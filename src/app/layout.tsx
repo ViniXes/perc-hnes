@@ -9,7 +9,7 @@ const geistSans = Geist({
 
 export const metadata: Metadata = {
   title: "PERC HNES",
-  description: "Proyecto base — listo para desarrollar.",
+  description: "Captura mensual PERC por servicio con acceso privado.",
 };
 
 export default function RootLayout({

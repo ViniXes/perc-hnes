@@ -1,0 +1,251 @@
+export type ServiceDefinition = {
+  id: string;
+  name: string;
+  rows: string[];
+};
+
+export const TABULATOR_HEADERS = [
+  "66-Hospitalizacion medicina interna",
+  "95-Hospitalizacion cirugia general",
+  "745-Hospitalizacion servicios por convenios",
+  "166-Unidad de cuidados intensivos",
+  "179-Unidad de cuidados intermedios",
+  "201-Emergencias",
+  "743-Clinica empresarial",
+  "806-Centro quirurgico",
+  "767-Unidad de cuidados especiales",
+  "766-Servicio de apoyo a riiss",
+  "398-Vacunacion",
+  "518-Laboratorio clinico",
+  "530-Laboratorio de biologia molecular",
+  "538-Resonancia magnetica",
+  "541-Tomografia",
+  "791-Estudio de radiologia",
+  "559-Ultrasonografia",
+  "776-Estudios gastroclinicos",
+  "562-Terapia fisica",
+  "566-Terapia respiratoria",
+  "570-Rehabilitacion pulmonar",
+  "575-Banco de sangre",
+  "579-Unidad de hemodinamia",
+  "268-Hemodialisis",
+  "593-Servicio farmaceutico",
+  "803-Rehablitacion psicosocial",
+  "750-Alimentacion enteral",
+  "760-Nutricion parenteral",
+  "662-Central de esterilizacion",
+  "761-Saneamiento ambiental",
+  "648-Aseo",
+  "721-Almacen",
+  "652-Servicio de alimentacion",
+  "659-Lavanderia",
+  "664-Transporte general",
+  "665-Mantenimiento",
+  "713-Trabajo social",
+  "670-Administracion",
+  "702-Docencia e investigacion",
+] as const;
+
+export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
+  {
+    id: "vacunacion",
+    name: "Vacunacion",
+    rows: ["398_1-Vacunacion | Actividad", "398_2-Vacunacion | Dosis aplicada"],
+  },
+  {
+    id: "laboratorio-clinico",
+    name: "Laboratorio clinico",
+    rows: [
+      "518_1-Laboratorio clinico | Examen",
+      "518_2-Laboratorio clinico | Prueba",
+    ],
+  },
+  {
+    id: "laboratorio-de-biologia-molecular",
+    name: "Laboratorio de biologia molecular",
+    rows: ["530_1-Laboratorio de biologia molecular | Examen"],
+  },
+  {
+    id: "resonancia-magnetica",
+    name: "Resonancia magnetica",
+    rows: [
+      "538_1-Resonancia magnetica | Estudio",
+      "538_2-Resonancia magnetica | Placas",
+    ],
+  },
+  {
+    id: "tomografia",
+    name: "Tomografia",
+    rows: ["541_1-Tomografia | Estudio", "541_2-Tomografia | Placas"],
+  },
+  {
+    id: "estudio-de-radiologia",
+    name: "Estudio de radiologia",
+    rows: ["791_1-Estudio de radiologia | Estudio"],
+  },
+  {
+    id: "ultrasonografia",
+    name: "Ultrasonografia",
+    rows: ["559_1-Ultrasonografia | Estudio"],
+  },
+  {
+    id: "estudios-gastroclinicos",
+    name: "Estudios gastroclinicos",
+    rows: ["776_1-Estudios gastroclinicos | Procedimiento"],
+  },
+  {
+    id: "terapia-fisica",
+    name: "Terapia fisica",
+    rows: ["562_1-Terapia fisica | Sesion"],
+  },
+  {
+    id: "terapia-respiratoria",
+    name: "Terapia respiratoria",
+    rows: [
+      "566_1-Terapia respiratoria | Sesion",
+      "566_2-Terapia respiratoria | Atencion",
+      "566_3-Terapia respiratoria | Nebulizacion",
+    ],
+  },
+  {
+    id: "rehabilitacion-pulmonar",
+    name: "Rehabilitacion pulmonar",
+    rows: ["570_1-Rehabilitacion pulmonar | Sesion"],
+  },
+  {
+    id: "banco-de-sangre",
+    name: "Banco de sangre",
+    rows: [
+      "575_1-Banco de sangre | Unidad",
+      "575_2-Banco de sangre | Examen",
+      "575_3-Banco de sangre | Hemocomponentes procesados",
+      "575_4-Banco de sangre | Bolsas de sangre",
+    ],
+  },
+  {
+    id: "unidad-de-hemodinamia",
+    name: "Unidad de hemodinamia",
+    rows: [
+      "579_1-Unidad de hemodinamia | Procedimiento",
+      "579_2-Unidad de hemodinamia | Estudio",
+    ],
+  },
+  {
+    id: "hemodialisis",
+    name: "Hemodialisis",
+    rows: [
+      "268_1-Hemodialisis | Procedimiento",
+      "268_2-Hemodialisis | Paciente",
+      "268_3-Hemodialisis | Sesion",
+      "268_4-Hemodialisis | Tratamiento",
+    ],
+  },
+  {
+    id: "servicio-farmaceutico",
+    name: "Servicio farmaceutico",
+    rows: [
+      "593_1-Servicio farmaceutico | Receta",
+      "593_2-Servicio farmaceutico | Prescripcion",
+      "593_3-Servicio farmaceutico | Paciente",
+      "593_4-Servicio farmaceutico | Receta Unidosis",
+      "593_5-Servicio farmaceutico | Formula",
+    ],
+  },
+  {
+    id: "rehablitacion-psicosocial",
+    name: "Rehablitacion psicosocial",
+    rows: ["803_1-Rehablitacion psicosocial | Atencion"],
+  },
+  {
+    id: "alimentacion-enteral",
+    name: "Alimentacion enteral",
+    rows: [
+      "750_1-Alimentacion enteral | Preparacion",
+      "750_2-Alimentacion enteral | Paciente",
+      "750_3-Alimentacion enteral | Formula",
+    ],
+  },
+  {
+    id: "nutricion-parenteral",
+    name: "Nutricion parenteral",
+    rows: ["760_1-Nutricion parenteral | Preparacion"],
+  },
+  {
+    id: "central-de-esterilizacion",
+    name: "Central de esterilizacion",
+    rows: [
+      "662_1-Central de esterilizacion | Paquete",
+      "662_2-Central de esterilizacion | Metro cubico",
+    ],
+  },
+  {
+    id: "saneamiento-ambiental",
+    name: "Saneamiento ambiental",
+    rows: ["761_1-Saneamiento ambiental | Inspeccion"],
+  },
+  {
+    id: "aseo",
+    name: "Aseo",
+    rows: ["648_1-Aseo | Metro cuadrado"],
+  },
+  {
+    id: "almacen",
+    name: "Almacen",
+    rows: ["721_1-Almacen | Despacho"],
+  },
+  {
+    id: "servicio-de-alimentacion",
+    name: "Servicio de alimentacion",
+    rows: [
+      "652_1-Servicio de alimentacion | Racion paciente",
+      "652_2-Servicio de alimentacion | Racion funcionario",
+    ],
+  },
+  {
+    id: "lavanderia",
+    name: "Lavanderia",
+    rows: [
+      "659_1-Lavanderia | Libras",
+      "659_2-Lavanderia | Pieza",
+      "659_3-Lavanderia | Kilo",
+    ],
+  },
+  {
+    id: "transporte-general",
+    name: "Transporte general",
+    rows: [
+      "664_1-Transporte general | Traslado",
+      "664_2-Transporte general | Kilometro",
+      "664_3-Transporte general | Viajes",
+    ],
+  },
+  {
+    id: "mantenimiento",
+    name: "Mantenimiento",
+    rows: [
+      "665_1-Mantenimiento | Orden",
+      "665_2-Mantenimiento | Solicitud",
+      "665_3-Mantenimiento | Solicitud Recibida",
+      "665_4-Mantenimiento | Solicitud Cumplida",
+    ],
+  },
+  {
+    id: "trabajo-social",
+    name: "Trabajo social",
+    rows: [
+      "713_1-Trabajo social | Atencion",
+      "713_2-Trabajo social | Actividad",
+      "713_3-Trabajo social | Paciente",
+      "713_4-Trabajo social | Casos",
+      "713_5-Trabajo social | Entrevista",
+    ],
+  },
+  {
+    id: "docencia-e-investigacion",
+    name: "Docencia e investigacion",
+    rows: ["702_1-Docencia e investigacion | Capacitacion"],
+  },
+];
+
+export const SERVICE_COUNT = SERVICE_DEFINITIONS.length;
+export const COST_CENTER_COUNT = TABULATOR_HEADERS.length;
