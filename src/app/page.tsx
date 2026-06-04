@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import {
   User,
   browserLocalPersistence,
@@ -21,8 +21,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
   serverTimestamp,
   setDoc,
+  where,
 } from "firebase/firestore";
 import { auth } from "@/lib/firebase";
 import { db } from "@/lib/firestore";
@@ -63,7 +65,16 @@ type AdminDraft = {
   name: string;
 };
 
+type AdminOverviewEntry = {
+  service: ServiceDefinition;
+  values: TableValues;
+  hasSavedData: boolean;
+};
+
 const DEFAULT_TEMP_PASSWORD = "PERC2026!";
+const ADMIN_USERNAME = "Hcardoza";
+const ADMIN_PASSWORD = "Cardoza1986";
+const ADMIN_EMAIL = "hcardoza@perc.local";
 
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
   weekday: "long",
@@ -229,6 +240,20 @@ function sanitizeNumericValue(value: string) {
   return value.replace(/[^0-9]/g, "");
 }
 
+function normalizeLoginIdentifier(value: string) {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return "";
+  }
+
+  if (!trimmedValue.includes("@") && trimmedValue.toLowerCase() === ADMIN_USERNAME.toLowerCase()) {
+    return ADMIN_EMAIL;
+  }
+
+  return trimmedValue;
+}
+
 function normalizeProfile(uid: string, email: string, data: Record<string, unknown>): ManagedUser {
   const role = data.role === "admin" ? "admin" : "service";
   const defaultPermissions = getDefaultPermissions(role);
@@ -293,6 +318,52 @@ async function fetchSavedDataForPeriod(service: ServiceDefinition, periodId: str
   return mergeWithTemplate(service, data.values);
 }
 
+async function fetchAdminOverviewForPeriod(periodId: string): Promise<AdminOverviewEntry[]> {
+  const snapshot = await getDocs(
+    query(collection(db, "serviceTabulators"), where("periodId", "==", periodId)),
+  );
+  const savedByService = new Map<string, Record<string, Record<string, unknown>>>();
+
+  for (const item of snapshot.docs) {
+    const data = item.data() as {
+      serviceId?: string;
+      values?: Record<string, Record<string, unknown>>;
+    };
+
+    if (typeof data.serviceId === "string") {
+      savedByService.set(data.serviceId, data.values || {});
+    }
+  }
+
+  return SERVICE_DEFINITIONS.map((service) => ({
+    service,
+    values: mergeWithTemplate(service, savedByService.get(service.id)),
+    hasSavedData: savedByService.has(service.id),
+  }));
+}
+
+async function ensureDefaultAdminProfile(currentUser: User) {
+  await updateProfile(currentUser, {
+    displayName: ADMIN_USERNAME,
+  });
+
+  await setDoc(
+    doc(db, "serviceUsers", currentUser.uid),
+    {
+      serviceId: null,
+      serviceName: null,
+      email: ADMIN_EMAIL,
+      name: ADMIN_USERNAME,
+      role: "admin",
+      isActive: true,
+      mustChangePassword: false,
+      permissions: getDefaultPermissions("admin"),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+}
+
 export default function Home() {
   const [mode, setMode] = useState<AuthMode>("login");
   const [user, setUser] = useState<User | null>(null);
@@ -318,6 +389,8 @@ export default function Home() {
   const [adminDrafts, setAdminDrafts] = useState<Record<string, AdminDraft>>({});
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [adminBusyUserId, setAdminBusyUserId] = useState("");
+  const [adminOverview, setAdminOverview] = useState<AdminOverviewEntry[]>([]);
+  const [isLoadingOverview, setIsLoadingOverview] = useState(false);
 
   const currentService = useMemo(
     () => getServiceById(serviceProfile?.serviceId),
@@ -370,6 +443,7 @@ export default function Home() {
         setTableValues({});
         setAdminUsers([]);
         setAdminDrafts({});
+        setAdminOverview([]);
         setProfileReady(true);
         return;
       }
@@ -386,6 +460,7 @@ export default function Home() {
         if (!profileSnapshot.exists()) {
           setServiceProfile(null);
           setTableValues({});
+          setAdminOverview([]);
           setError("La cuenta no tiene un perfil configurado en la base.");
           return;
         }
@@ -399,6 +474,7 @@ export default function Home() {
         if (!profile.isActive) {
           setServiceProfile(null);
           setTableValues({});
+          setAdminOverview([]);
           setError("La cuenta esta desactivada por el administrador.");
           await signOut(auth);
           return;
@@ -418,15 +494,20 @@ export default function Home() {
         }
 
         if (profile.permissions.canManageUsers || profile.role === "admin") {
-          const users = await fetchManagedUsers();
+          const [users, overview] = await Promise.all([
+            fetchManagedUsers(),
+            fetchAdminOverviewForPeriod(periodId),
+          ]);
 
           if (!cancelled) {
             setAdminUsers(users);
             setAdminDrafts(buildAdminDrafts(users));
+            setAdminOverview(overview);
           }
         } else if (!cancelled) {
           setAdminUsers([]);
           setAdminDrafts({});
+          setAdminOverview([]);
         }
       } catch (sessionError) {
         if (!cancelled) {
@@ -434,6 +515,7 @@ export default function Home() {
           setTableValues({});
           setAdminUsers([]);
           setAdminDrafts({});
+          setAdminOverview([]);
           setError(getAuthErrorMessage(sessionError));
         }
       } finally {
@@ -499,6 +581,28 @@ export default function Home() {
     }
   }
 
+  async function loadAdminOverview(showMessage: boolean) {
+    if (!isAdmin) {
+      return;
+    }
+
+    setIsLoadingOverview(true);
+
+    try {
+      const overview = await fetchAdminOverviewForPeriod(periodId);
+      setAdminOverview(overview);
+      setError("");
+
+      if (showMessage) {
+        setMessage("Vista global del administrador actualizada.");
+      }
+    } catch {
+      setError("No pudimos cargar la vista global del administrador.");
+    } finally {
+      setIsLoadingOverview(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -529,9 +633,10 @@ export default function Home() {
           throw new Error("service-already-assigned");
         }
 
+        const serviceEmail = email.trim();
         const credential = await createUserWithEmailAndPassword(
           auth,
-          email,
+          serviceEmail,
           DEFAULT_TEMP_PASSWORD,
         );
 
@@ -542,7 +647,7 @@ export default function Home() {
         await setDoc(doc(db, "serviceUsers", credential.user.uid), {
           serviceId: service.id,
           serviceName: service.name,
-          email,
+          email: serviceEmail,
           name: name.trim() || service.name,
           role: "service",
           isActive: true,
@@ -556,7 +661,7 @@ export default function Home() {
           serviceId: service.id,
           serviceName: service.name,
           uid: credential.user.uid,
-          email,
+          email: serviceEmail,
           updatedAt: serverTimestamp(),
         });
 
@@ -567,7 +672,33 @@ export default function Home() {
           `Cuenta creada para ${service.name}. Contrasena temporal: ${DEFAULT_TEMP_PASSWORD}. Debe cambiarse al ingresar.`,
         );
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const loginIdentifier = normalizeLoginIdentifier(email);
+
+        if (
+          loginIdentifier.toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
+          password === ADMIN_PASSWORD
+        ) {
+          try {
+            const credential = await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+            await ensureDefaultAdminProfile(credential.user);
+          } catch (loginError) {
+            const authCode = (loginError as AuthError).code;
+
+            if (authCode !== "auth/invalid-credential" && authCode !== "auth/user-not-found") {
+              throw loginError;
+            }
+
+            const credential = await createUserWithEmailAndPassword(
+              auth,
+              ADMIN_EMAIL,
+              ADMIN_PASSWORD,
+            );
+            await ensureDefaultAdminProfile(credential.user);
+          }
+        } else {
+          await signInWithEmailAndPassword(auth, loginIdentifier, password);
+        }
+
         setPassword("");
       }
     } catch (submitError) {
@@ -584,6 +715,7 @@ export default function Home() {
     setTableValues({});
     setAdminUsers([]);
     setAdminDrafts({});
+    setAdminOverview([]);
     setNewPassword("");
     setConfirmPassword("");
     await signOut(auth);
@@ -846,6 +978,10 @@ export default function Home() {
     const openDaysLabel = captureWindow.openDays
       .map((day) => SHORT_DATE_FORMATTER.format(day))
       .join(" / ");
+    const adminRowsCount = adminOverview.reduce(
+      (total, entry) => total + entry.service.rows.length,
+      0,
+    );
 
     return (
       <main className="min-h-screen bg-[#161f31] px-4 py-6 text-slate-100 sm:px-7 lg:px-10">
@@ -904,14 +1040,24 @@ export default function Home() {
                 ) : null}
 
                 {isAdmin ? (
-                  <button
-                    type="button"
-                    onClick={() => void loadAdminUsers()}
-                    disabled={isLoadingUsers}
-                    className="rounded-2xl bg-amber-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-amber-300"
-                  >
-                    {isLoadingUsers ? "Actualizando..." : "Actualizar usuarios"}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void loadAdminOverview(true)}
+                      disabled={isLoadingOverview}
+                      className="rounded-2xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-cyan-300"
+                    >
+                      {isLoadingOverview ? "Cargando vista..." : "Vista global"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void loadAdminUsers()}
+                      disabled={isLoadingUsers}
+                      className="rounded-2xl bg-amber-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-amber-300"
+                    >
+                      {isLoadingUsers ? "Actualizando..." : "Actualizar usuarios"}
+                    </button>
+                  </>
                 ) : null}
 
                 <button
@@ -971,6 +1117,80 @@ export default function Home() {
             <p className="rounded-2xl border border-emerald-500/40 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-100">
               {message}
             </p>
+          ) : null}
+
+          {isAdmin ? (
+            <section className="overflow-hidden rounded-[24px] border border-cyan-400/20 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
+              <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">
+                    Vista Global
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold">Todos los centros juntos</h2>
+                  <p className="mt-2 text-sm text-slate-300">
+                    El administrador ve en una sola vista todos los servicios y todos los centros del
+                    periodo {periodLabel}.
+                  </p>
+                </div>
+                <div className="text-sm text-slate-300">
+                  <p>Servicios: {adminOverview.length}</p>
+                  <p>Filas consolidadas: {adminRowsCount}</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse text-sm text-slate-100">
+                  <thead>
+                    <tr className="bg-[#1a2334] text-left">
+                      <th className="sticky left-0 z-20 min-w-[320px] border-b border-white/10 bg-[#1a2334] px-4 py-4 font-semibold uppercase tracking-wide">
+                        Servicio / Centro de costos
+                      </th>
+                      {TABULATOR_HEADERS.map((header) => (
+                        <th
+                          key={`admin-${header}`}
+                          className="min-w-[210px] border-b border-l border-white/10 px-4 py-4 align-top font-semibold"
+                        >
+                          {header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminOverview.map((entry) => (
+                      <Fragment key={entry.service.id}>
+                        <tr className="bg-[#162234]">
+                          <th
+                            colSpan={TABULATOR_HEADERS.length + 1}
+                            className="border-t border-b border-cyan-400/20 px-4 py-3 text-left text-base font-semibold text-cyan-100"
+                          >
+                            {entry.service.name}
+                            {!entry.hasSavedData ? " · sin datos guardados este mes" : ""}
+                          </th>
+                        </tr>
+                        {entry.service.rows.map((row) => (
+                          <tr
+                            key={`${entry.service.id}-${row}`}
+                            className="odd:bg-white/[0.02] even:bg-white/[0.05]"
+                          >
+                            <th className="sticky left-0 z-10 border-r border-white/10 bg-[#314055] px-4 py-4 text-left font-semibold text-slate-100">
+                              {row}
+                            </th>
+                            {TABULATOR_HEADERS.map((header) => (
+                              <td
+                                key={`${entry.service.id}-${row}-${header}`}
+                                className="border-l border-white/10 px-3 py-3 text-center text-slate-200"
+                              >
+                                {entry.values[row]?.[header] || "0"}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           ) : null}
 
           {currentService ? (
@@ -1036,44 +1256,53 @@ export default function Home() {
               </p>
               <h2 className="mt-2 text-2xl font-semibold">Cambiar contrasena</h2>
               <p className="mt-2 text-sm text-slate-300">
-                La clave inicial es generica para las cuentas nuevas. Cada usuario puede cambiarla
-                desde aqui.
+                {isAdmin
+                  ? "El acceso administrador principal usa las credenciales fijas solicitadas."
+                  : "La clave inicial es generica para las cuentas nuevas. Cada usuario puede cambiarla desde aqui."}
               </p>
             </div>
 
-            <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto]" onSubmit={handleChangePassword}>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-200">Nueva contrasena</span>
-                <input
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-violet-500"
-                  minLength={6}
-                  placeholder="Minimo 6 caracteres"
-                  type="password"
-                />
-              </label>
+            {isAdmin ? (
+              <div className="rounded-2xl border border-amber-400/30 bg-amber-950/30 px-4 py-4 text-sm text-amber-50">
+                Usuario administrador: <strong>{ADMIN_USERNAME}</strong>
+                {" · "}
+                Contrasena: <strong>{ADMIN_PASSWORD}</strong>
+              </div>
+            ) : (
+              <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto]" onSubmit={handleChangePassword}>
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-200">Nueva contrasena</span>
+                  <input
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-violet-500"
+                    minLength={6}
+                    placeholder="Minimo 6 caracteres"
+                    type="password"
+                  />
+                </label>
 
-              <label className="block">
-                <span className="text-sm font-medium text-slate-200">Confirmar contrasena</span>
-                <input
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-violet-500"
-                  minLength={6}
-                  placeholder="Repite la nueva clave"
-                  type="password"
-                />
-              </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-200">Confirmar contrasena</span>
+                  <input
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-violet-500"
+                    minLength={6}
+                    placeholder="Repite la nueva clave"
+                    type="password"
+                  />
+                </label>
 
-              <button
-                type="submit"
-                disabled={isChangingPassword}
-                className="mt-6 rounded-2xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800"
-              >
-                {isChangingPassword ? "Actualizando..." : "Cambiar clave"}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  disabled={isChangingPassword}
+                  className="mt-6 rounded-2xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800"
+                >
+                  {isChangingPassword ? "Actualizando..." : "Cambiar clave"}
+                </button>
+              </form>
+            )}
           </section>
 
           {isAdmin ? (
@@ -1347,6 +1576,11 @@ export default function Home() {
                       ? "Ingresa con la cuenta asignada a tu servicio o administrador."
                       : "Cada servicio se crea con una contrasena generica y luego el usuario la cambia desde su panel."}
                   </p>
+                  {mode === "login" ? (
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      Acceso admin: usuario <strong>{ADMIN_USERNAME}</strong>.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="mb-6 grid grid-cols-2 rounded-2xl bg-slate-100 p-1">
@@ -1419,18 +1653,33 @@ export default function Home() {
                     </>
                   ) : null}
 
-                  <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Correo</span>
-                    <input
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
-                      name="email"
-                      placeholder="correo@hospital.com"
-                      required
-                      type="email"
-                    />
-                  </label>
+                  {mode === "login" ? (
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-700">Correo o usuario</span>
+                      <input
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
+                        name="email"
+                        placeholder="correo@hospital.com o Hcardoza"
+                        required
+                        type="text"
+                      />
+                    </label>
+                  ) : (
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-700">Correo</span>
+                      <input
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
+                        name="email"
+                        placeholder="correo@hospital.com"
+                        required
+                        type="email"
+                      />
+                    </label>
+                  )}
 
                   {mode === "login" ? (
                     <label className="block">
