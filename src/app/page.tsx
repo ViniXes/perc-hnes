@@ -74,7 +74,7 @@ type AdminOverviewEntry = {
 const DEFAULT_TEMP_PASSWORD = "PERC2026!";
 const ADMIN_USERNAME = "Hcardoza";
 const ADMIN_PASSWORD = "Cardoza1986";
-const ADMIN_EMAIL = "hcardoza@perc.local";
+const ADMIN_EMAIL = "hcardoza.admin@perc-hnes.app";
 
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
   weekday: "long",
@@ -109,6 +109,8 @@ function getAuthErrorMessage(error: unknown) {
       return "La nueva contrasena y su confirmacion no coinciden.";
     case "change-password-length":
       return "La nueva contrasena debe tener al menos 6 caracteres.";
+    case "admin-access-failed":
+      return "No pudimos habilitar el acceso del administrador en Firebase Auth.";
     default:
       break;
   }
@@ -688,12 +690,22 @@ export default function Home() {
               throw loginError;
             }
 
-            const credential = await createUserWithEmailAndPassword(
-              auth,
-              ADMIN_EMAIL,
-              ADMIN_PASSWORD,
-            );
-            await ensureDefaultAdminProfile(credential.user);
+            try {
+              const credential = await createUserWithEmailAndPassword(
+                auth,
+                ADMIN_EMAIL,
+                ADMIN_PASSWORD,
+              );
+              await ensureDefaultAdminProfile(credential.user);
+            } catch (createAdminError) {
+              const createAdminCode = (createAdminError as AuthError).code;
+
+              if (createAdminCode === "auth/email-already-in-use") {
+                throw new Error("admin-access-failed");
+              }
+
+              throw createAdminError;
+            }
           }
         } else {
           await signInWithEmailAndPassword(auth, loginIdentifier, password);
