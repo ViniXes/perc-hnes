@@ -29,7 +29,6 @@ import {
 import { auth } from "@/lib/firebase";
 import { db } from "@/lib/firestore";
 import {
-  COST_CENTER_COUNT,
   SERVICE_COUNT,
   SERVICE_DEFINITIONS,
   TABULATOR_HEADERS,
@@ -71,10 +70,75 @@ type AdminOverviewEntry = {
   hasSavedData: boolean;
 };
 
+type PublicDashboardMonth = {
+  periodId: string;
+  label: string;
+  completedServices: number;
+  totalServices: number;
+  isCurrentMonth: boolean;
+  isOpen: boolean;
+};
+
+type ServiceGroup = {
+  id: string;
+  title: string;
+  services: ServiceDefinition[];
+};
+
+type PublicDashboardService = ServiceDefinition & {
+  completed: boolean;
+};
+
+type PublicDashboardGroup = {
+  id: string;
+  title: string;
+  services: PublicDashboardService[];
+};
+
 const DEFAULT_TEMP_PASSWORD = "PERC2026!";
 const ADMIN_USERNAME = "Hcardoza";
 const ADMIN_PASSWORD = "Cardoza1986";
 const ADMIN_EMAIL = "hcardoza.admin@perc-hnes.app";
+const CAPTURE_WINDOW_DAYS = 3;
+
+const SERVICE_GROUP_LABELS: Record<string, string> = {
+  direccion: "Direccion",
+  apoyo: "Division de Apoyo",
+  medica: "Division Medica",
+  enfermeria: "Division de Enfermeria",
+  administrativa: "Subdireccion Administrativa",
+};
+
+const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
+  almacen: "direccion",
+  "docencia-e-investigacion": "direccion",
+  "servicio-farmaceutico": "direccion",
+  "trabajo-social": "apoyo",
+  "laboratorio-clinico": "apoyo",
+  "laboratorio-de-biologia-molecular": "apoyo",
+  "banco-de-sangre": "apoyo",
+  "alimentacion-enteral": "apoyo",
+  "nutricion-parenteral": "apoyo",
+  "servicio-de-alimentacion": "apoyo",
+  "estudio-de-radiologia": "medica",
+  "resonancia-magnetica": "medica",
+  tomografia: "medica",
+  ultrasonografia: "medica",
+  "estudios-gastroclinicos": "medica",
+  "unidad-de-hemodinamia": "medica",
+  hemodialisis: "medica",
+  "terapia-fisica": "medica",
+  "terapia-respiratoria": "medica",
+  "rehabilitacion-pulmonar": "medica",
+  "rehablitacion-psicosocial": "medica",
+  vacunacion: "medica",
+  "central-de-esterilizacion": "enfermeria",
+  aseo: "administrativa",
+  lavanderia: "administrativa",
+  "transporte-general": "administrativa",
+  mantenimiento: "administrativa",
+  "saneamiento-ambiental": "administrativa",
+};
 
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
   weekday: "long",
@@ -189,6 +253,12 @@ function isBusinessDay(date: Date) {
   return day !== 0 && day !== 6;
 }
 
+function getDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
 function isSameCalendarDay(left: Date, right: Date) {
   return (
     left.getFullYear() === right.getFullYear() &&
@@ -197,7 +267,7 @@ function isSameCalendarDay(left: Date, right: Date) {
   );
 }
 
-function getFirstThreeBusinessDays(referenceDate: Date) {
+function getFirstBusinessDays(referenceDate: Date, blockedDates: string[], totalDays: number) {
   const current = new Date(
     referenceDate.getFullYear(),
     referenceDate.getMonth(),
@@ -208,9 +278,10 @@ function getFirstThreeBusinessDays(referenceDate: Date) {
     0,
   );
   const result: Date[] = [];
+  const blockedDateSet = new Set(blockedDates);
 
-  while (result.length < 3) {
-    if (isBusinessDay(current)) {
+  while (result.length < totalDays) {
+    if (isBusinessDay(current) && !blockedDateSet.has(getDateKey(current))) {
       result.push(new Date(current));
     }
 
@@ -220,8 +291,8 @@ function getFirstThreeBusinessDays(referenceDate: Date) {
   return result;
 }
 
-function getCaptureWindow(referenceDate: Date) {
-  const openDays = getFirstThreeBusinessDays(referenceDate);
+function getCaptureWindow(referenceDate: Date, blockedDates: string[]) {
+  const openDays = getFirstBusinessDays(referenceDate, blockedDates, CAPTURE_WINDOW_DAYS);
   const activeDayIndex = openDays.findIndex((day) =>
     isSameCalendarDay(day, referenceDate),
   );
@@ -232,6 +303,33 @@ function getCaptureWindow(referenceDate: Date) {
     activeDayNumber: activeDayIndex + 1,
     lastOpenDay: openDays[openDays.length - 1],
   };
+}
+
+function hasAnyCapturedValue(values: Record<string, Record<string, unknown>> | undefined) {
+  if (!values) {
+    return false;
+  }
+
+  return Object.values(values).some((row) =>
+    Object.values(row || {}).some((cell) => String(cell ?? "").trim() !== ""),
+  );
+}
+
+function buildServiceGroups(): ServiceGroup[] {
+  const groups = new Map<string, ServiceDefinition[]>();
+
+  for (const service of SERVICE_DEFINITIONS) {
+    const groupId = SERVICE_GROUP_BY_ID[service.id] || "apoyo";
+    const currentGroup = groups.get(groupId) || [];
+    currentGroup.push(service);
+    groups.set(groupId, currentGroup);
+  }
+
+  return Object.entries(SERVICE_GROUP_LABELS).map(([id, title]) => ({
+    id,
+    title,
+    services: groups.get(id) || [],
+  }));
 }
 
 function getPeriodId(date: Date) {
@@ -344,6 +442,89 @@ async function fetchAdminOverviewForPeriod(periodId: string): Promise<AdminOverv
   }));
 }
 
+async function fetchCalendarOverridesForYear(year: number) {
+  const snapshot = await getDocs(collection(db, "captureCalendar"));
+  const overrides: Record<string, string[]> = {};
+
+  for (const item of snapshot.docs) {
+    if (!item.id.startsWith(`${year}-`)) {
+      continue;
+    }
+
+    const data = item.data() as {
+      blockedDates?: unknown;
+    };
+
+    overrides[item.id] = Array.isArray(data.blockedDates)
+      ? data.blockedDates.filter((value): value is string => typeof value === "string")
+      : [];
+  }
+
+  return overrides;
+}
+
+async function fetchPublicDashboard(year: number, currentPeriodId: string) {
+  const [calendarOverrides, tabulatorsSnapshot] = await Promise.all([
+    fetchCalendarOverridesForYear(year),
+    getDocs(collection(db, "serviceTabulators")),
+  ]);
+  const completedByPeriod = new Map<string, Set<string>>();
+
+  for (const item of tabulatorsSnapshot.docs) {
+    const data = item.data() as {
+      periodId?: string;
+      serviceId?: string;
+      values?: Record<string, Record<string, unknown>>;
+    };
+
+    if (
+      typeof data.periodId !== "string" ||
+      typeof data.serviceId !== "string" ||
+      !data.periodId.startsWith(`${year}-`) ||
+      !hasAnyCapturedValue(data.values)
+    ) {
+      continue;
+    }
+
+    const currentSet = completedByPeriod.get(data.periodId) || new Set<string>();
+    currentSet.add(data.serviceId);
+    completedByPeriod.set(data.periodId, currentSet);
+  }
+
+  const currentYear = new Date(year, 0, 1).getFullYear();
+  const months: PublicDashboardMonth[] = Array.from({ length: 12 }, (_, index) => {
+    const monthDate = new Date(currentYear, index, 1, 12, 0, 0, 0);
+    const periodId = getPeriodId(monthDate);
+    const completedServices = completedByPeriod.get(periodId)?.size || 0;
+    const blockedDates = calendarOverrides[periodId] || [];
+
+    return {
+      periodId,
+      label: PERIOD_FORMATTER.format(monthDate),
+      completedServices,
+      totalServices: SERVICE_DEFINITIONS.length,
+      isCurrentMonth: periodId === currentPeriodId,
+      isOpen: blockedDates.length === 0,
+    };
+  });
+
+  const currentCompletedServices = completedByPeriod.get(currentPeriodId) || new Set<string>();
+  const groups: PublicDashboardGroup[] = buildServiceGroups().map((group) => ({
+    ...group,
+    services: group.services.map((service) => ({
+      ...service,
+      completed: currentCompletedServices.has(service.id),
+    })),
+  }));
+
+  return {
+    calendarOverrides,
+    months,
+    groups,
+    completedCount: currentCompletedServices.size,
+  };
+}
+
 async function ensureDefaultAdminProfile(currentUser: User) {
   await updateProfile(currentUser, {
     displayName: ADMIN_USERNAME,
@@ -393,21 +574,63 @@ export default function Home() {
   const [adminBusyUserId, setAdminBusyUserId] = useState("");
   const [adminOverview, setAdminOverview] = useState<AdminOverviewEntry[]>([]);
   const [isLoadingOverview, setIsLoadingOverview] = useState(false);
+  const [calendarOverrides, setCalendarOverrides] = useState<Record<string, string[]>>({});
+  const [publicDashboardMonths, setPublicDashboardMonths] = useState<PublicDashboardMonth[]>([]);
+  const [publicDashboardGroups, setPublicDashboardGroups] = useState<PublicDashboardGroup[]>([]);
+  const [publicCompletedCount, setPublicCompletedCount] = useState(0);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
+  const [calendarEditorPeriodId, setCalendarEditorPeriodId] = useState(() => getPeriodId(new Date()));
+  const [calendarDraftDate, setCalendarDraftDate] = useState("");
+  const [isSavingCalendar, setIsSavingCalendar] = useState(false);
 
   const currentService = useMemo(
     () => getServiceById(serviceProfile?.serviceId),
     [serviceProfile?.serviceId],
   );
-  const captureWindow = useMemo(() => getCaptureWindow(now), [now]);
   const periodId = useMemo(() => getPeriodId(now), [now]);
+  const currentBlockedDates = useMemo(() => calendarOverrides[periodId] || [], [calendarOverrides, periodId]);
+  const captureWindow = useMemo(
+    () => getCaptureWindow(now, currentBlockedDates),
+    [currentBlockedDates, now],
+  );
   const periodLabel = useMemo(
     () => PERIOD_FORMATTER.format(new Date(now.getFullYear(), now.getMonth(), 1)),
     [now],
   );
+  const currentYear = useMemo(() => now.getFullYear(), [now]);
   const welcomeName = useMemo(() => {
     return serviceProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Usuario";
   }, [serviceProfile?.name, user?.displayName, user?.email]);
   const isAdmin = !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
+  const calendarEditorBlockedDates = useMemo(
+    () => calendarOverrides[calendarEditorPeriodId] || [],
+    [calendarEditorPeriodId, calendarOverrides],
+  );
+  const currentMonthProgress = Math.round(
+    (publicCompletedCount / Math.max(SERVICE_DEFINITIONS.length, 1)) * 100,
+  );
+  const calendarPreviewDate = useMemo(() => {
+    if (!calendarEditorPeriodId) {
+      return null;
+    }
+
+    const [yearText, monthText] = calendarEditorPeriodId.split("-");
+    const year = Number(yearText);
+    const month = Number(monthText);
+
+    if (!year || !month) {
+      return null;
+    }
+
+    return new Date(year, month - 1, 1, 12, 0, 0, 0);
+  }, [calendarEditorPeriodId]);
+  const calendarPreviewWindow = useMemo(() => {
+    if (!calendarPreviewDate) {
+      return null;
+    }
+
+    return getCaptureWindow(calendarPreviewDate, calendarEditorBlockedDates);
+  }, [calendarEditorBlockedDates, calendarPreviewDate]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -425,6 +648,43 @@ export default function Home() {
 
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboard() {
+      setIsLoadingDashboard(true);
+
+      try {
+        const dashboard = await fetchPublicDashboard(currentYear, periodId);
+
+        if (cancelled) {
+          return;
+        }
+
+        setCalendarOverrides(dashboard.calendarOverrides);
+        setPublicDashboardMonths(dashboard.months);
+        setPublicDashboardGroups(dashboard.groups);
+        setPublicCompletedCount(dashboard.completedCount);
+      } catch {
+        if (!cancelled) {
+          setPublicDashboardMonths([]);
+          setPublicDashboardGroups([]);
+          setPublicCompletedCount(0);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingDashboard(false);
+        }
+      }
+    }
+
+    void loadDashboard();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentYear, periodId]);
 
   async function fetchManagedUsers() {
     const snapshot = await getDocs(collection(db, "serviceUsers"));
@@ -602,6 +862,85 @@ export default function Home() {
       setError("No pudimos cargar la vista global del administrador.");
     } finally {
       setIsLoadingOverview(false);
+    }
+  }
+
+  async function refreshPublicDashboard(showMessage: boolean) {
+    try {
+      const dashboard = await fetchPublicDashboard(currentYear, periodId);
+      setCalendarOverrides(dashboard.calendarOverrides);
+      setPublicDashboardMonths(dashboard.months);
+      setPublicDashboardGroups(dashboard.groups);
+      setPublicCompletedCount(dashboard.completedCount);
+
+      if (showMessage) {
+        setMessage("Tablero general actualizado.");
+      }
+    } catch {
+      setError("No pudimos actualizar el tablero general.");
+    }
+  }
+
+  function handleAddBlockedDate() {
+    if (!calendarEditorPeriodId || !calendarDraftDate.startsWith(calendarEditorPeriodId)) {
+      setError("Selecciona una fecha que pertenezca al mes configurado.");
+      return;
+    }
+
+    setCalendarOverrides((currentOverrides) => {
+      const currentDates = currentOverrides[calendarEditorPeriodId] || [];
+
+      if (currentDates.includes(calendarDraftDate)) {
+        return currentOverrides;
+      }
+
+      return {
+        ...currentOverrides,
+        [calendarEditorPeriodId]: [...currentDates, calendarDraftDate].sort(),
+      };
+    });
+    setCalendarDraftDate("");
+    setError("");
+  }
+
+  function handleRemoveBlockedDate(dateKey: string) {
+    setCalendarOverrides((currentOverrides) => ({
+      ...currentOverrides,
+      [calendarEditorPeriodId]: (currentOverrides[calendarEditorPeriodId] || []).filter(
+        (value) => value !== dateKey,
+      ),
+    }));
+  }
+
+  async function handleSaveCalendarOverride() {
+    if (!isAdmin || !calendarEditorPeriodId) {
+      return;
+    }
+
+    setIsSavingCalendar(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await setDoc(
+        doc(db, "captureCalendar", calendarEditorPeriodId),
+        {
+          periodId: calendarEditorPeriodId,
+          blockedDates: calendarOverrides[calendarEditorPeriodId] || [],
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      await refreshPublicDashboard(false);
+      if (calendarEditorPeriodId === periodId) {
+        await loadAdminOverview(false);
+      }
+      setMessage("Dias habiles actualizados correctamente.");
+    } catch {
+      setError("No pudimos guardar la configuracion del calendario.");
+    } finally {
+      setIsSavingCalendar(false);
     }
   }
 
@@ -797,6 +1136,12 @@ export default function Home() {
       );
 
       setTableValues(normalizedValues);
+      await refreshPublicDashboard(false);
+
+      if (isAdmin) {
+        await loadAdminOverview(false);
+      }
+
       setMessage(`Datos guardados correctamente para ${currentService.name}.`);
     } catch {
       setError("No pudimos guardar los datos. Revisa Firestore e intentalo de nuevo.");
@@ -1208,16 +1553,16 @@ export default function Home() {
           {currentService ? (
             <section className="overflow-hidden rounded-[24px] border border-white/10 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
               <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse text-sm text-slate-100">
+                <table className="min-w-full border-collapse text-xs text-slate-100">
                   <thead>
                     <tr className="bg-[#1a2334] text-left">
-                      <th className="sticky left-0 z-20 min-w-[280px] border-b border-white/10 bg-[#1a2334] px-4 py-4 font-semibold uppercase tracking-wide">
+                      <th className="sticky left-0 z-20 min-w-[210px] border-b border-white/10 bg-[#1a2334] px-3 py-3 font-semibold uppercase tracking-wide">
                         Centro de costos
                       </th>
                       {TABULATOR_HEADERS.map((header) => (
                         <th
                           key={header}
-                          className="min-w-[210px] border-b border-l border-white/10 px-4 py-4 align-top font-semibold"
+                          className="min-w-[118px] border-b border-l border-white/10 px-2 py-2 align-top text-[11px] font-semibold leading-4"
                         >
                           {header}
                         </th>
@@ -1227,11 +1572,11 @@ export default function Home() {
                   <tbody>
                     {currentService.rows.map((row) => (
                       <tr key={row} className="odd:bg-white/[0.02] even:bg-white/[0.05]">
-                        <th className="sticky left-0 z-10 border-r border-white/10 bg-[#3a465d] px-4 py-4 text-left font-semibold text-slate-100">
+                        <th className="sticky left-0 z-10 border-r border-white/10 bg-[#3a465d] px-3 py-3 text-left text-[11px] font-semibold leading-4 text-slate-100">
                           {row}
                         </th>
                         {TABULATOR_HEADERS.map((header) => (
-                          <td key={`${row}-${header}`} className="border-l border-white/10 px-2 py-2">
+                          <td key={`${row}-${header}`} className="border-l border-white/10 px-1 py-1">
                             <input
                               value={tableValues[row]?.[header] || ""}
                               onChange={(event) =>
@@ -1239,7 +1584,7 @@ export default function Home() {
                               }
                               disabled={isFormLocked}
                               inputMode="numeric"
-                              className="w-full rounded-xl border border-white/5 bg-[#2a3448] px-3 py-3 text-center text-base text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:bg-[#313d54] disabled:cursor-not-allowed disabled:bg-[#253145] disabled:text-slate-400"
+                              className="w-full rounded-lg border border-white/5 bg-[#2a3448] px-2 py-2 text-center text-xs text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:bg-[#313d54] disabled:cursor-not-allowed disabled:bg-[#253145] disabled:text-slate-400"
                               placeholder="0"
                               type="text"
                             />
@@ -1316,6 +1661,113 @@ export default function Home() {
               </form>
             )}
           </section>
+
+          {isAdmin ? (
+            <section className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
+              <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">
+                    Calendario Editable
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold">Modificar dias habiles por mes</h2>
+                  <p className="mt-2 max-w-3xl text-sm text-slate-300">
+                    Si hay vacaciones o cierre institucional, agrega las fechas para excluirlas del
+                    calculo automatico. El sistema movera la captura a los siguientes dias habiles.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
+                <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-200">Mes a configurar</span>
+                    <input
+                      value={calendarEditorPeriodId}
+                      onChange={(event) => setCalendarEditorPeriodId(event.target.value)}
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
+                      type="month"
+                    />
+                  </label>
+
+                  <label className="mt-4 block">
+                    <span className="text-sm font-medium text-slate-200">Agregar fecha no habil</span>
+                    <input
+                      value={calendarDraftDate}
+                      onChange={(event) => setCalendarDraftDate(event.target.value)}
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
+                      type="date"
+                    />
+                  </label>
+
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddBlockedDate}
+                      className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                    >
+                      Agregar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveCalendarOverride()}
+                      disabled={isSavingCalendar}
+                      className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800"
+                    >
+                      {isSavingCalendar ? "Guardando..." : "Guardar calendario"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                  <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
+                    <h3 className="text-lg font-semibold text-white">Fechas excluidas</h3>
+                    <p className="mt-2 text-sm text-slate-300">
+                      Usa esta lista para vacaciones, feriados extraordinarios o cierres.
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {calendarEditorBlockedDates.length > 0 ? (
+                        calendarEditorBlockedDates.map((dateKey) => (
+                          <button
+                            key={dateKey}
+                            type="button"
+                            onClick={() => handleRemoveBlockedDate(dateKey)}
+                            className="rounded-full border border-rose-400/40 bg-rose-950/30 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-900/40"
+                          >
+                            {dateKey} ×
+                          </button>
+                        ))
+                      ) : (
+                        <p className="text-sm text-slate-400">No hay fechas excluidas para este mes.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
+                    <h3 className="text-lg font-semibold text-white">Vista previa</h3>
+                    <p className="mt-2 text-sm text-slate-300">
+                      Primeros dias habiles que quedaran abiertos para captura.
+                    </p>
+
+                    <div className="mt-4 space-y-2">
+                      {calendarPreviewWindow ? (
+                        calendarPreviewWindow.openDays.map((day, index) => (
+                          <div
+                            key={getDateKey(day)}
+                            className="rounded-xl border border-cyan-400/20 bg-cyan-950/20 px-3 py-2 text-sm text-cyan-100"
+                          >
+                            Dia habil {index + 1}: {DATE_TIME_FORMATTER.format(day).split(", ")[0]}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-slate-400">Selecciona un mes para calcular.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          ) : null}
 
           {isAdmin ? (
             <section className="rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
@@ -1500,8 +1952,8 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f4efe6] text-slate-950">
-      <section className="grid min-h-screen grid-cols-1 lg:grid-cols-[1.15fr_500px]">
-        <div className="relative flex min-h-[45vh] flex-col justify-between overflow-hidden bg-slate-950 px-6 py-8 text-white sm:px-10 lg:min-h-screen lg:px-14">
+      <section className="grid min-h-screen grid-cols-1 lg:grid-cols-[1.2fr_500px]">
+        <div className="relative flex min-h-[45vh] flex-col gap-8 overflow-y-auto bg-slate-950 px-6 py-8 text-white sm:px-10 lg:min-h-screen lg:px-14">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.22),transparent_28%),radial-gradient(circle_at_80%_15%,rgba(16,185,129,0.18),transparent_25%),linear-gradient(150deg,#020617_0%,#111827_55%,#172554_100%)]" />
           <div className="relative flex items-center justify-between">
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-violet-200">
@@ -1510,40 +1962,185 @@ export default function Home() {
             <div className="h-2.5 w-2.5 rounded-full bg-emerald-300 shadow-[0_0_24px_rgba(110,231,183,0.85)]" />
           </div>
 
-          <div className="relative max-w-2xl py-14 lg:py-0">
-            <p className="mb-4 text-sm font-medium uppercase tracking-[0.2em] text-violet-200">
-              Tabuladores por servicio
-            </p>
-            <h1 className="max-w-3xl text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
-              Cada servicio entra con su propia cuenta y su propia clave temporal.
-            </h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
-              La primera fila de centros de costos se mantiene igual para todos. El usuario cambia
-              su contrasena despues del primer ingreso y el administrador puede ajustar permisos.
-            </p>
-          </div>
+          <div className="relative space-y-6">
+            <div className="rounded-[28px] border border-white/10 bg-[#162034]/90 p-6 shadow-[0_24px_80px_rgba(3,7,18,0.35)] backdrop-blur">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="max-w-3xl">
+                  <p className="inline-flex rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-violet-200">
+                    Sistema HNES
+                  </p>
+                  <h1 className="mt-4 max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl lg:text-5xl">
+                    Produccion eficiente
+                    <span className="text-violet-300"> recursos costos</span>
+                  </h1>
+                  <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+                    Tablero previo al inicio de sesion para revisar cuantas dependencias ya
+                    completaron su produccion mensual y como avanza el cierre del periodo.
+                  </p>
+                </div>
 
-          <div className="relative grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
-              <strong className="block text-sm uppercase tracking-wide text-violet-100">
-                Servicios
-              </strong>
-              <p className="mt-2 text-3xl font-semibold text-white">{SERVICE_COUNT}</p>
-              <p className="mt-1 text-sm text-slate-300">Detectados desde el Excel</p>
+                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Total</p>
+                    <p className="mt-2 text-3xl font-semibold text-white">{SERVICE_COUNT}</p>
+                    <p className="mt-1 text-xs text-slate-400">Dependencias</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Completos</p>
+                    <p className="mt-2 text-3xl font-semibold text-emerald-300">{publicCompletedCount}</p>
+                    <p className="mt-1 text-xs text-slate-400">Mes actual</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Progreso</p>
+                    <p className="mt-2 text-3xl font-semibold text-violet-300">{currentMonthProgress}%</p>
+                    <p className="mt-1 text-xs text-slate-400">Avance mensual</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 rounded-2xl border border-violet-400/15 bg-[#0f1728] p-4">
+                <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400">
+                  <span>Progreso general</span>
+                  <span>{currentMonthProgress}%</span>
+                </div>
+                <div className="mt-3 h-3 rounded-full bg-white/10">
+                  <div
+                    className="h-3 rounded-full bg-gradient-to-r from-violet-400 to-cyan-300"
+                    style={{ width: `${currentMonthProgress}%` }}
+                  />
+                </div>
+                <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+                  <span>
+                    {publicCompletedCount} de {SERVICE_COUNT} servicios completados
+                  </span>
+                  <span>{DATE_TIME_FORMATTER.format(now)}</span>
+                </div>
+              </div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
-              <strong className="block text-sm uppercase tracking-wide text-violet-100">
-                Centros
-              </strong>
-              <p className="mt-2 text-3xl font-semibold text-white">{COST_CENTER_COUNT}</p>
-              <p className="mt-1 text-sm text-slate-300">Encabezados compartidos</p>
+
+            <div className="rounded-[24px] border border-white/10 bg-[#162034]/90 p-5 shadow-[0_24px_80px_rgba(3,7,18,0.28)] backdrop-blur">
+              <h2 className="text-lg font-semibold text-white">Calendario de cierre mensual</h2>
+              <p className="mt-2 text-sm text-slate-300">
+                Cada mes muestra cuantas dependencias completaron su captura. El mes activo se
+                resalta automaticamente.
+              </p>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {isLoadingDashboard
+                  ? Array.from({ length: 12 }, (_, index) => (
+                      <div
+                        key={`month-skeleton-${index}`}
+                        className="h-24 rounded-2xl border border-white/10 bg-white/5"
+                      />
+                    ))
+                  : publicDashboardMonths.map((month) => {
+                      const monthProgress = Math.round(
+                        (month.completedServices / Math.max(month.totalServices, 1)) * 100,
+                      );
+
+                      return (
+                        <div
+                          key={month.periodId}
+                          className={`rounded-2xl border px-4 py-4 ${
+                            month.isCurrentMonth
+                              ? "border-cyan-400/40 bg-cyan-500/10"
+                              : month.completedServices > 0
+                                ? "border-emerald-400/20 bg-emerald-500/10"
+                                : "border-white/10 bg-white/5"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-semibold uppercase tracking-wide text-white">
+                              {month.label}
+                            </p>
+                            <span className="rounded-full bg-white/10 px-2 py-1 text-[11px] font-semibold text-slate-200">
+                              {month.completedServices}/{month.totalServices}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-300">
+                            {month.isCurrentMonth ? "Mes actual" : "Periodo mensual"}
+                          </p>
+                          <div className="mt-3 h-2 rounded-full bg-white/10">
+                            <div
+                              className="h-2 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-300"
+                              style={{ width: `${monthProgress}%` }}
+                            />
+                          </div>
+                          <p className="mt-3 text-xs text-slate-400">
+                            {month.isOpen ? "Ventana calculada" : "Ventana ajustada por calendario"}
+                          </p>
+                        </div>
+                      );
+                    })}
+              </div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
-              <strong className="block text-sm uppercase tracking-wide text-violet-100">
-                Clave inicial
-              </strong>
-              <p className="mt-2 text-2xl font-semibold text-white">{DEFAULT_TEMP_PASSWORD}</p>
-              <p className="mt-1 text-sm text-slate-300">Debe cambiarse al ingresar</p>
+
+            <div className="space-y-4">
+              {isLoadingDashboard
+                ? Array.from({ length: 3 }, (_, groupIndex) => (
+                    <div
+                      key={`group-skeleton-${groupIndex}`}
+                      className="rounded-[24px] border border-white/10 bg-[#162034]/90 p-5"
+                    >
+                      <div className="h-6 w-52 rounded bg-white/10" />
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {Array.from({ length: 6 }, (_, cardIndex) => (
+                          <div
+                            key={`card-skeleton-${groupIndex}-${cardIndex}`}
+                            className="h-28 rounded-2xl border border-white/10 bg-white/5"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                : publicDashboardGroups.map((group) => (
+                    <section
+                      key={group.id}
+                      className="rounded-[24px] border border-white/10 bg-[#162034]/90 p-5 shadow-[0_24px_80px_rgba(3,7,18,0.24)] backdrop-blur"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <h2 className="text-xl font-semibold text-white">{group.title}</h2>
+                          <p className="mt-1 text-sm text-slate-300">
+                            {
+                              group.services.filter((service) => service.completed).length
+                            }{" "}
+                            de {group.services.length} dependencias completadas
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                        {group.services.map((service) => (
+                          <article
+                            key={service.id}
+                            className="rounded-2xl border border-white/10 bg-[#1f2a3f] px-4 py-4"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-violet-500/20 text-violet-200">
+                                •
+                              </span>
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                                  service.completed
+                                    ? "bg-emerald-400/20 text-emerald-200"
+                                    : "bg-slate-500/20 text-slate-300"
+                                }`}
+                              >
+                                {service.completed ? "Completo" : "Pendiente"}
+                              </span>
+                            </div>
+                            <h3 className="mt-4 text-sm font-semibold uppercase leading-5 text-white">
+                              {service.name}
+                            </h3>
+                            <p className="mt-2 text-xs text-slate-400">
+                              {service.rows.length} fila{service.rows.length === 1 ? "" : "s"} de captura
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
             </div>
           </div>
         </div>
