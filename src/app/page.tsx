@@ -47,6 +47,7 @@ type ManagedUser = {
   serviceId: string | null;
   serviceName: string | null;
   email: string;
+  username: string;
   name: string;
   role: UserRole;
   permissions: ServicePermissions;
@@ -61,6 +62,7 @@ type AdminDraft = {
   mustChangePassword: boolean;
   isActive: boolean;
   email: string;
+  username: string;
   name: string;
 };
 
@@ -138,6 +140,37 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "transporte-general": "administrativa",
   mantenimiento: "administrativa",
   "saneamiento-ambiental": "administrativa",
+};
+
+const SERVICE_USERNAME_BY_ID: Record<string, string> = {
+  vacunacion: "dep.vacunacion",
+  "laboratorio-clinico": "dep.laboratorio",
+  "laboratorio-de-biologia-molecular": "dep.biologia",
+  "resonancia-magnetica": "dep.resonancia",
+  tomografia: "dep.tomografia",
+  "estudio-de-radiologia": "dep.radiologia",
+  ultrasonografia: "dep.ultrasonografia",
+  "estudios-gastroclinicos": "dep.gastro",
+  "terapia-fisica": "dep.fisioterapia",
+  "terapia-respiratoria": "dep.terapiaresp",
+  "rehabilitacion-pulmonar": "dep.rehabpulmonar",
+  "banco-de-sangre": "dep.bancosangre",
+  "unidad-de-hemodinamia": "dep.hemodinamia",
+  hemodialisis: "dep.hemodialisis",
+  "servicio-farmaceutico": "dep.farmacia",
+  "rehablitacion-psicosocial": "dep.psicosocial",
+  "alimentacion-enteral": "dep.enteral",
+  "nutricion-parenteral": "dep.parenteral",
+  "central-de-esterilizacion": "dep.esterilizacion",
+  "saneamiento-ambiental": "dep.saneamiento",
+  aseo: "dep.aseo",
+  almacen: "dep.almacen",
+  "servicio-de-alimentacion": "dep.alimentacion",
+  lavanderia: "dep.lavanderia",
+  "transporte-general": "dep.transporte",
+  mantenimiento: "dep.mantenimiento",
+  "trabajo-social": "dep.trabajosocial",
+  "docencia-e-investigacion": "dep.docencia",
 };
 
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
@@ -340,6 +373,28 @@ function sanitizeNumericValue(value: string) {
   return value.replace(/[^0-9]/g, "");
 }
 
+function normalizeKey(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function getServiceUsername(serviceId: string | null | undefined) {
+  if (!serviceId) {
+    return "";
+  }
+
+  return SERVICE_USERNAME_BY_ID[serviceId] || `dep.${serviceId}`;
+}
+
+function findServiceByUsername(username: string) {
+  const normalizedUsername = normalizeKey(username);
+
+  return (
+    SERVICE_DEFINITIONS.find(
+      (service) => normalizeKey(getServiceUsername(service.id)) === normalizedUsername,
+    ) || null
+  );
+}
+
 function normalizeLoginIdentifier(value: string) {
   const trimmedValue = value.trim();
 
@@ -367,6 +422,12 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     serviceId: typeof data.serviceId === "string" ? data.serviceId : null,
     serviceName: typeof data.serviceName === "string" ? data.serviceName : null,
     email,
+    username:
+      typeof data.username === "string"
+        ? data.username
+        : role === "admin"
+          ? ADMIN_USERNAME
+          : getServiceUsername(typeof data.serviceId === "string" ? data.serviceId : null),
     name: typeof data.name === "string" ? data.name : email.split("@")[0] || "Usuario",
     role,
     permissions: {
@@ -390,6 +451,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         mustChangePassword: managedUser.mustChangePassword,
         isActive: managedUser.isActive,
         email: managedUser.email,
+        username: managedUser.username,
         name: managedUser.name,
       } satisfies AdminDraft,
     ]),
@@ -536,6 +598,7 @@ async function ensureDefaultAdminProfile(currentUser: User) {
       serviceId: null,
       serviceName: null,
       email: ADMIN_EMAIL,
+      username: ADMIN_USERNAME,
       name: ADMIN_USERNAME,
       role: "admin",
       isActive: true,
@@ -545,6 +608,46 @@ async function ensureDefaultAdminProfile(currentUser: User) {
     },
     { merge: true },
   );
+}
+
+async function resolveLoginEmail(loginIdentifier: string) {
+  const normalizedIdentifier = normalizeLoginIdentifier(loginIdentifier);
+
+  if (!normalizedIdentifier) {
+    return "";
+  }
+
+  if (normalizedIdentifier.includes("@")) {
+    return normalizedIdentifier;
+  }
+
+  if (normalizeKey(normalizedIdentifier) === normalizeKey(ADMIN_USERNAME)) {
+    return ADMIN_EMAIL;
+  }
+
+  const mappedService = findServiceByUsername(normalizedIdentifier);
+
+  if (mappedService) {
+    const serviceSnapshot = await getDocs(
+      query(collection(db, "serviceUsers"), where("serviceId", "==", mappedService.id)),
+    );
+    const matchedUser = serviceSnapshot.docs.find((item) => Boolean(item.data().email));
+
+    if (matchedUser) {
+      return String(matchedUser.data().email);
+    }
+  }
+
+  const usernameSnapshot = await getDocs(
+    query(collection(db, "serviceUsers"), where("username", "==", normalizedIdentifier)),
+  );
+  const matchedByUsername = usernameSnapshot.docs.find((item) => Boolean(item.data().email));
+
+  if (matchedByUsername) {
+    return String(matchedByUsername.data().email);
+  }
+
+  return normalizedIdentifier;
 }
 
 export default function Home() {
@@ -967,6 +1070,8 @@ export default function Home() {
           throw new Error("service-required");
         }
 
+        const serviceUsername = getServiceUsername(service.id);
+
         const assignmentRef = doc(db, "serviceAssignments", service.id);
         const assignmentSnapshot = await getDoc(assignmentRef);
 
@@ -989,6 +1094,7 @@ export default function Home() {
           serviceId: service.id,
           serviceName: service.name,
           email: serviceEmail,
+          username: serviceUsername,
           name: name.trim() || service.name,
           role: "service",
           isActive: true,
@@ -1003,6 +1109,7 @@ export default function Home() {
           serviceName: service.name,
           uid: credential.user.uid,
           email: serviceEmail,
+          username: serviceUsername,
           updatedAt: serverTimestamp(),
         });
 
@@ -1010,13 +1117,13 @@ export default function Home() {
         setSelectedServiceId("");
         setName("");
         setMessage(
-          `Cuenta creada para ${service.name}. Contrasena temporal: ${DEFAULT_TEMP_PASSWORD}. Debe cambiarse al ingresar.`,
+          `Cuenta creada para ${service.name}. Usuario: ${serviceUsername}. Contrasena temporal: ${DEFAULT_TEMP_PASSWORD}.`,
         );
       } else {
-        const loginIdentifier = normalizeLoginIdentifier(email);
+        const loginIdentifier = email.trim();
 
         if (
-          loginIdentifier.toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
+          normalizeKey(loginIdentifier) === normalizeKey(ADMIN_USERNAME) &&
           password === ADMIN_PASSWORD
         ) {
           try {
@@ -1047,7 +1154,8 @@ export default function Home() {
             }
           }
         } else {
-          await signInWithEmailAndPassword(auth, loginIdentifier, password);
+          const resolvedEmail = await resolveLoginEmail(loginIdentifier);
+          await signInWithEmailAndPassword(auth, resolvedEmail, password);
         }
 
         setPassword("");
@@ -1218,6 +1326,8 @@ export default function Home() {
 
     const nextService = getServiceById(draft.serviceId || null);
     const nextRole = draft.role;
+    const nextUsername =
+      nextRole === "service" && nextService ? getServiceUsername(nextService.id) : draft.username;
     const nextPermissions = {
       canEdit: draft.canEdit,
       canManageUsers: nextRole === "admin" ? true : false,
@@ -1254,6 +1364,7 @@ export default function Home() {
             serviceName: nextService.name,
             uid,
             email: draft.email,
+            username: nextUsername,
             updatedAt: serverTimestamp(),
           },
           { merge: true },
@@ -1265,6 +1376,7 @@ export default function Home() {
         {
           serviceId: draft.serviceId || null,
           serviceName: nextService?.name || null,
+          username: nextUsername,
           role: nextRole,
           isActive: draft.isActive,
           mustChangePassword: draft.mustChangePassword,
@@ -1358,6 +1470,8 @@ export default function Home() {
                   Usuario: <span className="font-semibold text-white">{welcomeName}</span>
                   {" · "}
                   Rol: <span className="font-semibold text-white">{isAdmin ? "Administrador" : "Servicio"}</span>
+                  {" · "}
+                  Acceso: <span className="font-semibold text-white">{serviceProfile.username}</span>
                   {currentService ? (
                     <>
                       {" · "}
@@ -1791,6 +1905,7 @@ export default function Home() {
                   <thead>
                     <tr className="bg-[#1a2334] text-left">
                       <th className="px-4 py-3 font-semibold">Responsable</th>
+                      <th className="px-4 py-3 font-semibold">Usuario</th>
                       <th className="px-4 py-3 font-semibold">Correo</th>
                       <th className="px-4 py-3 font-semibold">Servicio</th>
                       <th className="px-4 py-3 font-semibold">Rol</th>
@@ -1818,6 +1933,7 @@ export default function Home() {
                               {managedUser.uid}
                             </p>
                           </td>
+                          <td className="px-4 py-4 font-mono text-sm text-cyan-200">{draft.username}</td>
                           <td className="px-4 py-4 text-slate-200">{draft.email}</td>
                           <td className="px-4 py-4">
                             <select
@@ -2229,6 +2345,12 @@ export default function Home() {
                           ))}
                         </select>
                       </label>
+
+                      {selectedServiceId ? (
+                        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
+                          Usuario asignado: <strong>{getServiceUsername(selectedServiceId)}</strong>
+                        </div>
+                      ) : null}
 
                       <label className="block">
                         <span className="text-sm font-medium text-slate-700">
