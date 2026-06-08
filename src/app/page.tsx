@@ -2,7 +2,9 @@
 
 import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import {
-  User,
+  type Auth,
+  type AuthError,
+  type User,
   browserLocalPersistence,
   browserSessionPersistence,
   createUserWithEmailAndPassword,
@@ -14,7 +16,6 @@ import {
   updatePassword,
   updateProfile,
 } from "firebase/auth";
-import type { AuthError } from "firebase/auth";
 import {
   collection,
   deleteDoc,
@@ -26,7 +27,7 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { auth, firestoreDatabaseId } from "@/lib/firebase";
+import { auth, createSecondaryAuth, firestoreDatabaseId } from "@/lib/firebase";
 import { db, shutdownFirestore } from "@/lib/firestore";
 import {
   SERVICE_COUNT,
@@ -48,7 +49,11 @@ type ManagedUser = {
   serviceName: string | null;
   email: string;
   username: string;
+  firstName: string;
+  lastName: string;
   name: string;
+  dui: string;
+  phone: string;
   role: UserRole;
   permissions: ServicePermissions;
   mustChangePassword: boolean;
@@ -64,6 +69,14 @@ type AdminDraft = {
   email: string;
   username: string;
   name: string;
+};
+type AdminCreateForm = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  dui: string;
+  phone: string;
+  serviceId: string;
 };
 
 type AdminOverviewEntry = {
@@ -392,6 +405,11 @@ function normalizeKey(value: string) {
   return value.trim().toLowerCase();
 }
 
+function buildFullName(firstName: string, lastName: string, fallback: string) {
+  const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
+  return fullName || fallback;
+}
+
 function getServiceUsername(serviceId: string | null | undefined) {
   if (!serviceId) {
     return "";
@@ -431,6 +449,9 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     typeof data.permissions === "object" && data.permissions !== null
       ? (data.permissions as Partial<ServicePermissions>)
       : {};
+  const firstName = typeof data.firstName === "string" ? data.firstName : "";
+  const lastName = typeof data.lastName === "string" ? data.lastName : "";
+  const fallbackName = typeof data.name === "string" ? data.name : email.split("@")[0] || "Usuario";
 
   return {
     uid,
@@ -443,7 +464,11 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
         : role === "admin"
           ? ADMIN_USERNAME
           : getServiceUsername(typeof data.serviceId === "string" ? data.serviceId : null),
-    name: typeof data.name === "string" ? data.name : email.split("@")[0] || "Usuario",
+    firstName,
+    lastName,
+    name: buildFullName(firstName, lastName, fallbackName),
+    dui: typeof data.dui === "string" ? data.dui : "",
+    phone: typeof data.phone === "string" ? data.phone : "",
     role,
     permissions: {
       canEdit: rawPermissions.canEdit ?? defaultPermissions.canEdit,
@@ -625,6 +650,87 @@ async function ensureDefaultAdminProfile(currentUser: User) {
   );
 }
 
+async function createServiceUserAccount(
+  creationAuth: Auth,
+  {
+    service,
+    email,
+    firstName,
+    lastName,
+    dui,
+    phone,
+  }: {
+    service: ServiceDefinition;
+    email: string;
+    firstName: string;
+    lastName: string;
+    dui: string;
+    phone: string;
+  },
+) {
+  const serviceUsername = getServiceUsername(service.id);
+  const assignmentRef = doc(db, "serviceAssignments", service.id);
+  const assignmentSnapshot = await getDoc(assignmentRef);
+
+  if (assignmentSnapshot.exists()) {
+    throw new Error("service-already-assigned");
+  }
+
+  const normalizedEmail = email.trim();
+  const normalizedFirstName = firstName.trim();
+  const normalizedLastName = lastName.trim();
+  const normalizedDui = dui.trim();
+  const normalizedPhone = phone.trim();
+  const displayName = buildFullName(normalizedFirstName, normalizedLastName, service.name);
+  const credential = await createUserWithEmailAndPassword(
+    creationAuth,
+    normalizedEmail,
+    DEFAULT_TEMP_PASSWORD,
+  );
+
+  await updateProfile(credential.user, {
+    displayName,
+  });
+
+  await setDoc(doc(db, "serviceUsers", credential.user.uid), {
+    serviceId: service.id,
+    serviceName: service.name,
+    email: normalizedEmail,
+    username: serviceUsername,
+    firstName: normalizedFirstName,
+    lastName: normalizedLastName,
+    name: displayName,
+    dui: normalizedDui,
+    phone: normalizedPhone,
+    role: "service",
+    isActive: true,
+    mustChangePassword: true,
+    permissions: getDefaultPermissions("service"),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  await setDoc(assignmentRef, {
+    serviceId: service.id,
+    serviceName: service.name,
+    uid: credential.user.uid,
+    email: normalizedEmail,
+    username: serviceUsername,
+    firstName: normalizedFirstName,
+    lastName: normalizedLastName,
+    name: displayName,
+    dui: normalizedDui,
+    phone: normalizedPhone,
+    updatedAt: serverTimestamp(),
+  });
+
+  return {
+    credential,
+    displayName,
+    serviceUsername,
+  };
+}
+
 async function resolveLoginEmail(loginIdentifier: string) {
   const normalizedIdentifier = normalizeLoginIdentifier(loginIdentifier);
 
@@ -666,6 +772,14 @@ async function resolveLoginEmail(loginIdentifier: string) {
 }
 
 export default function Home() {
+  const [adminCreateForm, setAdminCreateForm] = useState<AdminCreateForm>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    dui: "",
+    phone: "",
+    serviceId: "",
+  });
   const [mode, setMode] = useState<AuthMode>("login");
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -689,6 +803,7 @@ export default function Home() {
   const [adminUsers, setAdminUsers] = useState<ManagedUser[]>([]);
   const [adminDrafts, setAdminDrafts] = useState<Record<string, AdminDraft>>({});
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [isCreatingManagedUser, setIsCreatingManagedUser] = useState(false);
   const [adminBusyUserId, setAdminBusyUserId] = useState("");
   const [adminOverview, setAdminOverview] = useState<AdminOverviewEntry[]>([]);
   const [isLoadingOverview, setIsLoadingOverview] = useState(false);
@@ -728,6 +843,21 @@ export default function Home() {
   );
   const currentMonthProgress = Math.round(
     (publicCompletedCount / Math.max(SERVICE_DEFINITIONS.length, 1)) * 100,
+  );
+  const assignedServiceUsers = useMemo(() => {
+    const assignedByService = new Map<string, ManagedUser>();
+
+    for (const managedUser of adminUsers) {
+      if (managedUser.serviceId) {
+        assignedByService.set(managedUser.serviceId, managedUser);
+      }
+    }
+
+    return assignedByService;
+  }, [adminUsers]);
+  const selectedAdminCreateService = useMemo(
+    () => getServiceById(adminCreateForm.serviceId),
+    [adminCreateForm.serviceId],
   );
   const calendarPreviewDate = useMemo(() => {
     if (!calendarEditorPeriodId) {
@@ -1206,47 +1336,13 @@ export default function Home() {
           throw new Error("service-required");
         }
 
-        const serviceUsername = getServiceUsername(service.id);
-
-        const assignmentRef = doc(db, "serviceAssignments", service.id);
-        const assignmentSnapshot = await getDoc(assignmentRef);
-
-        if (assignmentSnapshot.exists()) {
-          throw new Error("service-already-assigned");
-        }
-
-        const serviceEmail = email.trim();
-        const credential = await createUserWithEmailAndPassword(
-          auth,
-          serviceEmail,
-          DEFAULT_TEMP_PASSWORD,
-        );
-
-        await updateProfile(credential.user, {
-          displayName: name.trim() || service.name,
-        });
-
-        await setDoc(doc(db, "serviceUsers", credential.user.uid), {
-          serviceId: service.id,
-          serviceName: service.name,
-          email: serviceEmail,
-          username: serviceUsername,
-          name: name.trim() || service.name,
-          role: "service",
-          isActive: true,
-          mustChangePassword: true,
-          permissions: getDefaultPermissions("service"),
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-
-        await setDoc(assignmentRef, {
-          serviceId: service.id,
-          serviceName: service.name,
-          uid: credential.user.uid,
-          email: serviceEmail,
-          username: serviceUsername,
-          updatedAt: serverTimestamp(),
+        const { serviceUsername } = await createServiceUserAccount(auth, {
+          service,
+          email,
+          firstName: name,
+          lastName: "",
+          dui: "",
+          phone: "",
         });
 
         setPassword("");
@@ -1308,6 +1404,83 @@ export default function Home() {
       setError(getAuthErrorMessage(submitError));
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  function updateAdminCreateForm(field: keyof AdminCreateForm, value: string) {
+    setAdminCreateForm((currentForm) => ({
+      ...currentForm,
+      [field]: value,
+    }));
+  }
+
+  async function handleAdminCreateUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (firestoreUnavailable) {
+      setError(FIRESTORE_SETUP_MESSAGE);
+      setMessage("");
+      return;
+    }
+
+    const service = getServiceById(adminCreateForm.serviceId);
+
+    if (!service) {
+      setError(getAuthErrorMessage(new Error("service-required")));
+      setMessage("");
+      return;
+    }
+
+    setIsCreatingManagedUser(true);
+    setError("");
+    setMessage("");
+
+    const secondarySession = createSecondaryAuth();
+
+    try {
+      const { serviceUsername } = await createServiceUserAccount(secondarySession.auth, {
+        service,
+        email: adminCreateForm.email,
+        firstName: adminCreateForm.firstName,
+        lastName: adminCreateForm.lastName,
+        dui: adminCreateForm.dui,
+        phone: adminCreateForm.phone,
+      });
+
+      const users = await fetchManagedUsers();
+      setAdminUsers(users);
+      setAdminDrafts(buildAdminDrafts(users));
+      setAdminCreateForm({
+        firstName: "",
+        lastName: "",
+        email: "",
+        dui: "",
+        phone: "",
+        serviceId: "",
+      });
+      setMessage(
+        `Cuenta creada para ${service.name}. Usuario: ${serviceUsername}. Contrasena temporal: ${DEFAULT_TEMP_PASSWORD}.`,
+      );
+    } catch (createError) {
+      if (await handleFirestoreError(createError)) {
+        return;
+      }
+
+      setError(getAuthErrorMessage(createError));
+    } finally {
+      try {
+        await signOut(secondarySession.auth);
+      } catch {
+        // Ignore secondary sign-out issues after account creation.
+      }
+
+      try {
+        await secondarySession.dispose();
+      } catch {
+        // Ignore secondary app disposal races.
+      }
+
+      setIsCreatingManagedUser(false);
     }
   }
 
@@ -2048,6 +2221,198 @@ export default function Home() {
                 <p className="text-sm text-slate-300">Clave temporal inicial: {DEFAULT_TEMP_PASSWORD}</p>
               </div>
 
+              <div className="mb-6 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                <form
+                  className="rounded-[24px] border border-white/10 bg-[#1b2537] p-5"
+                  onSubmit={handleAdminCreateUser}
+                >
+                  <p className="text-sm uppercase tracking-[0.2em] text-emerald-200/80">
+                    Nuevo usuario
+                  </p>
+                  <h3 className="mt-2 text-2xl font-semibold text-white">
+                    Crear cuenta y asignar servicio
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-300">
+                    Captura los datos del responsable y elige un servicio disponible. Los servicios
+                    en gris ya tienen usuario asignado.
+                  </p>
+
+                  <div className="mt-5 grid gap-4 md:grid-cols-2">
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-200">Nombres</span>
+                      <input
+                        value={adminCreateForm.firstName}
+                        onChange={(event) => updateAdminCreateForm("firstName", event.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-emerald-400"
+                        placeholder="Nombres"
+                        required
+                        type="text"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-200">Apellidos</span>
+                      <input
+                        value={adminCreateForm.lastName}
+                        onChange={(event) => updateAdminCreateForm("lastName", event.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-emerald-400"
+                        placeholder="Apellidos"
+                        required
+                        type="text"
+                      />
+                    </label>
+
+                    <label className="block md:col-span-2">
+                      <span className="text-sm font-medium text-slate-200">Correo</span>
+                      <input
+                        value={adminCreateForm.email}
+                        onChange={(event) => updateAdminCreateForm("email", event.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-emerald-400"
+                        placeholder="correo@perc-hnes.app"
+                        required
+                        type="email"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-200">DUI</span>
+                      <input
+                        value={adminCreateForm.dui}
+                        onChange={(event) => updateAdminCreateForm("dui", event.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-emerald-400"
+                        placeholder="00000000-0"
+                        required
+                        type="text"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-200">Telefono</span>
+                      <input
+                        value={adminCreateForm.phone}
+                        onChange={(event) => updateAdminCreateForm("phone", event.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-emerald-400"
+                        placeholder="0000-0000"
+                        required
+                        type="text"
+                      />
+                    </label>
+
+                    <label className="block md:col-span-2">
+                      <span className="text-sm font-medium text-slate-200">Servicio</span>
+                      <select
+                        value={adminCreateForm.serviceId}
+                        onChange={(event) => updateAdminCreateForm("serviceId", event.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                        required
+                      >
+                        <option value="">Selecciona un servicio</option>
+                        {SERVICE_DEFINITIONS.map((service) => {
+                          const assignedUser = assignedServiceUsers.get(service.id);
+
+                          return (
+                            <option
+                              key={service.id}
+                              value={service.id}
+                              disabled={Boolean(assignedUser)}
+                            >
+                              {assignedUser
+                                ? `${service.name} - asignado a ${assignedUser.name}`
+                                : service.name}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-950/20 px-4 py-4 text-sm text-emerald-100">
+                    <p>
+                      Usuario asignado: <strong>{selectedAdminCreateService ? getServiceUsername(selectedAdminCreateService.id) : "Selecciona un servicio"}</strong>
+                    </p>
+                    <p className="mt-1">
+                      Contrasena temporal: <strong>{DEFAULT_TEMP_PASSWORD}</strong>
+                    </p>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                      type="submit"
+                      disabled={isCreatingManagedUser}
+                      className="rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                    >
+                      {isCreatingManagedUser ? "Creando usuario..." : "Crear usuario"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAdminCreateForm({
+                          firstName: "",
+                          lastName: "",
+                          email: "",
+                          dui: "",
+                          phone: "",
+                          serviceId: "",
+                        })
+                      }
+                      className="rounded-2xl border border-white/10 bg-transparent px-5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
+                    >
+                      Limpiar formulario
+                    </button>
+                  </div>
+                </form>
+
+                <div className="rounded-[24px] border border-white/10 bg-[#1b2537] p-5">
+                  <p className="text-sm uppercase tracking-[0.2em] text-amber-200/80">
+                    Servicios
+                  </p>
+                  <h3 className="mt-2 text-2xl font-semibold text-white">Estado de asignacion</h3>
+                  <p className="mt-2 text-sm text-slate-300">
+                    Revisa rapido que servicios ya tienen cuenta y a quien estan asignados.
+                  </p>
+
+                  <div className="mt-5 grid max-h-[540px] gap-2 overflow-y-auto pr-1">
+                    {SERVICE_DEFINITIONS.map((service) => {
+                      const assignedUser = assignedServiceUsers.get(service.id);
+
+                      return (
+                        <article
+                          key={service.id}
+                          className={`rounded-2xl border px-4 py-3 ${
+                            assignedUser
+                              ? "border-white/10 bg-slate-500/20 text-slate-300"
+                              : "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h4 className="text-sm font-semibold text-white">{service.name}</h4>
+                              <p className="mt-1 text-xs text-slate-300">
+                                Usuario: {getServiceUsername(service.id)}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-400">
+                                {assignedUser
+                                  ? `${assignedUser.name} · ${assignedUser.email}`
+                                  : "Disponible para crear cuenta"}
+                              </p>
+                            </div>
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                                assignedUser
+                                  ? "bg-slate-200/10 text-slate-300"
+                                  : "bg-emerald-300/20 text-emerald-100"
+                              }`}
+                            >
+                              {assignedUser ? "Asignado" : "Disponible"}
+                            </span>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="min-w-[1400px] border-collapse text-sm text-slate-100">
                   <thead>
@@ -2077,6 +2442,14 @@ export default function Home() {
                         <tr key={managedUser.uid} className="border-t border-white/10 align-top">
                           <td className="px-4 py-4">
                             <p className="font-semibold text-white">{draft.name}</p>
+                            {managedUser.dui ? (
+                              <p className="mt-1 text-xs text-slate-300">DUI: {managedUser.dui}</p>
+                            ) : null}
+                            {managedUser.phone ? (
+                              <p className="mt-1 text-xs text-slate-300">
+                                Telefono: {managedUser.phone}
+                              </p>
+                            ) : null}
                             <p className="mt-1 break-all font-mono text-xs text-slate-400">
                               {managedUser.uid}
                             </p>
@@ -2094,11 +2467,23 @@ export default function Home() {
                               className="w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400"
                             >
                               <option value="">Sin servicio</option>
-                              {SERVICE_DEFINITIONS.map((service) => (
-                                <option key={service.id} value={service.id}>
-                                  {service.name}
-                                </option>
-                              ))}
+                              {SERVICE_DEFINITIONS.map((service) => {
+                                const assignedUser = assignedServiceUsers.get(service.id);
+                                const isTakenByAnotherUser =
+                                  Boolean(assignedUser) && assignedUser?.uid !== managedUser.uid;
+
+                                return (
+                                  <option
+                                    key={service.id}
+                                    value={service.id}
+                                    disabled={isTakenByAnotherUser}
+                                  >
+                                    {isTakenByAnotherUser
+                                      ? `${service.name} - asignado a ${assignedUser?.name}`
+                                      : service.name}
+                                  </option>
+                                );
+                              })}
                             </select>
                           </td>
                           <td className="px-4 py-4">
