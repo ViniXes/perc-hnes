@@ -2245,8 +2245,8 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="flex items-center justify-center px-5 py-10 sm:px-8">
-          <div className="w-full max-w-md">
+        <div className="px-5 py-10 sm:px-8 lg:py-8">
+          <div className="w-full max-w-md lg:sticky lg:top-6 lg:ml-auto">
             {isLoadingSession ? (
               <div className="rounded-[24px] border border-slate-200 bg-white p-8 shadow-sm">
                 <div className="h-3 w-28 rounded-full bg-slate-200" />
