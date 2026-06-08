@@ -2358,18 +2358,18 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
                         {group.services.map((service) => (
                           <article
                             key={service.id}
-                            className="rounded-2xl border border-white/10 bg-[#1f2a3f] px-4 py-4"
+                            className="rounded-xl border border-white/10 bg-[#1f2a3f] px-3 py-3"
                           >
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-violet-500/20 text-violet-200">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-violet-500/20 text-xs text-violet-200">
                                 •
                               </span>
                               <span
-                                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                                   service.completed
                                     ? "bg-emerald-400/20 text-emerald-200"
                                     : "bg-slate-500/20 text-slate-300"
@@ -2378,10 +2378,10 @@ export default function Home() {
                                 {service.completed ? "Completo" : "Pendiente"}
                               </span>
                             </div>
-                            <h3 className="mt-4 text-sm font-semibold uppercase leading-5 text-white">
+                            <h3 className="mt-3 text-xs font-semibold uppercase leading-4 text-white">
                               {service.name}
                             </h3>
-                            <p className="mt-2 text-xs text-slate-400">
+                            <p className="mt-1 text-[11px] text-slate-400">
                               {service.rows.length} fila{service.rows.length === 1 ? "" : "s"} de captura
                             </p>
                           </article>
