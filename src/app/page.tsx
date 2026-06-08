@@ -26,7 +26,7 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { auth } from "@/lib/firebase";
+import { auth, firestoreDatabaseId } from "@/lib/firebase";
 import { db, shutdownFirestore } from "@/lib/firestore";
 import {
   SERVICE_COUNT,
@@ -102,8 +102,7 @@ const ADMIN_USERNAME = "Hcardoza";
 const ADMIN_PASSWORD = "Cardoza1986";
 const ADMIN_EMAIL = "hcardoza.admin@perc-hnes.app";
 const CAPTURE_WINDOW_DAYS = 3;
-const FIRESTORE_SETUP_MESSAGE =
-  "Firestore no esta creado en este proyecto de Firebase. Crea la base de datos '(default)' para habilitar login, tablero y guardado.";
+const FIRESTORE_SETUP_MESSAGE = `Firestore no esta creado o configurado en este proyecto de Firebase. Verifica la base de datos '${firestoreDatabaseId}' para habilitar login, tablero y guardado.`;
 const FIRESTORE_DISABLED_STORAGE_KEY = "perc-hnes.firestore-disabled";
 
 const SERVICE_GROUP_LABELS: Record<string, string> = {
@@ -243,6 +242,7 @@ function isFirestoreSetupError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
 
   return (
+    message.includes(`Database '${firestoreDatabaseId}' not found`) ||
     message.includes("Database '(default)' not found") ||
     message.includes("firestore/failed-precondition") ||
     message.includes("firestore-setup-required")

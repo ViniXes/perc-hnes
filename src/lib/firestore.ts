@@ -1,7 +1,10 @@
-import { getFirestore, terminate } from "firebase/firestore";
-import app from "@/lib/firebase";
+import { getFirestore, setLogLevel, terminate } from "firebase/firestore";
+import app, { firestoreDatabaseId } from "@/lib/firebase";
 
-export const db = getFirestore(app);
+// The page already handles Firestore availability errors explicitly.
+setLogLevel("silent");
+
+export const db = getFirestore(app, firestoreDatabaseId);
 
 let firestoreTerminated = false;
 
