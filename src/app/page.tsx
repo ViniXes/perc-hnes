@@ -2341,54 +2341,218 @@ export default function Home() {
                       </div>
                     </div>
                   ))
-                : publicDashboardGroups.map((group) => (
-                    <section
-                      key={group.id}
-                      className="rounded-[24px] border border-white/10 bg-[#162034]/90 p-5 shadow-[0_24px_80px_rgba(3,7,18,0.24)] backdrop-blur"
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <h2 className="text-xl font-semibold text-white">{group.title}</h2>
-                          <p className="mt-1 text-sm text-slate-300">
-                            {
-                              group.services.filter((service) => service.completed).length
-                            }{" "}
-                            de {group.services.length} dependencias completadas
-                          </p>
-                        </div>
-                      </div>
+                : publicDashboardGroups.map((group) => {
+                    const completedServices = group.services.filter((service) => service.completed);
+                    const pendingServices = group.services.filter((service) => !service.completed);
+                    const completionShare = Math.round(
+                      (completedServices.length / Math.max(group.services.length, 1)) * 100,
+                    );
+                    const pendingShare = Math.max(100 - completionShare, 0);
 
-                      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
-                        {group.services.map((service) => (
-                          <article
-                            key={service.id}
-                            className="rounded-xl border border-white/10 bg-[#1f2a3f] px-3 py-3"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-violet-500/20 text-xs text-violet-200">
-                                •
-                              </span>
-                              <span
-                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                  service.completed
-                                    ? "bg-emerald-400/20 text-emerald-200"
-                                    : "bg-slate-500/20 text-slate-300"
-                                }`}
-                              >
-                                {service.completed ? "Completo" : "Pendiente"}
-                              </span>
-                            </div>
-                            <h3 className="mt-3 text-xs font-semibold uppercase leading-4 text-white">
-                              {service.name}
-                            </h3>
-                            <p className="mt-1 text-[11px] text-slate-400">
-                              {service.rows.length} fila{service.rows.length === 1 ? "" : "s"} de captura
+                    return (
+                      <section
+                        key={group.id}
+                        className="rounded-[26px] border border-[#d8cfbd] bg-[#f6f1e6] p-5 text-slate-900 shadow-[0_24px_70px_rgba(15,23,42,0.14)]"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#d8cfbd] pb-4">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#64748b]">
+                              Panel de cumplimiento
                             </p>
-                          </article>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
+                            <h2 className="mt-2 text-2xl font-semibold text-[#23395d]">{group.title}</h2>
+                            <p className="mt-1 text-sm text-slate-600">
+                              Vista de pendientes y completos del periodo actual.
+                            </p>
+                          </div>
+                          <div className="rounded-full border border-[#c6b899] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#23395d]">
+                            {completedServices.length}/{group.services.length} completos
+                          </div>
+                        </div>
+
+                        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(320px,0.92fr)_minmax(0,1.08fr)]">
+                          <div className="space-y-4">
+                            <div className="rounded-[24px] bg-[#23395d] p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                              <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-3">
+                                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4">
+                                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-300">
+                                    Total
+                                  </p>
+                                  <p className="mt-3 text-3xl font-semibold">{group.services.length}</p>
+                                  <p className="mt-1 text-xs text-slate-300">Dependencias</p>
+                                </div>
+                                <div className="rounded-2xl border border-[#f3cf63]/30 bg-[#f3cf63]/15 px-4 py-4">
+                                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#f8df8a]">
+                                    Completos
+                                  </p>
+                                  <p className="mt-3 text-3xl font-semibold text-[#fff3c8]">
+                                    {completedServices.length}
+                                  </p>
+                                  <p className="mt-1 text-xs text-[#f8df8a]">Servicios al dia</p>
+                                </div>
+                                <div className="rounded-2xl border border-[#ff7a30]/30 bg-[#ff7a30]/15 px-4 py-4">
+                                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#ffd1b5]">
+                                    Pendientes
+                                  </p>
+                                  <p className="mt-3 text-3xl font-semibold text-[#fff0e7]">
+                                    {pendingServices.length}
+                                  </p>
+                                  <p className="mt-1 text-xs text-[#ffd1b5]">Por capturar</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-[24px] border border-[#d8cfbd] bg-white/80 p-4">
+                              <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                                <span>Ritmo de captura</span>
+                                <span>{completionShare}%</span>
+                              </div>
+
+                              <div className="mt-4 space-y-4">
+                                <div>
+                                  <div className="flex items-center justify-between text-sm font-medium text-slate-700">
+                                    <span>Completados</span>
+                                    <span>{completionShare}%</span>
+                                  </div>
+                                  <div className="mt-2 h-4 rounded-full bg-slate-200">
+                                    <div
+                                      className="h-4 rounded-full bg-[#f3c623]"
+                                      style={{ width: `${completionShare}%` }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div className="flex items-center justify-between text-sm font-medium text-slate-700">
+                                    <span>Pendientes</span>
+                                    <span>{pendingShare}%</span>
+                                  </div>
+                                  <div className="mt-2 h-4 rounded-full bg-slate-200">
+                                    <div
+                                      className="h-4 rounded-full bg-[#ff6b2c]"
+                                      style={{ width: `${pendingShare}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-2xl border border-[#d8cfbd] bg-[#f8f4ea] px-4 py-3">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                                    Objetivo
+                                  </p>
+                                  <p className="mt-2 text-lg font-semibold text-[#23395d]">
+                                    Completar el 100% del grupo
+                                  </p>
+                                </div>
+                                <div className="rounded-2xl border border-[#d8cfbd] bg-[#f8f4ea] px-4 py-3">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                                    Estado
+                                  </p>
+                                  <p className="mt-2 text-lg font-semibold text-[#23395d]">
+                                    {pendingServices.length === 0 ? "Ciclo cerrado" : "Requiere seguimiento"}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-4 lg:grid-cols-2">
+                            <div className="rounded-[24px] border border-[#d8cfbd] bg-white/85 p-4">
+                              <div className="flex items-center justify-between gap-3 border-b border-[#e8dfcf] pb-3">
+                                <div>
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                                    Completos
+                                  </p>
+                                  <h3 className="mt-1 text-lg font-semibold text-[#23395d]">
+                                    Dependencias al dia
+                                  </h3>
+                                </div>
+                                <span className="rounded-full bg-[#f3c623] px-3 py-1 text-xs font-semibold text-[#23395d]">
+                                  {completedServices.length}
+                                </span>
+                              </div>
+
+                              <div className="mt-4 space-y-2">
+                                {completedServices.length > 0 ? (
+                                  completedServices.map((service) => (
+                                    <article
+                                      key={service.id}
+                                      className="rounded-2xl border border-[#eedb94] bg-[#fff7d7] px-4 py-3"
+                                    >
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                          <h4 className="text-sm font-semibold uppercase leading-5 text-[#23395d]">
+                                            {service.name}
+                                          </h4>
+                                          <p className="mt-1 text-xs text-slate-600">
+                                            {service.rows.length} fila
+                                            {service.rows.length === 1 ? "" : "s"} registradas
+                                          </p>
+                                        </div>
+                                        <span className="rounded-full bg-[#23395d] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                                          Completo
+                                        </span>
+                                      </div>
+                                    </article>
+                                  ))
+                                ) : (
+                                  <div className="rounded-2xl border border-dashed border-[#d8cfbd] bg-[#f8f4ea] px-4 py-6 text-sm text-slate-500">
+                                    Aun no hay dependencias completadas en este grupo.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="rounded-[24px] border border-[#d8cfbd] bg-white/85 p-4">
+                              <div className="flex items-center justify-between gap-3 border-b border-[#e8dfcf] pb-3">
+                                <div>
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                                    Pendientes
+                                  </p>
+                                  <h3 className="mt-1 text-lg font-semibold text-[#23395d]">
+                                    Dependencias por capturar
+                                  </h3>
+                                </div>
+                                <span className="rounded-full bg-[#ff6b2c] px-3 py-1 text-xs font-semibold text-white">
+                                  {pendingServices.length}
+                                </span>
+                              </div>
+
+                              <div className="mt-4 space-y-2">
+                                {pendingServices.length > 0 ? (
+                                  pendingServices.map((service) => (
+                                    <article
+                                      key={service.id}
+                                      className="rounded-2xl border border-[#ffc7ab] bg-[#fff0e8] px-4 py-3"
+                                    >
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                          <h4 className="text-sm font-semibold uppercase leading-5 text-[#23395d]">
+                                            {service.name}
+                                          </h4>
+                                          <p className="mt-1 text-xs text-slate-600">
+                                            {service.rows.length} fila
+                                            {service.rows.length === 1 ? "" : "s"} pendientes de revisar
+                                          </p>
+                                        </div>
+                                        <span className="rounded-full bg-[#ff6b2c] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                                          Pendiente
+                                        </span>
+                                      </div>
+                                    </article>
+                                  ))
+                                ) : (
+                                  <div className="rounded-2xl border border-dashed border-[#d8cfbd] bg-[#f8f4ea] px-4 py-6 text-sm text-slate-500">
+                                    No hay pendientes en este grupo.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                    );
+                  })}
             </div>
           </div>
         </div>
