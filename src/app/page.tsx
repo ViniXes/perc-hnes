@@ -1964,37 +1964,21 @@ export default function Home() {
 
           <div className="relative space-y-6">
             <div className="rounded-[28px] border border-white/10 bg-[#162034]/90 p-6 shadow-[0_24px_80px_rgba(3,7,18,0.35)] backdrop-blur">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                <div className="max-w-3xl">
-                  <p className="inline-flex rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-violet-200">
-                    Sistema HNES
-                  </p>
-                  <h1 className="mt-4 max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl lg:text-5xl">
-                    Produccion eficiente
-                    <span className="text-violet-300"> recursos costos</span>
-                  </h1>
-                  <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                    Tablero previo al inicio de sesion para revisar cuantas dependencias ya
-                    completaron su produccion mensual y como avanza el cierre del periodo.
-                  </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Total</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{SERVICE_COUNT}</p>
+                  <p className="mt-1 text-xs text-slate-400">Dependencias</p>
                 </div>
-
-                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Total</p>
-                    <p className="mt-2 text-3xl font-semibold text-white">{SERVICE_COUNT}</p>
-                    <p className="mt-1 text-xs text-slate-400">Dependencias</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Completos</p>
-                    <p className="mt-2 text-3xl font-semibold text-emerald-300">{publicCompletedCount}</p>
-                    <p className="mt-1 text-xs text-slate-400">Mes actual</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Progreso</p>
-                    <p className="mt-2 text-3xl font-semibold text-violet-300">{currentMonthProgress}%</p>
-                    <p className="mt-1 text-xs text-slate-400">Avance mensual</p>
-                  </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Completos</p>
+                  <p className="mt-2 text-3xl font-semibold text-emerald-300">{publicCompletedCount}</p>
+                  <p className="mt-1 text-xs text-slate-400">Mes actual</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Progreso</p>
+                  <p className="mt-2 text-3xl font-semibold text-violet-300">{currentMonthProgress}%</p>
+                  <p className="mt-1 text-xs text-slate-400">Avance mensual</p>
                 </div>
               </div>
 
