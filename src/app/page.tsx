@@ -104,6 +104,7 @@ const ADMIN_EMAIL = "hcardoza.admin@perc-hnes.app";
 const CAPTURE_WINDOW_DAYS = 3;
 const FIRESTORE_SETUP_MESSAGE =
   "Firestore no esta creado en este proyecto de Firebase. Crea la base de datos '(default)' para habilitar login, tablero y guardado.";
+const FIRESTORE_DISABLED_STORAGE_KEY = "perc-hnes.firestore-disabled";
 
 const SERVICE_GROUP_LABELS: Record<string, string> = {
   direccion: "Direccion",
@@ -700,6 +701,7 @@ export default function Home() {
   const [calendarDraftDate, setCalendarDraftDate] = useState("");
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
   const [firestoreUnavailable, setFirestoreUnavailable] = useState(false);
+  const [firestoreStatusReady, setFirestoreStatusReady] = useState(false);
 
   const currentService = useMemo(
     () => getServiceById(serviceProfile?.serviceId),
@@ -756,11 +758,32 @@ export default function Home() {
     }
 
     setFirestoreUnavailable(true);
+    try {
+      window.localStorage.setItem(FIRESTORE_DISABLED_STORAGE_KEY, "true");
+    } catch {
+      // Ignore storage write issues.
+    }
     setError(FIRESTORE_SETUP_MESSAGE);
     setMessage("");
     await shutdownFirestore();
     return true;
   }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        setFirestoreUnavailable(
+          window.localStorage.getItem(FIRESTORE_DISABLED_STORAGE_KEY) === "true",
+        );
+      } catch {
+        // Ignore storage access issues.
+      }
+
+      setFirestoreStatusReady(true);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -783,6 +806,10 @@ export default function Home() {
     let cancelled = false;
 
     async function loadDashboard() {
+      if (!firestoreStatusReady) {
+        return;
+      }
+
       if (firestoreUnavailable) {
         setIsLoadingDashboard(false);
         return;
@@ -829,7 +856,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [currentYear, firestoreUnavailable, periodId]);
+  }, [currentYear, firestoreStatusReady, firestoreUnavailable, periodId]);
 
   async function fetchManagedUsers() {
     const snapshot = await getDocs(collection(db, "serviceUsers"));
@@ -845,6 +872,10 @@ export default function Home() {
     let cancelled = false;
 
     async function syncSession() {
+      if (!firestoreStatusReady) {
+        return;
+      }
+
       if (!user) {
         setServiceProfile(null);
         setTableValues({});
@@ -955,7 +986,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [firestoreUnavailable, periodId, user]);
+  }, [firestoreStatusReady, firestoreUnavailable, periodId, user]);
 
   async function loadSavedData(showEmptyMessage: boolean) {
     if (!currentService || firestoreUnavailable) {
@@ -1136,6 +1167,16 @@ export default function Home() {
     } finally {
       setIsSavingCalendar(false);
     }
+  }
+
+  function handleRetryFirestore() {
+    try {
+      window.localStorage.removeItem(FIRESTORE_DISABLED_STORAGE_KEY);
+    } catch {
+      // Ignore storage write issues.
+    }
+
+    window.location.reload();
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -2220,7 +2261,7 @@ export default function Home() {
                   <span>
                     {publicCompletedCount} de {SERVICE_COUNT} servicios completados
                   </span>
-                  <span>{DATE_TIME_FORMATTER.format(now)}</span>
+                  <time suppressHydrationWarning>{DATE_TIME_FORMATTER.format(now)}</time>
                 </div>
               </div>
             </div>
@@ -2534,9 +2575,18 @@ export default function Home() {
                   </label>
 
                   {error ? (
-                    <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                      {error}
-                    </p>
+                    <div className="space-y-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      <p>{error}</p>
+                      {firestoreUnavailable ? (
+                        <button
+                          type="button"
+                          onClick={handleRetryFirestore}
+                          className="rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-600"
+                        >
+                          Reintentar Firestore
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
 
                   {message ? (
