@@ -2939,144 +2939,44 @@ export default function Home() {
               <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
                 <div className="mb-7">
                   <p className="text-sm font-medium text-violet-700">Acceso</p>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-tight">
-                    {mode === "login" ? "Iniciar sesion" : "Registrar servicio"}
-                  </h2>
+                  <h2 className="mt-2 text-3xl font-semibold tracking-tight">Iniciar sesion</h2>
                   <p className="mt-3 text-sm leading-6 text-slate-500">
-                    {mode === "login"
-                      ? "Ingresa con la cuenta asignada a tu servicio o administrador."
-                      : "Cada servicio se crea con una contrasena generica y luego el usuario la cambia desde su panel."}
+                    Las cuentas de servicio se crean manualmente desde el panel del administrador.
+                    Cada usuario entra con su cuenta asignada y cambia su contrasena en el primer
+                    ingreso.
                   </p>
-                  {mode === "login" ? (
-                    <p className="mt-2 text-xs leading-5 text-slate-500">
-                      Acceso admin: usuario <strong>{ADMIN_USERNAME}</strong>.
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="mb-6 grid grid-cols-2 rounded-2xl bg-slate-100 p-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode("login");
-                      setError("");
-                      setMessage("");
-                    }}
-                    className={`rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
-                      mode === "login"
-                        ? "bg-white text-slate-950 shadow-sm"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    Entrar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode("register");
-                      setError("");
-                      setMessage("");
-                    }}
-                    className={`rounded-2xl px-3 py-2.5 text-sm font-semibold transition ${
-                      mode === "register"
-                        ? "bg-white text-slate-950 shadow-sm"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    Registro
-                  </button>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    Acceso admin: usuario <strong>{ADMIN_USERNAME}</strong>.
+                  </p>
                 </div>
 
                 <form className="space-y-5" onSubmit={handleSubmit}>
-                  {mode === "register" ? (
-                    <>
-                      <label className="block">
-                        <span className="text-sm font-medium text-slate-700">Servicio</span>
-                        <select
-                          value={selectedServiceId}
-                          onChange={(event) => setSelectedServiceId(event.target.value)}
-                          className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
-                          name="service"
-                          required
-                        >
-                          <option value="">Selecciona un servicio</option>
-                          {SERVICE_DEFINITIONS.map((service) => (
-                            <option key={service.id} value={service.id}>
-                              {service.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Correo o usuario</span>
+                    <input
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
+                      name="email"
+                      placeholder="correo@hospital.com o Hcardoza"
+                      required
+                      type="text"
+                    />
+                  </label>
 
-                      {selectedServiceId ? (
-                        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
-                          Usuario asignado: <strong>{getServiceUsername(selectedServiceId)}</strong>
-                        </div>
-                      ) : null}
-
-                      <label className="block">
-                        <span className="text-sm font-medium text-slate-700">
-                          Nombre del responsable
-                        </span>
-                        <input
-                          value={name}
-                          onChange={(event) => setName(event.target.value)}
-                          className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
-                          name="name"
-                          placeholder="Ejemplo: Jefe de servicio"
-                          type="text"
-                        />
-                      </label>
-                    </>
-                  ) : null}
-
-                  {mode === "login" ? (
-                    <label className="block">
-                      <span className="text-sm font-medium text-slate-700">Correo o usuario</span>
-                      <input
-                        value={email}
-                        onChange={(event) => setEmail(event.target.value)}
-                        className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
-                        name="email"
-                        placeholder="correo@hospital.com o Hcardoza"
-                        required
-                        type="text"
-                      />
-                    </label>
-                  ) : (
-                    <label className="block">
-                      <span className="text-sm font-medium text-slate-700">Correo</span>
-                      <input
-                        value={email}
-                        onChange={(event) => setEmail(event.target.value)}
-                        className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
-                        name="email"
-                        placeholder="correo@hospital.com"
-                        required
-                        type="email"
-                      />
-                    </label>
-                  )}
-
-                  {mode === "login" ? (
-                    <label className="block">
-                      <span className="text-sm font-medium text-slate-700">Contrasena</span>
-                      <input
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
-                        minLength={6}
-                        name="password"
-                        placeholder="Ingresa tu clave"
-                        required
-                        type="password"
-                      />
-                    </label>
-                  ) : (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                      Contrasena generica inicial: <strong>{DEFAULT_TEMP_PASSWORD}</strong>
-                    </div>
-                  )}
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Contrasena</span>
+                    <input
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
+                      minLength={6}
+                      name="password"
+                      placeholder="Ingresa tu clave"
+                      required
+                      type="password"
+                    />
+                  </label>
 
                   <label className="flex items-center gap-3 text-sm text-slate-600">
                     <input
@@ -3114,11 +3014,7 @@ export default function Home() {
                     className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                     type="submit"
                   >
-                    {isSubmitting
-                      ? "Procesando..."
-                      : mode === "login"
-                        ? "Entrar al sistema"
-                        : "Crear cuenta del servicio"}
+                    {isSubmitting ? "Procesando..." : "Entrar al sistema"}
                   </button>
                 </form>
               </section>
