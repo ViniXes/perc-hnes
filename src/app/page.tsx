@@ -36,7 +36,6 @@ import {
   type ServiceDefinition,
 } from "@/lib/tabulator-template";
 
-type AuthMode = "login" | "register";
 type UserRole = "service" | "admin";
 type TableValues = Record<string, Record<string, string>>;
 type ServicePermissions = {
@@ -780,15 +779,12 @@ export default function Home() {
     phone: "",
     serviceId: "",
   });
-  const [mode, setMode] = useState<AuthMode>("login");
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
   const [serviceProfile, setServiceProfile] = useState<ManagedUser | null>(null);
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedServiceId, setSelectedServiceId] = useState("");
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -1321,81 +1317,49 @@ export default function Home() {
         remember ? browserLocalPersistence : browserSessionPersistence,
       );
 
-      if (firestoreUnavailable && mode === "register") {
-        throw new Error("firestore-setup-required");
-      }
+      const loginIdentifier = email.trim();
 
-      if (mode === "register") {
-        if (!selectedServiceId) {
-          throw new Error("service-required");
-        }
+      if (
+        normalizeKey(loginIdentifier) === normalizeKey(ADMIN_USERNAME) &&
+        password === ADMIN_PASSWORD
+      ) {
+        try {
+          const credential = await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+          await ensureDefaultAdminProfile(credential.user);
+        } catch (loginError) {
+          const authCode = (loginError as AuthError).code;
 
-        const service = getServiceById(selectedServiceId);
+          if (authCode !== "auth/invalid-credential" && authCode !== "auth/user-not-found") {
+            throw loginError;
+          }
 
-        if (!service) {
-          throw new Error("service-required");
-        }
-
-        const { serviceUsername } = await createServiceUserAccount(auth, {
-          service,
-          email,
-          firstName: name,
-          lastName: "",
-          dui: "",
-          phone: "",
-        });
-
-        setPassword("");
-        setSelectedServiceId("");
-        setName("");
-        setMessage(
-          `Cuenta creada para ${service.name}. Usuario: ${serviceUsername}. Contrasena temporal: ${DEFAULT_TEMP_PASSWORD}.`,
-        );
-      } else {
-        const loginIdentifier = email.trim();
-
-        if (
-          normalizeKey(loginIdentifier) === normalizeKey(ADMIN_USERNAME) &&
-          password === ADMIN_PASSWORD
-        ) {
           try {
-            const credential = await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+            const credential = await createUserWithEmailAndPassword(
+              auth,
+              ADMIN_EMAIL,
+              ADMIN_PASSWORD,
+            );
             await ensureDefaultAdminProfile(credential.user);
-          } catch (loginError) {
-            const authCode = (loginError as AuthError).code;
+          } catch (createAdminError) {
+            const createAdminCode = (createAdminError as AuthError).code;
 
-            if (authCode !== "auth/invalid-credential" && authCode !== "auth/user-not-found") {
-              throw loginError;
+            if (createAdminCode === "auth/email-already-in-use") {
+              throw new Error("admin-access-failed");
             }
 
-            try {
-              const credential = await createUserWithEmailAndPassword(
-                auth,
-                ADMIN_EMAIL,
-                ADMIN_PASSWORD,
-              );
-              await ensureDefaultAdminProfile(credential.user);
-            } catch (createAdminError) {
-              const createAdminCode = (createAdminError as AuthError).code;
-
-              if (createAdminCode === "auth/email-already-in-use") {
-                throw new Error("admin-access-failed");
-              }
-
-              throw createAdminError;
-            }
+            throw createAdminError;
           }
-        } else {
-          if (firestoreUnavailable && !loginIdentifier.includes("@")) {
-            throw new Error("firestore-setup-required");
-          }
-
-          const resolvedEmail = await resolveLoginEmail(loginIdentifier);
-          await signInWithEmailAndPassword(auth, resolvedEmail, password);
+        }
+      } else {
+        if (firestoreUnavailable && !loginIdentifier.includes("@")) {
+          throw new Error("firestore-setup-required");
         }
 
-        setPassword("");
+        const resolvedEmail = await resolveLoginEmail(loginIdentifier);
+        await signInWithEmailAndPassword(auth, resolvedEmail, password);
       }
+
+      setPassword("");
     } catch (submitError) {
       if (await handleFirestoreError(submitError)) {
         return;
@@ -1772,6 +1736,112 @@ export default function Home() {
       (total, entry) => total + entry.service.rows.length,
       0,
     );
+    const adminCalendarSection = isAdmin ? (
+      <section className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
+        <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">
+              Configuracion mensual
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold">Modificar dias habiles por mes</h2>
+            <p className="mt-2 max-w-3xl text-sm text-slate-300">
+              Configura arriba el calendario operativo del mes. El sistema movera la captura a los
+              siguientes dias habiles si agregas cierres, feriados o vacaciones.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
+          <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-200">Mes a configurar</span>
+              <input
+                value={calendarEditorPeriodId}
+                onChange={(event) => setCalendarEditorPeriodId(event.target.value)}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
+                type="month"
+              />
+            </label>
+
+            <label className="mt-4 block">
+              <span className="text-sm font-medium text-slate-200">Agregar fecha no habil</span>
+              <input
+                value={calendarDraftDate}
+                onChange={(event) => setCalendarDraftDate(event.target.value)}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
+                type="date"
+              />
+            </label>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={handleAddBlockedDate}
+                className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+              >
+                Agregar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveCalendarOverride()}
+                disabled={isSavingCalendar}
+                className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800"
+              >
+                {isSavingCalendar ? "Guardando..." : "Guardar calendario"}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
+              <h3 className="text-lg font-semibold text-white">Fechas excluidas</h3>
+              <p className="mt-2 text-sm text-slate-300">
+                Usa esta lista para vacaciones, feriados extraordinarios o cierres.
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {calendarEditorBlockedDates.length > 0 ? (
+                  calendarEditorBlockedDates.map((dateKey) => (
+                    <button
+                      key={dateKey}
+                      type="button"
+                      onClick={() => handleRemoveBlockedDate(dateKey)}
+                      className="rounded-full border border-rose-400/40 bg-rose-950/30 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-900/40"
+                    >
+                      {dateKey} ×
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-400">No hay fechas excluidas para este mes.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
+              <h3 className="text-lg font-semibold text-white">Vista previa</h3>
+              <p className="mt-2 text-sm text-slate-300">
+                Primeros dias habiles que quedaran abiertos para captura.
+              </p>
+
+              <div className="mt-4 space-y-2">
+                {calendarPreviewWindow ? (
+                  calendarPreviewWindow.openDays.map((day, index) => (
+                    <div
+                      key={getDateKey(day)}
+                      className="rounded-xl border border-cyan-400/20 bg-cyan-950/20 px-3 py-2 text-sm text-cyan-100"
+                    >
+                      Dia habil {index + 1}: {DATE_TIME_FORMATTER.format(day).split(", ")[0]}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-400">Selecciona un mes para calcular.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    ) : null;
 
     return (
       <main className="min-h-screen bg-[#161f31] px-4 py-6 text-slate-100 sm:px-7 lg:px-10">
@@ -1910,6 +1980,8 @@ export default function Home() {
               {message}
             </p>
           ) : null}
+
+          {adminCalendarSection}
 
           {isAdmin ? (
             <section className="overflow-hidden rounded-[24px] border border-cyan-400/20 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
@@ -2096,113 +2168,6 @@ export default function Home() {
               </form>
             )}
           </section>
-
-          {isAdmin ? (
-            <section className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
-              <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <p className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">
-                    Calendario Editable
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold">Modificar dias habiles por mes</h2>
-                  <p className="mt-2 max-w-3xl text-sm text-slate-300">
-                    Si hay vacaciones o cierre institucional, agrega las fechas para excluirlas del
-                    calculo automatico. El sistema movera la captura a los siguientes dias habiles.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
-                <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
-                  <label className="block">
-                    <span className="text-sm font-medium text-slate-200">Mes a configurar</span>
-                    <input
-                      value={calendarEditorPeriodId}
-                      onChange={(event) => setCalendarEditorPeriodId(event.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
-                      type="month"
-                    />
-                  </label>
-
-                  <label className="mt-4 block">
-                    <span className="text-sm font-medium text-slate-200">Agregar fecha no habil</span>
-                    <input
-                      value={calendarDraftDate}
-                      onChange={(event) => setCalendarDraftDate(event.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
-                      type="date"
-                    />
-                  </label>
-
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={handleAddBlockedDate}
-                      className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
-                    >
-                      Agregar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleSaveCalendarOverride()}
-                      disabled={isSavingCalendar}
-                      className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800"
-                    >
-                      {isSavingCalendar ? "Guardando..." : "Guardar calendario"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-                  <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
-                    <h3 className="text-lg font-semibold text-white">Fechas excluidas</h3>
-                    <p className="mt-2 text-sm text-slate-300">
-                      Usa esta lista para vacaciones, feriados extraordinarios o cierres.
-                    </p>
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {calendarEditorBlockedDates.length > 0 ? (
-                        calendarEditorBlockedDates.map((dateKey) => (
-                          <button
-                            key={dateKey}
-                            type="button"
-                            onClick={() => handleRemoveBlockedDate(dateKey)}
-                            className="rounded-full border border-rose-400/40 bg-rose-950/30 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-900/40"
-                          >
-                            {dateKey} ×
-                          </button>
-                        ))
-                      ) : (
-                        <p className="text-sm text-slate-400">No hay fechas excluidas para este mes.</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
-                    <h3 className="text-lg font-semibold text-white">Vista previa</h3>
-                    <p className="mt-2 text-sm text-slate-300">
-                      Primeros dias habiles que quedaran abiertos para captura.
-                    </p>
-
-                    <div className="mt-4 space-y-2">
-                      {calendarPreviewWindow ? (
-                        calendarPreviewWindow.openDays.map((day, index) => (
-                          <div
-                            key={getDateKey(day)}
-                            className="rounded-xl border border-cyan-400/20 bg-cyan-950/20 px-3 py-2 text-sm text-cyan-100"
-                          >
-                            Dia habil {index + 1}: {DATE_TIME_FORMATTER.format(day).split(", ")[0]}
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-slate-400">Selecciona un mes para calcular.</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-          ) : null}
 
           {isAdmin ? (
             <section className="rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
