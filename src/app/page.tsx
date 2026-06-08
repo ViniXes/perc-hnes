@@ -27,7 +27,7 @@ import {
   where,
 } from "firebase/firestore";
 import { auth } from "@/lib/firebase";
-import { db } from "@/lib/firestore";
+import { db, shutdownFirestore } from "@/lib/firestore";
 import {
   SERVICE_COUNT,
   SERVICE_DEFINITIONS,
@@ -102,6 +102,8 @@ const ADMIN_USERNAME = "Hcardoza";
 const ADMIN_PASSWORD = "Cardoza1986";
 const ADMIN_EMAIL = "hcardoza.admin@perc-hnes.app";
 const CAPTURE_WINDOW_DAYS = 3;
+const FIRESTORE_SETUP_MESSAGE =
+  "Firestore no esta creado en este proyecto de Firebase. Crea la base de datos '(default)' para habilitar login, tablero y guardado.";
 
 const SERVICE_GROUP_LABELS: Record<string, string> = {
   direccion: "Direccion",
@@ -208,6 +210,8 @@ function getAuthErrorMessage(error: unknown) {
       return "La nueva contrasena debe tener al menos 6 caracteres.";
     case "admin-access-failed":
       return "No pudimos habilitar el acceso del administrador en Firebase Auth.";
+    case "firestore-setup-required":
+      return FIRESTORE_SETUP_MESSAGE;
     default:
       break;
   }
@@ -232,6 +236,16 @@ function getAuthErrorMessage(error: unknown) {
     default:
       return "No pudimos completar la accion. Intentalo de nuevo.";
   }
+}
+
+function isFirestoreSetupError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes("Database '(default)' not found") ||
+    message.includes("firestore/failed-precondition") ||
+    message.includes("firestore-setup-required")
+  );
 }
 
 function getDefaultPermissions(role: UserRole): ServicePermissions {
@@ -685,6 +699,7 @@ export default function Home() {
   const [calendarEditorPeriodId, setCalendarEditorPeriodId] = useState(() => getPeriodId(new Date()));
   const [calendarDraftDate, setCalendarDraftDate] = useState("");
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
+  const [firestoreUnavailable, setFirestoreUnavailable] = useState(false);
 
   const currentService = useMemo(
     () => getServiceById(serviceProfile?.serviceId),
@@ -735,6 +750,18 @@ export default function Home() {
     return getCaptureWindow(calendarPreviewDate, calendarEditorBlockedDates);
   }, [calendarEditorBlockedDates, calendarPreviewDate]);
 
+  async function handleFirestoreError(error: unknown) {
+    if (!isFirestoreSetupError(error)) {
+      return false;
+    }
+
+    setFirestoreUnavailable(true);
+    setError(FIRESTORE_SETUP_MESSAGE);
+    setMessage("");
+    await shutdownFirestore();
+    return true;
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -756,6 +783,11 @@ export default function Home() {
     let cancelled = false;
 
     async function loadDashboard() {
+      if (firestoreUnavailable) {
+        setIsLoadingDashboard(false);
+        return;
+      }
+
       setIsLoadingDashboard(true);
 
       try {
@@ -769,7 +801,17 @@ export default function Home() {
         setPublicDashboardMonths(dashboard.months);
         setPublicDashboardGroups(dashboard.groups);
         setPublicCompletedCount(dashboard.completedCount);
-      } catch {
+      } catch (dashboardError) {
+        if (await handleFirestoreError(dashboardError)) {
+          if (!cancelled) {
+            setPublicDashboardMonths([]);
+            setPublicDashboardGroups([]);
+            setPublicCompletedCount(0);
+          }
+
+          return;
+        }
+
         if (!cancelled) {
           setPublicDashboardMonths([]);
           setPublicDashboardGroups([]);
@@ -787,7 +829,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [currentYear, periodId]);
+  }, [currentYear, firestoreUnavailable, periodId]);
 
   async function fetchManagedUsers() {
     const snapshot = await getDocs(collection(db, "serviceUsers"));
@@ -809,6 +851,11 @@ export default function Home() {
         setAdminUsers([]);
         setAdminDrafts({});
         setAdminOverview([]);
+        setProfileReady(true);
+        return;
+      }
+
+      if (firestoreUnavailable) {
         setProfileReady(true);
         return;
       }
@@ -875,6 +922,19 @@ export default function Home() {
           setAdminOverview([]);
         }
       } catch (sessionError) {
+        if (await handleFirestoreError(sessionError)) {
+          if (!cancelled) {
+            setServiceProfile(null);
+            setTableValues({});
+            setAdminUsers([]);
+            setAdminDrafts({});
+            setAdminOverview([]);
+            setProfileReady(true);
+          }
+
+          return;
+        }
+
         if (!cancelled) {
           setServiceProfile(null);
           setTableValues({});
@@ -895,10 +955,10 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [periodId, user]);
+  }, [firestoreUnavailable, periodId, user]);
 
   async function loadSavedData(showEmptyMessage: boolean) {
-    if (!currentService) {
+    if (!currentService || firestoreUnavailable) {
       return;
     }
 
@@ -919,7 +979,12 @@ export default function Home() {
       } else {
         setMessage(`Datos recuperados para ${currentService.name}.`);
       }
-    } catch {
+    } catch (loadError) {
+      if (await handleFirestoreError(loadError)) {
+        setTableValues(buildEmptyTable(currentService));
+        return;
+      }
+
       setError("No pudimos recuperar los datos guardados.");
     } finally {
       setIsLoadingData(false);
@@ -927,7 +992,7 @@ export default function Home() {
   }
 
   async function loadAdminUsers() {
-    if (!isAdmin) {
+    if (!isAdmin || firestoreUnavailable) {
       return;
     }
 
@@ -939,7 +1004,13 @@ export default function Home() {
       setAdminDrafts(buildAdminDrafts(users));
       setMessage("Listado de usuarios actualizado.");
       setError("");
-    } catch {
+    } catch (loadError) {
+      if (await handleFirestoreError(loadError)) {
+        setAdminUsers([]);
+        setAdminDrafts({});
+        return;
+      }
+
       setError("No pudimos cargar los usuarios del modulo administrador.");
     } finally {
       setIsLoadingUsers(false);
@@ -947,7 +1018,7 @@ export default function Home() {
   }
 
   async function loadAdminOverview(showMessage: boolean) {
-    if (!isAdmin) {
+    if (!isAdmin || firestoreUnavailable) {
       return;
     }
 
@@ -961,7 +1032,12 @@ export default function Home() {
       if (showMessage) {
         setMessage("Vista global del administrador actualizada.");
       }
-    } catch {
+    } catch (overviewError) {
+      if (await handleFirestoreError(overviewError)) {
+        setAdminOverview([]);
+        return;
+      }
+
       setError("No pudimos cargar la vista global del administrador.");
     } finally {
       setIsLoadingOverview(false);
@@ -969,6 +1045,10 @@ export default function Home() {
   }
 
   async function refreshPublicDashboard(showMessage: boolean) {
+    if (firestoreUnavailable) {
+      return;
+    }
+
     try {
       const dashboard = await fetchPublicDashboard(currentYear, periodId);
       setCalendarOverrides(dashboard.calendarOverrides);
@@ -979,7 +1059,14 @@ export default function Home() {
       if (showMessage) {
         setMessage("Tablero general actualizado.");
       }
-    } catch {
+    } catch (dashboardError) {
+      if (await handleFirestoreError(dashboardError)) {
+        setPublicDashboardMonths([]);
+        setPublicDashboardGroups([]);
+        setPublicCompletedCount(0);
+        return;
+      }
+
       setError("No pudimos actualizar el tablero general.");
     }
   }
@@ -1016,7 +1103,7 @@ export default function Home() {
   }
 
   async function handleSaveCalendarOverride() {
-    if (!isAdmin || !calendarEditorPeriodId) {
+    if (!isAdmin || !calendarEditorPeriodId || firestoreUnavailable) {
       return;
     }
 
@@ -1040,7 +1127,11 @@ export default function Home() {
         await loadAdminOverview(false);
       }
       setMessage("Dias habiles actualizados correctamente.");
-    } catch {
+    } catch (calendarError) {
+      if (await handleFirestoreError(calendarError)) {
+        return;
+      }
+
       setError("No pudimos guardar la configuracion del calendario.");
     } finally {
       setIsSavingCalendar(false);
@@ -1058,6 +1149,10 @@ export default function Home() {
         auth,
         remember ? browserLocalPersistence : browserSessionPersistence,
       );
+
+      if (firestoreUnavailable && mode === "register") {
+        throw new Error("firestore-setup-required");
+      }
 
       if (mode === "register") {
         if (!selectedServiceId) {
@@ -1154,6 +1249,10 @@ export default function Home() {
             }
           }
         } else {
+          if (firestoreUnavailable && !loginIdentifier.includes("@")) {
+            throw new Error("firestore-setup-required");
+          }
+
           const resolvedEmail = await resolveLoginEmail(loginIdentifier);
           await signInWithEmailAndPassword(auth, resolvedEmail, password);
         }
@@ -1161,6 +1260,10 @@ export default function Home() {
         setPassword("");
       }
     } catch (submitError) {
+      if (await handleFirestoreError(submitError)) {
+        return;
+      }
+
       setError(getAuthErrorMessage(submitError));
     } finally {
       setIsSubmitting(false);
@@ -1203,7 +1306,7 @@ export default function Home() {
   }
 
   async function handleSave() {
-    if (!user || !currentService || !serviceProfile) {
+    if (!user || !currentService || !serviceProfile || firestoreUnavailable) {
       return;
     }
 
@@ -1251,7 +1354,11 @@ export default function Home() {
       }
 
       setMessage(`Datos guardados correctamente para ${currentService.name}.`);
-    } catch {
+    } catch (saveError) {
+      if (await handleFirestoreError(saveError)) {
+        return;
+      }
+
       setError("No pudimos guardar los datos. Revisa Firestore e intentalo de nuevo.");
     } finally {
       setIsSaving(false);
