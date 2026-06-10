@@ -134,9 +134,7 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "laboratorio-clinico": "apoyo",
   "laboratorio-de-biologia-molecular": "apoyo",
   "banco-de-sangre": "apoyo",
-  "alimentacion-enteral": "apoyo",
-  "nutricion-parenteral": "apoyo",
-  "servicio-de-alimentacion": "apoyo",
+  "alimentacion-y-dieta": "apoyo",
   "estudio-de-radiologia": "medica",
   "resonancia-magnetica": "medica",
   tomografia: "medica",
@@ -174,13 +172,11 @@ const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   hemodialisis: "dep.hemodialisis",
   "servicio-farmaceutico": "dep.farmacia",
   "rehablitacion-psicosocial": "dep.psicosocial",
-  "alimentacion-enteral": "dep.enteral",
-  "nutricion-parenteral": "dep.parenteral",
+  "alimentacion-y-dieta": "dep.alimentacion",
   "central-de-esterilizacion": "dep.esterilizacion",
   "saneamiento-ambiental": "dep.saneamiento",
   aseo: "dep.aseo",
   almacen: "dep.almacen",
-  "servicio-de-alimentacion": "dep.alimentacion",
   lavanderia: "dep.lavanderia",
   "transporte-general": "dep.transporte",
   mantenimiento: "dep.mantenimiento",
@@ -859,7 +855,14 @@ export default function Home() {
   const [calendarDraftDate, setCalendarDraftDate] = useState("");
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
   const [activeSidebarSection, setActiveSidebarSection] = useState("panel-overview");
-  const [panelTheme, setPanelTheme] = useState<"dark" | "light">("dark");
+  const [panelTheme, setPanelTheme] = useState<"dark" | "light">(() => {
+    if (typeof window === "undefined") {
+      return "dark";
+    }
+
+    const savedTheme = window.localStorage.getItem(PANEL_THEME_STORAGE_KEY);
+    return savedTheme === "light" ? "light" : "dark";
+  });
   const [firestoreUnavailable, setFirestoreUnavailable] = useState(false);
   const [firestoreStatusReady, setFirestoreStatusReady] = useState(false);
 
@@ -967,18 +970,6 @@ export default function Home() {
     });
 
     return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    try {
-      const savedTheme = window.localStorage.getItem(PANEL_THEME_STORAGE_KEY);
-
-      if (savedTheme === "dark" || savedTheme === "light") {
-        setPanelTheme(savedTheme);
-      }
-    } catch {
-      // Ignore local storage access issues.
-    }
   }, []);
 
   useEffect(() => {
@@ -1841,11 +1832,11 @@ export default function Home() {
       >
         <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">
+            <p className={`text-sm uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-sky-700" : "text-cyan-200/80"}`}>
               Configuracion mensual
             </p>
             <h2 className="mt-2 text-2xl font-semibold">Modificar dias habiles por mes</h2>
-            <p className="mt-2 max-w-3xl text-sm text-slate-300">
+            <p className={`mt-2 max-w-3xl text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
               Configura arriba el calendario operativo del mes. El sistema movera la captura a los
               siguientes dias habiles si agregas cierres, feriados o vacaciones.
             </p>
@@ -1991,10 +1982,20 @@ export default function Home() {
     ];
 
     return (
-      <main className="min-h-screen bg-[#161f31] px-4 py-6 text-slate-100 sm:px-7 lg:px-10">
+      <main
+        className={`min-h-screen px-4 py-6 sm:px-7 lg:px-10 ${
+          isLightPanelTheme ? "bg-[#f3f6fb] text-slate-900" : "bg-[#161f31] text-slate-100"
+        }`}
+      >
         <div className="mx-auto grid max-w-[1850px] gap-6 xl:grid-cols-[290px_minmax(0,1fr)]">
-          <aside className="self-start rounded-[30px] border border-white/10 bg-[#eef2fb] p-5 text-slate-900 shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:sticky xl:top-6">
-            <div className="border-b border-slate-200 pb-5 text-center">
+          <aside
+            className={`self-start rounded-[30px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:sticky xl:top-6 ${
+              isLightPanelTheme
+                ? "border border-slate-200 bg-[#eef2fb] text-slate-900"
+                : "border border-white/10 bg-[#1b2537] text-slate-100"
+            }`}
+          >
+            <div className={`pb-5 text-center ${isLightPanelTheme ? "border-b border-slate-200" : "border-b border-white/10"}`}>
               <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-slate-500">
                 HOSPITAL NACIONAL
               </p>
@@ -2004,12 +2005,16 @@ export default function Home() {
               <div className="mx-auto mt-4 h-px w-24 bg-slate-300" />
             </div>
 
-            <div className="mt-5 flex items-start gap-3 rounded-[24px] bg-white px-3 py-3 shadow-sm">
+            <div
+              className={`mt-5 flex items-start gap-3 rounded-[24px] px-3 py-3 shadow-sm ${
+                isLightPanelTheme ? "bg-white" : "bg-[#202c41]"
+              }`}
+            >
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#1f255f] text-sm font-bold text-white">
                 {serviceProfile.username.slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900">{welcomeName}</p>
+                <p className={`text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{welcomeName}</p>
                 <p className="truncate text-sm text-[#4f6aa3]">
                   {currentService?.name || (isAdmin ? "Administrador del sistema" : serviceProfile.email)}
                 </p>
@@ -2031,7 +2036,9 @@ export default function Home() {
                     className={`flex w-full items-center gap-3 rounded-[22px] border px-3 py-3 text-left transition ${
                       isActive
                         ? "border-[#cad5ee] bg-[#e8eefb] shadow-sm"
-                        : "border-transparent bg-transparent hover:border-slate-200 hover:bg-white/80"
+                        : isLightPanelTheme
+                          ? "border-transparent bg-transparent hover:border-slate-200 hover:bg-white/80"
+                          : "border-transparent bg-transparent hover:border-white/10 hover:bg-white/5"
                     }`}
                   >
                     <span
@@ -2044,29 +2051,33 @@ export default function Home() {
                       {item.badge}
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-slate-900">{item.label}</span>
-                      <span className="block truncate text-xs text-slate-500">{item.detail}</span>
+                      <span className={`block text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-slate-100"}`}>{item.label}</span>
+                      <span className={`block truncate text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>{item.detail}</span>
                     </span>
                   </button>
                 );
               })}
             </nav>
 
-            <div className="mt-10 space-y-2 border-t border-slate-200 pt-5">
+            <div className={`mt-10 space-y-2 pt-5 ${isLightPanelTheme ? "border-t border-slate-200" : "border-t border-white/10"}`}>
               <button
                 type="button"
-                onClick={handleSidebarDarkModeHint}
-                className="flex w-full items-center gap-3 rounded-[20px] px-3 py-3 text-left text-sm text-slate-700 transition hover:bg-white"
+                onClick={handleTogglePanelTheme}
+                className={`flex w-full items-center gap-3 rounded-[20px] px-3 py-3 text-left text-sm transition ${
+                  isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
+                }`}
               >
                 <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  DK
+                  {isLightPanelTheme ? "DK" : "LT"}
                 </span>
-                <span>Modo oscuro</span>
+                <span>{isLightPanelTheme ? "Modo oscuro" : "Modo claro"}</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleSidebarNavigation("panel-security")}
-                className="flex w-full items-center gap-3 rounded-[20px] px-3 py-3 text-left text-sm text-slate-700 transition hover:bg-white"
+                className={`flex w-full items-center gap-3 rounded-[20px] px-3 py-3 text-left text-sm transition ${
+                  isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
+                }`}
               >
                 <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                   PW
@@ -2089,11 +2100,15 @@ export default function Home() {
           <div className="space-y-6">
             <section
               id="panel-overview"
-              className="rounded-[28px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.45)]"
+              className={`rounded-[28px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.45)] ${
+                isLightPanelTheme
+                  ? "border border-slate-200 bg-white text-slate-900"
+                  : "border border-white/10 bg-[#202c41]"
+              }`}
             >
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
-                <p className="text-sm uppercase tracking-[0.3em] text-violet-200/80">
+                <p className={`text-sm uppercase tracking-[0.3em] ${isLightPanelTheme ? "text-violet-700" : "text-violet-200/80"}`}>
                   PERC HNES
                 </p>
                 <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">
@@ -2101,16 +2116,16 @@ export default function Home() {
                     ? `Ingreso de Datos - ${periodLabel} - ${currentService.name}`
                     : "Modulo de Administracion"}
                 </h1>
-                <p className="mt-3 text-sm text-slate-300 sm:text-base">
-                  Usuario: <span className="font-semibold text-white">{welcomeName}</span>
+                <p className={`mt-3 text-sm sm:text-base ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                  Usuario: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{welcomeName}</span>
                   {" · "}
-                  Rol: <span className="font-semibold text-white">{isAdmin ? "Administrador" : "Servicio"}</span>
+                  Rol: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{isAdmin ? "Administrador" : "Servicio"}</span>
                   {" · "}
-                  Acceso: <span className="font-semibold text-white">{serviceProfile.username}</span>
+                  Acceso: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{serviceProfile.username}</span>
                   {currentService ? (
                     <>
                       {" · "}
-                      Servicio: <span className="font-semibold text-white">{currentService.name}</span>
+                      Servicio: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{currentService.name}</span>
                     </>
                   ) : null}
                 </p>
@@ -2149,11 +2164,11 @@ export default function Home() {
                   <>
                     <button
                       type="button"
-                      onClick={() => void loadAdminOverview(true)}
-                      disabled={isLoadingOverview}
+                      onClick={() => void handleExportMonthlyReport()}
+                      disabled={isExportingMonthlyReport || !canExportMonthlyReport}
                       className="rounded-2xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-cyan-300"
                     >
-                      {isLoadingOverview ? "Cargando vista..." : "Vista global"}
+                      {isExportingMonthlyReport ? "Generando Excel..." : "Descargar Excel"}
                     </button>
                     <button
                       type="button"
@@ -2209,7 +2224,7 @@ export default function Home() {
             </section>
           ) : null}
 
-          <section className="rounded-[20px] bg-[#202c41] px-5 py-4 text-center text-lg font-semibold text-slate-100 shadow-lg">
+          <section className={`rounded-[20px] px-5 py-4 text-center text-lg font-semibold shadow-lg ${isLightPanelTheme ? "border border-slate-200 bg-white text-slate-900" : "bg-[#202c41] text-slate-100"}`}>
             <time suppressHydrationWarning>{DATE_TIME_FORMATTER.format(now)}</time>
           </section>
 
@@ -2229,77 +2244,68 @@ export default function Home() {
 
           {isAdmin ? (
             <section
-              id="panel-admin-overview"
-              className="overflow-hidden rounded-[24px] border border-cyan-400/20 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+              id="panel-admin-export"
+              className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
+                isLightPanelTheme
+                  ? "border border-slate-200 bg-white text-slate-900"
+                  : "border border-cyan-400/20 bg-[#202c41]"
+              }`}
             >
-              <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">
-                    Vista Global
+                  <p className={`text-sm uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-sky-700" : "text-cyan-200/80"}`}>
+                    Exportacion mensual
                   </p>
-                  <h2 className="mt-2 text-2xl font-semibold">Todos los centros juntos</h2>
-                  <p className="mt-2 text-sm text-slate-300">
-                    El administrador ve en una sola vista todos los servicios y todos los centros del
-                    periodo {periodLabel}.
+                  <h2 className="mt-2 text-2xl font-semibold">Descargar consolidado en Excel</h2>
+                  <p className={`mt-2 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                    Cuando todas las dependencias completen su captura del periodo {periodLabel},
+                    podras descargar el archivo consolidado listo para Excel.
                   </p>
                 </div>
-                <div className="text-sm text-slate-300">
-                  <p>Servicios: {adminOverview.length}</p>
-                  <p>Filas consolidadas: {adminRowsCount}</p>
+                <div className={`text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                  <p>Completados: {publicCompletedCount}</p>
+                  <p>Pendientes: {Math.max(SERVICE_COUNT - publicCompletedCount, 0)}</p>
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse text-sm text-slate-100">
-                  <thead>
-                    <tr className="bg-[#1a2334] text-left">
-                      <th className="sticky left-0 z-20 min-w-[320px] border-b border-white/10 bg-[#1a2334] px-4 py-4 font-semibold uppercase tracking-wide">
-                        Servicio / Centro de costos
-                      </th>
-                      {TABULATOR_HEADERS.map((header) => (
-                        <th
-                          key={`admin-${header}`}
-                          className="min-w-[210px] border-b border-l border-white/10 px-4 py-4 align-top font-semibold"
-                        >
-                          {header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {adminOverview.map((entry) => (
-                      <Fragment key={entry.service.id}>
-                        <tr className="bg-[#162234]">
-                          <th
-                            colSpan={TABULATOR_HEADERS.length + 1}
-                            className="border-t border-b border-cyan-400/20 px-4 py-3 text-left text-base font-semibold text-cyan-100"
-                          >
-                            {entry.service.name}
-                            {!entry.hasSavedData ? " · sin datos guardados este mes" : ""}
-                          </th>
-                        </tr>
-                        {entry.service.rows.map((row) => (
-                          <tr
-                            key={`${entry.service.id}-${row}`}
-                            className="odd:bg-white/[0.02] even:bg-white/[0.05]"
-                          >
-                            <th className="sticky left-0 z-10 border-r border-white/10 bg-[#314055] px-4 py-4 text-left font-semibold text-slate-100">
-                              {row}
-                            </th>
-                            {TABULATOR_HEADERS.map((header) => (
-                              <td
-                                key={`${entry.service.id}-${row}-${header}`}
-                                className="border-l border-white/10 px-3 py-3 text-center text-slate-200"
-                              >
-                                {entry.values[row]?.[header] || "0"}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="mt-5 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+                <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Estado actual</p>
+                  <p className="mt-3 text-4xl font-semibold text-white">{currentMonthProgress}%</p>
+                  <p className="mt-2 text-sm text-slate-300">
+                    {canExportMonthlyReport
+                      ? "Todas las dependencias completaron el mes. Ya puedes descargar el consolidado."
+                      : "Aun faltan dependencias por completar su captura de este mes."}
+                  </p>
+                  <div className="mt-4 h-3 rounded-full bg-white/10">
+                    <div
+                      className="h-3 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-300"
+                      style={{ width: `${currentMonthProgress}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Descarga</p>
+                  <h3 className="mt-2 text-xl font-semibold text-white">Archivo del periodo {periodLabel}</h3>
+                  <p className="mt-2 text-sm text-slate-300">
+                    El archivo incluye todos los servicios, sus filas y todos los centros de costos del
+                    mes actual.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void handleExportMonthlyReport()}
+                    disabled={isExportingMonthlyReport || !canExportMonthlyReport}
+                    className="mt-5 rounded-2xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-cyan-300"
+                  >
+                    {isExportingMonthlyReport ? "Generando Excel..." : "Descargar Excel mensual"}
+                  </button>
+                  {!canExportMonthlyReport ? (
+                    <p className="mt-3 text-xs text-amber-300">
+                      El boton se habilita cuando las {SERVICE_COUNT} dependencias completan el mes.
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </section>
           ) : null}

@@ -157,18 +157,16 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: ["803_1-Rehablitacion psicosocial | Atencion"],
   },
   {
-    id: "alimentacion-enteral",
-    name: "Alimentacion enteral",
+    id: "alimentacion-y-dieta",
+    name: "Alimentacion y dieta",
     rows: [
       "750_1-Alimentacion enteral | Preparacion",
       "750_2-Alimentacion enteral | Paciente",
       "750_3-Alimentacion enteral | Formula",
+      "760_1-Nutricion parenteral | Preparacion",
+      "652_1-Servicio de alimentacion | Racion paciente",
+      "652_2-Servicio de alimentacion | Racion funcionario",
     ],
-  },
-  {
-    id: "nutricion-parenteral",
-    name: "Nutricion parenteral",
-    rows: ["760_1-Nutricion parenteral | Preparacion"],
   },
   {
     id: "central-de-esterilizacion",
@@ -192,14 +190,6 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     id: "almacen",
     name: "Almacen",
     rows: ["721_1-Almacen | Despacho"],
-  },
-  {
-    id: "servicio-de-alimentacion",
-    name: "Servicio de alimentacion",
-    rows: [
-      "652_1-Servicio de alimentacion | Racion paciente",
-      "652_2-Servicio de alimentacion | Racion funcionario",
-    ],
   },
   {
     id: "lavanderia",
