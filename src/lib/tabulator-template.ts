@@ -241,6 +241,49 @@ export const SERVICE_COUNT = SERVICE_DEFINITIONS.length;
 export const COST_CENTER_COUNT = TABULATOR_HEADERS.length;
 
 // =============================================================================
+// Filas con valores FIJOS (no se capturan: el sistema los pone automaticamente).
+// -----------------------------------------------------------------------------
+// Algunas filas tienen valores que nunca cambian mes a mes (p.ej. los metros
+// cuadrados de Aseo por centro de costo). Se definen aqui como un arreglo alineado
+// a TABULATOR_HEADERS (mismo orden), se pre-cargan en el tabulador y se muestran
+// como solo-lectura. Siempre prevalecen sobre lo guardado.
+// =============================================================================
+
+// "648_1-Aseo | Metro cuadrado" -> metros cuadrados por centro de costo (fijos).
+const ASEO_METRO_CUADRADO: readonly number[] = [
+  1250, 396, 745.6, 1827.54, 2002, 282.3, 97.46, 738, 100, 0, 6357, 884, 240.46,
+  155, 60, 836.8, 126.4, 30, 25, 195, 240, 109.26, 292.04, 187.96, 406, 30,
+  348.78, 150, 1055, 106.23, 45, 1677, 421, 626.62, 403, 401, 126.58, 1167,
+  726.46,
+];
+
+if (ASEO_METRO_CUADRADO.length !== TABULATOR_HEADERS.length) {
+  throw new Error(
+    `ASEO_METRO_CUADRADO debe tener ${TABULATOR_HEADERS.length} valores (uno por centro de costo).`,
+  );
+}
+
+/** Mapa fila -> { header -> valor fijo }. Agrega aqui nuevas filas fijas. */
+export const FIXED_ROW_VALUES: Record<string, Record<string, string>> = {
+  "648_1-Aseo | Metro cuadrado": Object.fromEntries(
+    TABULATOR_HEADERS.map((header, index) => [
+      header,
+      String(ASEO_METRO_CUADRADO[index]),
+    ]),
+  ),
+};
+
+/** Indica si una fila tiene valores fijos (solo-lectura, automaticos). */
+export function isFixedRow(row: string): boolean {
+  return Object.prototype.hasOwnProperty.call(FIXED_ROW_VALUES, row);
+}
+
+/** Valores fijos de una fila (o undefined si la fila se captura normalmente). */
+export function getFixedValuesForRow(row: string): Record<string, string> | undefined {
+  return FIXED_ROW_VALUES[row];
+}
+
+// =============================================================================
 // Orden EXACTO de filas para el consolidado (descarga Excel).
 // -----------------------------------------------------------------------------
 // La plantilla oficial "Produccion Distribuida" NO agrupa las filas igual que el

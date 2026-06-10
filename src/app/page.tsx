@@ -33,6 +33,8 @@ import {
   SERVICE_COUNT,
   SERVICE_DEFINITIONS,
   TABULATOR_HEADERS,
+  isFixedRow,
+  getFixedValuesForRow,
   type ServiceDefinition,
 } from "@/lib/tabulator-template";
 import {
@@ -281,13 +283,27 @@ function getServiceById(serviceId: string | null | undefined) {
   return SERVICE_DEFINITIONS.find((service) => service.id === serviceId) || null;
 }
 
+/** Aplica los valores fijos (solo-lectura) sobre una tabla, sobreescribiendo. */
+function applyFixedValues(table: TableValues) {
+  for (const row of Object.keys(table)) {
+    const fixed = getFixedValuesForRow(row);
+
+    if (fixed) {
+      table[row] = { ...table[row], ...fixed };
+    }
+  }
+}
+
 function buildEmptyTable(service: ServiceDefinition): TableValues {
-  return Object.fromEntries(
+  const table: TableValues = Object.fromEntries(
     service.rows.map((row) => [
       row,
       Object.fromEntries(TABULATOR_HEADERS.map((header) => [header, ""])),
     ]),
   );
+
+  applyFixedValues(table);
+  return table;
 }
 
 function mergeWithTemplate(
@@ -310,6 +326,8 @@ function mergeWithTemplate(
     }
   }
 
+  // Las filas fijas siempre prevalecen, aunque haya datos guardados antiguos.
+  applyFixedValues(template);
   return template;
 }
 
@@ -1671,6 +1689,10 @@ export default function Home() {
   }
 
   function handleCellChange(row: string, header: string, rawValue: string) {
+    if (isFixedRow(row)) {
+      return; // Fila de valores fijos: no editable.
+    }
+
     const value = sanitizeNumericValue(rawValue);
 
     setTableValues((currentValues) => ({
@@ -2130,12 +2152,6 @@ export default function Home() {
             },
           ]
         : []),
-      {
-        id: "panel-security",
-        label: "Cambiar contrasena",
-        detail: "Seguridad de acceso",
-        badge: "PW",
-      },
     ];
 
     const moduleSections =
@@ -2235,42 +2251,38 @@ export default function Home() {
       >
         <div className="mx-auto grid max-w-[1850px] gap-6 xl:grid-cols-[290px_minmax(0,1fr)]">
           <aside
-            className={`self-start rounded-[30px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:sticky xl:top-6 ${
+            className={`self-start rounded-[24px] p-4 shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:sticky xl:top-6 ${
               isLightPanelTheme
                 ? "border border-slate-200 bg-[#eef2fb] text-slate-900"
                 : "border border-white/10 bg-[#1b2537] text-slate-100"
             }`}
           >
-            <div className={`pb-5 text-center ${isLightPanelTheme ? "border-b border-slate-200" : "border-b border-white/10"}`}>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-slate-500">
-                HOSPITAL NACIONAL
+            <div className={`pb-4 text-center ${isLightPanelTheme ? "border-b border-slate-200" : "border-b border-white/10"}`}>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
+                Hospital Nacional
               </p>
-              <p className="mt-1 text-sm font-medium tracking-[0.18em] text-slate-500">
-                EL SALVADOR
+              <p className="mt-0.5 text-[11px] font-medium tracking-[0.16em] text-slate-500">
+                El Salvador
               </p>
-              <div className="mx-auto mt-4 h-px w-24 bg-slate-300" />
             </div>
 
             <div
-              className={`mt-5 flex items-start gap-3 rounded-[24px] px-3 py-3 shadow-sm ${
+              className={`mt-4 flex items-center gap-3 rounded-2xl px-3 py-2.5 shadow-sm ${
                 isLightPanelTheme ? "bg-white" : "bg-[#202c41]"
               }`}
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#1f255f] text-sm font-bold text-white">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1f255f] text-sm font-bold text-white">
                 {serviceProfile.username.slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0">
-                <p className={`text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{welcomeName}</p>
-                <p className="truncate text-sm text-[#4f6aa3]">
+                <p className={`truncate text-[13px] font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{welcomeName}</p>
+                <p className="truncate text-xs text-[#4f6aa3]">
                   {currentService?.name || (isAdmin ? "Administrador del sistema" : serviceProfile.email)}
-                </p>
-                <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">
-                  {isAdmin ? "Admin" : "Servicio"}
                 </p>
               </div>
             </div>
 
-            <nav className="mt-6 space-y-2">
+            <nav className="mt-5 space-y-1">
               {sidebarItems.map((item) => {
                 const isActive = activeSidebarSection === item.id;
 
@@ -2279,7 +2291,8 @@ export default function Home() {
                     key={item.id}
                     type="button"
                     onClick={() => handleSidebarNavigation(item.id)}
-                    className={`flex w-full items-center gap-3 rounded-[22px] border px-3 py-3 text-left transition ${
+                    title={item.detail}
+                    className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition ${
                       isActive
                         ? "border-[#cad5ee] bg-[#e8eefb] shadow-sm"
                         : isLightPanelTheme
@@ -2288,7 +2301,7 @@ export default function Home() {
                     }`}
                   >
                     <span
-                      className={`flex h-10 w-10 items-center justify-center rounded-2xl text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold uppercase tracking-[0.12em] ${
                         isActive
                           ? "bg-[#1f255f] text-white"
                           : "bg-slate-100 text-slate-500"
@@ -2296,24 +2309,23 @@ export default function Home() {
                     >
                       {item.badge}
                     </span>
-                    <span className="min-w-0">
-                      <span className={`block text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-slate-100"}`}>{item.label}</span>
-                      <span className={`block truncate text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>{item.detail}</span>
+                    <span className={`block truncate text-[13px] font-medium ${isLightPanelTheme ? "text-slate-900" : "text-slate-100"}`}>
+                      {item.label}
                     </span>
                   </button>
                 );
               })}
             </nav>
 
-            <div className={`mt-10 space-y-2 pt-5 ${isLightPanelTheme ? "border-t border-slate-200" : "border-t border-white/10"}`}>
+            <div className={`mt-6 space-y-1 pt-4 ${isLightPanelTheme ? "border-t border-slate-200" : "border-t border-white/10"}`}>
               <button
                 type="button"
                 onClick={handleTogglePanelTheme}
-                className={`flex w-full items-center gap-3 rounded-[20px] px-3 py-3 text-left text-sm transition ${
+                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition ${
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                   {isLightPanelTheme ? "DK" : "LT"}
                 </span>
                 <span>{isLightPanelTheme ? "Modo oscuro" : "Modo claro"}</span>
@@ -2321,11 +2333,11 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => handleSidebarNavigation("panel-security")}
-                className={`flex w-full items-center gap-3 rounded-[20px] px-3 py-3 text-left text-sm transition ${
+                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition ${
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                   PW
                 </span>
                 <span>Cambiar contrasena</span>
@@ -2333,9 +2345,9 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="flex w-full items-center gap-3 rounded-[20px] px-3 py-3 text-left text-sm text-[#8a2d2d] transition hover:bg-white"
+                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-[#8a2d2d] transition hover:bg-white"
               >
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#fbe8e8] text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8a2d2d]">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#fbe8e8] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8a2d2d]">
                   SO
                 </span>
                 <span>Cerrar sesion</span>
@@ -2576,19 +2588,34 @@ export default function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {currentService.rows.map((row) => (
+                    {currentService.rows.map((row) => {
+                      const rowIsFixed = isFixedRow(row);
+                      const fixedValues = getFixedValuesForRow(row);
+
+                      return (
                       <tr key={row} className="odd:bg-white/[0.02] even:bg-white/[0.05]">
                         <th className="sticky left-0 z-10 border-r border-white/10 bg-[#3a465d] px-3 py-3 text-left text-[11px] font-semibold leading-4 text-slate-100">
                           {row}
+                          {rowIsFixed ? (
+                            <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300">
+                              Fijo
+                            </span>
+                          ) : null}
                         </th>
                         {TABULATOR_HEADERS.map((header) => (
                           <td key={`${row}-${header}`} className="border-l border-white/10 px-1 py-1">
                             <input
-                              value={tableValues[row]?.[header] || ""}
+                              value={
+                                rowIsFixed
+                                  ? fixedValues?.[header] ?? ""
+                                  : tableValues[row]?.[header] || ""
+                              }
                               onChange={(event) =>
                                 handleCellChange(row, header, event.target.value)
                               }
-                              disabled={isFormLocked}
+                              disabled={isFormLocked || rowIsFixed}
+                              readOnly={rowIsFixed}
+                              title={rowIsFixed ? "Valor fijo (automatico, no editable)" : undefined}
                               inputMode="numeric"
                               className="w-full rounded-lg border border-white/5 bg-[#2a3448] px-2 py-2 text-center text-xs text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:bg-[#313d54] disabled:cursor-not-allowed disabled:bg-[#253145] disabled:text-slate-400"
                               placeholder="0"
@@ -2597,7 +2624,8 @@ export default function Home() {
                           </td>
                         ))}
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
