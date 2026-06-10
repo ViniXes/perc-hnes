@@ -263,6 +263,20 @@ if (ASEO_METRO_CUADRADO.length !== TABULATOR_HEADERS.length) {
   );
 }
 
+/** Fila fija con un valor en un solo centro de costo y `rest` en los demas. */
+function fixedSingleColumn(
+  header: string,
+  value: string,
+  rest = "0",
+): Record<string, string> {
+  return Object.fromEntries(
+    TABULATOR_HEADERS.map((current) => [current, current === header ? value : rest]),
+  );
+}
+
+// Vacunacion no se captura: el sistema pone fijo 1 en la columna Administracion.
+const ADMINISTRACION_HEADER = "670-Administracion";
+
 /** Mapa fila -> { header -> valor fijo }. Agrega aqui nuevas filas fijas. */
 export const FIXED_ROW_VALUES: Record<string, Record<string, string>> = {
   "648_1-Aseo | Metro cuadrado": Object.fromEntries(
@@ -271,6 +285,8 @@ export const FIXED_ROW_VALUES: Record<string, Record<string, string>> = {
       String(ASEO_METRO_CUADRADO[index]),
     ]),
   ),
+  "398_1-Vacunacion | Actividad": fixedSingleColumn(ADMINISTRACION_HEADER, "1"),
+  "398_2-Vacunacion | Dosis aplicada": fixedSingleColumn(ADMINISTRACION_HEADER, "1"),
 };
 
 /** Indica si una fila tiene valores fijos (solo-lectura, automaticos). */
