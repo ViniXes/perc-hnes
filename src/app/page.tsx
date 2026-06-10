@@ -2229,9 +2229,9 @@ export default function Home() {
 
     return (
       <main
-        className={`min-h-screen px-4 py-6 sm:px-7 lg:px-10 ${
-          isLightPanelTheme ? "bg-[#f3f6fb] text-slate-900" : "bg-[#161f31] text-slate-100"
-        }`}
+        className={`panel-shell ${
+          isLightPanelTheme ? "theme-light" : "theme-dark"
+        } min-h-screen px-4 py-6 sm:px-7 lg:px-10`}
       >
         <div className="mx-auto grid max-w-[1850px] gap-6 xl:grid-cols-[290px_minmax(0,1fr)]">
           <aside

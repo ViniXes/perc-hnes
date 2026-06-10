@@ -7,3 +7,150 @@
 body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
+
+/* =============================================================================
+   Tema del modulo administrativo (panel-shell)
+   -----------------------------------------------------------------------------
+   Todo el "look" del panel vive aqui, en variables que se voltean segun el tema
+   (.theme-dark / .theme-light puesto en el <main> raiz del panel). Las reglas van
+   SIN @layer, por lo que ganan a las utilidades de Tailwind y permiten retematizar
+   las clases hardcodeadas del JSX sin tocarlo.
+
+   Direccion: Grafito + dorado.
+     - Oscuro: casi-negro grafito, tarjetas en gris muy oscuro, borde fino, acento
+       dorado. Sobrio y premium.
+     - Claro: marfil/blanco calido, tarjetas blancas, acento ambar. Limpio y
+       armonico (sin tarjetas oscuras "en color").
+   Para cambiar la paleta entera basta editar las variables de abajo.
+============================================================================= */
+
+.panel-shell {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+.panel-shell.theme-dark {
+  --bg: #0e1013;
+  --surface: #181a1f;       /* tarjeta principal */
+  --surface-2: #131519;     /* tarjeta interna / sidebar */
+  --surface-3: #20242b;     /* inputs / elevado */
+  --chip: #262a31;          /* badges, avatar, chips neutros */
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(212, 175, 106, 0.30);
+  --text: #e9e6df;
+  --text-muted: #b1aca2;
+  --text-faint: #837f76;
+  --accent: #d4af6a;        /* dorado: texto, bordes, detalles */
+  --accent-btn: #c79a4f;    /* dorado lleno para botones */
+  --accent-ink: #17140c;    /* texto sobre acento lleno */
+  --shadow-card: 0 24px 70px rgba(0, 0, 0, 0.45);
+}
+
+.panel-shell.theme-light {
+  --bg: #f6f4ef;
+  --surface: #ffffff;
+  --surface-2: #faf8f3;
+  --surface-3: #f0ede6;
+  --chip: #efece4;
+  --border: rgba(28, 25, 20, 0.10);
+  --border-strong: rgba(176, 125, 35, 0.32);
+  --text: #232019;
+  --text-muted: #5d594f;
+  --text-faint: #8b867c;
+  --accent: #a9781f;
+  --accent-btn: #b8862f;
+  --accent-ink: #ffffff;
+  --shadow-card: 0 18px 45px rgba(20, 18, 12, 0.07);
+}
+
+/* ----- Superficies (se voltean con el tema) -------------------------------- */
+.panel-shell .bg-\[\#202c41\] { background-color: var(--surface); }
+.panel-shell .bg-\[\#1b2537\] { background-color: var(--surface-2); }
+.panel-shell .bg-\[\#161f31\] { background-color: var(--bg); }
+.panel-shell .bg-\[\#2a3448\],
+.panel-shell .bg-\[\#313d54\],
+.panel-shell .bg-\[\#3a465d\] { background-color: var(--surface-3); }
+.panel-shell .bg-\[\#1f255f\],
+.panel-shell .bg-\[\#1a2334\],
+.panel-shell .bg-\[\#162034\],
+.panel-shell .bg-\[\#253145\],
+.panel-shell .bg-\[\#0f1728\] { background-color: var(--chip); }
+.panel-shell .bg-slate-100 { background-color: var(--chip); }
+
+/* Superficies "claras" hardcodeadas en las ramas light de los ternarios:
+   se canalizan a las mismas variables para mantener armonia total. */
+.panel-shell .bg-white,
+.panel-shell .bg-\[\#eef2fb\],
+.panel-shell .bg-\[\#f3f6fb\],
+.panel-shell .bg-\[\#f7f9fe\] { background-color: var(--surface); }
+.panel-shell .bg-\[\#e8eefb\],
+.panel-shell .bg-\[\#cad5ee\] { background-color: var(--chip); }
+.panel-shell .bg-white\/80,
+.panel-shell .bg-white\/85,
+.panel-shell .bg-white\/5 { background-color: color-mix(in srgb, var(--surface) 80%, transparent); }
+
+/* ----- Bordes -------------------------------------------------------------- */
+.panel-shell .border-white\/10,
+.panel-shell .border-slate-200,
+.panel-shell .border-\[\#cad5ee\] { border-color: var(--border); }
+.panel-shell .border-cyan-400\/20,
+.panel-shell .border-cyan-400 { border-color: var(--border-strong); }
+
+/* ----- Texto: muteados se voltean con el tema ------------------------------ */
+.panel-shell .text-slate-300,
+.panel-shell .text-slate-200 { color: var(--text-muted); }
+.panel-shell .text-slate-100 { color: var(--text); }
+.panel-shell .text-slate-400,
+.panel-shell .text-slate-500 { color: var(--text-faint); }
+
+/* Texto de las ramas claras (dark text) tambien por variable */
+.panel-shell .text-slate-900,
+.panel-shell .text-slate-950 { color: var(--text); }
+.panel-shell .text-slate-600,
+.panel-shell .text-slate-700 { color: var(--text-muted); }
+.panel-shell .text-\[\#23395d\],
+.panel-shell .text-\[\#4f6aa3\] { color: var(--text-muted); }
+
+/* En claro, los blancos puros (titulos sobre tarjetas que ahora son claras)
+   deben oscurecerse para no quedar invisibles. En oscuro se quedan blancos. */
+.panel-shell.theme-light .text-white { color: var(--text); }
+
+/* ----- Acentos: cian y violeta -> dorado (cohesion grafito+dorado) --------- */
+.panel-shell .text-cyan-200\/80,
+.panel-shell .text-cyan-200,
+.panel-shell .text-cyan-100,
+.panel-shell .text-sky-700,
+.panel-shell .text-violet-200\/80,
+.panel-shell .text-violet-700 { color: var(--accent); }
+
+.panel-shell .bg-cyan-500,
+.panel-shell .bg-cyan-400,
+.panel-shell .bg-cyan-300,
+.panel-shell .bg-violet-500,
+.panel-shell .bg-violet-400,
+.panel-shell .bg-violet-500\/80,
+.panel-shell .bg-violet-800,
+.panel-shell .bg-violet-800\/80 {
+  background-color: var(--accent-btn);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.panel-shell .hover\:bg-cyan-400:hover,
+.panel-shell .hover\:bg-cyan-300:hover {
+  background-color: color-mix(in srgb, var(--accent-btn) 85%, #ffffff);
+}
+.panel-shell .bg-cyan-950\/20 { background-color: var(--surface-3); }
+.panel-shell .text-cyan-200\/80,
+.panel-shell .border-violet-500,
+.panel-shell .border-violet-400 { border-color: var(--border-strong); }
+
+/* ----- Sombras: en claro, suaves (la sombra oscura recarga el look) -------- */
+.panel-shell.theme-light [class*="shadow-[0_24px"],
+.panel-shell.theme-light [class*="shadow-[0_18px"] {
+  box-shadow: var(--shadow-card);
+}
+
+/* Selección coherente con el acento */
+.panel-shell ::selection {
+  background-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
