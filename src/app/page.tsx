@@ -34,6 +34,13 @@ import {
   TABULATOR_HEADERS,
   type ServiceDefinition,
 } from "@/lib/tabulator-template";
+import {
+  MODULE_DEFINITIONS,
+  getAreaById,
+  getAreaModules,
+  type ModuleDefinition,
+  type ModuleId,
+} from "@/lib/modules";
 
 type UserRole = "service" | "admin";
 type TableValues = Record<string, Record<string, string>>;
@@ -2044,6 +2051,34 @@ export default function Home() {
         </div>
       </section>
     ) : null;
+    // --- Menus por area (PERC / SESPS / Distribucion de Horas) ---------------
+    // Cada area ve solo los menus que tiene asignados. El admin ve los 3.
+    const moduleBadges: Record<ModuleId, string> = {
+      perc: "PE",
+      sesps: "SE",
+      distribucion: "DH",
+    };
+    const currentArea = getAreaById(serviceProfile.serviceId);
+    const visibleModules: ModuleDefinition[] = isAdmin
+      ? MODULE_DEFINITIONS
+      : currentArea
+        ? getAreaModules(currentArea)
+        : [];
+    const getModuleUiStatus = (mod: ModuleDefinition): "completo" | "incompleto" => {
+      if (mod.id === "distribucion") {
+        return hasAnyCapturedValue(tableValues) ? "completo" : "incompleto";
+      }
+
+      // PERC y SESPS: plantilla pendiente -> incompleto por defecto.
+      return "incompleto";
+    };
+    const moduleSidebarItems = visibleModules.map((mod) => ({
+      id: `panel-module-${mod.id}`,
+      label: mod.name,
+      detail: "Menu del area",
+      badge: moduleBadges[mod.id],
+    }));
+
     const sidebarItems = [
       {
         id: "panel-overview",
@@ -2051,6 +2086,7 @@ export default function Home() {
         detail: isAdmin ? "Resumen general" : "Estado del periodo",
         badge: "IN",
       },
+      ...moduleSidebarItems,
       ...(currentService
         ? [
             {
@@ -2090,6 +2126,95 @@ export default function Home() {
         badge: "PW",
       },
     ];
+
+    const moduleSections =
+      visibleModules.length > 0 ? (
+        <section
+          id="panel-modules"
+          className={`rounded-[28px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
+            isLightPanelTheme
+              ? "border border-slate-200 bg-white text-slate-900"
+              : "border border-white/10 bg-[#202c41]"
+          }`}
+        >
+          <div className="mb-5">
+            <p className={`text-sm uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-sky-700" : "text-cyan-200/80"}`}>
+              Menus del area
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold">
+              Tus menus ({visibleModules.length} de {MODULE_DEFINITIONS.length})
+            </h2>
+            <p className={`mt-2 max-w-3xl text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+              {isAdmin
+                ? "Como administrador ves los tres menus. Cada area vera unicamente los que tenga asignados."
+                : "Esta area accede solo a los menus mostrados. El control de completo / incompleto aplica a cada uno."}
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {visibleModules.map((mod) => {
+              const status = getModuleUiStatus(mod);
+              const isComplete = status === "completo";
+
+              return (
+                <div
+                  key={mod.id}
+                  id={`panel-module-${mod.id}`}
+                  className={`flex flex-col rounded-2xl border p-4 ${
+                    isLightPanelTheme
+                      ? "border-slate-200 bg-[#f7f9fe]"
+                      : "border-white/10 bg-[#1b2537]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#1f255f] text-[11px] font-semibold uppercase tracking-[0.18em] text-white">
+                      {moduleBadges[mod.id]}
+                    </span>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        isComplete
+                          ? "bg-emerald-500/15 text-emerald-500"
+                          : "bg-amber-500/15 text-amber-500"
+                      }`}
+                    >
+                      {isComplete ? "Completo" : "Incompleto"}
+                    </span>
+                  </div>
+
+                  <h3 className={`mt-4 text-lg font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                    {mod.name}
+                  </h3>
+                  <p className={`mt-2 flex-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                    {mod.description}
+                  </p>
+
+                  <div className="mt-4">
+                    {mod.id === "distribucion" ? (
+                      currentService ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSidebarNavigation("panel-tabulator")}
+                          className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                        >
+                          Abrir captura
+                        </button>
+                      ) : (
+                        <p className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                          Sin tabulador asignado a esta cuenta.
+                        </p>
+                      )
+                    ) : (
+                      <p className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                        Plantilla pendiente de cargar.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null;
 
     return (
       <main
@@ -2208,6 +2333,7 @@ export default function Home() {
           </aside>
 
           <div className="space-y-6">
+            {moduleSections}
             <section
               id="panel-overview"
               className={`rounded-[28px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.45)] ${
