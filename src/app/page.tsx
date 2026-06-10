@@ -811,6 +811,7 @@ export default function Home() {
   const [calendarEditorPeriodId, setCalendarEditorPeriodId] = useState(() => getPeriodId(new Date()));
   const [calendarDraftDate, setCalendarDraftDate] = useState("");
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
+  const [activeSidebarSection, setActiveSidebarSection] = useState("panel-overview");
   const [firestoreUnavailable, setFirestoreUnavailable] = useState(false);
   const [firestoreStatusReady, setFirestoreStatusReady] = useState(false);
 
@@ -1063,20 +1064,51 @@ export default function Home() {
         }
 
         if (profile.permissions.canManageUsers || profile.role === "admin") {
-          const [users, overview] = await Promise.all([
-            fetchManagedUsers(),
-            fetchAdminOverviewForPeriod(periodId),
-          ]);
+          setIsLoadingUsers(true);
+          setIsLoadingOverview(true);
 
-          if (!cancelled) {
-            setAdminUsers(users);
-            setAdminDrafts(buildAdminDrafts(users));
-            setAdminOverview(overview);
-          }
+          void (async () => {
+            try {
+              const [users, overview] = await Promise.all([
+                fetchManagedUsers(),
+                fetchAdminOverviewForPeriod(periodId),
+              ]);
+
+              if (!cancelled) {
+                setAdminUsers(users);
+                setAdminDrafts(buildAdminDrafts(users));
+                setAdminOverview(overview);
+              }
+            } catch (adminLoadError) {
+              if (await handleFirestoreError(adminLoadError)) {
+                if (!cancelled) {
+                  setAdminUsers([]);
+                  setAdminDrafts({});
+                  setAdminOverview([]);
+                }
+
+                return;
+              }
+
+              if (!cancelled) {
+                setAdminUsers([]);
+                setAdminDrafts({});
+                setAdminOverview([]);
+                setError("No pudimos cargar por completo el panel del administrador.");
+              }
+            } finally {
+              if (!cancelled) {
+                setIsLoadingUsers(false);
+                setIsLoadingOverview(false);
+              }
+            }
+          })();
         } else if (!cancelled) {
           setAdminUsers([]);
           setAdminDrafts({});
           setAdminOverview([]);
+          setIsLoadingUsers(false);
+          setIsLoadingOverview(false);
         }
       } catch (sessionError) {
         if (await handleFirestoreError(sessionError)) {
@@ -1086,6 +1118,8 @@ export default function Home() {
             setAdminUsers([]);
             setAdminDrafts({});
             setAdminOverview([]);
+            setIsLoadingUsers(false);
+            setIsLoadingOverview(false);
             setProfileReady(true);
           }
 
@@ -1098,6 +1132,8 @@ export default function Home() {
           setAdminUsers([]);
           setAdminDrafts({});
           setAdminOverview([]);
+          setIsLoadingUsers(false);
+          setIsLoadingOverview(false);
           setError(getAuthErrorMessage(sessionError));
         }
       } finally {
@@ -1451,6 +1487,7 @@ export default function Home() {
   async function handleSignOut() {
     setError("");
     setMessage("");
+    setActiveSidebarSection("panel-overview");
     setServiceProfile(null);
     setTableValues({});
     setAdminUsers([]);
@@ -1723,6 +1760,20 @@ export default function Home() {
     }
   }
 
+  function handleSidebarNavigation(sectionId: string) {
+    setActiveSidebarSection(sectionId);
+    const section = window.document.getElementById(sectionId);
+
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function handleSidebarDarkModeHint() {
+    setError("");
+    setMessage("El panel interno ya usa modo oscuro por defecto.");
+  }
+
   const isLoadingSession = !authReady || (user !== null && !profileReady);
 
   if (user && serviceProfile && !isLoadingSession) {
@@ -1737,7 +1788,10 @@ export default function Home() {
       0,
     );
     const adminCalendarSection = isAdmin ? (
-      <section className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
+      <section
+        id="panel-calendar"
+        className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+      >
         <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">
@@ -1842,11 +1896,154 @@ export default function Home() {
         </div>
       </section>
     ) : null;
+    const sidebarItems = [
+      {
+        id: "panel-overview",
+        label: "Inicio",
+        detail: isAdmin ? "Resumen general" : "Estado del periodo",
+        badge: "IN",
+      },
+      ...(currentService
+        ? [
+            {
+              id: "panel-tabulator",
+              label: "Mi tabulador",
+              detail: "Captura mensual",
+              badge: "TB",
+            },
+          ]
+        : []),
+      ...(isAdmin
+        ? [
+            {
+              id: "panel-calendar",
+              label: "Configuracion mensual",
+              detail: "Dias habiles",
+              badge: "CM",
+            },
+            {
+              id: "panel-admin-overview",
+              label: "Vista global",
+              detail: "Todos los servicios",
+              badge: "VG",
+            },
+            {
+              id: "panel-users",
+              label: "Usuarios",
+              detail: "Cuentas y permisos",
+              badge: "US",
+            },
+          ]
+        : []),
+      {
+        id: "panel-security",
+        label: "Cambiar contrasena",
+        detail: "Seguridad de acceso",
+        badge: "PW",
+      },
+    ];
 
     return (
       <main className="min-h-screen bg-[#161f31] px-4 py-6 text-slate-100 sm:px-7 lg:px-10">
-        <div className="mx-auto max-w-[1850px] space-y-6">
-          <section className="rounded-[28px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.45)]">
+        <div className="mx-auto grid max-w-[1850px] gap-6 xl:grid-cols-[290px_minmax(0,1fr)]">
+          <aside className="self-start rounded-[30px] border border-white/10 bg-[#eef2fb] p-5 text-slate-900 shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:sticky xl:top-6">
+            <div className="border-b border-slate-200 pb-5 text-center">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-slate-500">
+                HOSPITAL NACIONAL
+              </p>
+              <p className="mt-1 text-sm font-medium tracking-[0.18em] text-slate-500">
+                EL SALVADOR
+              </p>
+              <div className="mx-auto mt-4 h-px w-24 bg-slate-300" />
+            </div>
+
+            <div className="mt-5 flex items-start gap-3 rounded-[24px] bg-white px-3 py-3 shadow-sm">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#1f255f] text-sm font-bold text-white">
+                {serviceProfile.username.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">{welcomeName}</p>
+                <p className="truncate text-sm text-[#4f6aa3]">
+                  {currentService?.name || (isAdmin ? "Administrador del sistema" : serviceProfile.email)}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">
+                  {isAdmin ? "Admin" : "Servicio"}
+                </p>
+              </div>
+            </div>
+
+            <nav className="mt-6 space-y-2">
+              {sidebarItems.map((item) => {
+                const isActive = activeSidebarSection === item.id;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSidebarNavigation(item.id)}
+                    className={`flex w-full items-center gap-3 rounded-[22px] border px-3 py-3 text-left transition ${
+                      isActive
+                        ? "border-[#cad5ee] bg-[#e8eefb] shadow-sm"
+                        : "border-transparent bg-transparent hover:border-slate-200 hover:bg-white/80"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-10 w-10 items-center justify-center rounded-2xl text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                        isActive
+                          ? "bg-[#1f255f] text-white"
+                          : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-slate-900">{item.label}</span>
+                      <span className="block truncate text-xs text-slate-500">{item.detail}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            <div className="mt-10 space-y-2 border-t border-slate-200 pt-5">
+              <button
+                type="button"
+                onClick={handleSidebarDarkModeHint}
+                className="flex w-full items-center gap-3 rounded-[20px] px-3 py-3 text-left text-sm text-slate-700 transition hover:bg-white"
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  DK
+                </span>
+                <span>Modo oscuro</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSidebarNavigation("panel-security")}
+                className="flex w-full items-center gap-3 rounded-[20px] px-3 py-3 text-left text-sm text-slate-700 transition hover:bg-white"
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  PW
+                </span>
+                <span>Cambiar contrasena</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="flex w-full items-center gap-3 rounded-[20px] px-3 py-3 text-left text-sm text-[#8a2d2d] transition hover:bg-white"
+              >
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#fbe8e8] text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8a2d2d]">
+                  SO
+                </span>
+                <span>Cerrar sesion</span>
+              </button>
+            </div>
+          </aside>
+
+          <div className="space-y-6">
+            <section
+              id="panel-overview"
+              className="rounded-[28px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.45)]"
+            >
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-sm uppercase tracking-[0.3em] text-violet-200/80">
@@ -1931,7 +2128,7 @@ export default function Home() {
                 </button>
               </div>
             </div>
-          </section>
+            </section>
 
           {serviceProfile.mustChangePassword ? (
             <section className="rounded-[24px] border border-amber-500/50 bg-amber-950/35 px-5 py-4 text-center text-amber-50 shadow-lg">
@@ -1984,7 +2181,10 @@ export default function Home() {
           {adminCalendarSection}
 
           {isAdmin ? (
-            <section className="overflow-hidden rounded-[24px] border border-cyan-400/20 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
+            <section
+              id="panel-admin-overview"
+              className="overflow-hidden rounded-[24px] border border-cyan-400/20 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+            >
               <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">
@@ -2058,7 +2258,10 @@ export default function Home() {
           ) : null}
 
           {currentService ? (
-            <section className="overflow-hidden rounded-[24px] border border-white/10 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
+            <section
+              id="panel-tabulator"
+              className="overflow-hidden rounded-[24px] border border-white/10 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+            >
               <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse text-xs text-slate-100">
                   <thead>
@@ -2113,7 +2316,10 @@ export default function Home() {
             </section>
           )}
 
-          <section className="rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
+          <section
+            id="panel-security"
+            className="rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+          >
             <div className="mb-5">
               <p className="text-sm uppercase tracking-[0.2em] text-violet-200/80">
                 Seguridad
@@ -2170,7 +2376,10 @@ export default function Home() {
           </section>
 
           {isAdmin ? (
-            <section className="rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
+            <section
+              id="panel-users"
+              className="rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+            >
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.2em] text-amber-200/80">
@@ -2559,6 +2768,7 @@ export default function Home() {
               </div>
             </section>
           ) : null}
+        </div>
         </div>
       </main>
     );
