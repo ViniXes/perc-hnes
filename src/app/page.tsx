@@ -495,6 +495,17 @@ function getServiceUsername(serviceId: string | null | undefined) {
   return SERVICE_USERNAME_BY_ID[serviceId] || `dep.${serviceId}`;
 }
 
+// Correo de ACCESO deterministico derivado del usuario del servicio. Permite
+// resolver usuario -> correo en memoria (sin leer Firestore antes de autenticar),
+// que es lo que impedia el login de las cuentas creadas. No es un buzon real:
+// el correo de contacto del usuario se guarda aparte en el perfil.
+const SERVICE_LOGIN_DOMAIN = "perc-hnes.app";
+
+function getServiceLoginEmail(serviceId: string | null | undefined) {
+  const username = getServiceUsername(serviceId);
+  return username ? `${username.toLowerCase()}@${SERVICE_LOGIN_DOMAIN}` : "";
+}
+
 function findServiceByUsername(username: string) {
   const normalizedUsername = normalizeKey(username);
 
@@ -785,9 +796,13 @@ async function createServiceUserAccount(
   const normalizedDui = dui.trim();
   const normalizedPhone = phone.trim();
   const displayName = buildFullName(normalizedFirstName, normalizedLastName, service.name);
+  // Correo de ACCESO deterministico (derivado del usuario). El correo que escribe
+  // el admin queda como correo de CONTACTO. Asi el login por usuario funciona sin
+  // leer Firestore antes de autenticar.
+  const loginEmail = getServiceLoginEmail(service.id);
   const credential = await createUserWithEmailAndPassword(
     creationAuth,
-    normalizedEmail,
+    loginEmail,
     DEFAULT_TEMP_PASSWORD,
   );
 
@@ -799,6 +814,8 @@ async function createServiceUserAccount(
     serviceId: service.id,
     serviceName: service.name,
     email: normalizedEmail,
+    contactEmail: normalizedEmail,
+    loginEmail,
     username: serviceUsername,
     firstName: normalizedFirstName,
     lastName: normalizedLastName,
@@ -818,6 +835,8 @@ async function createServiceUserAccount(
     serviceName: service.name,
     uid: credential.user.uid,
     email: normalizedEmail,
+    contactEmail: normalizedEmail,
+    loginEmail,
     username: serviceUsername,
     firstName: normalizedFirstName,
     lastName: normalizedLastName,
@@ -834,7 +853,11 @@ async function createServiceUserAccount(
   };
 }
 
-async function resolveLoginEmail(loginIdentifier: string) {
+// Resuelve el correo de ACCESO desde lo que el usuario escribe (usuario o correo).
+// Todo en memoria: ya NO consulta Firestore antes de autenticar (ese era el origen
+// de que las cuentas creadas no pudieran ingresar cuando las reglas bloquean la
+// lectura sin sesion).
+function resolveLoginEmail(loginIdentifier: string) {
   const normalizedIdentifier = normalizeLoginIdentifier(loginIdentifier);
 
   if (!normalizedIdentifier) {
@@ -852,23 +875,7 @@ async function resolveLoginEmail(loginIdentifier: string) {
   const mappedService = findServiceByUsername(normalizedIdentifier);
 
   if (mappedService) {
-    const serviceSnapshot = await getDocs(
-      query(collection(db, "serviceUsers"), where("serviceId", "==", mappedService.id)),
-    );
-    const matchedUser = serviceSnapshot.docs.find((item) => Boolean(item.data().email));
-
-    if (matchedUser) {
-      return String(matchedUser.data().email);
-    }
-  }
-
-  const usernameSnapshot = await getDocs(
-    query(collection(db, "serviceUsers"), where("username", "==", normalizedIdentifier)),
-  );
-  const matchedByUsername = usernameSnapshot.docs.find((item) => Boolean(item.data().email));
-
-  if (matchedByUsername) {
-    return String(matchedByUsername.data().email);
+    return getServiceLoginEmail(mappedService.id);
   }
 
   return normalizedIdentifier;
@@ -1580,11 +1587,7 @@ export default function Home() {
           }
         }
       } else {
-        if (firestoreUnavailable && !loginIdentifier.includes("@")) {
-          throw new Error("firestore-setup-required");
-        }
-
-        const resolvedEmail = await resolveLoginEmail(loginIdentifier);
+        const resolvedEmail = resolveLoginEmail(loginIdentifier);
         await signInWithEmailAndPassword(auth, resolvedEmail, password);
       }
 
@@ -1651,7 +1654,7 @@ export default function Home() {
         serviceId: "",
       });
       setMessage(
-        `Cuenta creada para ${service.name}. Usuario: ${serviceUsername}. Contrasena temporal: ${DEFAULT_TEMP_PASSWORD}.`,
+        `Cuenta creada para ${service.name}. Inicia sesion con el usuario "${serviceUsername}" y la contrasena temporal "${DEFAULT_TEMP_PASSWORD}".`,
       );
     } catch (createError) {
       if (await handleFirestoreError(createError)) {
@@ -1922,13 +1925,19 @@ export default function Home() {
     }
   }
 
-  async function handleAdminSendReset(uid: string, userEmail: string) {
+  async function handleAdminSendReset(uid: string, managedUser: ManagedUser) {
     setAdminBusyUserId(uid);
     setError("");
     setMessage("");
 
     try {
-      await sendPasswordResetEmail(auth, userEmail);
+      // El reset debe ir al correo de ACCESO real de la cuenta (deterministico),
+      // no al correo de contacto que escribio el admin.
+      const targetEmail =
+        managedUser.role === "service"
+          ? getServiceLoginEmail(managedUser.serviceId) || managedUser.email
+          : managedUser.email;
+      await sendPasswordResetEmail(auth, targetEmail);
       await setDoc(
         doc(db, "serviceUsers", uid),
         {
@@ -1940,7 +1949,7 @@ export default function Home() {
 
       const users = await fetchManagedUsers();
       applyAdminUsers(users);
-      setMessage(`Se envio el correo de restablecimiento a ${userEmail}.`);
+      setMessage(`Se envio el correo de restablecimiento a ${targetEmail}.`);
     } catch (resetError) {
       setError(getAuthErrorMessage(resetError));
     } finally {
@@ -2761,7 +2770,7 @@ export default function Home() {
                     </label>
 
                     <label className="block md:col-span-2">
-                      <span className="text-sm font-medium text-slate-200">Correo</span>
+                      <span className="text-sm font-medium text-slate-200">Correo de contacto</span>
                       <input
                         value={adminCreateForm.email}
                         onChange={(event) => updateAdminCreateForm("email", event.target.value)}
@@ -3075,7 +3084,7 @@ export default function Home() {
                               <button
                                 type="button"
                                 onClick={() =>
-                                  void handleAdminSendReset(managedUser.uid, managedUser.email)
+                                  void handleAdminSendReset(managedUser.uid, managedUser)
                                 }
                                 disabled={busy}
                                 className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800"
