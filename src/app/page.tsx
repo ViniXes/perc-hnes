@@ -218,8 +218,6 @@ function getAuthErrorMessage(error: unknown) {
       return "La nueva contrasena debe tener al menos 6 caracteres.";
     case "admin-access-failed":
       return "No pudimos habilitar el acceso del administrador en Firebase Auth.";
-    case "report-month-incomplete":
-      return "El Excel solo se habilita cuando todas las dependencias completan el mes actual.";
     case "firestore-setup-required":
       return FIRESTORE_SETUP_MESSAGE;
     default:
@@ -692,6 +690,24 @@ async function ensureDefaultAdminProfile(currentUser: User) {
   );
 }
 
+function buildDefaultAdminProfile(uid: string) {
+  return normalizeProfile(uid, ADMIN_EMAIL, {
+    serviceId: null,
+    serviceName: null,
+    email: ADMIN_EMAIL,
+    username: ADMIN_USERNAME,
+    firstName: ADMIN_USERNAME,
+    lastName: "",
+    name: ADMIN_USERNAME,
+    dui: "",
+    phone: "",
+    role: "admin",
+    isActive: true,
+    mustChangePassword: false,
+    permissions: getDefaultPermissions("admin"),
+  });
+}
+
 async function createServiceUserAccount(
   creationAuth: Auth,
   {
@@ -1077,6 +1093,53 @@ export default function Home() {
       setProfileReady(false);
 
       try {
+        const isPrimaryAdminUser = normalizeKey(user.email || "") === normalizeKey(ADMIN_EMAIL);
+
+        if (isPrimaryAdminUser) {
+          const profile = buildDefaultAdminProfile(user.uid);
+
+          setServiceProfile(profile);
+          setTableValues({});
+          setError("");
+          setIsLoadingUsers(true);
+
+          void ensureDefaultAdminProfile(user).catch(() => {
+            // Ignore background admin profile sync failures during login.
+          });
+
+          void (async () => {
+            try {
+              const users = await fetchManagedUsers();
+
+              if (!cancelled) {
+                setAdminUsers(users);
+                setAdminDrafts(buildAdminDrafts(users));
+              }
+            } catch (adminLoadError) {
+              if (await handleFirestoreError(adminLoadError)) {
+                if (!cancelled) {
+                  setAdminUsers([]);
+                  setAdminDrafts({});
+                }
+
+                return;
+              }
+
+              if (!cancelled) {
+                setAdminUsers([]);
+                setAdminDrafts({});
+                setError("No pudimos cargar por completo los usuarios del administrador.");
+              }
+            } finally {
+              if (!cancelled) {
+                setIsLoadingUsers(false);
+              }
+            }
+          })();
+
+          return;
+        }
+
         const profileSnapshot = await getDoc(doc(db, "serviceUsers", user.uid));
 
         if (cancelled) {
@@ -1261,12 +1324,6 @@ export default function Home() {
 
     try {
       const overview = await fetchAdminOverviewForPeriod(periodId);
-      const completedServices = overview.filter((entry) => entry.hasSavedData).length;
-
-      if (completedServices < SERVICE_COUNT) {
-        throw new Error("report-month-incomplete");
-      }
-
       downloadAdminExcelReport(overview, periodId);
       setMessage(`Excel generado correctamente para el periodo ${periodLabel}.`);
     } catch (exportError) {
@@ -1397,8 +1454,7 @@ export default function Home() {
         password === ADMIN_PASSWORD
       ) {
         try {
-          const credential = await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
-          await ensureDefaultAdminProfile(credential.user);
+          await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
         } catch (loginError) {
           const authCode = (loginError as AuthError).code;
 
@@ -1407,12 +1463,10 @@ export default function Home() {
           }
 
           try {
-            const credential = await createUserWithEmailAndPassword(
-              auth,
-              ADMIN_EMAIL,
-              ADMIN_PASSWORD,
-            );
-            await ensureDefaultAdminProfile(credential.user);
+            const credential = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+            void ensureDefaultAdminProfile(credential.user).catch(() => {
+              // Ignore background admin profile sync failures during account bootstrap.
+            });
           } catch (createAdminError) {
             const createAdminCode = (createAdminError as AuthError).code;
 
@@ -1815,7 +1869,6 @@ export default function Home() {
     const openDaysLabel = captureWindow.openDays
       .map((day) => SHORT_DATE_FORMATTER.format(day))
       .join(" / ");
-    const canExportMonthlyReport = !isLoadingDashboard && publicCompletedCount === SERVICE_COUNT;
     const adminCalendarSection = isAdmin ? (
       <section
         id="panel-calendar"
@@ -2160,7 +2213,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => void handleExportMonthlyReport()}
-                      disabled={isExportingMonthlyReport || !canExportMonthlyReport}
+                      disabled={isExportingMonthlyReport}
                       className="rounded-2xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-cyan-300"
                     >
                       {isExportingMonthlyReport ? "Generando Excel..." : "Descargar Excel"}
@@ -2253,8 +2306,8 @@ export default function Home() {
                   </p>
                   <h2 className="mt-2 text-2xl font-semibold">Descargar consolidado en Excel</h2>
                   <p className={`mt-2 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                    Cuando todas las dependencias completen su captura del periodo {periodLabel},
-                    podras descargar el archivo consolidado listo para Excel.
+                    Descarga el archivo consolidado del periodo {periodLabel} cuando lo necesites,
+                    incluso si aun faltan dependencias por completar su captura.
                   </p>
                 </div>
                 <div className={`text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
@@ -2268,9 +2321,7 @@ export default function Home() {
                   <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Estado actual</p>
                   <p className="mt-3 text-4xl font-semibold text-white">{currentMonthProgress}%</p>
                   <p className="mt-2 text-sm text-slate-300">
-                    {canExportMonthlyReport
-                      ? "Todas las dependencias completaron el mes. Ya puedes descargar el consolidado."
-                      : "Aun faltan dependencias por completar su captura de este mes."}
+                    {publicCompletedCount} de {SERVICE_COUNT} dependencias han completado el mes actual.
                   </p>
                   <div className="mt-4 h-3 rounded-full bg-white/10">
                     <div
@@ -2290,16 +2341,14 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => void handleExportMonthlyReport()}
-                    disabled={isExportingMonthlyReport || !canExportMonthlyReport}
+                    disabled={isExportingMonthlyReport}
                     className="mt-5 rounded-2xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-cyan-300"
                   >
                     {isExportingMonthlyReport ? "Generando Excel..." : "Descargar Excel mensual"}
                   </button>
-                  {!canExportMonthlyReport ? (
-                    <p className="mt-3 text-xs text-amber-300">
-                      El boton se habilita cuando las {SERVICE_COUNT} dependencias completan el mes.
-                    </p>
-                  ) : null}
+                  <p className="mt-3 text-xs text-slate-300">
+                    El archivo saldra con los datos disponibles al momento de la descarga.
+                  </p>
                 </div>
               </div>
             </section>
