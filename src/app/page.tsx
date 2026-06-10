@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   type Auth,
   type AuthError,
@@ -116,6 +116,7 @@ const CAPTURE_WINDOW_DAYS = 3;
 const FIRESTORE_SETUP_MESSAGE = `Firestore no esta creado o configurado en este proyecto de Firebase. Verifica la base de datos '${firestoreDatabaseId}' para habilitar login, tablero y guardado.`;
 const FIRESTORE_DISABLED_STORAGE_KEY = "perc-hnes.firestore-disabled";
 const PANEL_THEME_STORAGE_KEY = "perc-hnes.panel-theme";
+const ADMIN_USERS_CACHE_STORAGE_KEY = "perc-hnes.admin-users-cache";
 
 const SERVICE_GROUP_LABELS: Record<string, string> = {
   direccion: "Direccion",
@@ -585,14 +586,16 @@ async function fetchAdminOverviewForPeriod(periodId: string): Promise<AdminOverv
 }
 
 async function fetchCalendarOverridesForYear(year: number) {
-  const snapshot = await getDocs(collection(db, "captureCalendar"));
+  const snapshot = await getDocs(
+    query(
+      collection(db, "captureCalendar"),
+      where("periodId", ">=", `${year}-01`),
+      where("periodId", "<=", `${year}-12`),
+    ),
+  );
   const overrides: Record<string, string[]> = {};
 
   for (const item of snapshot.docs) {
-    if (!item.id.startsWith(`${year}-`)) {
-      continue;
-    }
-
     const data = item.data() as {
       blockedDates?: unknown;
     };
@@ -608,7 +611,13 @@ async function fetchCalendarOverridesForYear(year: number) {
 async function fetchPublicDashboard(year: number, currentPeriodId: string) {
   const [calendarOverrides, tabulatorsSnapshot] = await Promise.all([
     fetchCalendarOverridesForYear(year),
-    getDocs(collection(db, "serviceTabulators")),
+    getDocs(
+      query(
+        collection(db, "serviceTabulators"),
+        where("periodId", ">=", `${year}-01`),
+        where("periodId", "<=", `${year}-12`),
+      ),
+    ),
   ]);
   const completedByPeriod = new Map<string, Set<string>>();
 
@@ -921,6 +930,46 @@ export default function Home() {
     () => getServiceById(adminCreateForm.serviceId),
     [adminCreateForm.serviceId],
   );
+
+  const persistAdminUsersCache = useCallback((users: ManagedUser[]) => {
+    try {
+      window.localStorage.setItem(ADMIN_USERS_CACHE_STORAGE_KEY, JSON.stringify(users));
+    } catch {
+      // Ignore local storage access issues.
+    }
+  }, []);
+
+  const readAdminUsersCache = useCallback(() => {
+    try {
+      const rawValue = window.localStorage.getItem(ADMIN_USERS_CACHE_STORAGE_KEY);
+
+      if (!rawValue) {
+        return null;
+      }
+
+      const parsedValue = JSON.parse(rawValue) as ManagedUser[];
+      return Array.isArray(parsedValue) ? parsedValue : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const applyAdminUsers = useCallback((users: ManagedUser[]) => {
+    setAdminUsers(users);
+    setAdminDrafts(buildAdminDrafts(users));
+    persistAdminUsersCache(users);
+  }, [persistAdminUsersCache]);
+
+  const clearAdminUsersState = useCallback(() => {
+    setAdminUsers([]);
+    setAdminDrafts({});
+
+    try {
+      window.localStorage.removeItem(ADMIN_USERS_CACHE_STORAGE_KEY);
+    } catch {
+      // Ignore local storage access issues.
+    }
+  }, []);
   const calendarPreviewDate = useMemo(() => {
     if (!calendarEditorPeriodId) {
       return null;
@@ -1004,6 +1053,7 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: number | null = null;
 
     async function loadDashboard() {
       if (!firestoreStatusReady) {
@@ -1051,10 +1101,16 @@ export default function Home() {
       }
     }
 
-    void loadDashboard();
+    timeoutId = window.setTimeout(() => {
+      void loadDashboard();
+    }, 180);
 
     return () => {
       cancelled = true;
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [currentYear, firestoreStatusReady, firestoreUnavailable, periodId]);
 
@@ -1079,8 +1135,7 @@ export default function Home() {
       if (!user) {
         setServiceProfile(null);
         setTableValues({});
-        setAdminUsers([]);
-        setAdminDrafts({});
+        clearAdminUsersState();
         setProfileReady(true);
         return;
       }
@@ -1097,11 +1152,18 @@ export default function Home() {
 
         if (isPrimaryAdminUser) {
           const profile = buildDefaultAdminProfile(user.uid);
+          const cachedUsers = readAdminUsersCache();
 
           setServiceProfile(profile);
           setTableValues({});
           setError("");
-          setIsLoadingUsers(true);
+
+          if (cachedUsers) {
+            applyAdminUsers(cachedUsers);
+            setIsLoadingUsers(false);
+          } else {
+            setIsLoadingUsers(true);
+          }
 
           void ensureDefaultAdminProfile(user).catch(() => {
             // Ignore background admin profile sync failures during login.
@@ -1112,22 +1174,19 @@ export default function Home() {
               const users = await fetchManagedUsers();
 
               if (!cancelled) {
-                setAdminUsers(users);
-                setAdminDrafts(buildAdminDrafts(users));
+                applyAdminUsers(users);
               }
             } catch (adminLoadError) {
               if (await handleFirestoreError(adminLoadError)) {
                 if (!cancelled) {
-                  setAdminUsers([]);
-                  setAdminDrafts({});
+                  clearAdminUsersState();
                 }
 
                 return;
               }
 
               if (!cancelled) {
-                setAdminUsers([]);
-                setAdminDrafts({});
+                clearAdminUsersState();
                 setError("No pudimos cargar por completo los usuarios del administrador.");
               }
             } finally {
@@ -1181,29 +1240,33 @@ export default function Home() {
         }
 
         if (profile.permissions.canManageUsers || profile.role === "admin") {
-          setIsLoadingUsers(true);
+          const cachedUsers = readAdminUsersCache();
+
+          if (cachedUsers) {
+            applyAdminUsers(cachedUsers);
+            setIsLoadingUsers(false);
+          } else {
+            setIsLoadingUsers(true);
+          }
 
           void (async () => {
             try {
               const users = await fetchManagedUsers();
 
               if (!cancelled) {
-                setAdminUsers(users);
-                setAdminDrafts(buildAdminDrafts(users));
+                applyAdminUsers(users);
               }
             } catch (adminLoadError) {
               if (await handleFirestoreError(adminLoadError)) {
                 if (!cancelled) {
-                  setAdminUsers([]);
-                  setAdminDrafts({});
+                  clearAdminUsersState();
                 }
 
                 return;
               }
 
               if (!cancelled) {
-                setAdminUsers([]);
-                setAdminDrafts({});
+                clearAdminUsersState();
                 setError("No pudimos cargar por completo los usuarios del administrador.");
               }
             } finally {
@@ -1213,8 +1276,7 @@ export default function Home() {
             }
           })();
         } else if (!cancelled) {
-          setAdminUsers([]);
-          setAdminDrafts({});
+          clearAdminUsersState();
           setIsLoadingUsers(false);
         }
       } catch (sessionError) {
@@ -1222,8 +1284,7 @@ export default function Home() {
           if (!cancelled) {
             setServiceProfile(null);
             setTableValues({});
-            setAdminUsers([]);
-            setAdminDrafts({});
+            clearAdminUsersState();
             setIsLoadingUsers(false);
             setProfileReady(true);
           }
@@ -1234,8 +1295,7 @@ export default function Home() {
         if (!cancelled) {
           setServiceProfile(null);
           setTableValues({});
-          setAdminUsers([]);
-          setAdminDrafts({});
+          clearAdminUsersState();
           setIsLoadingUsers(false);
           setError(getAuthErrorMessage(sessionError));
         }
@@ -1251,7 +1311,15 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [firestoreStatusReady, firestoreUnavailable, periodId, user]);
+  }, [
+    applyAdminUsers,
+    clearAdminUsersState,
+    firestoreStatusReady,
+    firestoreUnavailable,
+    periodId,
+    readAdminUsersCache,
+    user,
+  ]);
 
   async function loadSavedData(showEmptyMessage: boolean) {
     if (!currentService || firestoreUnavailable) {
@@ -1296,14 +1364,12 @@ export default function Home() {
 
     try {
       const users = await fetchManagedUsers();
-      setAdminUsers(users);
-      setAdminDrafts(buildAdminDrafts(users));
+      applyAdminUsers(users);
       setMessage("Listado de usuarios actualizado.");
       setError("");
     } catch (loadError) {
       if (await handleFirestoreError(loadError)) {
-        setAdminUsers([]);
-        setAdminDrafts({});
+        clearAdminUsersState();
         return;
       }
 
@@ -1539,8 +1605,7 @@ export default function Home() {
       });
 
       const users = await fetchManagedUsers();
-      setAdminUsers(users);
-      setAdminDrafts(buildAdminDrafts(users));
+      applyAdminUsers(users);
       setAdminCreateForm({
         firstName: "",
         lastName: "",
@@ -1581,8 +1646,7 @@ export default function Home() {
     setActiveSidebarSection("panel-overview");
     setServiceProfile(null);
     setTableValues({});
-    setAdminUsers([]);
-    setAdminDrafts({});
+    clearAdminUsersState();
     setNewPassword("");
     setConfirmPassword("");
     await signOut(auth);
@@ -1795,8 +1859,7 @@ export default function Home() {
       );
 
       const users = await fetchManagedUsers();
-      setAdminUsers(users);
-      setAdminDrafts(buildAdminDrafts(users));
+      applyAdminUsers(users);
 
       if (user?.uid === uid) {
         const updated = users.find((managedUser) => managedUser.uid === uid) || null;
@@ -1836,8 +1899,7 @@ export default function Home() {
       );
 
       const users = await fetchManagedUsers();
-      setAdminUsers(users);
-      setAdminDrafts(buildAdminDrafts(users));
+      applyAdminUsers(users);
       setMessage(`Se envio el correo de restablecimiento a ${userEmail}.`);
     } catch (resetError) {
       setError(getAuthErrorMessage(resetError));
