@@ -49,9 +49,9 @@ export const MODULE_DEFINITIONS: ModuleDefinition[] = [
   },
   {
     id: "sesps",
-    name: "SESPS",
-    shortName: "SESPS",
-    description: "Modulo SESPS. Plantilla pendiente de definir.",
+    name: "SEPS",
+    shortName: "SEPS",
+    description: "Modulo SEPS. Plantilla pendiente de definir.",
   },
   {
     id: "distribucion",

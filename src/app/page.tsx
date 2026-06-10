@@ -29,6 +29,7 @@ import {
 import { auth, createSecondaryAuth, firestoreDatabaseId } from "@/lib/firebase";
 import { db, shutdownFirestore } from "@/lib/firestore";
 import {
+  CONSOLIDADO_ROW_ORDER,
   SERVICE_COUNT,
   SERVICE_DEFINITIONS,
   TABULATOR_HEADERS,
@@ -423,26 +424,36 @@ function escapeHtml(value: string) {
 }
 
 function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: string) {
-  const headerCells = ["Servicio", "Fila", ...TABULATOR_HEADERS]
+  // El consolidado debe respetar la plantilla oficial TAL CUAL: una sola columna
+  // de etiqueta (encabezado vacio) seguida de los centros de costo, y las filas en
+  // el orden de CONSOLIDADO_ROW_ORDER (donde Nutricion va SEPARADA: las filas 652-*
+  // quedan despues de Almacen, no junto a las 750/760 como en el tablero).
+  const valuesByRow = new Map<string, TableValues[string]>();
+  for (const entry of overview) {
+    for (const row of entry.service.rows) {
+      if (entry.values[row]) {
+        valuesByRow.set(row, entry.values[row]);
+      }
+    }
+  }
+
+  const headerCells = ["", ...TABULATOR_HEADERS]
     .map(
       (header) =>
         `<th style="background:#dbe7ff;border:1px solid #cbd5e1;padding:8px;font-weight:700;">${escapeHtml(header)}</th>`,
     )
     .join("");
-  const bodyRows = overview
-    .flatMap((entry) =>
-      entry.service.rows.map((row) => {
-        const cells = TABULATOR_HEADERS.map(
-          (header) =>
-            `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(
-              entry.values[row]?.[header] || "0",
-            )}</td>`,
-        ).join("");
+  const bodyRows = CONSOLIDADO_ROW_ORDER.map((row) => {
+    const rowValues = valuesByRow.get(row);
+    const cells = TABULATOR_HEADERS.map(
+      (header) =>
+        `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(
+          rowValues?.[header] || "0",
+        )}</td>`,
+    ).join("");
 
-        return `<tr><td style="border:1px solid #cbd5e1;padding:6px;font-weight:700;">${escapeHtml(entry.service.name)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(row)}</td>${cells}</tr>`;
-      }),
-    )
-    .join("");
+    return `<tr><td style="border:1px solid #cbd5e1;padding:6px;font-weight:700;">${escapeHtml(row)}</td>${cells}</tr>`;
+  }).join("");
   const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Consolidado ${periodId}</title></head><body><table>${`<thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody>`}</table></body></html>`;
   const blob = new Blob(["\ufeff", documentHtml], {
     type: "application/vnd.ms-excel;charset=utf-8;",

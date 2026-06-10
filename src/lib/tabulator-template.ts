@@ -239,3 +239,78 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
 
 export const SERVICE_COUNT = SERVICE_DEFINITIONS.length;
 export const COST_CENTER_COUNT = TABULATOR_HEADERS.length;
+
+// =============================================================================
+// Orden EXACTO de filas para el consolidado (descarga Excel).
+// -----------------------------------------------------------------------------
+// La plantilla oficial "Produccion Distribuida" NO agrupa las filas igual que el
+// tablero. En el tablero, Nutricion / Alimentacion y dieta captura sus 6 items
+// JUNTOS (750_*, 760_1, 652_*); pero en el consolidado las filas de
+// "652-Servicio de alimentacion" van SEPARADAS, despues de Almacen (721) y antes
+// de Lavanderia (659). Esta lista reproduce columna A de la plantilla tal cual.
+//
+// Validado contra "Producción Distribuida_2026_05.xlsx" (60 filas, mismo set que
+// SERVICE_DEFINITIONS). NO reordenar a mano: respetar la plantilla.
+// =============================================================================
+export const CONSOLIDADO_ROW_ORDER: readonly string[] = [
+  "398_1-Vacunacion | Actividad",
+  "398_2-Vacunacion | Dosis aplicada",
+  "518_1-Laboratorio clinico | Examen",
+  "518_2-Laboratorio clinico | Prueba",
+  "530_1-Laboratorio de biologia molecular | Examen",
+  "538_1-Resonancia magnetica | Estudio",
+  "538_2-Resonancia magnetica | Placas",
+  "541_1-Tomografia | Estudio",
+  "541_2-Tomografia | Placas",
+  "791_1-Estudio de radiologia | Estudio",
+  "559_1-Ultrasonografia | Estudio",
+  "776_1-Estudios gastroclinicos | Procedimiento",
+  "562_1-Terapia fisica | Sesion",
+  "566_1-Terapia respiratoria | Sesion",
+  "566_2-Terapia respiratoria | Atencion",
+  "566_3-Terapia respiratoria | Nebulizacion",
+  "570_1-Rehabilitacion pulmonar | Sesion",
+  "575_1-Banco de sangre | Unidad",
+  "575_2-Banco de sangre | Examen",
+  "575_3-Banco de sangre | Hemocomponentes procesados",
+  "575_4-Banco de sangre | Bolsas de sangre",
+  "579_1-Unidad de hemodinamia | Procedimiento",
+  "579_2-Unidad de hemodinamia | Estudio",
+  "268_1-Hemodialisis | Procedimiento",
+  "268_2-Hemodialisis | Paciente",
+  "268_3-Hemodialisis | Sesion",
+  "268_4-Hemodialisis | Tratamiento",
+  "593_1-Servicio farmaceutico | Receta",
+  "593_2-Servicio farmaceutico | Prescripcion",
+  "593_3-Servicio farmaceutico | Paciente",
+  "593_4-Servicio farmaceutico | Receta Unidosis",
+  "593_5-Servicio farmaceutico | Formula",
+  "803_1-Rehablitacion psicosocial | Atencion",
+  "750_1-Alimentacion enteral | Preparacion",
+  "750_2-Alimentacion enteral | Paciente",
+  "750_3-Alimentacion enteral | Formula",
+  "760_1-Nutricion parenteral | Preparacion",
+  "662_1-Central de esterilizacion | Paquete",
+  "662_2-Central de esterilizacion | Metro cubico",
+  "761_1-Saneamiento ambiental | Inspeccion",
+  "648_1-Aseo | Metro cuadrado",
+  "721_1-Almacen | Despacho",
+  "652_1-Servicio de alimentacion | Racion paciente",
+  "652_2-Servicio de alimentacion | Racion funcionario",
+  "659_1-Lavanderia | Libras",
+  "659_2-Lavanderia | Pieza",
+  "659_3-Lavanderia | Kilo",
+  "664_1-Transporte general | Traslado",
+  "664_2-Transporte general | Kilometro",
+  "664_3-Transporte general | Viajes",
+  "665_1-Mantenimiento | Orden",
+  "665_2-Mantenimiento | Solicitud",
+  "665_3-Mantenimiento | Solicitud Recibida",
+  "665_4-Mantenimiento | Solicitud Cumplida",
+  "713_1-Trabajo social | Atencion",
+  "713_2-Trabajo social | Actividad",
+  "713_3-Trabajo social | Paciente",
+  "713_4-Trabajo social | Casos",
+  "713_5-Trabajo social | Entrevista",
+  "702_1-Docencia e investigacion | Capacitacion",
+] as const;
