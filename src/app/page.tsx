@@ -6,7 +6,6 @@ import {
   type AuthError,
   type User,
   browserLocalPersistence,
-  browserSessionPersistence,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   sendPasswordResetEmail,
@@ -829,7 +828,6 @@ export default function Home() {
   const [serviceProfile, setServiceProfile] = useState<ManagedUser | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1390,10 +1388,7 @@ export default function Home() {
     setIsSubmitting(true);
 
     try {
-      await setPersistence(
-        auth,
-        remember ? browserLocalPersistence : browserSessionPersistence,
-      );
+      await setPersistence(auth, browserLocalPersistence);
 
       const loginIdentifier = email.trim();
 
@@ -3239,16 +3234,6 @@ export default function Home() {
                       required
                       type="password"
                     />
-                  </label>
-
-                  <label className="flex items-center gap-3 text-sm text-slate-600">
-                    <input
-                      checked={remember}
-                      onChange={(event) => setRemember(event.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-violet-700 focus:ring-violet-600"
-                      type="checkbox"
-                    />
-                    Mantener mi sesion abierta
                   </label>
 
                   {error ? (
