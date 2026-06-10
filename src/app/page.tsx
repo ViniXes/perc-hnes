@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   type Auth,
   type AuthError,
@@ -116,6 +116,7 @@ const ADMIN_EMAIL = "hcardoza.admin@perc-hnes.app";
 const CAPTURE_WINDOW_DAYS = 3;
 const FIRESTORE_SETUP_MESSAGE = `Firestore no esta creado o configurado en este proyecto de Firebase. Verifica la base de datos '${firestoreDatabaseId}' para habilitar login, tablero y guardado.`;
 const FIRESTORE_DISABLED_STORAGE_KEY = "perc-hnes.firestore-disabled";
+const PANEL_THEME_STORAGE_KEY = "perc-hnes.panel-theme";
 
 const SERVICE_GROUP_LABELS: Record<string, string> = {
   direccion: "Direccion",
@@ -222,6 +223,8 @@ function getAuthErrorMessage(error: unknown) {
       return "La nueva contrasena debe tener al menos 6 caracteres.";
     case "admin-access-failed":
       return "No pudimos habilitar el acceso del administrador en Firebase Auth.";
+    case "report-month-incomplete":
+      return "El Excel solo se habilita cuando todas las dependencias completan el mes actual.";
     case "firestore-setup-required":
       return FIRESTORE_SETUP_MESSAGE;
     default:
@@ -407,6 +410,51 @@ function normalizeKey(value: string) {
 function buildFullName(firstName: string, lastName: string, fallback: string) {
   const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
   return fullName || fallback;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: string) {
+  const headerCells = ["Servicio", "Fila", ...TABULATOR_HEADERS]
+    .map(
+      (header) =>
+        `<th style="background:#dbe7ff;border:1px solid #cbd5e1;padding:8px;font-weight:700;">${escapeHtml(header)}</th>`,
+    )
+    .join("");
+  const bodyRows = overview
+    .flatMap((entry) =>
+      entry.service.rows.map((row) => {
+        const cells = TABULATOR_HEADERS.map(
+          (header) =>
+            `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(
+              entry.values[row]?.[header] || "0",
+            )}</td>`,
+        ).join("");
+
+        return `<tr><td style="border:1px solid #cbd5e1;padding:6px;font-weight:700;">${escapeHtml(entry.service.name)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(row)}</td>${cells}</tr>`;
+      }),
+    )
+    .join("");
+  const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Consolidado ${periodId}</title></head><body><table>${`<thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody>`}</table></body></html>`;
+  const blob = new Blob(["\ufeff", documentHtml], {
+    type: "application/vnd.ms-excel;charset=utf-8;",
+  });
+  const url = window.URL.createObjectURL(blob);
+  const link = window.document.createElement("a");
+
+  link.href = url;
+  link.download = `consolidado-${periodId}.xls`;
+  window.document.body.appendChild(link);
+  link.click();
+  window.document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
 }
 
 function getServiceUsername(serviceId: string | null | undefined) {
@@ -800,9 +848,8 @@ export default function Home() {
   const [adminDrafts, setAdminDrafts] = useState<Record<string, AdminDraft>>({});
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isCreatingManagedUser, setIsCreatingManagedUser] = useState(false);
+  const [isExportingMonthlyReport, setIsExportingMonthlyReport] = useState(false);
   const [adminBusyUserId, setAdminBusyUserId] = useState("");
-  const [adminOverview, setAdminOverview] = useState<AdminOverviewEntry[]>([]);
-  const [isLoadingOverview, setIsLoadingOverview] = useState(false);
   const [calendarOverrides, setCalendarOverrides] = useState<Record<string, string[]>>({});
   const [publicDashboardMonths, setPublicDashboardMonths] = useState<PublicDashboardMonth[]>([]);
   const [publicDashboardGroups, setPublicDashboardGroups] = useState<PublicDashboardGroup[]>([]);
@@ -812,6 +859,7 @@ export default function Home() {
   const [calendarDraftDate, setCalendarDraftDate] = useState("");
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
   const [activeSidebarSection, setActiveSidebarSection] = useState("panel-overview");
+  const [panelTheme, setPanelTheme] = useState<"dark" | "light">("dark");
   const [firestoreUnavailable, setFirestoreUnavailable] = useState(false);
   const [firestoreStatusReady, setFirestoreStatusReady] = useState(false);
 
@@ -922,6 +970,26 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    try {
+      const savedTheme = window.localStorage.getItem(PANEL_THEME_STORAGE_KEY);
+
+      if (savedTheme === "dark" || savedTheme === "light") {
+        setPanelTheme(savedTheme);
+      }
+    } catch {
+      // Ignore local storage access issues.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PANEL_THEME_STORAGE_KEY, panelTheme);
+    } catch {
+      // Ignore local storage access issues.
+    }
+  }, [panelTheme]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
       setNow(new Date());
     }, 60_000);
@@ -1008,7 +1076,6 @@ export default function Home() {
         setTableValues({});
         setAdminUsers([]);
         setAdminDrafts({});
-        setAdminOverview([]);
         setProfileReady(true);
         return;
       }
@@ -1030,7 +1097,6 @@ export default function Home() {
         if (!profileSnapshot.exists()) {
           setServiceProfile(null);
           setTableValues({});
-          setAdminOverview([]);
           setError("La cuenta no tiene un perfil configurado en la base.");
           return;
         }
@@ -1044,7 +1110,6 @@ export default function Home() {
         if (!profile.isActive) {
           setServiceProfile(null);
           setTableValues({});
-          setAdminOverview([]);
           setError("La cuenta esta desactivada por el administrador.");
           await signOut(auth);
           return;
@@ -1065,26 +1130,20 @@ export default function Home() {
 
         if (profile.permissions.canManageUsers || profile.role === "admin") {
           setIsLoadingUsers(true);
-          setIsLoadingOverview(true);
 
           void (async () => {
             try {
-              const [users, overview] = await Promise.all([
-                fetchManagedUsers(),
-                fetchAdminOverviewForPeriod(periodId),
-              ]);
+              const users = await fetchManagedUsers();
 
               if (!cancelled) {
                 setAdminUsers(users);
                 setAdminDrafts(buildAdminDrafts(users));
-                setAdminOverview(overview);
               }
             } catch (adminLoadError) {
               if (await handleFirestoreError(adminLoadError)) {
                 if (!cancelled) {
                   setAdminUsers([]);
                   setAdminDrafts({});
-                  setAdminOverview([]);
                 }
 
                 return;
@@ -1093,22 +1152,18 @@ export default function Home() {
               if (!cancelled) {
                 setAdminUsers([]);
                 setAdminDrafts({});
-                setAdminOverview([]);
-                setError("No pudimos cargar por completo el panel del administrador.");
+                setError("No pudimos cargar por completo los usuarios del administrador.");
               }
             } finally {
               if (!cancelled) {
                 setIsLoadingUsers(false);
-                setIsLoadingOverview(false);
               }
             }
           })();
         } else if (!cancelled) {
           setAdminUsers([]);
           setAdminDrafts({});
-          setAdminOverview([]);
           setIsLoadingUsers(false);
-          setIsLoadingOverview(false);
         }
       } catch (sessionError) {
         if (await handleFirestoreError(sessionError)) {
@@ -1117,9 +1172,7 @@ export default function Home() {
             setTableValues({});
             setAdminUsers([]);
             setAdminDrafts({});
-            setAdminOverview([]);
             setIsLoadingUsers(false);
-            setIsLoadingOverview(false);
             setProfileReady(true);
           }
 
@@ -1131,9 +1184,7 @@ export default function Home() {
           setTableValues({});
           setAdminUsers([]);
           setAdminDrafts({});
-          setAdminOverview([]);
           setIsLoadingUsers(false);
-          setIsLoadingOverview(false);
           setError(getAuthErrorMessage(sessionError));
         }
       } finally {
@@ -1210,30 +1261,33 @@ export default function Home() {
     }
   }
 
-  async function loadAdminOverview(showMessage: boolean) {
+  async function handleExportMonthlyReport() {
     if (!isAdmin || firestoreUnavailable) {
       return;
     }
 
-    setIsLoadingOverview(true);
+    setIsExportingMonthlyReport(true);
+    setError("");
+    setMessage("");
 
     try {
       const overview = await fetchAdminOverviewForPeriod(periodId);
-      setAdminOverview(overview);
-      setError("");
+      const completedServices = overview.filter((entry) => entry.hasSavedData).length;
 
-      if (showMessage) {
-        setMessage("Vista global del administrador actualizada.");
+      if (completedServices < SERVICE_COUNT) {
+        throw new Error("report-month-incomplete");
       }
-    } catch (overviewError) {
-      if (await handleFirestoreError(overviewError)) {
-        setAdminOverview([]);
+
+      downloadAdminExcelReport(overview, periodId);
+      setMessage(`Excel generado correctamente para el periodo ${periodLabel}.`);
+    } catch (exportError) {
+      if (await handleFirestoreError(exportError)) {
         return;
       }
 
-      setError("No pudimos cargar la vista global del administrador.");
+      setError(getAuthErrorMessage(exportError));
     } finally {
-      setIsLoadingOverview(false);
+      setIsExportingMonthlyReport(false);
     }
   }
 
@@ -1316,9 +1370,6 @@ export default function Home() {
       );
 
       await refreshPublicDashboard(false);
-      if (calendarEditorPeriodId === periodId) {
-        await loadAdminOverview(false);
-      }
       setMessage("Dias habiles actualizados correctamente.");
     } catch (calendarError) {
       if (await handleFirestoreError(calendarError)) {
@@ -1492,7 +1543,6 @@ export default function Home() {
     setTableValues({});
     setAdminUsers([]);
     setAdminDrafts({});
-    setAdminOverview([]);
     setNewPassword("");
     setConfirmPassword("");
     await signOut(auth);
@@ -1563,10 +1613,6 @@ export default function Home() {
 
       setTableValues(normalizedValues);
       await refreshPublicDashboard(false);
-
-      if (isAdmin) {
-        await loadAdminOverview(false);
-      }
 
       setMessage(`Datos guardados correctamente para ${currentService.name}.`);
     } catch (saveError) {
@@ -1769,9 +1815,8 @@ export default function Home() {
     }
   }
 
-  function handleSidebarDarkModeHint() {
-    setError("");
-    setMessage("El panel interno ya usa modo oscuro por defecto.");
+  function handleTogglePanelTheme() {
+    setPanelTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
   }
 
   const isLoadingSession = !authReady || (user !== null && !profileReady);
@@ -1780,17 +1825,19 @@ export default function Home() {
     const isDateLocked = !captureWindow.isOpen;
     const isPermissionLocked = !currentService || !serviceProfile.permissions.canEdit;
     const isFormLocked = isDateLocked || isPermissionLocked;
+    const isLightPanelTheme = panelTheme === "light";
     const openDaysLabel = captureWindow.openDays
       .map((day) => SHORT_DATE_FORMATTER.format(day))
       .join(" / ");
-    const adminRowsCount = adminOverview.reduce(
-      (total, entry) => total + entry.service.rows.length,
-      0,
-    );
+    const canExportMonthlyReport = !isLoadingDashboard && publicCompletedCount === SERVICE_COUNT;
     const adminCalendarSection = isAdmin ? (
       <section
         id="panel-calendar"
-        className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+        className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
+          isLightPanelTheme
+            ? "border border-slate-200 bg-white text-slate-900"
+            : "border border-cyan-400/20 bg-[#202c41]"
+        }`}
       >
         <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -1922,10 +1969,10 @@ export default function Home() {
               badge: "CM",
             },
             {
-              id: "panel-admin-overview",
-              label: "Vista global",
-              detail: "Todos los servicios",
-              badge: "VG",
+              id: "panel-admin-export",
+              label: "Excel mensual",
+              detail: "Descarga consolidado",
+              badge: "XL",
             },
             {
               id: "panel-users",
