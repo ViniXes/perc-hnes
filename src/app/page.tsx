@@ -47,6 +47,12 @@ import {
   type ModuleDefinition,
   type ModuleId,
 } from "@/lib/modules";
+import {
+  getDayColumns,
+  getSepsRows,
+  getSepsTemplate,
+  type SepsTemplate,
+} from "@/lib/seps-templates";
 
 type UserRole = "service" | "admin" | "supervisor";
 type TableValues = Record<string, Record<string, string>>;
@@ -590,6 +596,45 @@ function getCaptureWindow(
   };
 }
 
+type SepsPhase = "cierre" | "transicion" | "captura";
+
+// Ventana especial de SEPS (doble fase) por mes calendario:
+// - "cierre": dias 1 .. 3er dia habil -> abierto para CERRAR el mes anterior.
+// - "transicion": despues del cierre y antes del dia 6 -> cerrado.
+// - "captura": dia 6 .. fin de mes -> abierto para digitar el mes EN CURSO (diarios).
+function getSepsWindow(referenceDate: Date, blockedDates: string[]) {
+  const closeDays = getFirstBusinessDays(
+    referenceDate,
+    blockedDates,
+    MODULE_CAPTURE_DAYS.sesps,
+  );
+  const inClosing = closeDays.some((day) => isSameCalendarDay(day, referenceDate));
+  const calendarDay = referenceDate.getDate();
+  const reopenDay = 6;
+
+  let phase: SepsPhase;
+  if (inClosing) {
+    phase = "cierre";
+  } else if (calendarDay >= reopenDay) {
+    phase = "captura";
+  } else {
+    phase = "transicion";
+  }
+
+  // En "captura" se digita el mes en curso; en "cierre"/"transicion", el mes anterior.
+  const periodId =
+    phase === "captura" ? getPeriodId(referenceDate) : getClosingPeriodId(referenceDate);
+
+  return {
+    phase,
+    isOpen: phase !== "transicion",
+    periodId,
+    closeDays,
+    reopenDay,
+    lastCloseDay: closeDays[closeDays.length - 1],
+  };
+}
+
 function hasAnyCapturedValue(values: Record<string, Record<string, unknown>> | undefined) {
   if (!values) {
     return false;
@@ -619,6 +664,27 @@ function buildServiceGroups(): ServiceGroup[] {
 
 function getPeriodId(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Periodo de PRODUCCION que se cierra: SIEMPRE el mes anterior al calendario actual.
+// No se puede cerrar un mes hasta que termino (en febrero se cierra enero, etc.).
+// La ventana de captura ocurre en el mes calendario actual, pero el dato pertenece
+// a este periodo (mes anterior). Aplica a PERC, SEPS y Distribucion de Horas.
+function getClosingPeriodId(date: Date) {
+  return getPeriodId(new Date(date.getFullYear(), date.getMonth() - 1, 1));
+}
+
+// Etiqueta legible ("Mayo 2026") de un periodo "YYYY-MM".
+function getPeriodLabel(periodId: string) {
+  const [yearText, monthText] = periodId.split("-");
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return periodId;
+  }
+
+  return PERIOD_FORMATTER.format(new Date(year, month - 1, 1));
 }
 
 function sanitizeNumericValue(value: string) {
@@ -850,6 +916,75 @@ async function fetchSavedDataForPeriod(service: ServiceDefinition, periodId: str
   };
 
   return mergeWithTemplate(service, data.values);
+}
+
+// ---- SEPS (tabuladores diarios) -------------------------------------------
+// values: Record<rowKey, Record<dayStr, valor>>. Las filas readOnly no se guardan
+// (se recalculan en vivo). Doc id en coleccion "sepsTabulators".
+type SepsValues = Record<string, Record<string, string>>;
+
+function buildEmptySeps(template: SepsTemplate, periodId: string): SepsValues {
+  const days = getDayColumns(periodId);
+  const values: SepsValues = {};
+
+  for (const row of getSepsRows(template)) {
+    if (row.readOnly) {
+      continue;
+    }
+
+    values[row.key] = Object.fromEntries(days.map((day) => [day, ""]));
+  }
+
+  return values;
+}
+
+function mergeSepsWithTemplate(
+  template: SepsTemplate,
+  periodId: string,
+  saved?: Record<string, Record<string, unknown>>,
+): SepsValues {
+  const values = buildEmptySeps(template, periodId);
+
+  if (!saved) {
+    return values;
+  }
+
+  for (const rowKey of Object.keys(values)) {
+    for (const day of Object.keys(values[rowKey])) {
+      const cell = saved[rowKey]?.[day];
+      if (cell !== undefined && cell !== null) {
+        values[rowKey][day] = String(cell);
+      }
+    }
+  }
+
+  return values;
+}
+
+async function fetchSepsDataForPeriod(
+  template: SepsTemplate,
+  periodId: string,
+): Promise<SepsValues> {
+  const snapshot = await getDoc(
+    doc(db, "sepsTabulators", `${periodId}__${template.serviceId}`),
+  );
+
+  if (!snapshot.exists()) {
+    return buildEmptySeps(template, periodId);
+  }
+
+  const data = snapshot.data() as { values?: Record<string, Record<string, unknown>> };
+  return mergeSepsWithTemplate(template, periodId, data.values);
+}
+
+function hasAnySepsValue(values: SepsValues | undefined) {
+  if (!values) {
+    return false;
+  }
+
+  return Object.values(values).some((row) =>
+    Object.values(row || {}).some((cell) => String(cell ?? "").trim() !== ""),
+  );
 }
 
 async function fetchAdminOverviewForPeriod(periodId: string): Promise<AdminOverviewEntry[]> {
@@ -1211,6 +1346,8 @@ export default function Home() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [tableValues, setTableValues] = useState<TableValues>({});
+  const [sepsValues, setSepsValues] = useState<SepsValues>({});
+  const [isSavingSeps, setIsSavingSeps] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -1231,7 +1368,10 @@ export default function Home() {
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
   // Overrides de tableros (reabiertos/cerrados) por id `${periodId}__${serviceId}__${moduleId}`.
   const [captureOverrides, setCaptureOverrides] = useState<CaptureOverridesMap>({});
-  const [overridePanelPeriodId, setOverridePanelPeriodId] = useState(() => getPeriodId(new Date()));
+  // Default = periodo que se esta cerrando (mes anterior), que es el ciclo activo.
+  const [overridePanelPeriodId, setOverridePanelPeriodId] = useState(() =>
+    getClosingPeriodId(new Date()),
+  );
   const [overrideBusyKey, setOverrideBusyKey] = useState("");
   const [overrideServiceQuery, setOverrideServiceQuery] = useState("");
   const [activeSidebarSection, setActiveSidebarSection] = useState("panel-overview");
@@ -1250,17 +1390,22 @@ export default function Home() {
     () => getServiceById(serviceProfile?.serviceId),
     [serviceProfile?.serviceId],
   );
-  const periodId = useMemo(() => getPeriodId(now), [now]);
-  const currentBlockedDates = useMemo(() => calendarOverrides[periodId] || [], [calendarOverrides, periodId]);
+  // periodId = periodo de PRODUCCION que se captura/cierra = MES ANTERIOR.
+  // windowPeriodId = mes calendario actual, donde ocurre la ventana de captura y al
+  // que pertenecen las fechas no habiles del calendario.
+  const periodId = useMemo(() => getClosingPeriodId(now), [now]);
+  const windowPeriodId = useMemo(() => getPeriodId(now), [now]);
+  const currentBlockedDates = useMemo(
+    () => calendarOverrides[windowPeriodId] || [],
+    [calendarOverrides, windowPeriodId],
+  );
   const captureWindow = useMemo(
     () => getCaptureWindow(now, currentBlockedDates),
     [currentBlockedDates, now],
   );
-  const periodLabel = useMemo(
-    () => PERIOD_FORMATTER.format(new Date(now.getFullYear(), now.getMonth(), 1)),
-    [now],
-  );
-  const currentYear = useMemo(() => now.getFullYear(), [now]);
+  const periodLabel = useMemo(() => getPeriodLabel(periodId), [periodId]);
+  // Año del periodo que se cierra (puede ser el anterior en enero). Lo usa el tablero.
+  const currentYear = useMemo(() => Number.parseInt(periodId.split("-")[0], 10), [periodId]);
   const welcomeName = useMemo(() => {
     return serviceProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Usuario";
   }, [serviceProfile?.name, user?.displayName, user?.email]);
@@ -1282,6 +1427,25 @@ export default function Home() {
 
     return effectiveCaptureOpen(captureWindow.isOpen, override);
   }, [captureOverrides, captureWindow.isOpen, currentService, periodId]);
+  // SEPS: plantilla del servicio (si tiene), ventana de doble fase y estado efectivo.
+  const sepsTemplate = useMemo(
+    () => getSepsTemplate(serviceProfile?.serviceId),
+    [serviceProfile?.serviceId],
+  );
+  const sepsWindow = useMemo(
+    () => getSepsWindow(now, currentBlockedDates),
+    [now, currentBlockedDates],
+  );
+  const sepsPeriodId = sepsWindow.periodId;
+  const sepsPeriodLabel = useMemo(() => getPeriodLabel(sepsPeriodId), [sepsPeriodId]);
+  const sepsDayColumns = useMemo(() => getDayColumns(sepsPeriodId), [sepsPeriodId]);
+  const sepsCaptureOpen = useMemo(() => {
+    const override = sepsTemplate
+      ? captureOverrides[getCaptureOverrideId(sepsPeriodId, sepsTemplate.serviceId, "sesps")]
+      : undefined;
+
+    return effectiveCaptureOpen(sepsWindow.isOpen, override);
+  }, [captureOverrides, sepsWindow.isOpen, sepsTemplate, sepsPeriodId]);
   const calendarEditorBlockedDates = useMemo(
     () => calendarOverrides[calendarEditorPeriodId] || [],
     [calendarEditorPeriodId, calendarOverrides],
@@ -1529,6 +1693,42 @@ export default function Home() {
     serviceProfile?.permissions.canToggleCapture,
     firestoreUnavailable,
   ]);
+
+  // Carga el tabulador SEPS del servicio logueado para el periodo activo de su ventana.
+  useEffect(() => {
+    if (firestoreUnavailable || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      if (!sepsTemplate) {
+        if (!cancelled) {
+          setSepsValues({});
+        }
+        return;
+      }
+
+      try {
+        const values = await fetchSepsDataForPeriod(sepsTemplate, sepsPeriodId);
+        if (!cancelled) {
+          setSepsValues(values);
+        }
+      } catch (sepsError) {
+        if (await handleFirestoreError(sepsError)) {
+          return;
+        }
+        if (!cancelled) {
+          setSepsValues(buildEmptySeps(sepsTemplate, sepsPeriodId));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sepsTemplate, sepsPeriodId, firestoreUnavailable, user]);
 
   async function fetchManagedUsers() {
     const snapshot = await getDocs(collection(db, "serviceUsers"));
@@ -2252,6 +2452,71 @@ export default function Home() {
     }
   }
 
+  function handleSepsCellChange(rowKey: string, day: string, rawValue: string) {
+    const value = sanitizeNumericValue(rawValue);
+
+    setSepsValues((current) => ({
+      ...current,
+      [rowKey]: {
+        ...(current[rowKey] || {}),
+        [day]: value,
+      },
+    }));
+  }
+
+  async function handleSaveSeps() {
+    if (!user || !sepsTemplate || !serviceProfile || firestoreUnavailable) {
+      return;
+    }
+
+    if (!serviceProfile.permissions.canEdit) {
+      setError("Tu cuenta no tiene permiso de captura en este momento.");
+      setMessage("");
+      return;
+    }
+
+    if (!sepsCaptureOpen) {
+      setError("La captura SEPS esta cerrada en este momento.");
+      setMessage("");
+      return;
+    }
+
+    setIsSavingSeps(true);
+    setError("");
+    setMessage("");
+
+    const normalizedValues = mergeSepsWithTemplate(sepsTemplate, sepsPeriodId, sepsValues);
+
+    try {
+      await setDoc(
+        doc(db, "sepsTabulators", `${sepsPeriodId}__${sepsTemplate.serviceId}`),
+        {
+          periodId: sepsPeriodId,
+          periodLabel: sepsPeriodLabel,
+          module: "sesps",
+          serviceId: sepsTemplate.serviceId,
+          serviceName: currentService?.name || sepsTemplate.serviceId,
+          userId: user.uid,
+          userEmail: user.email || "",
+          values: normalizedValues,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      setSepsValues(normalizedValues);
+      setMessage(`Tabulador SEPS guardado correctamente (${sepsPeriodLabel}).`);
+    } catch (saveError) {
+      if (await handleFirestoreError(saveError)) {
+        return;
+      }
+
+      setError("No pudimos guardar el tabulador SEPS. Revisa Firestore e intentalo de nuevo.");
+    } finally {
+      setIsSavingSeps(false);
+    }
+  }
+
   async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -2766,6 +3031,168 @@ export default function Home() {
         </div>
       </section>
     ) : null;
+
+    // --- Tabulador SEPS (captura diaria) -------------------------------------
+    const sepsNumericValue = (rowKey: string, day: string) => {
+      const parsed = Number.parseInt(sepsValues[rowKey]?.[day] ?? "", 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const sepsDayCell = (row: { key: string; readOnly?: boolean; sumOf?: string[] }, day: string) => {
+      if (row.readOnly && row.sumOf) {
+        return row.sumOf.reduce((acc, key) => acc + sepsNumericValue(key, day), 0);
+      }
+      return sepsNumericValue(row.key, day);
+    };
+    const sepsRowTotal = (row: { key: string; readOnly?: boolean; sumOf?: string[] }) =>
+      sepsDayColumns.reduce((acc, day) => acc + sepsDayCell(row, day), 0);
+    const sepsLocked = !sepsCaptureOpen || !serviceProfile.permissions.canEdit;
+    const sepsPhaseLabel =
+      sepsWindow.phase === "cierre"
+        ? `Cierre del mes ${sepsPeriodLabel} (hasta el 3er dia habil)`
+        : sepsWindow.phase === "captura"
+          ? `Captura diaria del mes ${sepsPeriodLabel}`
+          : "Captura cerrada (se reabre el dia 6)";
+
+    const sepsSection = sepsTemplate ? (
+      <section
+        id="panel-seps"
+        className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 text-slate-100 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">Tabulador SEPS</p>
+            <h2 className="mt-2 text-2xl font-semibold">
+              {currentService?.name || sepsTemplate.serviceId} — {sepsPeriodLabel}
+            </h2>
+            <p className="mt-1 text-sm text-slate-300">{sepsTemplate.establishment}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                sepsLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
+              }`}
+            >
+              {sepsLocked ? "BLOQUEADO" : "HABILITADO"}
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleSaveSeps()}
+              disabled={isSavingSeps || sepsLocked}
+              className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+            >
+              {isSavingSeps ? "Guardando..." : "Guardar SEPS"}
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-3 rounded-xl border border-white/10 bg-[#1b2537] px-4 py-2 text-sm text-slate-200">
+          {sepsPhaseLabel}. Los totales y la fila de suma se calculan solos.
+        </p>
+
+        <div className="mt-5 space-y-6">
+          {sepsTemplate.tables.map((table) => {
+            const hasGroups = table.rows.some((row) => row.group);
+            // rowSpan por grupo (solo en la primera fila del grupo).
+            const groupSpan: Record<number, number> = {};
+            for (let i = 0; i < table.rows.length; ) {
+              const g = table.rows[i].group;
+              if (!g) {
+                i += 1;
+                continue;
+              }
+              let j = i;
+              while (j < table.rows.length && table.rows[j].group === g) {
+                j += 1;
+              }
+              groupSpan[i] = j - i;
+              for (let k = i + 1; k < j; k += 1) {
+                groupSpan[k] = 0;
+              }
+              i = j;
+            }
+
+            return (
+              <div key={table.id} className="overflow-hidden rounded-2xl border border-white/10">
+                <div className="bg-white/5 px-4 py-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide">{table.title}</h3>
+                  {table.subtitle ? (
+                    <p className="mt-1 text-xs text-slate-300">{table.subtitle}</p>
+                  ) : null}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="border-collapse text-xs text-slate-100">
+                    <thead>
+                      <tr className="bg-white/5 text-slate-300">
+                        {hasGroups ? (
+                          <th className="sticky left-0 z-10 bg-[#243049] px-3 py-2 text-left font-medium">
+                            Grupo
+                          </th>
+                        ) : null}
+                        <th
+                          className={`${hasGroups ? "" : "sticky left-0 z-10 bg-[#243049]"} px-3 py-2 text-left font-medium`}
+                        >
+                          {table.detailLabel || "Detalle"}
+                        </th>
+                        {sepsDayColumns.map((day) => (
+                          <th key={day} className="w-10 px-1 py-2 text-center font-medium">
+                            {day}
+                          </th>
+                        ))}
+                        <th className="bg-[#243049] px-3 py-2 text-center font-semibold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {table.rows.map((row, index) => (
+                        <tr key={row.key} className="border-t border-white/5">
+                          {hasGroups && groupSpan[index] !== 0 ? (
+                            <td
+                              rowSpan={groupSpan[index] || 1}
+                              className="sticky left-0 z-10 bg-[#1b2537] px-3 py-1.5 align-middle font-medium"
+                            >
+                              {row.group}
+                            </td>
+                          ) : null}
+                          <td
+                            className={`${hasGroups ? "" : "sticky left-0 z-10 bg-[#1b2537]"} whitespace-nowrap px-3 py-1.5 ${
+                              row.readOnly ? "font-semibold text-cyan-200" : ""
+                            }`}
+                            style={row.indent ? { paddingLeft: `${12 + row.indent * 14}px` } : undefined}
+                          >
+                            {row.label}
+                          </td>
+                          {sepsDayColumns.map((day) => (
+                            <td key={day} className="px-0.5 py-1 text-center">
+                              {row.readOnly ? (
+                                <span className="block w-9 text-center text-cyan-200">
+                                  {sepsDayCell(row, day) || ""}
+                                </span>
+                              ) : (
+                                <input
+                                  value={sepsValues[row.key]?.[day] ?? ""}
+                                  onChange={(event) =>
+                                    handleSepsCellChange(row.key, day, event.target.value)
+                                  }
+                                  disabled={sepsLocked}
+                                  inputMode="numeric"
+                                  className="w-9 rounded border border-white/10 bg-[#1b2537] px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 disabled:opacity-50"
+                                />
+                              )}
+                            </td>
+                          ))}
+                          <td className="bg-[#243049] px-3 py-1.5 text-center font-semibold text-cyan-100">
+                            {sepsRowTotal(row)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    ) : null;
     // --- Menus por area (PERC / SESPS / Distribucion de Horas) ---------------
     // Cada area ve solo los menus que tiene asignados. El admin ve los 3.
     const moduleBadges: Record<ModuleId, string> = {
@@ -2784,7 +3211,11 @@ export default function Home() {
         return hasAnyCapturedValue(tableValues) ? "completo" : "incompleto";
       }
 
-      // PERC y SESPS: plantilla pendiente -> incompleto por defecto.
+      if (mod.id === "sesps" && sepsTemplate) {
+        return hasAnySepsValue(sepsValues) ? "completo" : "incompleto";
+      }
+
+      // PERC (y SEPS sin plantilla aun) -> incompleto por defecto.
       return "incompleto";
     };
     const moduleSidebarItems = visibleModules.map((mod) => ({
@@ -2802,6 +3233,16 @@ export default function Home() {
         badge: "IN",
       },
       ...moduleSidebarItems,
+      ...(sepsTemplate
+        ? [
+            {
+              id: "panel-seps",
+              label: "Tabulador SEPS",
+              detail: "Captura diaria SEPS",
+              badge: "SE",
+            },
+          ]
+        : []),
       ...(currentService
         ? [
             {
@@ -2922,6 +3363,14 @@ export default function Home() {
                           Sin tabulador asignado a esta cuenta.
                         </p>
                       )
+                    ) : mod.id === "sesps" && sepsTemplate ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSidebarNavigation("panel-seps")}
+                        className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                      >
+                        Abrir captura
+                      </button>
                     ) : (
                       <p className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
                         Plantilla pendiente de cargar.
@@ -3262,6 +3711,8 @@ export default function Home() {
               </div>
             </section>
           ) : null}
+
+          {sepsSection}
 
           {currentService ? (
             <section

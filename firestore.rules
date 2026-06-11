@@ -55,6 +55,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Tabuladores SEPS (id = "<periodo>__<servicio>"). Mismo modelo que los de Horas:
+    // lectura con sesion; escritura admin o el dueno del registro.
+    match /sepsTabulators/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin()
+        || (isSignedIn() && request.resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
     // Calendario de captura por periodo: lectura con sesion, escritura admin.
     match /captureCalendar/{periodId} {
       allow read: if isSignedIn();

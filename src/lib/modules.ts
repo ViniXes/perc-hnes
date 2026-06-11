@@ -127,7 +127,9 @@ const DISTRIBUCION_AREAS: AreaDefinition[] = SERVICE_DEFINITIONS.map((service) =
 // entradas nuevas en NEW_AREAS (abajo).
 
 const AREA_OVERRIDES: Record<string, ModuleId[]> = {
-  // PENDIENTE: completar con el listado de PERC y SESPS.
+  // Trabajo Social: ademas de Distribucion de Horas, ahora captura SEPS.
+  "trabajo-social": ["sesps", "distribucion"],
+  // PENDIENTE: completar el resto con el listado de PERC y SESPS.
 };
 
 // Areas que solo participan en PERC y/o SESPS y no existen entre los servicios
