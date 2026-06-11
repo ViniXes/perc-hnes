@@ -66,6 +66,15 @@ export const MODULE_BY_ID: Record<ModuleId, ModuleDefinition> = Object.fromEntri
   MODULE_DEFINITIONS.map((module) => [module.id, module]),
 ) as Record<ModuleId, ModuleDefinition>;
 
+// Dias habiles de captura por modulo. PERC y SEPS abren los primeros 3 dias
+// habiles del mes; Distribucion de Horas, los primeros 5. Siempre se descuentan
+// sabados, domingos y las fechas no habiles del calendario (captureCalendar).
+export const MODULE_CAPTURE_DAYS: Record<ModuleId, number> = {
+  perc: 3,
+  sesps: 3,
+  distribucion: 5,
+};
+
 /** Orden estable para mostrar los menus en la UI. */
 export const MODULE_ORDER: ModuleId[] = MODULE_DEFINITIONS.map((module) => module.id);
 
