@@ -130,9 +130,23 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
       "579_2-Unidad de hemodinamia | Estudio",
     ],
   },
+  // Hemodialisis se divide en DOS servicios/areas que capturan por separado las
+  // MISMAS filas 268_* (uno por UCI, otro por Medicina interna). En el consolidado
+  // oficial ambos se SUMAN columna por columna en el unico bloque "268-Hemodialisis"
+  // (ver downloadAdminExcelReport). Por eso las filas son identicas en ambos.
   {
     id: "hemodialisis",
-    name: "Hemodialisis",
+    name: "UCI Hemodialisis",
+    rows: [
+      "268_1-Hemodialisis | Procedimiento",
+      "268_2-Hemodialisis | Paciente",
+      "268_3-Hemodialisis | Sesion",
+      "268_4-Hemodialisis | Tratamiento",
+    ],
+  },
+  {
+    id: "hemodialisis-medicina-interna",
+    name: "Medicina Interna Hemodialisis",
     rows: [
       "268_1-Hemodialisis | Procedimiento",
       "268_2-Hemodialisis | Paciente",
@@ -186,9 +200,18 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     name: "Aseo",
     rows: ["648_1-Aseo | Metro cuadrado"],
   },
+  // Almacen se divide en DOS servicios/areas que capturan por separado la MISMA
+  // fila 721_1 (uno por Insumos, otro por Medicamentos). En el consolidado oficial
+  // ambos se SUMAN columna por columna en el unico bloque "721-Almacen"
+  // (ver downloadAdminExcelReport). Por eso la fila es identica en ambos.
   {
     id: "almacen",
-    name: "Almacen",
+    name: "Almacen Insumos",
+    rows: ["721_1-Almacen | Despacho"],
+  },
+  {
+    id: "almacen-medicamentos",
+    name: "Almacen Medicamentos",
     rows: ["721_1-Almacen | Despacho"],
   },
   {

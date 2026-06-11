@@ -138,6 +138,7 @@ const SERVICE_GROUP_LABELS: Record<string, string> = {
 
 const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   almacen: "direccion",
+  "almacen-medicamentos": "direccion",
   "docencia-e-investigacion": "direccion",
   "servicio-farmaceutico": "direccion",
   "trabajo-social": "apoyo",
@@ -152,6 +153,7 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "estudios-gastroclinicos": "medica",
   "unidad-de-hemodinamia": "medica",
   hemodialisis: "medica",
+  "hemodialisis-medicina-interna": "medica",
   "terapia-fisica": "medica",
   "terapia-respiratoria": "medica",
   "rehabilitacion-pulmonar": "medica",
@@ -180,6 +182,7 @@ const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   "banco-de-sangre": "dep.bancosangre",
   "unidad-de-hemodinamia": "dep.hemodinamia",
   hemodialisis: "dep.hemodialisis",
+  "hemodialisis-medicina-interna": "dep.hemodialisis.mi",
   "servicio-farmaceutico": "dep.farmacia",
   "rehablitacion-psicosocial": "dep.psicosocial",
   "alimentacion-y-dieta": "dep.alimentacion",
@@ -187,6 +190,7 @@ const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   "saneamiento-ambiental": "dep.saneamiento",
   aseo: "dep.aseo",
   almacen: "dep.almacen",
+  "almacen-medicamentos": "dep.almacen.med",
   lavanderia: "dep.lavanderia",
   "transporte-general": "dep.transporte",
   mantenimiento: "dep.mantenimiento",
@@ -441,16 +445,48 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
+// Formatea un valor sumado del consolidado: redondea a 2 decimales (mata el ruido
+// de punto flotante al sumar) y descarta decimales innecesarios. Enteros quedan
+// como enteros (105) y los decimales reales se conservan (Aseo: 745.6, 1827.54).
+function formatConsolidatedNumber(value: number) {
+  const rounded = Math.round(value * 100) / 100;
+  return String(rounded);
+}
+
 function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: string) {
   // El consolidado debe respetar la plantilla oficial TAL CUAL: una sola columna
   // de etiqueta (encabezado vacio) seguida de los centros de costo, y las filas en
   // el orden de CONSOLIDADO_ROW_ORDER (donde Nutricion va SEPARADA: las filas 652-*
   // quedan despues de Almacen, no junto a las 750/760 como en el tablero).
-  const valuesByRow = new Map<string, TableValues[string]>();
+  // Sumamos por (fila, centro de costo) acumulando TODOS los servicios. La mayoria
+  // de filas pertenece a un solo servicio (la suma es ese mismo valor), pero las
+  // filas de Hemodialisis (268_*) las capturan DOS servicios distintos (UCI y
+  // Medicina interna) y en la plantilla oficial van en un unico bloque sumado:
+  // UCI 55 + Medicina interna 50 => 105; 0 + 88 => 88; 10 + 10 => 20.
+  const sumsByRow = new Map<string, Map<string, number>>();
   for (const entry of overview) {
     for (const row of entry.service.rows) {
-      if (entry.values[row]) {
-        valuesByRow.set(row, entry.values[row]);
+      const rowValues = entry.values[row];
+
+      if (!rowValues) {
+        continue;
+      }
+
+      let headerSums = sumsByRow.get(row);
+
+      if (!headerSums) {
+        headerSums = new Map<string, number>();
+        sumsByRow.set(row, headerSums);
+      }
+
+      for (const header of TABULATOR_HEADERS) {
+        const parsed = Number.parseFloat(rowValues[header] ?? "");
+
+        if (!Number.isFinite(parsed) || parsed === 0) {
+          continue;
+        }
+
+        headerSums.set(header, (headerSums.get(header) ?? 0) + parsed);
       }
     }
   }
@@ -462,13 +498,15 @@ function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: stri
     )
     .join("");
   const bodyRows = CONSOLIDADO_ROW_ORDER.map((row) => {
-    const rowValues = valuesByRow.get(row);
-    const cells = TABULATOR_HEADERS.map(
-      (header) =>
-        `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(
-          rowValues?.[header] || "0",
-        )}</td>`,
-    ).join("");
+    const headerSums = sumsByRow.get(row);
+    const cells = TABULATOR_HEADERS.map((header) => {
+      const sum = headerSums?.get(header);
+      const text = sum === undefined ? "0" : formatConsolidatedNumber(sum);
+
+      return `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(
+        text,
+      )}</td>`;
+    }).join("");
 
     return `<tr><td style="border:1px solid #cbd5e1;padding:6px;font-weight:700;">${escapeHtml(row)}</td>${cells}</tr>`;
   }).join("");
