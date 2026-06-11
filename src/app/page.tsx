@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   type Auth,
   type AuthError,
@@ -196,6 +196,90 @@ const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   mantenimiento: "dep.mantenimiento",
   "trabajo-social": "dep.trabajosocial",
   "docencia-e-investigacion": "dep.docencia",
+};
+
+// Iconos del menu lateral (SVG inline, sin dependencias). Heredan el color del
+// texto via `currentColor`, asi funcionan igual en modo claro y oscuro y en el
+// estado activo. Tamano fijo 18px para encajar en el badge de 32px.
+const ICON_PROPS = {
+  width: 18,
+  height: 18,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+const IconHome = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M3 10.5 12 3l9 7.5" />
+    <path d="M5 9.5V21h14V9.5" />
+    <path d="M9.5 21v-6h5v6" />
+  </svg>
+);
+
+const IconClock = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </svg>
+);
+
+const IconGear = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <circle cx="12" cy="12" r="3.2" />
+    <path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1M18.7 18.7l-2.1-2.1M7.4 7.4 5.3 5.3" />
+  </svg>
+);
+
+const IconFile = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M6 2.5h7l5 5V21a.5.5 0 0 1-.5.5H6A.5.5 0 0 1 5.5 21V3A.5.5 0 0 1 6 2.5Z" />
+    <path d="M13 2.5V8h5" />
+    <path d="M8.5 13h7M8.5 16.5h7" />
+  </svg>
+);
+
+const IconUsers = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3.5 19.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5" />
+    <circle cx="17" cy="9" r="2.4" />
+    <path d="M16 14.6c2.4.2 4.5 2 4.5 4.9" />
+  </svg>
+);
+
+const IconLogout = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M14 4.5H6.5A.5.5 0 0 0 6 5v14a.5.5 0 0 0 .5.5H14" />
+    <path d="M10.5 12h10" />
+    <path d="m17.5 8.5 3.5 3.5-3.5 3.5" />
+  </svg>
+);
+
+const IconMoon = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z" />
+  </svg>
+);
+
+const IconSun = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.1 5.1l1.8 1.8M17.1 17.1l1.8 1.8M18.9 5.1l-1.8 1.8M6.9 17.1l-1.8 1.8" />
+  </svg>
+);
+
+// Icono por id de item del sidebar. Lo que no esta aqui conserva su badge de letras
+// (PERC -> PE, SEPS -> SE, etc., segun pidio el usuario).
+const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
+  "panel-overview": IconHome,
+  "panel-module-distribucion": IconClock,
+  "panel-calendar": IconGear,
+  "panel-admin-export": IconFile,
+  "panel-users": IconUsers,
 };
 
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
@@ -2354,7 +2438,7 @@ export default function Home() {
                           : "bg-slate-100 text-slate-500"
                       }`}
                     >
-                      {item.badge}
+                      {SIDEBAR_ICON_BY_ID[item.id] ?? item.badge}
                     </span>
                     <span className={`block truncate text-[13px] font-medium ${isLightPanelTheme ? "text-slate-900" : "text-slate-100"}`}>
                       {item.label}
@@ -2372,8 +2456,8 @@ export default function Home() {
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  {isLightPanelTheme ? "DK" : "LT"}
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                  {isLightPanelTheme ? IconMoon : IconSun}
                 </span>
                 <span>{isLightPanelTheme ? "Modo oscuro" : "Modo claro"}</span>
               </button>
@@ -2394,8 +2478,8 @@ export default function Home() {
                 onClick={handleSignOut}
                 className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-[#8a2d2d] transition hover:bg-white"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#fbe8e8] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8a2d2d]">
-                  SO
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#fbe8e8] text-[#8a2d2d]">
+                  {IconLogout}
                 </span>
                 <span>Cerrar sesion</span>
               </button>
