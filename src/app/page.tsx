@@ -409,11 +409,15 @@ function getAuthErrorMessage(error: unknown) {
 }
 
 function isFirestoreSetupError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
 
   return (
-    message.includes(`Database '${firestoreDatabaseId}' not found`) ||
-    message.includes("Database '(default)' not found") ||
+    message.includes(`database '${firestoreDatabaseId}' not found`.toLowerCase()) ||
+    message.includes("database '(default)' not found") ||
+    // Mensaje real de la API cuando la base Firestore NO existe en el proyecto:
+    // "The database (default) does not exist for project ...".
+    message.includes("does not exist for project") ||
+    (message.includes("the database") && message.includes("does not exist")) ||
     message.includes("firestore/failed-precondition") ||
     message.includes("firestore-setup-required")
   );
