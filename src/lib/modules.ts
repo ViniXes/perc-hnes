@@ -131,6 +131,8 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "trabajo-social": ["sesps", "distribucion"],
   // Psicologia (= Rehablitacion psicosocial): captura PERC (pendiente), SEPS y Horas.
   "rehablitacion-psicosocial": ["perc", "sesps", "distribucion"],
+  // Nutricion (Departamento de Nutricion = Alimentacion y dieta): PERC, SEPS y Horas.
+  "alimentacion-y-dieta": ["perc", "sesps", "distribucion"],
   // PENDIENTE: completar el resto con el listado de PERC y SESPS.
 };
 

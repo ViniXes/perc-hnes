@@ -9,6 +9,7 @@
 // sus tablas/filas. El motor de render y guardado no se vuelve a tocar.
 // =============================================================================
 
+import { NUTRICION_TEMPLATE } from "@/lib/seps-nutricion";
 import { PSICOLOGIA_TEMPLATE } from "@/lib/seps-psicologia";
 
 export type SepsRow = {
@@ -107,6 +108,8 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   // Psicologia (mismo servicio que "rehablitacion-psicosocial" en PERC/Horas).
   // Plantilla grande auto-generada desde el Excel oficial.
   "rehablitacion-psicosocial": PSICOLOGIA_TEMPLATE,
+  // Nutricion (Departamento de Nutricion) = servicio "alimentacion-y-dieta".
+  "alimentacion-y-dieta": NUTRICION_TEMPLATE,
 };
 
 export function getSepsTemplate(serviceId: string | null | undefined): SepsTemplate | null {
