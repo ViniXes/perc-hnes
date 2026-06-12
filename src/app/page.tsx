@@ -1815,6 +1815,24 @@ export default function Home() {
           return;
         }
 
+        // Supervisores: cuentas definidas en codigo (como el admin). Se reconocen por
+        // su correo de acceso y su perfil se construye desde el codigo, SIN depender de
+        // leer/escribir Firestore (la escritura del perfil se intenta en segundo plano).
+        // Asi el login del supervisor nunca falla por un getDoc/permiso de Firestore.
+        const supervisorAccount = findSupervisorAccountByLoginEmail(user.email);
+
+        if (supervisorAccount) {
+          setServiceProfile(buildSupervisorProfile(user.uid, supervisorAccount));
+          setTableValues({});
+          setError("");
+          clearAdminUsersState();
+          setIsLoadingUsers(false);
+          void ensureSupervisorProfile(user, supervisorAccount).catch(() => {
+            // Ignore background supervisor profile sync failures during bootstrap.
+          });
+          return;
+        }
+
         const profileSnapshot = await getDoc(doc(db, "serviceUsers", user.uid));
 
         if (cancelled) {
@@ -1822,20 +1840,6 @@ export default function Home() {
         }
 
         if (!profileSnapshot.exists()) {
-          // Primer ingreso de un supervisor: el perfil aun puede no estar escrito.
-          // Usamos el perfil sembrado y disparamos la escritura en segundo plano.
-          const supervisorAccount = findSupervisorAccountByLoginEmail(user.email);
-
-          if (supervisorAccount) {
-            setServiceProfile(buildSupervisorProfile(user.uid, supervisorAccount));
-            setTableValues({});
-            setError("");
-            void ensureSupervisorProfile(user, supervisorAccount).catch(() => {
-              // Ignore background supervisor profile sync failures during bootstrap.
-            });
-            return;
-          }
-
           setServiceProfile(null);
           setTableValues({});
           setError("La cuenta no tiene un perfil configurado en la base.");
