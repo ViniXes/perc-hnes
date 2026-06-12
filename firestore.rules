@@ -26,6 +26,16 @@ service cloud.firestore {
         && request.auth.token.email == 'hcardoza.admin@perc-hnes.app';
     }
 
+    // Perfil del usuario logueado (rol, modulos de supervisor, etc.).
+    function userProfile() {
+      return get(/databases/$(database)/documents/serviceUsers/$(request.auth.uid)).data;
+    }
+
+    // Supervisores: cuentas con rol "supervisor" en su perfil de serviceUsers.
+    function isSupervisor() {
+      return isSignedIn() && userProfile().role == 'supervisor';
+    }
+
     // Perfiles: el admin ve/edita todos; cada usuario solo el suyo (uid == doc id).
     match /serviceUsers/{uid} {
       allow read, write: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
@@ -45,10 +55,33 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Tabuladores SEPS (id = "<periodo>__<servicio>"). Mismo modelo que los de Horas:
+    // lectura con sesion; escritura admin o el dueno del registro.
+    match /sepsTabulators/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin()
+        || (isSignedIn() && request.resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
     // Calendario de captura por periodo: lectura con sesion, escritura admin.
     match /captureCalendar/{periodId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // Override de tableros (reabrir/cerrar captura) id = "<periodo>__<servicio>__<modulo>".
+    // Lectura para cualquier sesion (el servicio necesita saber si lo reabrieron).
+    // Escritura: admin, o un supervisor cuyo perfil incluya ese modulo (Juan Carlos
+    // solo SEPS; Flor y Roberto los tres).
+    match /captureOverrides/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin()
+        || (isSupervisor()
+            && userProfile().supervisorModules.hasAny([request.resource.data.moduleId]));
+      allow delete: if isAdmin()
+        || (isSupervisor()
+            && userProfile().supervisorModules.hasAny([resource.data.moduleId]));
     }
 
     // Todo lo demas queda denegado por defecto.

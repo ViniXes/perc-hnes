@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   type Auth,
   type AuthError,
@@ -38,18 +38,29 @@ import {
   type ServiceDefinition,
 } from "@/lib/tabulator-template";
 import {
+  MODULE_BY_ID,
+  MODULE_CAPTURE_DAYS,
   MODULE_DEFINITIONS,
+  MODULE_ORDER,
   getAreaById,
   getAreaModules,
   type ModuleDefinition,
   type ModuleId,
 } from "@/lib/modules";
+import {
+  getDayColumns,
+  getSepsRows,
+  getSepsTemplate,
+  type SepsTemplate,
+} from "@/lib/seps-templates";
 
-type UserRole = "service" | "admin";
+type UserRole = "service" | "admin" | "supervisor";
 type TableValues = Record<string, Record<string, string>>;
 type ServicePermissions = {
   canEdit: boolean;
   canManageUsers: boolean;
+  // Supervisores: pueden reabrir/cerrar (habilitar/deshabilitar) tableros de captura.
+  canToggleCapture: boolean;
 };
 type ManagedUser = {
   uid: string;
@@ -64,6 +75,8 @@ type ManagedUser = {
   phone: string;
   role: UserRole;
   permissions: ServicePermissions;
+  // Modulos que un supervisor puede habilitar/deshabilitar (vacio para otros roles).
+  supervisorModules: ModuleId[];
   mustChangePassword: boolean;
   isActive: boolean;
 };
@@ -92,6 +105,13 @@ type AdminOverviewEntry = {
   values: TableValues;
   hasSavedData: boolean;
 };
+
+// Override manual de un tablero por (periodo, servicio, modulo). "open" = reabierto
+// para captura tardia; "closed" = cerrado aunque la ventana siga abierta. Sin entrada
+// = manda la ventana natural de dias habiles.
+type CaptureOverrideState = "open" | "closed";
+// Clave: `${periodId}__${serviceId}__${moduleId}` -> estado.
+type CaptureOverridesMap = Record<string, CaptureOverrideState>;
 
 type PublicDashboardMonth = {
   periodId: string;
@@ -122,7 +142,41 @@ const DEFAULT_TEMP_PASSWORD = "PERC2026!";
 const ADMIN_USERNAME = "Hcardoza";
 const ADMIN_PASSWORD = "Cardoza1986";
 const ADMIN_EMAIL = "hcardoza.admin@perc-hnes.app";
-const CAPTURE_WINDOW_DAYS = 3;
+
+// Cuentas de supervisor fijas en codigo (mismo modelo que el admin). Su unica
+// potestad es habilitar/deshabilitar tableros de los modulos indicados. La cuenta
+// Firebase se auto-crea en el primer login con la clave temporal (la cambian luego).
+type SupervisorAccount = {
+  username: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  modules: ModuleId[];
+};
+
+const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
+  {
+    username: "sup.flor",
+    password: DEFAULT_TEMP_PASSWORD,
+    firstName: "Flor de Maria",
+    lastName: "Fuentes Urbina",
+    modules: ["perc", "sesps", "distribucion"],
+  },
+  {
+    username: "sup.roberto",
+    password: DEFAULT_TEMP_PASSWORD,
+    firstName: "Dr. Roberto",
+    lastName: "Cenento Zambrano",
+    modules: ["perc", "sesps", "distribucion"],
+  },
+  {
+    username: "sup.juancarlos",
+    password: DEFAULT_TEMP_PASSWORD,
+    firstName: "Juan Carlos",
+    lastName: "Miranda Marroquin",
+    modules: ["sesps"],
+  },
+];
 const FIRESTORE_SETUP_MESSAGE = `Firestore no esta creado o configurado en este proyecto de Firebase. Verifica la base de datos '${firestoreDatabaseId}' para habilitar login, tablero y guardado.`;
 const FIRESTORE_DISABLED_STORAGE_KEY = "perc-hnes.firestore-disabled";
 const PANEL_THEME_STORAGE_KEY = "perc-hnes.panel-theme";
@@ -198,6 +252,99 @@ const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   "docencia-e-investigacion": "dep.docencia",
 };
 
+// Iconos del menu lateral (SVG inline, sin dependencias). Heredan el color del
+// texto via `currentColor`, asi funcionan igual en modo claro y oscuro y en el
+// estado activo. Tamano fijo 18px para encajar en el badge de 32px.
+const ICON_PROPS = {
+  width: 18,
+  height: 18,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+const IconHome = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M3 10.5 12 3l9 7.5" />
+    <path d="M5 9.5V21h14V9.5" />
+    <path d="M9.5 21v-6h5v6" />
+  </svg>
+);
+
+const IconClock = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </svg>
+);
+
+const IconGear = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <circle cx="12" cy="12" r="3.2" />
+    <path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1M18.7 18.7l-2.1-2.1M7.4 7.4 5.3 5.3" />
+  </svg>
+);
+
+const IconFile = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M6 2.5h7l5 5V21a.5.5 0 0 1-.5.5H6A.5.5 0 0 1 5.5 21V3A.5.5 0 0 1 6 2.5Z" />
+    <path d="M13 2.5V8h5" />
+    <path d="M8.5 13h7M8.5 16.5h7" />
+  </svg>
+);
+
+const IconUsers = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3.5 19.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5" />
+    <circle cx="17" cy="9" r="2.4" />
+    <path d="M16 14.6c2.4.2 4.5 2 4.5 4.9" />
+  </svg>
+);
+
+const IconLogout = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M14 4.5H6.5A.5.5 0 0 0 6 5v14a.5.5 0 0 0 .5.5H14" />
+    <path d="M10.5 12h10" />
+    <path d="m17.5 8.5 3.5 3.5-3.5 3.5" />
+  </svg>
+);
+
+const IconKey = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <circle cx="8" cy="8" r="4.2" />
+    <path d="M11 11 19.5 19.5" />
+    <path d="M16.5 16.5 18.5 14.5M18.5 18.5 20.5 16.5" />
+  </svg>
+);
+
+const IconMoon = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z" />
+  </svg>
+);
+
+const IconSun = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.1 5.1l1.8 1.8M17.1 17.1l1.8 1.8M18.9 5.1l-1.8 1.8M6.9 17.1l-1.8 1.8" />
+  </svg>
+);
+
+// Icono por id de item del sidebar. Lo que no esta aqui conserva su badge de letras
+// (PERC -> PE, SEPS -> SE, etc., segun pidio el usuario).
+const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
+  "panel-overview": IconHome,
+  "panel-module-distribucion": IconClock,
+  "panel-calendar": IconGear,
+  "panel-admin-export": IconFile,
+  "panel-users": IconUsers,
+  "panel-capture-toggle": IconKey,
+};
+
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
   weekday: "long",
   day: "numeric",
@@ -262,11 +409,15 @@ function getAuthErrorMessage(error: unknown) {
 }
 
 function isFirestoreSetupError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
 
   return (
-    message.includes(`Database '${firestoreDatabaseId}' not found`) ||
-    message.includes("Database '(default)' not found") ||
+    message.includes(`database '${firestoreDatabaseId}' not found`.toLowerCase()) ||
+    message.includes("database '(default)' not found") ||
+    // Mensaje real de la API cuando la base Firestore NO existe en el proyecto:
+    // "The database (default) does not exist for project ...".
+    message.includes("does not exist for project") ||
+    (message.includes("the database") && message.includes("does not exist")) ||
     message.includes("firestore/failed-precondition") ||
     message.includes("firestore-setup-required")
   );
@@ -274,9 +425,60 @@ function isFirestoreSetupError(error: unknown) {
 
 function getDefaultPermissions(role: UserRole): ServicePermissions {
   return {
-    canEdit: true,
+    // Los supervisores NO capturan datos: solo habilitan/deshabilitan tableros.
+    canEdit: role !== "supervisor",
     canManageUsers: role === "admin",
+    canToggleCapture: role === "admin" || role === "supervisor",
   };
+}
+
+function findSupervisorAccountByUsername(username: string) {
+  const normalizedUsername = normalizeKey(username);
+
+  return (
+    SUPERVISOR_ACCOUNTS.find(
+      (account) => normalizeKey(account.username) === normalizedUsername,
+    ) || null
+  );
+}
+
+function getSupervisorLoginEmail(username: string) {
+  return `${username.toLowerCase()}@${SERVICE_LOGIN_DOMAIN}`;
+}
+
+function findSupervisorAccountByLoginEmail(email: string | null | undefined) {
+  if (!email) {
+    return null;
+  }
+
+  const normalizedEmail = email.toLowerCase();
+
+  return (
+    SUPERVISOR_ACCOUNTS.find(
+      (account) => getSupervisorLoginEmail(account.username) === normalizedEmail,
+    ) || null
+  );
+}
+
+// Clave estable para un override de tablero (periodo + servicio + modulo).
+function getCaptureOverrideId(periodId: string, serviceId: string, moduleId: ModuleId) {
+  return `${periodId}__${serviceId}__${moduleId}`;
+}
+
+// Estado efectivo de captura: el override manual manda sobre la ventana natural.
+function effectiveCaptureOpen(
+  naturalIsOpen: boolean,
+  override: CaptureOverrideState | undefined,
+) {
+  if (override === "open") {
+    return true;
+  }
+
+  if (override === "closed") {
+    return false;
+  }
+
+  return naturalIsOpen;
 }
 
 function getServiceById(serviceId: string | null | undefined) {
@@ -378,17 +580,62 @@ function getFirstBusinessDays(referenceDate: Date, blockedDates: string[], total
   return result;
 }
 
-function getCaptureWindow(referenceDate: Date, blockedDates: string[]) {
-  const openDays = getFirstBusinessDays(referenceDate, blockedDates, CAPTURE_WINDOW_DAYS);
+function getCaptureWindow(
+  referenceDate: Date,
+  blockedDates: string[],
+  moduleId: ModuleId = "distribucion",
+) {
+  const totalDays = MODULE_CAPTURE_DAYS[moduleId];
+  const openDays = getFirstBusinessDays(referenceDate, blockedDates, totalDays);
   const activeDayIndex = openDays.findIndex((day) =>
     isSameCalendarDay(day, referenceDate),
   );
 
   return {
     openDays,
+    totalDays,
     isOpen: activeDayIndex >= 0,
     activeDayNumber: activeDayIndex + 1,
     lastOpenDay: openDays[openDays.length - 1],
+  };
+}
+
+type SepsPhase = "cierre" | "transicion" | "captura";
+
+// Ventana especial de SEPS (doble fase) por mes calendario:
+// - "cierre": dias 1 .. 3er dia habil -> abierto para CERRAR el mes anterior.
+// - "transicion": despues del cierre y antes del dia 6 -> cerrado.
+// - "captura": dia 6 .. fin de mes -> abierto para digitar el mes EN CURSO (diarios).
+function getSepsWindow(referenceDate: Date, blockedDates: string[]) {
+  const closeDays = getFirstBusinessDays(
+    referenceDate,
+    blockedDates,
+    MODULE_CAPTURE_DAYS.sesps,
+  );
+  const inClosing = closeDays.some((day) => isSameCalendarDay(day, referenceDate));
+  const calendarDay = referenceDate.getDate();
+  const reopenDay = 6;
+
+  let phase: SepsPhase;
+  if (inClosing) {
+    phase = "cierre";
+  } else if (calendarDay >= reopenDay) {
+    phase = "captura";
+  } else {
+    phase = "transicion";
+  }
+
+  // En "captura" se digita el mes en curso; en "cierre"/"transicion", el mes anterior.
+  const periodId =
+    phase === "captura" ? getPeriodId(referenceDate) : getClosingPeriodId(referenceDate);
+
+  return {
+    phase,
+    isOpen: phase !== "transicion",
+    periodId,
+    closeDays,
+    reopenDay,
+    lastCloseDay: closeDays[closeDays.length - 1],
   };
 }
 
@@ -421,6 +668,27 @@ function buildServiceGroups(): ServiceGroup[] {
 
 function getPeriodId(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Periodo de PRODUCCION que se cierra: SIEMPRE el mes anterior al calendario actual.
+// No se puede cerrar un mes hasta que termino (en febrero se cierra enero, etc.).
+// La ventana de captura ocurre en el mes calendario actual, pero el dato pertenece
+// a este periodo (mes anterior). Aplica a PERC, SEPS y Distribucion de Horas.
+function getClosingPeriodId(date: Date) {
+  return getPeriodId(new Date(date.getFullYear(), date.getMonth() - 1, 1));
+}
+
+// Etiqueta legible ("Mayo 2026") de un periodo "YYYY-MM".
+function getPeriodLabel(periodId: string) {
+  const [yearText, monthText] = periodId.split("-");
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return periodId;
+  }
+
+  return PERIOD_FORMATTER.format(new Date(year, month - 1, 1));
 }
 
 function sanitizeNumericValue(value: string) {
@@ -569,8 +837,14 @@ function normalizeLoginIdentifier(value: string) {
 }
 
 function normalizeProfile(uid: string, email: string, data: Record<string, unknown>): ManagedUser {
-  const role = data.role === "admin" ? "admin" : "service";
+  const role: UserRole =
+    data.role === "admin" ? "admin" : data.role === "supervisor" ? "supervisor" : "service";
   const defaultPermissions = getDefaultPermissions(role);
+  const supervisorModules = Array.isArray(data.supervisorModules)
+    ? (data.supervisorModules.filter((value): value is ModuleId =>
+        MODULE_ORDER.includes(value as ModuleId),
+      ) as ModuleId[])
+    : [];
   const rawPermissions =
     typeof data.permissions === "object" && data.permissions !== null
       ? (data.permissions as Partial<ServicePermissions>)
@@ -599,7 +873,9 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     permissions: {
       canEdit: rawPermissions.canEdit ?? defaultPermissions.canEdit,
       canManageUsers: rawPermissions.canManageUsers ?? defaultPermissions.canManageUsers,
+      canToggleCapture: rawPermissions.canToggleCapture ?? defaultPermissions.canToggleCapture,
     },
+    supervisorModules,
     mustChangePassword: data.mustChangePassword !== false,
     isActive: data.isActive !== false,
   };
@@ -646,6 +922,75 @@ async function fetchSavedDataForPeriod(service: ServiceDefinition, periodId: str
   return mergeWithTemplate(service, data.values);
 }
 
+// ---- SEPS (tabuladores diarios) -------------------------------------------
+// values: Record<rowKey, Record<dayStr, valor>>. Las filas readOnly no se guardan
+// (se recalculan en vivo). Doc id en coleccion "sepsTabulators".
+type SepsValues = Record<string, Record<string, string>>;
+
+function buildEmptySeps(template: SepsTemplate, periodId: string): SepsValues {
+  const days = getDayColumns(periodId);
+  const values: SepsValues = {};
+
+  for (const row of getSepsRows(template)) {
+    if (row.readOnly) {
+      continue;
+    }
+
+    values[row.key] = Object.fromEntries(days.map((day) => [day, ""]));
+  }
+
+  return values;
+}
+
+function mergeSepsWithTemplate(
+  template: SepsTemplate,
+  periodId: string,
+  saved?: Record<string, Record<string, unknown>>,
+): SepsValues {
+  const values = buildEmptySeps(template, periodId);
+
+  if (!saved) {
+    return values;
+  }
+
+  for (const rowKey of Object.keys(values)) {
+    for (const day of Object.keys(values[rowKey])) {
+      const cell = saved[rowKey]?.[day];
+      if (cell !== undefined && cell !== null) {
+        values[rowKey][day] = String(cell);
+      }
+    }
+  }
+
+  return values;
+}
+
+async function fetchSepsDataForPeriod(
+  template: SepsTemplate,
+  periodId: string,
+): Promise<SepsValues> {
+  const snapshot = await getDoc(
+    doc(db, "sepsTabulators", `${periodId}__${template.serviceId}`),
+  );
+
+  if (!snapshot.exists()) {
+    return buildEmptySeps(template, periodId);
+  }
+
+  const data = snapshot.data() as { values?: Record<string, Record<string, unknown>> };
+  return mergeSepsWithTemplate(template, periodId, data.values);
+}
+
+function hasAnySepsValue(values: SepsValues | undefined) {
+  if (!values) {
+    return false;
+  }
+
+  return Object.values(values).some((row) =>
+    Object.values(row || {}).some((cell) => String(cell ?? "").trim() !== ""),
+  );
+}
+
 async function fetchAdminOverviewForPeriod(periodId: string): Promise<AdminOverviewEntry[]> {
   const snapshot = await getDocs(
     query(collection(db, "serviceTabulators"), where("periodId", "==", periodId)),
@@ -688,6 +1033,25 @@ async function fetchCalendarOverridesForYear(year: number) {
     overrides[item.id] = Array.isArray(data.blockedDates)
       ? data.blockedDates.filter((value): value is string => typeof value === "string")
       : [];
+  }
+
+  return overrides;
+}
+
+// Trae los overrides de tableros (reabiertos/cerrados manualmente) de un periodo.
+// Devuelve un mapa cuya clave es el id de doc `${periodId}__${serviceId}__${moduleId}`.
+async function fetchCaptureOverridesForPeriod(periodId: string): Promise<CaptureOverridesMap> {
+  const snapshot = await getDocs(
+    query(collection(db, "captureOverrides"), where("periodId", "==", periodId)),
+  );
+  const overrides: CaptureOverridesMap = {};
+
+  for (const item of snapshot.docs) {
+    const state = (item.data() as { state?: unknown }).state;
+
+    if (state === "open" || state === "closed") {
+      overrides[item.id] = state;
+    }
   }
 
   return overrides;
@@ -799,6 +1163,52 @@ function buildDefaultAdminProfile(uid: string) {
     isActive: true,
     mustChangePassword: false,
     permissions: getDefaultPermissions("admin"),
+  });
+}
+
+// Siembra/actualiza el perfil de un supervisor en Firestore. Se llama en el primer
+// login (igual que el admin), con los modulos que puede habilitar/deshabilitar.
+async function ensureSupervisorProfile(currentUser: User, account: SupervisorAccount) {
+  const displayName = buildFullName(account.firstName, account.lastName, account.username);
+
+  await updateProfile(currentUser, { displayName });
+
+  await setDoc(
+    doc(db, "serviceUsers", currentUser.uid),
+    {
+      serviceId: null,
+      serviceName: null,
+      email: getSupervisorLoginEmail(account.username),
+      loginEmail: getSupervisorLoginEmail(account.username),
+      username: account.username,
+      firstName: account.firstName,
+      lastName: account.lastName,
+      name: displayName,
+      role: "supervisor",
+      isActive: true,
+      mustChangePassword: true,
+      permissions: getDefaultPermissions("supervisor"),
+      supervisorModules: account.modules,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+}
+
+function buildSupervisorProfile(uid: string, account: SupervisorAccount) {
+  return normalizeProfile(uid, getSupervisorLoginEmail(account.username), {
+    serviceId: null,
+    serviceName: null,
+    email: getSupervisorLoginEmail(account.username),
+    username: account.username,
+    firstName: account.firstName,
+    lastName: account.lastName,
+    name: buildFullName(account.firstName, account.lastName, account.username),
+    role: "supervisor",
+    isActive: true,
+    mustChangePassword: true,
+    permissions: getDefaultPermissions("supervisor"),
+    supervisorModules: account.modules,
   });
 }
 
@@ -940,6 +1350,8 @@ export default function Home() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [tableValues, setTableValues] = useState<TableValues>({});
+  const [sepsValues, setSepsValues] = useState<SepsValues>({});
+  const [isSavingSeps, setIsSavingSeps] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -958,6 +1370,14 @@ export default function Home() {
   const [calendarEditorPeriodId, setCalendarEditorPeriodId] = useState(() => getPeriodId(new Date()));
   const [calendarDraftDate, setCalendarDraftDate] = useState("");
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
+  // Overrides de tableros (reabiertos/cerrados) por id `${periodId}__${serviceId}__${moduleId}`.
+  const [captureOverrides, setCaptureOverrides] = useState<CaptureOverridesMap>({});
+  // Default = periodo que se esta cerrando (mes anterior), que es el ciclo activo.
+  const [overridePanelPeriodId, setOverridePanelPeriodId] = useState(() =>
+    getClosingPeriodId(new Date()),
+  );
+  const [overrideBusyKey, setOverrideBusyKey] = useState("");
+  const [overrideServiceQuery, setOverrideServiceQuery] = useState("");
   const [activeSidebarSection, setActiveSidebarSection] = useState("panel-overview");
   const [panelTheme, setPanelTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") {
@@ -974,21 +1394,62 @@ export default function Home() {
     () => getServiceById(serviceProfile?.serviceId),
     [serviceProfile?.serviceId],
   );
-  const periodId = useMemo(() => getPeriodId(now), [now]);
-  const currentBlockedDates = useMemo(() => calendarOverrides[periodId] || [], [calendarOverrides, periodId]);
+  // periodId = periodo de PRODUCCION que se captura/cierra = MES ANTERIOR.
+  // windowPeriodId = mes calendario actual, donde ocurre la ventana de captura y al
+  // que pertenecen las fechas no habiles del calendario.
+  const periodId = useMemo(() => getClosingPeriodId(now), [now]);
+  const windowPeriodId = useMemo(() => getPeriodId(now), [now]);
+  const currentBlockedDates = useMemo(
+    () => calendarOverrides[windowPeriodId] || [],
+    [calendarOverrides, windowPeriodId],
+  );
   const captureWindow = useMemo(
     () => getCaptureWindow(now, currentBlockedDates),
     [currentBlockedDates, now],
   );
-  const periodLabel = useMemo(
-    () => PERIOD_FORMATTER.format(new Date(now.getFullYear(), now.getMonth(), 1)),
-    [now],
-  );
-  const currentYear = useMemo(() => now.getFullYear(), [now]);
+  const periodLabel = useMemo(() => getPeriodLabel(periodId), [periodId]);
+  // Año del periodo que se cierra (puede ser el anterior en enero). Lo usa el tablero.
+  const currentYear = useMemo(() => Number.parseInt(periodId.split("-")[0], 10), [periodId]);
   const welcomeName = useMemo(() => {
     return serviceProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Usuario";
   }, [serviceProfile?.name, user?.displayName, user?.email]);
   const isAdmin = !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
+  const isSupervisor = serviceProfile?.role === "supervisor";
+  // Modulos que el usuario puede habilitar/deshabilitar: el admin todos; el supervisor
+  // solo los suyos. Determina las columnas del panel "Habilitar tableros".
+  const toggleableModules: ModuleId[] = !serviceProfile?.permissions.canToggleCapture
+    ? []
+    : isAdmin
+      ? [...MODULE_ORDER]
+      : MODULE_ORDER.filter((moduleId) => serviceProfile.supervisorModules.includes(moduleId));
+  // Estado efectivo de la captura de Horas del servicio logueado (la ventana natural
+  // puede estar reabierta o cerrada por un supervisor para este periodo).
+  const currentServiceCaptureOpen = useMemo(() => {
+    const override = currentService
+      ? captureOverrides[getCaptureOverrideId(periodId, currentService.id, "distribucion")]
+      : undefined;
+
+    return effectiveCaptureOpen(captureWindow.isOpen, override);
+  }, [captureOverrides, captureWindow.isOpen, currentService, periodId]);
+  // SEPS: plantilla del servicio (si tiene), ventana de doble fase y estado efectivo.
+  const sepsTemplate = useMemo(
+    () => getSepsTemplate(serviceProfile?.serviceId),
+    [serviceProfile?.serviceId],
+  );
+  const sepsWindow = useMemo(
+    () => getSepsWindow(now, currentBlockedDates),
+    [now, currentBlockedDates],
+  );
+  const sepsPeriodId = sepsWindow.periodId;
+  const sepsPeriodLabel = useMemo(() => getPeriodLabel(sepsPeriodId), [sepsPeriodId]);
+  const sepsDayColumns = useMemo(() => getDayColumns(sepsPeriodId), [sepsPeriodId]);
+  const sepsCaptureOpen = useMemo(() => {
+    const override = sepsTemplate
+      ? captureOverrides[getCaptureOverrideId(sepsPeriodId, sepsTemplate.serviceId, "sesps")]
+      : undefined;
+
+    return effectiveCaptureOpen(sepsWindow.isOpen, override);
+  }, [captureOverrides, sepsWindow.isOpen, sepsTemplate, sepsPeriodId]);
   const calendarEditorBlockedDates = useMemo(
     () => calendarOverrides[calendarEditorPeriodId] || [],
     [calendarEditorPeriodId, calendarOverrides],
@@ -1159,6 +1620,18 @@ export default function Home() {
         setPublicDashboardMonths(dashboard.months);
         setPublicDashboardGroups(dashboard.groups);
         setPublicCompletedCount(dashboard.completedCount);
+
+        // Los overrides de tableros son opcionales para el tablero: si su lectura
+        // falla (p.ej. reglas aun no publicadas), no debe romper el dashboard.
+        try {
+          const periodOverrides = await fetchCaptureOverridesForPeriod(periodId);
+
+          if (!cancelled) {
+            setCaptureOverrides((current) => ({ ...current, ...periodOverrides }));
+          }
+        } catch {
+          // Ignorar: el tablero sigue funcionando sin overrides.
+        }
       } catch (dashboardError) {
         if (await handleFirestoreError(dashboardError)) {
           if (!cancelled) {
@@ -1194,6 +1667,72 @@ export default function Home() {
       }
     };
   }, [currentYear, firestoreStatusReady, firestoreUnavailable, periodId]);
+
+  // Carga los overrides del periodo elegido en el panel "Habilitar tableros" cuando
+  // el usuario tiene esa potestad y cambia de periodo.
+  useEffect(() => {
+    if (!serviceProfile?.permissions.canToggleCapture || firestoreUnavailable) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const periodOverrides = await fetchCaptureOverridesForPeriod(overridePanelPeriodId);
+
+        if (!cancelled) {
+          setCaptureOverrides((current) => ({ ...current, ...periodOverrides }));
+        }
+      } catch (overridesError) {
+        await handleFirestoreError(overridesError);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    overridePanelPeriodId,
+    serviceProfile?.permissions.canToggleCapture,
+    firestoreUnavailable,
+  ]);
+
+  // Carga el tabulador SEPS del servicio logueado para el periodo activo de su ventana.
+  useEffect(() => {
+    if (firestoreUnavailable || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      if (!sepsTemplate) {
+        if (!cancelled) {
+          setSepsValues({});
+        }
+        return;
+      }
+
+      try {
+        const values = await fetchSepsDataForPeriod(sepsTemplate, sepsPeriodId);
+        if (!cancelled) {
+          setSepsValues(values);
+        }
+      } catch (sepsError) {
+        if (await handleFirestoreError(sepsError)) {
+          return;
+        }
+        if (!cancelled) {
+          setSepsValues(buildEmptySeps(sepsTemplate, sepsPeriodId));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sepsTemplate, sepsPeriodId, firestoreUnavailable, user]);
 
   async function fetchManagedUsers() {
     const snapshot = await getDocs(collection(db, "serviceUsers"));
@@ -1277,6 +1816,24 @@ export default function Home() {
             }
           })();
 
+          return;
+        }
+
+        // Supervisores: cuentas definidas en codigo (como el admin). Se reconocen por
+        // su correo de acceso y su perfil se construye desde el codigo, SIN depender de
+        // leer/escribir Firestore (la escritura del perfil se intenta en segundo plano).
+        // Asi el login del supervisor nunca falla por un getDoc/permiso de Firestore.
+        const supervisorAccount = findSupervisorAccountByLoginEmail(user.email);
+
+        if (supervisorAccount) {
+          setServiceProfile(buildSupervisorProfile(user.uid, supervisorAccount));
+          setTableValues({});
+          setError("");
+          clearAdminUsersState();
+          setIsLoadingUsers(false);
+          void ensureSupervisorProfile(user, supervisorAccount).catch(() => {
+            // Ignore background supervisor profile sync failures during bootstrap.
+          });
           return;
         }
 
@@ -1575,6 +2132,70 @@ export default function Home() {
     }
   }
 
+  // Habilita (reabre) o deshabilita (cierra) el tablero de un servicio/modulo para
+  // el periodo elegido. `nextState` null = volver a la ventana natural (borra override).
+  async function handleToggleCapture(
+    serviceId: string,
+    moduleId: ModuleId,
+    nextState: CaptureOverrideState | null,
+  ) {
+    if (!serviceProfile?.permissions.canToggleCapture || firestoreUnavailable) {
+      return;
+    }
+
+    if (!isAdmin && !serviceProfile.supervisorModules.includes(moduleId)) {
+      return;
+    }
+
+    const overrideId = getCaptureOverrideId(overridePanelPeriodId, serviceId, moduleId);
+    setOverrideBusyKey(overrideId);
+    setError("");
+    setMessage("");
+
+    try {
+      if (nextState === null) {
+        await deleteDoc(doc(db, "captureOverrides", overrideId));
+      } else {
+        await setDoc(doc(db, "captureOverrides", overrideId), {
+          periodId: overridePanelPeriodId,
+          serviceId,
+          moduleId,
+          state: nextState,
+          updatedByName: serviceProfile.name,
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      setCaptureOverrides((current) => {
+        const next = { ...current };
+
+        if (nextState === null) {
+          delete next[overrideId];
+        } else {
+          next[overrideId] = nextState;
+        }
+
+        return next;
+      });
+
+      setMessage(
+        nextState === "open"
+          ? "Tablero habilitado para captura."
+          : nextState === "closed"
+            ? "Tablero deshabilitado."
+            : "Tablero devuelto a su ventana normal.",
+      );
+    } catch (toggleError) {
+      if (await handleFirestoreError(toggleError)) {
+        return;
+      }
+
+      setError("No pudimos actualizar el estado del tablero.");
+    } finally {
+      setOverrideBusyKey("");
+    }
+  }
+
   function handleRetryFirestore() {
     try {
       window.localStorage.removeItem(FIRESTORE_DISABLED_STORAGE_KEY);
@@ -1623,6 +2244,34 @@ export default function Home() {
 
             throw createAdminError;
           }
+        }
+      } else if (findSupervisorAccountByUsername(loginIdentifier)) {
+        // Supervisores: cuentas fijas en codigo. Se firma con su correo de acceso
+        // determinista; en el primer ingreso (clave temporal sembrada) se crea la
+        // cuenta Firebase y su perfil. Tras cambiar la clave, entran normalmente.
+        const supervisorAccount = findSupervisorAccountByUsername(loginIdentifier)!;
+        const supervisorEmail = getSupervisorLoginEmail(supervisorAccount.username);
+
+        try {
+          await signInWithEmailAndPassword(auth, supervisorEmail, password);
+        } catch (loginError) {
+          const authCode = (loginError as AuthError).code;
+
+          if (
+            (authCode !== "auth/invalid-credential" && authCode !== "auth/user-not-found") ||
+            password !== supervisorAccount.password
+          ) {
+            throw loginError;
+          }
+
+          const credential = await createUserWithEmailAndPassword(
+            auth,
+            supervisorEmail,
+            supervisorAccount.password,
+          );
+          void ensureSupervisorProfile(credential.user, supervisorAccount).catch(() => {
+            // Ignore background supervisor profile sync failures during bootstrap.
+          });
         }
       } else {
         const resolvedEmail = resolveLoginEmail(loginIdentifier);
@@ -1766,7 +2415,7 @@ export default function Home() {
       return;
     }
 
-    if (!captureWindow.isOpen) {
+    if (!currentServiceCaptureOpen) {
       setError("El periodo de captura esta cerrado para este mes.");
       setMessage("");
       return;
@@ -1808,6 +2457,71 @@ export default function Home() {
       setError("No pudimos guardar los datos. Revisa Firestore e intentalo de nuevo.");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  function handleSepsCellChange(rowKey: string, day: string, rawValue: string) {
+    const value = sanitizeNumericValue(rawValue);
+
+    setSepsValues((current) => ({
+      ...current,
+      [rowKey]: {
+        ...(current[rowKey] || {}),
+        [day]: value,
+      },
+    }));
+  }
+
+  async function handleSaveSeps() {
+    if (!user || !sepsTemplate || !serviceProfile || firestoreUnavailable) {
+      return;
+    }
+
+    if (!serviceProfile.permissions.canEdit) {
+      setError("Tu cuenta no tiene permiso de captura en este momento.");
+      setMessage("");
+      return;
+    }
+
+    if (!sepsCaptureOpen) {
+      setError("La captura SEPS esta cerrada en este momento.");
+      setMessage("");
+      return;
+    }
+
+    setIsSavingSeps(true);
+    setError("");
+    setMessage("");
+
+    const normalizedValues = mergeSepsWithTemplate(sepsTemplate, sepsPeriodId, sepsValues);
+
+    try {
+      await setDoc(
+        doc(db, "sepsTabulators", `${sepsPeriodId}__${sepsTemplate.serviceId}`),
+        {
+          periodId: sepsPeriodId,
+          periodLabel: sepsPeriodLabel,
+          module: "sesps",
+          serviceId: sepsTemplate.serviceId,
+          serviceName: currentService?.name || sepsTemplate.serviceId,
+          userId: user.uid,
+          userEmail: user.email || "",
+          values: normalizedValues,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      setSepsValues(normalizedValues);
+      setMessage(`Tabulador SEPS guardado correctamente (${sepsPeriodLabel}).`);
+    } catch (saveError) {
+      if (await handleFirestoreError(saveError)) {
+        return;
+      }
+
+      setError("No pudimos guardar el tabulador SEPS. Revisa Firestore e intentalo de nuevo.");
+    } finally {
+      setIsSavingSeps(false);
     }
   }
 
@@ -1884,6 +2598,7 @@ export default function Home() {
     const nextPermissions = {
       canEdit: draft.canEdit,
       canManageUsers: nextRole === "admin" ? true : false,
+      canToggleCapture: nextRole === "admin" || nextRole === "supervisor",
     } satisfies ServicePermissions;
 
     setAdminBusyUserId(uid);
@@ -2011,7 +2726,8 @@ export default function Home() {
   const isLoadingSession = !authReady || (user !== null && !profileReady);
 
   if (user && serviceProfile && !isLoadingSession) {
-    const isDateLocked = !captureWindow.isOpen;
+    const isDateLocked = !currentServiceCaptureOpen;
+    const isReopenedLate = currentServiceCaptureOpen && !captureWindow.isOpen;
     const isPermissionLocked = !currentService || !serviceProfile.permissions.canEdit;
     const isFormLocked = isDateLocked || isPermissionLocked;
     const isLightPanelTheme = panelTheme === "light";
@@ -2131,6 +2847,360 @@ export default function Home() {
         </div>
       </section>
     ) : null;
+
+    // --- Panel "Habilitar tableros" (supervisores + admin) -------------------
+    // Reabre (Abrir) o cierra (Cerrar) la captura de un servicio/modulo para el
+    // periodo elegido. "Automatico" = sin override: manda la ventana de dias habiles.
+    // Vista ordenada: agrupada por division, con buscador y resumen de estado.
+    const overrideQuery = overrideServiceQuery.trim().toLowerCase();
+    const overrideGroups = buildServiceGroups()
+      .map((group) => ({
+        ...group,
+        services: group.services.filter(
+          (service) => !overrideQuery || service.name.toLowerCase().includes(overrideQuery),
+        ),
+      }))
+      .filter((group) => group.services.length > 0);
+
+    let overrideOpenCount = 0;
+    let overrideClosedCount = 0;
+    for (const service of SERVICE_DEFINITIONS) {
+      for (const moduleId of toggleableModules) {
+        const cellState =
+          captureOverrides[getCaptureOverrideId(overridePanelPeriodId, service.id, moduleId)];
+        if (cellState === "open") {
+          overrideOpenCount += 1;
+        } else if (cellState === "closed") {
+          overrideClosedCount += 1;
+        }
+      }
+    }
+    const overrideTotalCells = SERVICE_DEFINITIONS.length * toggleableModules.length;
+    const overrideAutoCount = overrideTotalCells - overrideOpenCount - overrideClosedCount;
+
+    const overrideStateSelect = (service: ServiceDefinition, moduleId: ModuleId) => {
+      const overrideId = getCaptureOverrideId(overridePanelPeriodId, service.id, moduleId);
+      const state = captureOverrides[overrideId];
+      const isBusy = overrideBusyKey === overrideId;
+      const tone =
+        state === "open"
+          ? isLightPanelTheme
+            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+            : "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+          : state === "closed"
+            ? isLightPanelTheme
+              ? "border-rose-300 bg-rose-50 text-rose-700"
+              : "border-rose-400/40 bg-rose-500/15 text-rose-200"
+            : isLightPanelTheme
+              ? "border-slate-200 bg-white text-slate-500"
+              : "border-white/10 bg-white/5 text-slate-300";
+
+      return (
+        <select
+          value={state ?? "auto"}
+          disabled={isBusy}
+          onChange={(event) => {
+            const value = event.target.value;
+            void handleToggleCapture(
+              service.id,
+              moduleId,
+              value === "auto" ? null : (value as CaptureOverrideState),
+            );
+          }}
+          className={`w-full cursor-pointer rounded-lg border px-2 py-1.5 text-xs font-semibold outline-none transition focus:ring-2 focus:ring-amber-400/40 disabled:opacity-50 ${tone}`}
+        >
+          <option value="auto">● Automatico</option>
+          <option value="open">▲ Abrir</option>
+          <option value="closed">■ Cerrar</option>
+        </select>
+      );
+    };
+
+    const captureToggleSection = serviceProfile.permissions.canToggleCapture ? (
+      <section
+        id="panel-capture-toggle"
+        className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
+          isLightPanelTheme
+            ? "border border-slate-200 bg-white text-slate-900"
+            : "border border-amber-400/20 bg-[#202c41]"
+        }`}
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className={`text-sm uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-amber-700" : "text-amber-200/80"}`}>
+              Habilitar tableros
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold">Reabrir o cerrar captura por servicio</h2>
+            <p className={`mt-2 max-w-3xl text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+              Cambia el estado de un servicio por modulo. <strong>Automatico</strong> sigue la
+              ventana normal de dias habiles; <strong>Abrir</strong> reabre la captura tardia y{" "}
+              <strong>Cerrar</strong> la bloquea.
+            </p>
+          </div>
+          <label className="block shrink-0">
+            <span className={`text-sm font-medium ${isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>
+              Mes
+            </span>
+            <input
+              value={overridePanelPeriodId}
+              onChange={(event) => setOverridePanelPeriodId(event.target.value)}
+              className={`mt-2 w-full rounded-2xl px-3 py-2.5 text-sm outline-none focus:border-amber-400 ${
+                isLightPanelTheme
+                  ? "border border-slate-200 bg-white text-slate-900"
+                  : "border border-white/10 bg-[#2a3448] text-white"
+              }`}
+              type="month"
+            />
+          </label>
+        </div>
+
+        {/* Resumen de estado + buscador */}
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {[
+              { label: "Automatico", count: overrideAutoCount, dot: "bg-slate-400" },
+              { label: "Abiertos", count: overrideOpenCount, dot: "bg-emerald-500" },
+              { label: "Cerrados", count: overrideClosedCount, dot: "bg-rose-500" },
+            ].map((chip) => (
+              <span
+                key={chip.label}
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                  isLightPanelTheme ? "bg-slate-100 text-slate-700" : "bg-white/5 text-slate-200"
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${chip.dot}`} />
+                {chip.label}: {chip.count}
+              </span>
+            ))}
+          </div>
+          <input
+            value={overrideServiceQuery}
+            onChange={(event) => setOverrideServiceQuery(event.target.value)}
+            placeholder="Buscar servicio..."
+            className={`w-full rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-400 sm:w-64 ${
+              isLightPanelTheme
+                ? "border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"
+                : "border border-white/10 bg-[#2a3448] text-white placeholder:text-slate-500"
+            }`}
+            type="search"
+          />
+        </div>
+
+        {/* Grupos por division */}
+        <div className="mt-5 space-y-4">
+          {overrideGroups.length === 0 ? (
+            <p className={`rounded-2xl border border-dashed px-4 py-8 text-center text-sm ${isLightPanelTheme ? "border-slate-200 text-slate-500" : "border-white/10 text-slate-400"}`}>
+              Ningun servicio coincide con la busqueda.
+            </p>
+          ) : (
+            overrideGroups.map((group) => (
+              <div
+                key={group.id}
+                className={`overflow-hidden rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10 bg-[#1b2537]"}`}
+              >
+                <div className={`flex items-center justify-between px-4 py-2.5 ${isLightPanelTheme ? "bg-slate-50" : "bg-white/5"}`}>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide">{group.title}</h3>
+                  <span className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                    {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left text-sm">
+                    <thead>
+                      <tr className={isLightPanelTheme ? "text-slate-500" : "text-slate-400"}>
+                        <th className="px-4 py-2 text-xs font-medium">Servicio</th>
+                        {toggleableModules.map((moduleId) => (
+                          <th key={moduleId} className="w-36 px-3 py-2 text-center text-xs font-medium">
+                            {MODULE_BY_ID[moduleId].shortName}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.services.map((service) => (
+                        <tr
+                          key={service.id}
+                          className={`border-t ${isLightPanelTheme ? "border-slate-100 hover:bg-slate-50/60" : "border-white/5 hover:bg-white/5"}`}
+                        >
+                          <td className="px-4 py-2 font-medium">{service.name}</td>
+                          {toggleableModules.map((moduleId) => (
+                            <td key={moduleId} className="px-3 py-2">
+                              {overrideStateSelect(service, moduleId)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+    ) : null;
+
+    // --- Tabulador SEPS (captura diaria) -------------------------------------
+    const sepsNumericValue = (rowKey: string, day: string) => {
+      const parsed = Number.parseInt(sepsValues[rowKey]?.[day] ?? "", 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const sepsDayCell = (row: { key: string; readOnly?: boolean; sumOf?: string[] }, day: string) => {
+      if (row.readOnly && row.sumOf) {
+        return row.sumOf.reduce((acc, key) => acc + sepsNumericValue(key, day), 0);
+      }
+      return sepsNumericValue(row.key, day);
+    };
+    const sepsRowTotal = (row: { key: string; readOnly?: boolean; sumOf?: string[] }) =>
+      sepsDayColumns.reduce((acc, day) => acc + sepsDayCell(row, day), 0);
+    const sepsLocked = !sepsCaptureOpen || !serviceProfile.permissions.canEdit;
+    const sepsPhaseLabel =
+      sepsWindow.phase === "cierre"
+        ? `Cierre del mes ${sepsPeriodLabel} (hasta el 3er dia habil)`
+        : sepsWindow.phase === "captura"
+          ? `Captura diaria del mes ${sepsPeriodLabel}`
+          : "Captura cerrada (se reabre el dia 6)";
+
+    const sepsSection = sepsTemplate ? (
+      <section
+        id="panel-seps"
+        className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 text-slate-100 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">Tabulador SEPS</p>
+            <h2 className="mt-2 text-2xl font-semibold">
+              {currentService?.name || sepsTemplate.serviceId} — {sepsPeriodLabel}
+            </h2>
+            <p className="mt-1 text-sm text-slate-300">{sepsTemplate.establishment}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                sepsLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
+              }`}
+            >
+              {sepsLocked ? "BLOQUEADO" : "HABILITADO"}
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleSaveSeps()}
+              disabled={isSavingSeps || sepsLocked}
+              className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+            >
+              {isSavingSeps ? "Guardando..." : "Guardar SEPS"}
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-3 rounded-xl border border-white/10 bg-[#1b2537] px-4 py-2 text-sm text-slate-200">
+          {sepsPhaseLabel}. Los totales y la fila de suma se calculan solos.
+        </p>
+
+        <div className="mt-5 space-y-6">
+          {sepsTemplate.tables.map((table) => {
+            const hasGroups = table.rows.some((row) => row.group);
+            // rowSpan por grupo (solo en la primera fila del grupo).
+            const groupSpan: Record<number, number> = {};
+            for (let i = 0; i < table.rows.length; ) {
+              const g = table.rows[i].group;
+              if (!g) {
+                i += 1;
+                continue;
+              }
+              let j = i;
+              while (j < table.rows.length && table.rows[j].group === g) {
+                j += 1;
+              }
+              groupSpan[i] = j - i;
+              for (let k = i + 1; k < j; k += 1) {
+                groupSpan[k] = 0;
+              }
+              i = j;
+            }
+
+            return (
+              <div key={table.id} className="overflow-hidden rounded-2xl border border-white/10">
+                <div className="bg-white/5 px-4 py-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide">{table.title}</h3>
+                  {table.subtitle ? (
+                    <p className="mt-1 text-xs text-slate-300">{table.subtitle}</p>
+                  ) : null}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="border-collapse text-xs text-slate-100">
+                    <thead>
+                      <tr className="bg-white/5 text-slate-300">
+                        {hasGroups ? (
+                          <th className="sticky left-0 z-10 bg-[#243049] px-3 py-2 text-left font-medium">
+                            Grupo
+                          </th>
+                        ) : null}
+                        <th
+                          className={`${hasGroups ? "" : "sticky left-0 z-10 bg-[#243049]"} px-3 py-2 text-left font-medium`}
+                        >
+                          {table.detailLabel || "Detalle"}
+                        </th>
+                        {sepsDayColumns.map((day) => (
+                          <th key={day} className="w-10 px-1 py-2 text-center font-medium">
+                            {day}
+                          </th>
+                        ))}
+                        <th className="bg-[#243049] px-3 py-2 text-center font-semibold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {table.rows.map((row, index) => (
+                        <tr key={row.key} className="border-t border-white/5">
+                          {hasGroups && groupSpan[index] !== 0 ? (
+                            <td
+                              rowSpan={groupSpan[index] || 1}
+                              className="sticky left-0 z-10 bg-[#1b2537] px-3 py-1.5 align-middle font-medium"
+                            >
+                              {row.group}
+                            </td>
+                          ) : null}
+                          <td
+                            className={`${hasGroups ? "" : "sticky left-0 z-10 bg-[#1b2537]"} whitespace-nowrap px-3 py-1.5 ${
+                              row.readOnly ? "font-semibold text-cyan-200" : ""
+                            }`}
+                            style={row.indent ? { paddingLeft: `${12 + row.indent * 14}px` } : undefined}
+                          >
+                            {row.label}
+                          </td>
+                          {sepsDayColumns.map((day) => (
+                            <td key={day} className="px-0.5 py-1 text-center">
+                              {row.readOnly ? (
+                                <span className="block w-9 text-center text-cyan-200">
+                                  {sepsDayCell(row, day) || ""}
+                                </span>
+                              ) : (
+                                <input
+                                  value={sepsValues[row.key]?.[day] ?? ""}
+                                  onChange={(event) =>
+                                    handleSepsCellChange(row.key, day, event.target.value)
+                                  }
+                                  disabled={sepsLocked}
+                                  inputMode="numeric"
+                                  className="w-9 rounded border border-white/10 bg-[#1b2537] px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 disabled:opacity-50"
+                                />
+                              )}
+                            </td>
+                          ))}
+                          <td className="bg-[#243049] px-3 py-1.5 text-center font-semibold text-cyan-100">
+                            {sepsRowTotal(row)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    ) : null;
     // --- Menus por area (PERC / SESPS / Distribucion de Horas) ---------------
     // Cada area ve solo los menus que tiene asignados. El admin ve los 3.
     const moduleBadges: Record<ModuleId, string> = {
@@ -2149,7 +3219,11 @@ export default function Home() {
         return hasAnyCapturedValue(tableValues) ? "completo" : "incompleto";
       }
 
-      // PERC y SESPS: plantilla pendiente -> incompleto por defecto.
+      if (mod.id === "sesps" && sepsTemplate) {
+        return hasAnySepsValue(sepsValues) ? "completo" : "incompleto";
+      }
+
+      // PERC (y SEPS sin plantilla aun) -> incompleto por defecto.
       return "incompleto";
     };
     const moduleSidebarItems = visibleModules.map((mod) => ({
@@ -2167,6 +3241,16 @@ export default function Home() {
         badge: "IN",
       },
       ...moduleSidebarItems,
+      ...(sepsTemplate
+        ? [
+            {
+              id: "panel-seps",
+              label: "Tabulador SEPS",
+              detail: "Captura diaria SEPS",
+              badge: "SE",
+            },
+          ]
+        : []),
       ...(currentService
         ? [
             {
@@ -2196,6 +3280,16 @@ export default function Home() {
               label: "Usuarios",
               detail: "Cuentas y permisos",
               badge: "US",
+            },
+          ]
+        : []),
+      ...(serviceProfile.permissions.canToggleCapture
+        ? [
+            {
+              id: "panel-capture-toggle",
+              label: "Habilitar tableros",
+              detail: "Reabrir o cerrar captura",
+              badge: "HT",
             },
           ]
         : []),
@@ -2277,6 +3371,14 @@ export default function Home() {
                           Sin tabulador asignado a esta cuenta.
                         </p>
                       )
+                    ) : mod.id === "sesps" && sepsTemplate ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSidebarNavigation("panel-seps")}
+                        className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                      >
+                        Abrir captura
+                      </button>
                     ) : (
                       <p className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
                         Plantilla pendiente de cargar.
@@ -2354,7 +3456,7 @@ export default function Home() {
                           : "bg-slate-100 text-slate-500"
                       }`}
                     >
-                      {item.badge}
+                      {SIDEBAR_ICON_BY_ID[item.id] ?? item.badge}
                     </span>
                     <span className={`block truncate text-[13px] font-medium ${isLightPanelTheme ? "text-slate-900" : "text-slate-100"}`}>
                       {item.label}
@@ -2372,8 +3474,8 @@ export default function Home() {
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  {isLightPanelTheme ? "DK" : "LT"}
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                  {isLightPanelTheme ? IconMoon : IconSun}
                 </span>
                 <span>{isLightPanelTheme ? "Modo oscuro" : "Modo claro"}</span>
               </button>
@@ -2394,15 +3496,15 @@ export default function Home() {
                 onClick={handleSignOut}
                 className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-[#8a2d2d] transition hover:bg-white"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#fbe8e8] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8a2d2d]">
-                  SO
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#fbe8e8] text-[#8a2d2d]">
+                  {IconLogout}
                 </span>
                 <span>Cerrar sesion</span>
               </button>
             </div>
           </aside>
 
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             {moduleSections}
             <section
               id="panel-overview"
@@ -2420,12 +3522,14 @@ export default function Home() {
                 <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">
                   {currentService
                     ? `Ingreso de Datos - ${periodLabel} - ${currentService.name}`
-                    : "Modulo de Administracion"}
+                    : isSupervisor
+                      ? "Panel de Supervision"
+                      : "Modulo de Administracion"}
                 </h1>
                 <p className={`mt-3 text-sm sm:text-base ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
                   Usuario: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{welcomeName}</span>
                   {" · "}
-                  Rol: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{isAdmin ? "Administrador" : "Servicio"}</span>
+                  Rol: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{isAdmin ? "Administrador" : isSupervisor ? "Supervisor" : "Servicio"}</span>
                   {" · "}
                   Acceso: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{serviceProfile.username}</span>
                   {currentService ? (
@@ -2523,8 +3627,10 @@ export default function Home() {
                 {!serviceProfile.permissions.canEdit
                   ? "El administrador desactivo temporalmente tu permiso de captura."
                   : isDateLocked
-                    ? `La captura solo esta disponible en los primeros 3 dias habiles del mes. El ultimo dia habil fue ${SHORT_DATE_FORMATTER.format(captureWindow.lastOpenDay)}.`
-                    : `Captura abierta. Hoy corresponde al dia habil ${captureWindow.activeDayNumber} de 3.`}
+                    ? `La captura solo esta disponible en los primeros ${captureWindow.totalDays} dias habiles del mes. El ultimo dia habil fue ${SHORT_DATE_FORMATTER.format(captureWindow.lastOpenDay)}.`
+                    : isReopenedLate
+                      ? "Captura reabierta por un supervisor: puedes registrar fuera de tus dias habiles."
+                      : `Captura abierta. Hoy corresponde al dia habil ${captureWindow.activeDayNumber} de ${captureWindow.totalDays}.`}
               </p>
               <p className="mt-1 text-sm text-slate-200/80">Dias habilitados: {openDaysLabel}</p>
             </section>
@@ -2547,6 +3653,8 @@ export default function Home() {
           ) : null}
 
           {adminCalendarSection}
+
+          {captureToggleSection}
 
           {isAdmin ? (
             <section
@@ -2611,6 +3719,8 @@ export default function Home() {
               </div>
             </section>
           ) : null}
+
+          {sepsSection}
 
           {currentService ? (
             <section
