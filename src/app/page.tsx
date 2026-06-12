@@ -138,10 +138,14 @@ type PublicDashboardGroup = {
   services: PublicDashboardService[];
 };
 
-const DEFAULT_TEMP_PASSWORD = "PERC2026!";
-const ADMIN_USERNAME = "Hcardoza";
-const ADMIN_PASSWORD = "Cardoza1986";
-const ADMIN_EMAIL = "hcardoza.admin@perc-hnes.app";
+// Credenciales sensibles: NO se hardcodean en el codigo. Se leen de variables de
+// entorno (definir en .env.local para desarrollo y en Vercel para produccion).
+// IMPORTANTE: al ser una app cliente, estas NEXT_PUBLIC_* quedan en el bundle del
+// navegador; la unica proteccion real es rotar las claves y mantener el repo privado.
+const DEFAULT_TEMP_PASSWORD = process.env.NEXT_PUBLIC_DEFAULT_TEMP_PASSWORD ?? "";
+const ADMIN_USERNAME = process.env.NEXT_PUBLIC_ADMIN_USERNAME ?? "";
+const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD ?? "";
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? "";
 
 // Cuentas de supervisor fijas en codigo (mismo modelo que el admin). Su unica
 // potestad es habilitar/deshabilitar tableros de los modulos indicados. La cuenta
@@ -3815,9 +3819,9 @@ export default function Home() {
 
             {isAdmin ? (
               <div className="rounded-2xl border border-amber-400/30 bg-amber-950/30 px-4 py-4 text-sm text-amber-50">
-                Usuario administrador: <strong>{ADMIN_USERNAME}</strong>
-                {" · "}
-                Contrasena: <strong>{ADMIN_PASSWORD}</strong>
+                La cuenta de administrador usa credenciales fijas gestionadas fuera de la
+                aplicacion (variables de entorno). Para cambiarlas, actualiza el entorno y rota
+                la clave en Firebase.
               </div>
             ) : (
               <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto]" onSubmit={handleChangePassword}>
@@ -4635,9 +4639,6 @@ export default function Home() {
                     Las cuentas de servicio se crean manualmente desde el panel del administrador.
                     Cada usuario entra con su cuenta asignada y cambia su contrasena en el primer
                     ingreso.
-                  </p>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    Acceso admin: usuario <strong>{ADMIN_USERNAME}</strong>.
                   </p>
                 </div>
 
