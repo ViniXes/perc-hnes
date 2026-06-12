@@ -9,6 +9,8 @@
 // sus tablas/filas. El motor de render y guardado no se vuelve a tocar.
 // =============================================================================
 
+import { PSICOLOGIA_TEMPLATE } from "@/lib/seps-psicologia";
+
 export type SepsRow = {
   /** Id estable para guardar (no cambia aunque cambie la etiqueta). */
   key: string;
@@ -102,6 +104,9 @@ function buildAgeSexRows(): SepsRow[] {
 
 export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "trabajo-social": TRABAJO_SOCIAL,
+  // Psicologia (mismo servicio que "rehablitacion-psicosocial" en PERC/Horas).
+  // Plantilla grande auto-generada desde el Excel oficial.
+  "rehablitacion-psicosocial": PSICOLOGIA_TEMPLATE,
 };
 
 export function getSepsTemplate(serviceId: string | null | undefined): SepsTemplate | null {
