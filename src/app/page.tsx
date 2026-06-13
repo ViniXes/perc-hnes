@@ -53,6 +53,7 @@ import {
   getSepsTemplate,
   type SepsTemplate,
 } from "@/lib/seps-templates";
+import { getHorasTemplate, type HorasTemplate } from "@/lib/horas-templates";
 
 type UserRole = "service" | "admin" | "supervisor";
 type TableValues = Record<string, Record<string, string>>;
@@ -996,6 +997,70 @@ function hasAnySepsValue(values: SepsValues | undefined) {
   );
 }
 
+// ---- Distribucion de Horas (empleados x centros de costo) ------------------
+// Filas dinamicas (el usuario agrega/quita empleados). hours: { columna -> horas }.
+// El comentario es transitorio (ayuda durante la captura); NO va al consolidado.
+type HorasEmployee = { name: string; comment: string; hours: Record<string, string> };
+
+function buildEmptyHorasEmployee(template: HorasTemplate, name = ""): HorasEmployee {
+  return {
+    name,
+    comment: "",
+    hours: Object.fromEntries(template.columns.map((col) => [col, ""])),
+  };
+}
+
+function seedHorasEmployees(template: HorasTemplate): HorasEmployee[] {
+  return template.seedEmployees.map((name) => buildEmptyHorasEmployee(template, name));
+}
+
+function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEmployee[] {
+  if (!Array.isArray(raw)) {
+    return seedHorasEmployees(template);
+  }
+
+  const list = raw
+    .map((item) => {
+      const row = (item ?? {}) as Record<string, unknown>;
+      const rawHours = (row.hours ?? {}) as Record<string, unknown>;
+      return {
+        name: typeof row.name === "string" ? row.name : "",
+        comment: typeof row.comment === "string" ? row.comment : "",
+        hours: Object.fromEntries(
+          template.columns.map((col) => [col, String(rawHours[col] ?? "")]),
+        ),
+      };
+    })
+    // Conservar filas con nombre o algun dato.
+    .filter((emp) => emp.name.trim() !== "" || Object.values(emp.hours).some((h) => h.trim() !== ""));
+
+  return list.length > 0 ? list : seedHorasEmployees(template);
+}
+
+async function fetchHorasForPeriod(
+  template: HorasTemplate,
+  periodId: string,
+): Promise<HorasEmployee[]> {
+  const snapshot = await getDoc(doc(db, "horasTabulators", `${periodId}__${template.serviceId}`));
+
+  if (!snapshot.exists()) {
+    return seedHorasEmployees(template);
+  }
+
+  const data = snapshot.data() as { employees?: unknown };
+  return normalizeHorasEmployees(template, data.employees);
+}
+
+function hasAnyHorasValue(employees: HorasEmployee[] | undefined) {
+  if (!employees) {
+    return false;
+  }
+
+  return employees.some(
+    (emp) => emp.name.trim() !== "" || Object.values(emp.hours).some((h) => h.trim() !== ""),
+  );
+}
+
 async function fetchAdminOverviewForPeriod(periodId: string): Promise<AdminOverviewEntry[]> {
   const snapshot = await getDocs(
     query(collection(db, "serviceTabulators"), where("periodId", "==", periodId)),
@@ -1357,6 +1422,8 @@ export default function Home() {
   const [tableValues, setTableValues] = useState<TableValues>({});
   const [sepsValues, setSepsValues] = useState<SepsValues>({});
   const [isSavingSeps, setIsSavingSeps] = useState(false);
+  const [horasEmployees, setHorasEmployees] = useState<HorasEmployee[]>([]);
+  const [isSavingHoras, setIsSavingHoras] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -1439,6 +1506,10 @@ export default function Home() {
   // SEPS: plantilla del servicio (si tiene), ventana de doble fase y estado efectivo.
   const sepsTemplate = useMemo(
     () => getSepsTemplate(serviceProfile?.serviceId),
+    [serviceProfile?.serviceId],
+  );
+  const horasTemplate = useMemo(
+    () => getHorasTemplate(serviceProfile?.serviceId),
     [serviceProfile?.serviceId],
   );
   const sepsWindow = useMemo(
@@ -1738,6 +1809,42 @@ export default function Home() {
       cancelled = true;
     };
   }, [sepsTemplate, sepsPeriodId, firestoreUnavailable, user]);
+
+  // Carga el tabulador de Horas (empleados) del periodo de cierre del servicio.
+  useEffect(() => {
+    if (firestoreUnavailable || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      if (!horasTemplate) {
+        if (!cancelled) {
+          setHorasEmployees([]);
+        }
+        return;
+      }
+
+      try {
+        const employees = await fetchHorasForPeriod(horasTemplate, periodId);
+        if (!cancelled) {
+          setHorasEmployees(employees);
+        }
+      } catch (horasError) {
+        if (await handleFirestoreError(horasError)) {
+          return;
+        }
+        if (!cancelled) {
+          setHorasEmployees(seedHorasEmployees(horasTemplate));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [horasTemplate, periodId, firestoreUnavailable, user]);
 
   async function fetchManagedUsers() {
     const snapshot = await getDocs(collection(db, "serviceUsers"));
@@ -2530,6 +2637,96 @@ export default function Home() {
     }
   }
 
+  // --- Distribucion de Horas (empleados) ---
+  function updateHorasEmployee(index: number, patch: Partial<HorasEmployee>) {
+    setHorasEmployees((current) =>
+      current.map((emp, i) => (i === index ? { ...emp, ...patch } : emp)),
+    );
+  }
+
+  function handleHorasName(index: number, value: string) {
+    updateHorasEmployee(index, { name: value });
+  }
+
+  function handleHorasComment(index: number, value: string) {
+    updateHorasEmployee(index, { comment: value });
+  }
+
+  function handleHorasHour(index: number, column: string, rawValue: string) {
+    const value = sanitizeNumericValue(rawValue);
+    setHorasEmployees((current) =>
+      current.map((emp, i) =>
+        i === index ? { ...emp, hours: { ...emp.hours, [column]: value } } : emp,
+      ),
+    );
+  }
+
+  function handleAddHorasEmployee() {
+    if (!horasTemplate) {
+      return;
+    }
+    setHorasEmployees((current) => [...current, buildEmptyHorasEmployee(horasTemplate)]);
+  }
+
+  function handleRemoveHorasEmployee(index: number) {
+    setHorasEmployees((current) => current.filter((_, i) => i !== index));
+  }
+
+  async function handleSaveHoras() {
+    if (!user || !horasTemplate || !serviceProfile || firestoreUnavailable) {
+      return;
+    }
+
+    if (!serviceProfile.permissions.canEdit) {
+      setError("Tu cuenta no tiene permiso de captura en este momento.");
+      setMessage("");
+      return;
+    }
+
+    if (!currentServiceCaptureOpen) {
+      setError("La captura de Distribucion de Horas esta cerrada en este momento.");
+      setMessage("");
+      return;
+    }
+
+    setIsSavingHoras(true);
+    setError("");
+    setMessage("");
+
+    // Solo guardamos empleados con nombre o algun dato (evita filas vacias).
+    const cleaned = horasEmployees.filter(
+      (emp) => emp.name.trim() !== "" || Object.values(emp.hours).some((h) => h.trim() !== ""),
+    );
+
+    try {
+      await setDoc(
+        doc(db, "horasTabulators", `${periodId}__${horasTemplate.serviceId}`),
+        {
+          periodId,
+          periodLabel,
+          module: "distribucion",
+          serviceId: horasTemplate.serviceId,
+          serviceName: currentService?.name || horasTemplate.serviceId,
+          columns: horasTemplate.columns,
+          employees: cleaned,
+          userId: user.uid,
+          userEmail: user.email || "",
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      setMessage(`Distribucion de Horas guardada correctamente (${periodLabel}).`);
+    } catch (saveError) {
+      if (await handleFirestoreError(saveError)) {
+        return;
+      }
+      setError("No pudimos guardar Distribucion de Horas. Revisa Firestore e intentalo de nuevo.");
+    } finally {
+      setIsSavingHoras(false);
+    }
+  }
+
   async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -3232,7 +3429,11 @@ export default function Home() {
         return hasAnySepsValue(sepsValues) ? "completo" : "incompleto";
       }
 
-      // Distribucion de Horas (sin plantilla propia aun) -> incompleto por defecto.
+      if (mod.id === "distribucion" && horasTemplate) {
+        return hasAnyHorasValue(horasEmployees) ? "completo" : "incompleto";
+      }
+
+      // Sin plantilla aun -> incompleto por defecto.
       return "incompleto";
     };
     // Cada modulo lleva a SU tabulador. NOTA: el grid de centros de costo (id
@@ -3253,7 +3454,152 @@ export default function Home() {
 
     // Seccion "Distribucion de Horas": aun sin plantilla propia. Da un destino con
     // titulo al hacer clic en el menu Distribucion de Horas. Va al final.
-    const horasPlaceholderSection = currentService ? (
+    const horasLocked = !currentServiceCaptureOpen || !serviceProfile.permissions.canEdit;
+    const horasNum = (emp: HorasEmployee, col: string) => {
+      const n = Number.parseInt(emp.hours[col] ?? "", 10);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const horasRowTotal = (emp: HorasEmployee) =>
+      horasTemplate ? horasTemplate.columns.reduce((acc, col) => acc + horasNum(emp, col), 0) : 0;
+    const horasColTotal = (col: string) =>
+      horasEmployees.reduce((acc, emp) => acc + horasNum(emp, col), 0);
+
+    const horasSection = horasTemplate ? (
+      <section
+        id="panel-horas"
+        className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-200/80">
+              Tabulador · DISTRIBUCION DE HORAS
+            </p>
+            <h2 className="mt-1 text-2xl font-bold text-white">Distribucion de Horas</h2>
+            <p className="mt-1 text-sm text-slate-300">
+              Cierre de <strong>{periodLabel}</strong> · {currentService?.name} ·{" "}
+              {horasTemplate.establishment}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                horasLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
+              }`}
+            >
+              {horasLocked ? "BLOQUEADO" : "HABILITADO"}
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleSaveHoras()}
+              disabled={isSavingHoras || horasLocked}
+              className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+            >
+              {isSavingHoras ? "Guardando..." : "Guardar Horas"}
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-3 rounded-xl border border-white/10 bg-[#1b2537] px-4 py-2 text-sm text-slate-200">
+          Horas por empleado distribuidas en los centros de costo. El <strong>comentario</strong>{" "}
+          (maternidad, vacaciones, permiso, etc.) es solo de apoyo y NO se guarda en el historial.
+          Solo se aceptan numeros en las casillas de horas.
+        </p>
+
+        <div className="mt-4 overflow-x-auto rounded-2xl border border-white/10">
+          <table className="w-full border-collapse text-xs text-slate-100">
+            <thead>
+              <tr className="bg-white/5 text-slate-300">
+                <th className="px-2 py-2 text-center font-medium">#</th>
+                <th className="px-3 py-2 text-left font-medium">Comentario</th>
+                <th className="px-3 py-2 text-left font-medium">Nombre del empleado</th>
+                {horasTemplate.columns.map((col) => (
+                  <th key={col} className="px-3 py-2 text-center font-medium">
+                    {col}
+                  </th>
+                ))}
+                <th className="bg-[#243049] px-3 py-2 text-center font-semibold">Total</th>
+                <th className="px-2 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {horasEmployees.map((emp, index) => (
+                <tr key={index} className="border-t border-white/5">
+                  <td className="px-2 py-1.5 text-center text-slate-400">{index + 1}</td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      value={emp.comment}
+                      onChange={(event) => handleHorasComment(index, event.target.value)}
+                      disabled={horasLocked}
+                      placeholder="(opcional)"
+                      className="w-40 rounded border border-amber-400/20 bg-[#1b2537] px-2 py-1.5 text-amber-100 outline-none focus:border-amber-400 disabled:opacity-50"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      value={emp.name}
+                      onChange={(event) => handleHorasName(index, event.target.value)}
+                      disabled={horasLocked}
+                      placeholder="Nombre"
+                      className="w-64 rounded border border-white/10 bg-[#1b2537] px-2 py-1.5 outline-none focus:border-cyan-400 disabled:opacity-50"
+                    />
+                  </td>
+                  {horasTemplate.columns.map((col) => (
+                    <td key={col} className="px-2 py-1.5 text-center">
+                      <input
+                        value={emp.hours[col] ?? ""}
+                        onChange={(event) => handleHorasHour(index, col, event.target.value)}
+                        disabled={horasLocked}
+                        inputMode="numeric"
+                        className="w-16 rounded border border-white/10 bg-[#1b2537] px-1 py-1.5 text-center outline-none focus:border-cyan-400 disabled:opacity-50"
+                      />
+                    </td>
+                  ))}
+                  <td className="bg-[#243049] px-3 py-1.5 text-center font-semibold text-cyan-100">
+                    {horasRowTotal(emp)}
+                  </td>
+                  <td className="px-2 py-1.5 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveHorasEmployee(index)}
+                      disabled={horasLocked}
+                      title="Quitar empleado"
+                      className="rounded-lg bg-rose-500/15 px-2 py-1 text-rose-200 transition hover:bg-rose-500/25 disabled:opacity-40"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-white/10 bg-white/5 font-semibold">
+                <td className="px-3 py-2" colSpan={3}>
+                  TOTAL
+                </td>
+                {horasTemplate.columns.map((col) => (
+                  <td key={col} className="px-3 py-2 text-center text-cyan-100">
+                    {horasColTotal(col)}
+                  </td>
+                ))}
+                <td className="bg-[#243049] px-3 py-2 text-center text-cyan-100">
+                  {horasEmployees.reduce((acc, emp) => acc + horasRowTotal(emp), 0)}
+                </td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleAddHorasEmployee}
+          disabled={horasLocked}
+          className="mt-4 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+        >
+          + Agregar empleado
+        </button>
+      </section>
+    ) : currentService ? (
       <section
         id="panel-horas"
         className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
@@ -3825,7 +4171,7 @@ export default function Home() {
 
           {sepsSection}
 
-          {horasPlaceholderSection}
+          {horasSection}
 
           <section
             id="panel-security"

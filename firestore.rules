@@ -64,6 +64,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Tabuladores de Distribucion de Horas (id = "<periodo>__<servicio>").
+    match /horasTabulators/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin()
+        || (isSignedIn() && request.resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
     // Calendario de captura por periodo: lectura con sesion, escritura admin.
     match /captureCalendar/{periodId} {
       allow read: if isSignedIn();
