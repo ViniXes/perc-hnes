@@ -129,8 +129,11 @@ type ServiceGroup = {
   services: ServiceDefinition[];
 };
 
+// Estado por modulo (PERC / SEPS / Horas) de un servicio en el periodo activo.
+type PublicModuleStatus = { label: string; completed: boolean };
 type PublicDashboardService = ServiceDefinition & {
-  completed: boolean;
+  completed: boolean; // PERC (para el conteo del mes)
+  modules: PublicModuleStatus[];
 };
 
 type PublicDashboardGroup = {
@@ -1040,25 +1043,15 @@ function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEm
 async function fetchHorasForPeriod(
   template: HorasTemplate,
   periodId: string,
-): Promise<HorasEmployee[]> {
+): Promise<{ employees: HorasEmployee[]; saved: boolean }> {
   const snapshot = await getDoc(doc(db, "horasTabulators", `${periodId}__${template.serviceId}`));
 
   if (!snapshot.exists()) {
-    return seedHorasEmployees(template);
+    return { employees: seedHorasEmployees(template), saved: false };
   }
 
   const data = snapshot.data() as { employees?: unknown };
-  return normalizeHorasEmployees(template, data.employees);
-}
-
-function hasAnyHorasValue(employees: HorasEmployee[] | undefined) {
-  if (!employees) {
-    return false;
-  }
-
-  return employees.some(
-    (emp) => emp.name.trim() !== "" || Object.values(emp.hours).some((h) => h.trim() !== ""),
-  );
+  return { employees: normalizeHorasEmployees(template, data.employees), saved: true };
 }
 
 async function fetchAdminOverviewForPeriod(periodId: string): Promise<AdminOverviewEntry[]> {
@@ -1128,7 +1121,28 @@ async function fetchCaptureOverridesForPeriod(periodId: string): Promise<Capture
 }
 
 async function fetchPublicDashboard(year: number, currentPeriodId: string) {
-  const [calendarOverrides, tabulatorsSnapshot] = await Promise.all([
+  // Lecturas opcionales (SEPS/Horas pueden fallar si faltan reglas): no deben romper.
+  const safeServiceIds = async (
+    coll: string,
+  ): Promise<Set<string>> => {
+    try {
+      const snap = await getDocs(
+        query(collection(db, coll), where("periodId", "==", currentPeriodId)),
+      );
+      const ids = new Set<string>();
+      for (const item of snap.docs) {
+        const sid = (item.data() as { serviceId?: unknown }).serviceId;
+        if (typeof sid === "string") {
+          ids.add(sid);
+        }
+      }
+      return ids;
+    } catch {
+      return new Set<string>();
+    }
+  };
+
+  const [calendarOverrides, tabulatorsSnapshot, sepsDone, horasDone] = await Promise.all([
     fetchCalendarOverridesForYear(year),
     getDocs(
       query(
@@ -1137,6 +1151,8 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
         where("periodId", "<=", `${year}-12`),
       ),
     ),
+    safeServiceIds("sepsTabulators"),
+    safeServiceIds("horasTabulators"),
   ]);
   const completedByPeriod = new Map<string, Set<string>>();
 
@@ -1181,10 +1197,18 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
   const currentCompletedServices = completedByPeriod.get(currentPeriodId) || new Set<string>();
   const groups: PublicDashboardGroup[] = buildServiceGroups().map((group) => ({
     ...group,
-    services: group.services.map((service) => ({
-      ...service,
-      completed: currentCompletedServices.has(service.id),
-    })),
+    services: group.services.map((service) => {
+      const percDone = currentCompletedServices.has(service.id);
+      // PERC (grid de centros de costo) aplica a todos. SEPS/Horas solo si tienen plantilla.
+      const modules: PublicModuleStatus[] = [{ label: "PERC", completed: percDone }];
+      if (getSepsTemplate(service.id)) {
+        modules.push({ label: "SEPS", completed: sepsDone.has(service.id) });
+      }
+      if (getHorasTemplate(service.id)) {
+        modules.push({ label: "Horas", completed: horasDone.has(service.id) });
+      }
+      return { ...service, completed: percDone, modules };
+    }),
   }));
 
   return {
@@ -1424,6 +1448,8 @@ export default function Home() {
   const [isSavingSeps, setIsSavingSeps] = useState(false);
   const [horasEmployees, setHorasEmployees] = useState<HorasEmployee[]>([]);
   const [isSavingHoras, setIsSavingHoras] = useState(false);
+  // "Completo" del modulo Horas: solo true cuando el usuario GUARDO (no por el seed).
+  const [horasSaved, setHorasSaved] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -1822,14 +1848,16 @@ export default function Home() {
       if (!horasTemplate) {
         if (!cancelled) {
           setHorasEmployees([]);
+          setHorasSaved(false);
         }
         return;
       }
 
       try {
-        const employees = await fetchHorasForPeriod(horasTemplate, periodId);
+        const result = await fetchHorasForPeriod(horasTemplate, periodId);
         if (!cancelled) {
-          setHorasEmployees(employees);
+          setHorasEmployees(result.employees);
+          setHorasSaved(result.saved);
         }
       } catch (horasError) {
         if (await handleFirestoreError(horasError)) {
@@ -1837,6 +1865,7 @@ export default function Home() {
         }
         if (!cancelled) {
           setHorasEmployees(seedHorasEmployees(horasTemplate));
+          setHorasSaved(false);
         }
       }
     })();
@@ -2716,6 +2745,7 @@ export default function Home() {
         { merge: true },
       );
 
+      setHorasSaved(true);
       setMessage(`Distribucion de Horas guardada correctamente (${periodLabel}).`);
     } catch (saveError) {
       if (await handleFirestoreError(saveError)) {
@@ -3430,7 +3460,8 @@ export default function Home() {
       }
 
       if (mod.id === "distribucion" && horasTemplate) {
-        return hasAnyHorasValue(horasEmployees) ? "completo" : "incompleto";
+        // Solo "completo" cuando se GUARDO (no por los empleados precargados).
+        return horasSaved ? "completo" : "incompleto";
       }
 
       // Sin plantilla aun -> incompleto por defecto.
@@ -3681,7 +3712,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {visibleModules.map((mod) => {
               const status = getModuleUiStatus(mod);
               const isComplete = status === "completo";
@@ -3690,69 +3721,66 @@ export default function Home() {
                 <div
                   key={mod.id}
                   id={`panel-module-${mod.id}`}
-                  className={`flex flex-col rounded-2xl border p-4 ${
+                  className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 ${
                     isLightPanelTheme
                       ? "border-slate-200 bg-[#f7f9fe]"
                       : "border-white/10 bg-[#1b2537]"
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#1f255f] text-[11px] font-semibold uppercase tracking-[0.18em] text-white">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#1f255f] text-[10px] font-semibold uppercase tracking-[0.12em] text-white">
                       {moduleBadges[mod.id]}
                     </span>
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        isComplete
-                          ? "bg-emerald-500/15 text-emerald-500"
-                          : "bg-amber-500/15 text-amber-500"
-                      }`}
-                    >
-                      {isComplete ? "Completo" : "Incompleto"}
-                    </span>
+                    <div className="min-w-0">
+                      <h3 className={`truncate text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                        {mod.name}
+                      </h3>
+                      <span
+                        className={`mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold ${
+                          isComplete ? "text-emerald-400" : "text-amber-400"
+                        }`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${isComplete ? "bg-emerald-400" : "bg-amber-400"}`} />
+                        {isComplete ? "Completo" : "Incompleto"}
+                      </span>
+                    </div>
                   </div>
 
-                  <h3 className={`mt-4 text-lg font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                    {mod.name}
-                  </h3>
-                  <p className={`mt-2 flex-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                    {mod.description}
-                  </p>
-
-                  <div className="mt-4">
+                  <div className="shrink-0">
                     {mod.id === "perc" ? (
                       currentService ? (
                         <button
                           type="button"
                           onClick={() => handleSidebarNavigation("panel-tabulator")}
-                          className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                          className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400"
                         >
-                          Abrir captura
+                          Abrir
                         </button>
                       ) : (
-                        <p className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-                          Sin tabulador asignado a esta cuenta.
-                        </p>
+                        <span className={`text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                          Sin tabulador
+                        </span>
                       )
                     ) : mod.id === "sesps" && sepsTemplate ? (
                       <button
                         type="button"
                         onClick={() => handleSidebarNavigation("panel-seps")}
-                        className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                        className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400"
                       >
-                        Abrir captura
+                        Abrir
                       </button>
                     ) : mod.id === "distribucion" && currentService ? (
                       <button
                         type="button"
                         onClick={() => handleSidebarNavigation("panel-horas")}
-                        className="rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                        className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400"
                       >
-                        Ver
+                        Abrir
                       </button>
                     ) : (
-                      <p className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-                        Plantilla pendiente de cargar.
-                      </p>
+                      <span className={`text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                        Pendiente
+                      </span>
                     )}
                   </div>
                 </div>
@@ -4759,213 +4787,56 @@ export default function Home() {
                     </div>
                   ))
                 : publicDashboardGroups.map((group) => {
-                    const completedServices = group.services.filter((service) => service.completed);
-                    const pendingServices = group.services.filter((service) => !service.completed);
-                    const completionShare = Math.round(
-                      (completedServices.length / Math.max(group.services.length, 1)) * 100,
-                    );
-                    const pendingShare = Math.max(100 - completionShare, 0);
+                    const groupCompleted = group.services.filter((service) => service.completed)
+                      .length;
 
                     return (
                       <section
                         key={group.id}
-                        className="rounded-[26px] border border-[#d8cfbd] bg-[#f6f1e6] p-5 text-slate-900 shadow-[0_24px_70px_rgba(15,23,42,0.14)]"
+                        className="rounded-2xl border border-white/10 bg-[#162032] p-4 shadow-[0_18px_50px_rgba(3,7,18,0.25)]"
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#d8cfbd] pb-4">
-                          <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#64748b]">
-                              Panel de cumplimiento
-                            </p>
-                            <h2 className="mt-2 text-2xl font-semibold text-[#23395d]">{group.title}</h2>
-                            <p className="mt-1 text-sm text-slate-600">
-                              Vista de pendientes y completos del periodo actual.
-                            </p>
-                          </div>
-                          <div className="rounded-full border border-[#c6b899] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#23395d]">
-                            {completedServices.length}/{group.services.length} completos
-                          </div>
+                        <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+                          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-200">
+                            {group.title}
+                          </h2>
+                          <span className="rounded-full bg-white/5 px-3 py-1 text-[11px] font-semibold text-slate-300">
+                            {groupCompleted}/{group.services.length}
+                          </span>
                         </div>
 
-                        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(320px,0.92fr)_minmax(0,1.08fr)]">
-                          <div className="space-y-4">
-                            <div className="rounded-[24px] bg-[#23395d] p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                              <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-3">
-                                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4">
-                                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-300">
-                                    Total
-                                  </p>
-                                  <p className="mt-3 text-3xl font-semibold">{group.services.length}</p>
-                                  <p className="mt-1 text-xs text-slate-300">Dependencias</p>
-                                </div>
-                                <div className="rounded-2xl border border-[#f3cf63]/30 bg-[#f3cf63]/15 px-4 py-4">
-                                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#f8df8a]">
-                                    Completos
-                                  </p>
-                                  <p className="mt-3 text-3xl font-semibold text-[#fff3c8]">
-                                    {completedServices.length}
-                                  </p>
-                                  <p className="mt-1 text-xs text-[#f8df8a]">Servicios al dia</p>
-                                </div>
-                                <div className="rounded-2xl border border-[#ff7a30]/30 bg-[#ff7a30]/15 px-4 py-4">
-                                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#ffd1b5]">
-                                    Pendientes
-                                  </p>
-                                  <p className="mt-3 text-3xl font-semibold text-[#fff0e7]">
-                                    {pendingServices.length}
-                                  </p>
-                                  <p className="mt-1 text-xs text-[#ffd1b5]">Por capturar</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="rounded-[24px] border border-[#d8cfbd] bg-white/80 p-4">
-                              <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                                <span>Ritmo de captura</span>
-                                <span>{completionShare}%</span>
-                              </div>
-
-                              <div className="mt-4 space-y-4">
-                                <div>
-                                  <div className="flex items-center justify-between text-sm font-medium text-slate-700">
-                                    <span>Completados</span>
-                                    <span>{completionShare}%</span>
-                                  </div>
-                                  <div className="mt-2 h-4 rounded-full bg-slate-200">
-                                    <div
-                                      className="h-4 rounded-full bg-[#f3c623]"
-                                      style={{ width: `${completionShare}%` }}
+                        <div className="mt-3 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                          {group.services.map((service) => (
+                            <div
+                              key={service.id}
+                              className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5"
+                            >
+                              <p
+                                className="truncate text-[13px] font-semibold text-white"
+                                title={service.name}
+                              >
+                                {service.name}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {service.modules.map((mod) => (
+                                  <span
+                                    key={mod.label}
+                                    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold ${
+                                      mod.completed
+                                        ? "bg-emerald-500/15 text-emerald-300"
+                                        : "bg-amber-500/15 text-amber-300"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`h-1.5 w-1.5 rounded-full ${
+                                        mod.completed ? "bg-emerald-400" : "bg-amber-400"
+                                      }`}
                                     />
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center justify-between text-sm font-medium text-slate-700">
-                                    <span>Pendientes</span>
-                                    <span>{pendingShare}%</span>
-                                  </div>
-                                  <div className="mt-2 h-4 rounded-full bg-slate-200">
-                                    <div
-                                      className="h-4 rounded-full bg-[#ff6b2c]"
-                                      style={{ width: `${pendingShare}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-2xl border border-[#d8cfbd] bg-[#f8f4ea] px-4 py-3">
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                                    Objetivo
-                                  </p>
-                                  <p className="mt-2 text-lg font-semibold text-[#23395d]">
-                                    Completar el 100% del grupo
-                                  </p>
-                                </div>
-                                <div className="rounded-2xl border border-[#d8cfbd] bg-[#f8f4ea] px-4 py-3">
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                                    Estado
-                                  </p>
-                                  <p className="mt-2 text-lg font-semibold text-[#23395d]">
-                                    {pendingServices.length === 0 ? "Ciclo cerrado" : "Requiere seguimiento"}
-                                  </p>
-                                </div>
+                                    {mod.label}: {mod.completed ? "Completo" : "Incompleto"}
+                                  </span>
+                                ))}
                               </div>
                             </div>
-                          </div>
-
-                          <div className="grid gap-4 lg:grid-cols-2">
-                            <div className="rounded-[24px] border border-[#d8cfbd] bg-white/85 p-4">
-                              <div className="flex items-center justify-between gap-3 border-b border-[#e8dfcf] pb-3">
-                                <div>
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                                    Completos
-                                  </p>
-                                  <h3 className="mt-1 text-lg font-semibold text-[#23395d]">
-                                    Dependencias al dia
-                                  </h3>
-                                </div>
-                                <span className="rounded-full bg-[#f3c623] px-3 py-1 text-xs font-semibold text-[#23395d]">
-                                  {completedServices.length}
-                                </span>
-                              </div>
-
-                              <div className="mt-4 space-y-2">
-                                {completedServices.length > 0 ? (
-                                  completedServices.map((service) => (
-                                    <article
-                                      key={service.id}
-                                      className="rounded-2xl border border-[#eedb94] bg-[#fff7d7] px-4 py-3"
-                                    >
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                          <h4 className="text-sm font-semibold uppercase leading-5 text-[#23395d]">
-                                            {service.name}
-                                          </h4>
-                                          <p className="mt-1 text-xs text-slate-600">
-                                            {service.rows.length} fila
-                                            {service.rows.length === 1 ? "" : "s"} registradas
-                                          </p>
-                                        </div>
-                                        <span className="rounded-full bg-[#23395d] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
-                                          Completo
-                                        </span>
-                                      </div>
-                                    </article>
-                                  ))
-                                ) : (
-                                  <div className="rounded-2xl border border-dashed border-[#d8cfbd] bg-[#f8f4ea] px-4 py-6 text-sm text-slate-500">
-                                    Aun no hay dependencias completadas en este grupo.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="rounded-[24px] border border-[#d8cfbd] bg-white/85 p-4">
-                              <div className="flex items-center justify-between gap-3 border-b border-[#e8dfcf] pb-3">
-                                <div>
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                                    Pendientes
-                                  </p>
-                                  <h3 className="mt-1 text-lg font-semibold text-[#23395d]">
-                                    Dependencias por capturar
-                                  </h3>
-                                </div>
-                                <span className="rounded-full bg-[#ff6b2c] px-3 py-1 text-xs font-semibold text-white">
-                                  {pendingServices.length}
-                                </span>
-                              </div>
-
-                              <div className="mt-4 space-y-2">
-                                {pendingServices.length > 0 ? (
-                                  pendingServices.map((service) => (
-                                    <article
-                                      key={service.id}
-                                      className="rounded-2xl border border-[#ffc7ab] bg-[#fff0e8] px-4 py-3"
-                                    >
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                          <h4 className="text-sm font-semibold uppercase leading-5 text-[#23395d]">
-                                            {service.name}
-                                          </h4>
-                                          <p className="mt-1 text-xs text-slate-600">
-                                            {service.rows.length} fila
-                                            {service.rows.length === 1 ? "" : "s"} pendientes de revisar
-                                          </p>
-                                        </div>
-                                        <span className="rounded-full bg-[#ff6b2c] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
-                                          Pendiente
-                                        </span>
-                                      </div>
-                                    </article>
-                                  ))
-                                ) : (
-                                  <div className="rounded-2xl border border-dashed border-[#d8cfbd] bg-[#f8f4ea] px-4 py-6 text-sm text-slate-500">
-                                    No hay pendientes en este grupo.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                          ))}
                         </div>
                       </section>
                     );
