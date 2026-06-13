@@ -3736,11 +3736,10 @@ export default function Home() {
                         {mod.name}
                       </h3>
                       <span
-                        className={`mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold ${
+                        className={`mt-0.5 block text-[11px] font-semibold ${
                           isComplete ? "text-emerald-400" : "text-amber-400"
                         }`}
                       >
-                        <span className={`h-1.5 w-1.5 rounded-full ${isComplete ? "bg-emerald-400" : "bg-amber-400"}`} />
                         {isComplete ? "Completo" : "Incompleto"}
                       </span>
                     </div>
@@ -4672,45 +4671,6 @@ export default function Home() {
           </div>
 
           <div className="relative space-y-6">
-            <div className="rounded-[28px] border border-white/10 bg-[#162034]/90 p-6 shadow-[0_24px_80px_rgba(3,7,18,0.35)] backdrop-blur">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Total</p>
-                  <p className="mt-2 text-3xl font-semibold text-white">{SERVICE_COUNT}</p>
-                  <p className="mt-1 text-xs text-slate-400">Dependencias</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Completos</p>
-                  <p className="mt-2 text-3xl font-semibold text-emerald-300">{publicCompletedCount}</p>
-                  <p className="mt-1 text-xs text-slate-400">Mes actual</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Progreso</p>
-                  <p className="mt-2 text-3xl font-semibold text-violet-300">{currentMonthProgress}%</p>
-                  <p className="mt-1 text-xs text-slate-400">Avance mensual</p>
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-2xl border border-violet-400/15 bg-[#0f1728] p-4">
-                <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400">
-                  <span>Progreso general</span>
-                  <span>{currentMonthProgress}%</span>
-                </div>
-                <div className="mt-3 h-3 rounded-full bg-white/10">
-                  <div
-                    className="h-3 rounded-full bg-gradient-to-r from-violet-400 to-cyan-300"
-                    style={{ width: `${currentMonthProgress}%` }}
-                  />
-                </div>
-                <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-                  <span>
-                    {publicCompletedCount} de {SERVICE_COUNT} servicios completados
-                  </span>
-                  <time suppressHydrationWarning>{DATE_TIME_FORMATTER.format(now)}</time>
-                </div>
-              </div>
-            </div>
-
             <div className="rounded-[24px] border border-white/10 bg-[#162034]/90 p-5 shadow-[0_24px_80px_rgba(3,7,18,0.28)] backdrop-blur">
               <h2 className="text-lg font-semibold text-white">Calendario de cierre mensual</h2>
               <p className="mt-2 text-sm text-slate-300">
@@ -4816,21 +4776,14 @@ export default function Home() {
                               >
                                 {service.name}
                               </p>
-                              <div className="mt-2 flex flex-wrap gap-1.5">
+                              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
                                 {service.modules.map((mod) => (
                                   <span
                                     key={mod.label}
-                                    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold ${
-                                      mod.completed
-                                        ? "bg-emerald-500/15 text-emerald-300"
-                                        : "bg-amber-500/15 text-amber-300"
+                                    className={`text-[11px] font-semibold ${
+                                      mod.completed ? "text-emerald-400" : "text-amber-400"
                                     }`}
                                   >
-                                    <span
-                                      className={`h-1.5 w-1.5 rounded-full ${
-                                        mod.completed ? "bg-emerald-400" : "bg-amber-400"
-                                      }`}
-                                    />
                                     {mod.label}: {mod.completed ? "Completo" : "Incompleto"}
                                   </span>
                                 ))}
