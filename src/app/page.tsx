@@ -343,7 +343,7 @@ const IconSun = (
 const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-overview": IconHome,
   "panel-module-distribucion": IconClock,
-  "panel-tabulator": IconClock,
+  "panel-horas": IconClock,
   "panel-calendar": IconGear,
   "panel-admin-export": IconFile,
   "panel-users": IconUsers,
@@ -3223,7 +3223,8 @@ export default function Home() {
         ? getAreaModules(currentArea)
         : [];
     const getModuleUiStatus = (mod: ModuleDefinition): "completo" | "incompleto" => {
-      if (mod.id === "distribucion") {
+      // El grid de centros de costo (tableValues) es el tabulador PERC.
+      if (mod.id === "perc") {
         return hasAnyCapturedValue(tableValues) ? "completo" : "incompleto";
       }
 
@@ -3231,15 +3232,16 @@ export default function Home() {
         return hasAnySepsValue(sepsValues) ? "completo" : "incompleto";
       }
 
-      // PERC (y SEPS sin plantilla aun) -> incompleto por defecto.
+      // Distribucion de Horas (sin plantilla propia aun) -> incompleto por defecto.
       return "incompleto";
     };
-    // Cada modulo lleva a SU tabulador (PERC / SEPS / Horas). Para el admin (que no
-    // captura) cae a la tarjeta resumen del modulo.
+    // Cada modulo lleva a SU tabulador. NOTA: el grid de centros de costo (id
+    // "distribucion") es, para el hospital, el tabulador PERC -> el menu "PERC" lleva
+    // a panel-tabulator. El menu "Distribucion de Horas" lleva a su seccion (pendiente).
     const moduleSectionTarget = (modId: ModuleId): string => {
-      if (modId === "distribucion") return currentService ? "panel-tabulator" : `panel-module-${modId}`;
+      if (modId === "perc") return currentService ? "panel-tabulator" : `panel-module-${modId}`;
       if (modId === "sesps") return sepsTemplate ? "panel-seps" : `panel-module-${modId}`;
-      if (modId === "perc") return currentService ? "panel-perc" : `panel-module-${modId}`;
+      if (modId === "distribucion") return currentService ? "panel-horas" : `panel-module-${modId}`;
       return `panel-module-${modId}`;
     };
     const moduleSidebarItems = visibleModules.map((mod) => ({
@@ -3249,23 +3251,23 @@ export default function Home() {
       badge: moduleBadges[mod.id],
     }));
 
-    // Seccion PERC: aun sin plantilla. Da un destino con titulo al hacer clic en PERC.
-    const percSection =
-      currentService && visibleModules.some((mod) => mod.id === "perc") ? (
-        <section
-          id="panel-perc"
-          className="rounded-[24px] border border-violet-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
-        >
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-violet-200/80">
-            Tabulador · PERC
-          </p>
-          <h2 className="mt-1 text-2xl font-bold text-white">PERC</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-            El tabulador PERC de <strong>{currentService.name}</strong> aun no esta cargado. Esta
-            seccion se habilitara aqui en cuanto se cargue la plantilla oficial de PERC.
-          </p>
-        </section>
-      ) : null;
+    // Seccion "Distribucion de Horas": aun sin plantilla propia. Da un destino con
+    // titulo al hacer clic en el menu Distribucion de Horas. Va al final.
+    const horasPlaceholderSection = currentService ? (
+      <section
+        id="panel-horas"
+        className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+      >
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-200/80">
+          Tabulador · DISTRIBUCION DE HORAS
+        </p>
+        <h2 className="mt-1 text-2xl font-bold text-white">Distribucion de Horas</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+          El tabulador de Distribucion de Horas de <strong>{currentService.name}</strong> aun no
+          esta cargado. Esta seccion se habilitara aqui en cuanto se cargue su plantilla.
+        </p>
+      </section>
+    ) : null;
 
     const sidebarItems = [
       {
@@ -3371,7 +3373,7 @@ export default function Home() {
                   </p>
 
                   <div className="mt-4">
-                    {mod.id === "distribucion" ? (
+                    {mod.id === "perc" ? (
                       currentService ? (
                         <button
                           type="button"
@@ -3393,13 +3395,13 @@ export default function Home() {
                       >
                         Abrir captura
                       </button>
-                    ) : mod.id === "perc" && currentService ? (
+                    ) : mod.id === "distribucion" && currentService ? (
                       <button
                         type="button"
-                        onClick={() => handleSidebarNavigation("panel-perc")}
-                        className="rounded-xl border border-violet-400/40 bg-violet-500/10 px-4 py-2 text-sm font-semibold text-violet-200 transition hover:bg-violet-500/20"
+                        onClick={() => handleSidebarNavigation("panel-horas")}
+                        className="rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
                       >
-                        Ver PERC
+                        Ver
                       </button>
                     ) : (
                       <p className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
@@ -3718,20 +3720,16 @@ export default function Home() {
             </section>
           ) : null}
 
-          {percSection}
-
-          {sepsSection}
-
           {currentService ? (
             <section
               id="panel-tabulator"
               className="overflow-hidden rounded-[24px] border border-cyan-400/20 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
             >
               <div className="border-b border-white/10 bg-[#1b2537] px-5 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-200/80">
-                  Tabulador · Distribucion de Horas
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-violet-200/80">
+                  Tabulador · PERC
                 </p>
-                <h2 className="mt-1 text-2xl font-bold text-white">Distribucion de Horas</h2>
+                <h2 className="mt-1 text-2xl font-bold text-white">PERC</h2>
                 <p className="mt-1 text-sm text-slate-300">
                   Captura mensual por centro de costos — {currentService.name} · {periodLabel}
                 </p>
@@ -3824,6 +3822,10 @@ export default function Home() {
               </p>
             </section>
           )}
+
+          {sepsSection}
+
+          {horasPlaceholderSection}
 
           <section
             id="panel-security"
