@@ -135,6 +135,8 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "alimentacion-y-dieta": ["perc", "sesps", "distribucion"],
   // Banco de Sangre: PERC (ya existe), SEPS y Horas.
   "banco-de-sangre": ["perc", "sesps", "distribucion"],
+  // Farmacia: PERC (ya existe), SEPS y Horas.
+  "servicio-farmaceutico": ["perc", "sesps", "distribucion"],
   // PENDIENTE: completar el resto con el listado de PERC y SESPS.
 };
 

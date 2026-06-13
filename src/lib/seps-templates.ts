@@ -10,6 +10,7 @@
 // =============================================================================
 
 import { BANCO_SANGRE_TEMPLATE } from "@/lib/seps-banco-sangre";
+import { FARMACIA_TEMPLATE } from "@/lib/seps-farmacia";
 import { NUTRICION_TEMPLATE } from "@/lib/seps-nutricion";
 import { PSICOLOGIA_TEMPLATE } from "@/lib/seps-psicologia";
 
@@ -113,6 +114,8 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "alimentacion-y-dieta": NUTRICION_TEMPLATE,
   // Banco de Sangre.
   "banco-de-sangre": BANCO_SANGRE_TEMPLATE,
+  // Farmacia.
+  "servicio-farmaceutico": FARMACIA_TEMPLATE,
 };
 
 export function getSepsTemplate(serviceId: string | null | undefined): SepsTemplate | null {

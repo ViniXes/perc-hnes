@@ -53,6 +53,7 @@ import {
   getSepsTemplate,
   type SepsTemplate,
 } from "@/lib/seps-templates";
+import { getHorasTemplate, type HorasTemplate } from "@/lib/horas-templates";
 
 type UserRole = "service" | "admin" | "supervisor";
 type TableValues = Record<string, Record<string, string>>;
@@ -128,8 +129,11 @@ type ServiceGroup = {
   services: ServiceDefinition[];
 };
 
+// Estado por modulo (PERC / SEPS / Horas) de un servicio en el periodo activo.
+type PublicModuleStatus = { label: string; completed: boolean };
 type PublicDashboardService = ServiceDefinition & {
-  completed: boolean;
+  completed: boolean; // PERC (para el conteo del mes)
+  modules: PublicModuleStatus[];
 };
 
 type PublicDashboardGroup = {
@@ -343,6 +347,7 @@ const IconSun = (
 const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-overview": IconHome,
   "panel-module-distribucion": IconClock,
+  "panel-horas": IconClock,
   "panel-calendar": IconGear,
   "panel-admin-export": IconFile,
   "panel-users": IconUsers,
@@ -995,6 +1000,60 @@ function hasAnySepsValue(values: SepsValues | undefined) {
   );
 }
 
+// ---- Distribucion de Horas (empleados x centros de costo) ------------------
+// Filas dinamicas (el usuario agrega/quita empleados). hours: { columna -> horas }.
+// El comentario es transitorio (ayuda durante la captura); NO va al consolidado.
+type HorasEmployee = { name: string; comment: string; hours: Record<string, string> };
+
+function buildEmptyHorasEmployee(template: HorasTemplate, name = ""): HorasEmployee {
+  return {
+    name,
+    comment: "",
+    hours: Object.fromEntries(template.columns.map((col) => [col, ""])),
+  };
+}
+
+function seedHorasEmployees(template: HorasTemplate): HorasEmployee[] {
+  return template.seedEmployees.map((name) => buildEmptyHorasEmployee(template, name));
+}
+
+function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEmployee[] {
+  if (!Array.isArray(raw)) {
+    return seedHorasEmployees(template);
+  }
+
+  const list = raw
+    .map((item) => {
+      const row = (item ?? {}) as Record<string, unknown>;
+      const rawHours = (row.hours ?? {}) as Record<string, unknown>;
+      return {
+        name: typeof row.name === "string" ? row.name : "",
+        comment: typeof row.comment === "string" ? row.comment : "",
+        hours: Object.fromEntries(
+          template.columns.map((col) => [col, String(rawHours[col] ?? "")]),
+        ),
+      };
+    })
+    // Conservar filas con nombre o algun dato.
+    .filter((emp) => emp.name.trim() !== "" || Object.values(emp.hours).some((h) => h.trim() !== ""));
+
+  return list.length > 0 ? list : seedHorasEmployees(template);
+}
+
+async function fetchHorasForPeriod(
+  template: HorasTemplate,
+  periodId: string,
+): Promise<{ employees: HorasEmployee[]; saved: boolean }> {
+  const snapshot = await getDoc(doc(db, "horasTabulators", `${periodId}__${template.serviceId}`));
+
+  if (!snapshot.exists()) {
+    return { employees: seedHorasEmployees(template), saved: false };
+  }
+
+  const data = snapshot.data() as { employees?: unknown };
+  return { employees: normalizeHorasEmployees(template, data.employees), saved: true };
+}
+
 async function fetchAdminOverviewForPeriod(periodId: string): Promise<AdminOverviewEntry[]> {
   const snapshot = await getDocs(
     query(collection(db, "serviceTabulators"), where("periodId", "==", periodId)),
@@ -1062,7 +1121,28 @@ async function fetchCaptureOverridesForPeriod(periodId: string): Promise<Capture
 }
 
 async function fetchPublicDashboard(year: number, currentPeriodId: string) {
-  const [calendarOverrides, tabulatorsSnapshot] = await Promise.all([
+  // Lecturas opcionales (SEPS/Horas pueden fallar si faltan reglas): no deben romper.
+  const safeServiceIds = async (
+    coll: string,
+  ): Promise<Set<string>> => {
+    try {
+      const snap = await getDocs(
+        query(collection(db, coll), where("periodId", "==", currentPeriodId)),
+      );
+      const ids = new Set<string>();
+      for (const item of snap.docs) {
+        const sid = (item.data() as { serviceId?: unknown }).serviceId;
+        if (typeof sid === "string") {
+          ids.add(sid);
+        }
+      }
+      return ids;
+    } catch {
+      return new Set<string>();
+    }
+  };
+
+  const [calendarOverrides, tabulatorsSnapshot, sepsDone, horasDone] = await Promise.all([
     fetchCalendarOverridesForYear(year),
     getDocs(
       query(
@@ -1071,6 +1151,8 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
         where("periodId", "<=", `${year}-12`),
       ),
     ),
+    safeServiceIds("sepsTabulators"),
+    safeServiceIds("horasTabulators"),
   ]);
   const completedByPeriod = new Map<string, Set<string>>();
 
@@ -1115,10 +1197,18 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
   const currentCompletedServices = completedByPeriod.get(currentPeriodId) || new Set<string>();
   const groups: PublicDashboardGroup[] = buildServiceGroups().map((group) => ({
     ...group,
-    services: group.services.map((service) => ({
-      ...service,
-      completed: currentCompletedServices.has(service.id),
-    })),
+    services: group.services.map((service) => {
+      const percDone = currentCompletedServices.has(service.id);
+      // PERC (grid de centros de costo) aplica a todos. SEPS/Horas solo si tienen plantilla.
+      const modules: PublicModuleStatus[] = [{ label: "PERC", completed: percDone }];
+      if (getSepsTemplate(service.id)) {
+        modules.push({ label: "SEPS", completed: sepsDone.has(service.id) });
+      }
+      if (getHorasTemplate(service.id)) {
+        modules.push({ label: "Horas", completed: horasDone.has(service.id) });
+      }
+      return { ...service, completed: percDone, modules };
+    }),
   }));
 
   return {
@@ -1356,6 +1446,10 @@ export default function Home() {
   const [tableValues, setTableValues] = useState<TableValues>({});
   const [sepsValues, setSepsValues] = useState<SepsValues>({});
   const [isSavingSeps, setIsSavingSeps] = useState(false);
+  const [horasEmployees, setHorasEmployees] = useState<HorasEmployee[]>([]);
+  const [isSavingHoras, setIsSavingHoras] = useState(false);
+  // "Completo" del modulo Horas: solo true cuando el usuario GUARDO (no por el seed).
+  const [horasSaved, setHorasSaved] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -1438,6 +1532,10 @@ export default function Home() {
   // SEPS: plantilla del servicio (si tiene), ventana de doble fase y estado efectivo.
   const sepsTemplate = useMemo(
     () => getSepsTemplate(serviceProfile?.serviceId),
+    [serviceProfile?.serviceId],
+  );
+  const horasTemplate = useMemo(
+    () => getHorasTemplate(serviceProfile?.serviceId),
     [serviceProfile?.serviceId],
   );
   const sepsWindow = useMemo(
@@ -1737,6 +1835,45 @@ export default function Home() {
       cancelled = true;
     };
   }, [sepsTemplate, sepsPeriodId, firestoreUnavailable, user]);
+
+  // Carga el tabulador de Horas (empleados) del periodo de cierre del servicio.
+  useEffect(() => {
+    if (firestoreUnavailable || !user) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      if (!horasTemplate) {
+        if (!cancelled) {
+          setHorasEmployees([]);
+          setHorasSaved(false);
+        }
+        return;
+      }
+
+      try {
+        const result = await fetchHorasForPeriod(horasTemplate, periodId);
+        if (!cancelled) {
+          setHorasEmployees(result.employees);
+          setHorasSaved(result.saved);
+        }
+      } catch (horasError) {
+        if (await handleFirestoreError(horasError)) {
+          return;
+        }
+        if (!cancelled) {
+          setHorasEmployees(seedHorasEmployees(horasTemplate));
+          setHorasSaved(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [horasTemplate, periodId, firestoreUnavailable, user]);
 
   async function fetchManagedUsers() {
     const snapshot = await getDocs(collection(db, "serviceUsers"));
@@ -2529,6 +2666,97 @@ export default function Home() {
     }
   }
 
+  // --- Distribucion de Horas (empleados) ---
+  function updateHorasEmployee(index: number, patch: Partial<HorasEmployee>) {
+    setHorasEmployees((current) =>
+      current.map((emp, i) => (i === index ? { ...emp, ...patch } : emp)),
+    );
+  }
+
+  function handleHorasName(index: number, value: string) {
+    updateHorasEmployee(index, { name: value });
+  }
+
+  function handleHorasComment(index: number, value: string) {
+    updateHorasEmployee(index, { comment: value });
+  }
+
+  function handleHorasHour(index: number, column: string, rawValue: string) {
+    const value = sanitizeNumericValue(rawValue);
+    setHorasEmployees((current) =>
+      current.map((emp, i) =>
+        i === index ? { ...emp, hours: { ...emp.hours, [column]: value } } : emp,
+      ),
+    );
+  }
+
+  function handleAddHorasEmployee() {
+    if (!horasTemplate) {
+      return;
+    }
+    setHorasEmployees((current) => [...current, buildEmptyHorasEmployee(horasTemplate)]);
+  }
+
+  function handleRemoveHorasEmployee(index: number) {
+    setHorasEmployees((current) => current.filter((_, i) => i !== index));
+  }
+
+  async function handleSaveHoras() {
+    if (!user || !horasTemplate || !serviceProfile || firestoreUnavailable) {
+      return;
+    }
+
+    if (!serviceProfile.permissions.canEdit) {
+      setError("Tu cuenta no tiene permiso de captura en este momento.");
+      setMessage("");
+      return;
+    }
+
+    if (!currentServiceCaptureOpen) {
+      setError("La captura de Distribucion de Horas esta cerrada en este momento.");
+      setMessage("");
+      return;
+    }
+
+    setIsSavingHoras(true);
+    setError("");
+    setMessage("");
+
+    // Solo guardamos empleados con nombre o algun dato (evita filas vacias).
+    const cleaned = horasEmployees.filter(
+      (emp) => emp.name.trim() !== "" || Object.values(emp.hours).some((h) => h.trim() !== ""),
+    );
+
+    try {
+      await setDoc(
+        doc(db, "horasTabulators", `${periodId}__${horasTemplate.serviceId}`),
+        {
+          periodId,
+          periodLabel,
+          module: "distribucion",
+          serviceId: horasTemplate.serviceId,
+          serviceName: currentService?.name || horasTemplate.serviceId,
+          columns: horasTemplate.columns,
+          employees: cleaned,
+          userId: user.uid,
+          userEmail: user.email || "",
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      setHorasSaved(true);
+      setMessage(`Distribucion de Horas guardada correctamente (${periodLabel}).`);
+    } catch (saveError) {
+      if (await handleFirestoreError(saveError)) {
+        return;
+      }
+      setError("No pudimos guardar Distribucion de Horas. Revisa Firestore e intentalo de nuevo.");
+    } finally {
+      setIsSavingHoras(false);
+    }
+  }
+
   async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -3072,11 +3300,14 @@ export default function Home() {
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">Tabulador SEPS</p>
-            <h2 className="mt-2 text-2xl font-semibold">
-              {currentService?.name || sepsTemplate.serviceId} — {sepsPeriodLabel}
-            </h2>
-            <p className="mt-1 text-sm text-slate-300">{sepsTemplate.establishment}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-200/80">
+              Tabulador · SEPS
+            </p>
+            <h2 className="mt-1 text-2xl font-bold text-white">SEPS</h2>
+            <p className="mt-1 text-sm text-slate-300">
+              {currentService?.name || sepsTemplate.serviceId} · {sepsPeriodLabel} ·{" "}
+              {sepsTemplate.establishment}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span
@@ -3219,7 +3450,8 @@ export default function Home() {
         ? getAreaModules(currentArea)
         : [];
     const getModuleUiStatus = (mod: ModuleDefinition): "completo" | "incompleto" => {
-      if (mod.id === "distribucion") {
+      // El grid de centros de costo (tableValues) es el tabulador PERC.
+      if (mod.id === "perc") {
         return hasAnyCapturedValue(tableValues) ? "completo" : "incompleto";
       }
 
@@ -3227,15 +3459,192 @@ export default function Home() {
         return hasAnySepsValue(sepsValues) ? "completo" : "incompleto";
       }
 
-      // PERC (y SEPS sin plantilla aun) -> incompleto por defecto.
+      if (mod.id === "distribucion" && horasTemplate) {
+        // Solo "completo" cuando se GUARDO (no por los empleados precargados).
+        return horasSaved ? "completo" : "incompleto";
+      }
+
+      // Sin plantilla aun -> incompleto por defecto.
       return "incompleto";
     };
+    // Cada modulo lleva a SU tabulador. NOTA: el grid de centros de costo (id
+    // "distribucion") es, para el hospital, el tabulador PERC -> el menu "PERC" lleva
+    // a panel-tabulator. El menu "Distribucion de Horas" lleva a su seccion (pendiente).
+    const moduleSectionTarget = (modId: ModuleId): string => {
+      if (modId === "perc") return currentService ? "panel-tabulator" : `panel-module-${modId}`;
+      if (modId === "sesps") return sepsTemplate ? "panel-seps" : `panel-module-${modId}`;
+      if (modId === "distribucion") return currentService ? "panel-horas" : `panel-module-${modId}`;
+      return `panel-module-${modId}`;
+    };
     const moduleSidebarItems = visibleModules.map((mod) => ({
-      id: `panel-module-${mod.id}`,
+      id: moduleSectionTarget(mod.id),
       label: mod.name,
-      detail: "Menu del area",
+      detail: "Ir al tabulador",
       badge: moduleBadges[mod.id],
     }));
+
+    // Seccion "Distribucion de Horas": aun sin plantilla propia. Da un destino con
+    // titulo al hacer clic en el menu Distribucion de Horas. Va al final.
+    const horasLocked = !currentServiceCaptureOpen || !serviceProfile.permissions.canEdit;
+    const horasNum = (emp: HorasEmployee, col: string) => {
+      const n = Number.parseInt(emp.hours[col] ?? "", 10);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const horasRowTotal = (emp: HorasEmployee) =>
+      horasTemplate ? horasTemplate.columns.reduce((acc, col) => acc + horasNum(emp, col), 0) : 0;
+    const horasColTotal = (col: string) =>
+      horasEmployees.reduce((acc, emp) => acc + horasNum(emp, col), 0);
+
+    const horasSection = horasTemplate ? (
+      <section
+        id="panel-horas"
+        className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-200/80">
+              Tabulador · DISTRIBUCION DE HORAS
+            </p>
+            <h2 className="mt-1 text-2xl font-bold text-white">Distribucion de Horas</h2>
+            <p className="mt-1 text-sm text-slate-300">
+              Cierre de <strong>{periodLabel}</strong> · {currentService?.name} ·{" "}
+              {horasTemplate.establishment}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                horasLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
+              }`}
+            >
+              {horasLocked ? "BLOQUEADO" : "HABILITADO"}
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleSaveHoras()}
+              disabled={isSavingHoras || horasLocked}
+              className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+            >
+              {isSavingHoras ? "Guardando..." : "Guardar Horas"}
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-3 rounded-xl border border-white/10 bg-[#1b2537] px-4 py-2 text-sm text-slate-200">
+          Horas por empleado distribuidas en los centros de costo. El <strong>comentario</strong>{" "}
+          (maternidad, vacaciones, permiso, etc.) es solo de apoyo y NO se guarda en el historial.
+          Solo se aceptan numeros en las casillas de horas.
+        </p>
+
+        <div className="mt-4 overflow-x-auto rounded-2xl border border-white/10">
+          <table className="w-full border-collapse text-xs text-slate-100">
+            <thead>
+              <tr className="bg-white/5 text-slate-300">
+                <th className="px-2 py-2 text-center font-medium">#</th>
+                <th className="px-3 py-2 text-left font-medium">Comentario</th>
+                <th className="px-3 py-2 text-left font-medium">Nombre del empleado</th>
+                {horasTemplate.columns.map((col) => (
+                  <th key={col} className="px-3 py-2 text-center font-medium">
+                    {col}
+                  </th>
+                ))}
+                <th className="bg-[#243049] px-3 py-2 text-center font-semibold">Total</th>
+                <th className="px-2 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {horasEmployees.map((emp, index) => (
+                <tr key={index} className="border-t border-white/5">
+                  <td className="px-2 py-1.5 text-center text-slate-400">{index + 1}</td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      value={emp.comment}
+                      onChange={(event) => handleHorasComment(index, event.target.value)}
+                      disabled={horasLocked}
+                      placeholder="(opcional)"
+                      className="w-40 rounded border border-amber-400/20 bg-[#1b2537] px-2 py-1.5 text-amber-100 outline-none focus:border-amber-400 disabled:opacity-50"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      value={emp.name}
+                      onChange={(event) => handleHorasName(index, event.target.value)}
+                      disabled={horasLocked}
+                      placeholder="Nombre"
+                      className="w-64 rounded border border-white/10 bg-[#1b2537] px-2 py-1.5 outline-none focus:border-cyan-400 disabled:opacity-50"
+                    />
+                  </td>
+                  {horasTemplate.columns.map((col) => (
+                    <td key={col} className="px-2 py-1.5 text-center">
+                      <input
+                        value={emp.hours[col] ?? ""}
+                        onChange={(event) => handleHorasHour(index, col, event.target.value)}
+                        disabled={horasLocked}
+                        inputMode="numeric"
+                        className="w-16 rounded border border-white/10 bg-[#1b2537] px-1 py-1.5 text-center outline-none focus:border-cyan-400 disabled:opacity-50"
+                      />
+                    </td>
+                  ))}
+                  <td className="bg-[#243049] px-3 py-1.5 text-center font-semibold text-cyan-100">
+                    {horasRowTotal(emp)}
+                  </td>
+                  <td className="px-2 py-1.5 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveHorasEmployee(index)}
+                      disabled={horasLocked}
+                      title="Quitar empleado"
+                      className="rounded-lg bg-rose-500/15 px-2 py-1 text-rose-200 transition hover:bg-rose-500/25 disabled:opacity-40"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-white/10 bg-white/5 font-semibold">
+                <td className="px-3 py-2" colSpan={3}>
+                  TOTAL
+                </td>
+                {horasTemplate.columns.map((col) => (
+                  <td key={col} className="px-3 py-2 text-center text-cyan-100">
+                    {horasColTotal(col)}
+                  </td>
+                ))}
+                <td className="bg-[#243049] px-3 py-2 text-center text-cyan-100">
+                  {horasEmployees.reduce((acc, emp) => acc + horasRowTotal(emp), 0)}
+                </td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleAddHorasEmployee}
+          disabled={horasLocked}
+          className="mt-4 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+        >
+          + Agregar empleado
+        </button>
+      </section>
+    ) : currentService ? (
+      <section
+        id="panel-horas"
+        className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+      >
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-200/80">
+          Tabulador · DISTRIBUCION DE HORAS
+        </p>
+        <h2 className="mt-1 text-2xl font-bold text-white">Distribucion de Horas</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+          El tabulador de Distribucion de Horas de <strong>{currentService.name}</strong> aun no
+          esta cargado. Esta seccion se habilitara aqui en cuanto se cargue su plantilla.
+        </p>
+      </section>
+    ) : null;
 
     const sidebarItems = [
       {
@@ -3245,26 +3654,6 @@ export default function Home() {
         badge: "IN",
       },
       ...moduleSidebarItems,
-      ...(sepsTemplate
-        ? [
-            {
-              id: "panel-seps",
-              label: "Tabulador SEPS",
-              detail: "Captura diaria SEPS",
-              badge: "SE",
-            },
-          ]
-        : []),
-      ...(currentService
-        ? [
-            {
-              id: "panel-tabulator",
-              label: "Mi tabulador",
-              detail: "Captura mensual",
-              badge: "TB",
-            },
-          ]
-        : []),
       ...(isAdmin
         ? [
             {
@@ -3323,7 +3712,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {visibleModules.map((mod) => {
               const status = getModuleUiStatus(mod);
               const isComplete = status === "completo";
@@ -3332,61 +3721,66 @@ export default function Home() {
                 <div
                   key={mod.id}
                   id={`panel-module-${mod.id}`}
-                  className={`flex flex-col rounded-2xl border p-4 ${
+                  className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 ${
                     isLightPanelTheme
                       ? "border-slate-200 bg-[#f7f9fe]"
                       : "border-white/10 bg-[#1b2537]"
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#1f255f] text-[11px] font-semibold uppercase tracking-[0.18em] text-white">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#1f255f] text-[10px] font-semibold uppercase tracking-[0.12em] text-white">
                       {moduleBadges[mod.id]}
                     </span>
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        isComplete
-                          ? "bg-emerald-500/15 text-emerald-500"
-                          : "bg-amber-500/15 text-amber-500"
-                      }`}
-                    >
-                      {isComplete ? "Completo" : "Incompleto"}
-                    </span>
+                    <div className="min-w-0">
+                      <h3 className={`truncate text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                        {mod.name}
+                      </h3>
+                      <span
+                        className={`mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold ${
+                          isComplete ? "text-emerald-400" : "text-amber-400"
+                        }`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${isComplete ? "bg-emerald-400" : "bg-amber-400"}`} />
+                        {isComplete ? "Completo" : "Incompleto"}
+                      </span>
+                    </div>
                   </div>
 
-                  <h3 className={`mt-4 text-lg font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                    {mod.name}
-                  </h3>
-                  <p className={`mt-2 flex-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                    {mod.description}
-                  </p>
-
-                  <div className="mt-4">
-                    {mod.id === "distribucion" ? (
+                  <div className="shrink-0">
+                    {mod.id === "perc" ? (
                       currentService ? (
                         <button
                           type="button"
                           onClick={() => handleSidebarNavigation("panel-tabulator")}
-                          className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                          className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400"
                         >
-                          Abrir captura
+                          Abrir
                         </button>
                       ) : (
-                        <p className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-                          Sin tabulador asignado a esta cuenta.
-                        </p>
+                        <span className={`text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                          Sin tabulador
+                        </span>
                       )
                     ) : mod.id === "sesps" && sepsTemplate ? (
                       <button
                         type="button"
                         onClick={() => handleSidebarNavigation("panel-seps")}
-                        className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                        className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400"
                       >
-                        Abrir captura
+                        Abrir
+                      </button>
+                    ) : mod.id === "distribucion" && currentService ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSidebarNavigation("panel-horas")}
+                        className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400"
+                      >
+                        Abrir
                       </button>
                     ) : (
-                      <p className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-                        Plantilla pendiente de cargar.
-                      </p>
+                      <span className={`text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                        Pendiente
+                      </span>
                     )}
                   </div>
                 </div>
@@ -3616,30 +4010,6 @@ export default function Home() {
             </section>
           ) : null}
 
-          {currentService ? (
-            <section
-              className={`rounded-[24px] border px-5 py-4 text-center shadow-lg ${
-                isFormLocked
-                  ? "border-rose-500/70 bg-rose-950/40 text-rose-100"
-                  : "border-emerald-500/40 bg-emerald-950/30 text-emerald-100"
-              }`}
-            >
-              <p className="text-lg font-semibold">
-                {isFormLocked ? "FORMULARIO BLOQUEADO" : "FORMULARIO HABILITADO"}
-              </p>
-              <p className="mt-1 text-sm sm:text-base">
-                {!serviceProfile.permissions.canEdit
-                  ? "El administrador desactivo temporalmente tu permiso de captura."
-                  : isDateLocked
-                    ? `La captura solo esta disponible en los primeros ${captureWindow.totalDays} dias habiles del mes. El ultimo dia habil fue ${SHORT_DATE_FORMATTER.format(captureWindow.lastOpenDay)}.`
-                    : isReopenedLate
-                      ? "Captura reabierta por un supervisor: puedes registrar fuera de tus dias habiles."
-                      : `Captura abierta. Hoy corresponde al dia habil ${captureWindow.activeDayNumber} de ${captureWindow.totalDays}.`}
-              </p>
-              <p className="mt-1 text-sm text-slate-200/80">Dias habilitados: {openDaysLabel}</p>
-            </section>
-          ) : null}
-
           <section className={`rounded-[20px] px-5 py-4 text-center text-lg font-semibold shadow-lg ${isLightPanelTheme ? "border border-slate-200 bg-white text-slate-900" : "bg-[#202c41] text-slate-100"}`}>
             <time suppressHydrationWarning>{DATE_TIME_FORMATTER.format(now)}</time>
           </section>
@@ -3724,13 +4094,39 @@ export default function Home() {
             </section>
           ) : null}
 
-          {sepsSection}
-
           {currentService ? (
             <section
               id="panel-tabulator"
-              className="overflow-hidden rounded-[24px] border border-white/10 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+              className="overflow-hidden rounded-[24px] border border-cyan-400/20 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
             >
+              <div className="border-b border-white/10 bg-[#1b2537] px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-violet-200/80">
+                  Tabulador · PERC
+                </p>
+                <h2 className="mt-1 text-2xl font-bold text-white">PERC</h2>
+                <p className="mt-1 text-sm text-slate-300">
+                  Captura mensual por centro de costos — {currentService.name} · {periodLabel}
+                </p>
+                <div
+                  className={`mt-3 rounded-2xl border px-4 py-3 text-sm ${
+                    isFormLocked
+                      ? "border-rose-500/60 bg-rose-950/40 text-rose-100"
+                      : "border-emerald-500/40 bg-emerald-950/30 text-emerald-100"
+                  }`}
+                >
+                  <span className="font-semibold">
+                    {isFormLocked ? "FORMULARIO BLOQUEADO" : "FORMULARIO HABILITADO"}
+                  </span>
+                  {" — "}
+                  {!serviceProfile.permissions.canEdit
+                    ? "El administrador desactivo temporalmente tu permiso de captura."
+                    : isDateLocked
+                      ? `La captura solo esta disponible en los primeros ${captureWindow.totalDays} dias habiles del mes. El ultimo dia habil fue ${SHORT_DATE_FORMATTER.format(captureWindow.lastOpenDay)}.`
+                      : isReopenedLate
+                        ? "Captura reabierta por un supervisor: puedes registrar fuera de tus dias habiles."
+                        : `Captura abierta. Hoy corresponde al dia habil ${captureWindow.activeDayNumber} de ${captureWindow.totalDays}. Dias habilitados: ${openDaysLabel}.`}
+                </div>
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse text-xs text-slate-100">
                   <thead>
@@ -3800,6 +4196,10 @@ export default function Home() {
               </p>
             </section>
           )}
+
+          {sepsSection}
+
+          {horasSection}
 
           <section
             id="panel-security"
@@ -4387,213 +4787,56 @@ export default function Home() {
                     </div>
                   ))
                 : publicDashboardGroups.map((group) => {
-                    const completedServices = group.services.filter((service) => service.completed);
-                    const pendingServices = group.services.filter((service) => !service.completed);
-                    const completionShare = Math.round(
-                      (completedServices.length / Math.max(group.services.length, 1)) * 100,
-                    );
-                    const pendingShare = Math.max(100 - completionShare, 0);
+                    const groupCompleted = group.services.filter((service) => service.completed)
+                      .length;
 
                     return (
                       <section
                         key={group.id}
-                        className="rounded-[26px] border border-[#d8cfbd] bg-[#f6f1e6] p-5 text-slate-900 shadow-[0_24px_70px_rgba(15,23,42,0.14)]"
+                        className="rounded-2xl border border-white/10 bg-[#162032] p-4 shadow-[0_18px_50px_rgba(3,7,18,0.25)]"
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#d8cfbd] pb-4">
-                          <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#64748b]">
-                              Panel de cumplimiento
-                            </p>
-                            <h2 className="mt-2 text-2xl font-semibold text-[#23395d]">{group.title}</h2>
-                            <p className="mt-1 text-sm text-slate-600">
-                              Vista de pendientes y completos del periodo actual.
-                            </p>
-                          </div>
-                          <div className="rounded-full border border-[#c6b899] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#23395d]">
-                            {completedServices.length}/{group.services.length} completos
-                          </div>
+                        <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+                          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-200">
+                            {group.title}
+                          </h2>
+                          <span className="rounded-full bg-white/5 px-3 py-1 text-[11px] font-semibold text-slate-300">
+                            {groupCompleted}/{group.services.length}
+                          </span>
                         </div>
 
-                        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(320px,0.92fr)_minmax(0,1.08fr)]">
-                          <div className="space-y-4">
-                            <div className="rounded-[24px] bg-[#23395d] p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                              <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-3">
-                                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4">
-                                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-300">
-                                    Total
-                                  </p>
-                                  <p className="mt-3 text-3xl font-semibold">{group.services.length}</p>
-                                  <p className="mt-1 text-xs text-slate-300">Dependencias</p>
-                                </div>
-                                <div className="rounded-2xl border border-[#f3cf63]/30 bg-[#f3cf63]/15 px-4 py-4">
-                                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#f8df8a]">
-                                    Completos
-                                  </p>
-                                  <p className="mt-3 text-3xl font-semibold text-[#fff3c8]">
-                                    {completedServices.length}
-                                  </p>
-                                  <p className="mt-1 text-xs text-[#f8df8a]">Servicios al dia</p>
-                                </div>
-                                <div className="rounded-2xl border border-[#ff7a30]/30 bg-[#ff7a30]/15 px-4 py-4">
-                                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#ffd1b5]">
-                                    Pendientes
-                                  </p>
-                                  <p className="mt-3 text-3xl font-semibold text-[#fff0e7]">
-                                    {pendingServices.length}
-                                  </p>
-                                  <p className="mt-1 text-xs text-[#ffd1b5]">Por capturar</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="rounded-[24px] border border-[#d8cfbd] bg-white/80 p-4">
-                              <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                                <span>Ritmo de captura</span>
-                                <span>{completionShare}%</span>
-                              </div>
-
-                              <div className="mt-4 space-y-4">
-                                <div>
-                                  <div className="flex items-center justify-between text-sm font-medium text-slate-700">
-                                    <span>Completados</span>
-                                    <span>{completionShare}%</span>
-                                  </div>
-                                  <div className="mt-2 h-4 rounded-full bg-slate-200">
-                                    <div
-                                      className="h-4 rounded-full bg-[#f3c623]"
-                                      style={{ width: `${completionShare}%` }}
+                        <div className="mt-3 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                          {group.services.map((service) => (
+                            <div
+                              key={service.id}
+                              className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5"
+                            >
+                              <p
+                                className="truncate text-[13px] font-semibold text-white"
+                                title={service.name}
+                              >
+                                {service.name}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {service.modules.map((mod) => (
+                                  <span
+                                    key={mod.label}
+                                    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold ${
+                                      mod.completed
+                                        ? "bg-emerald-500/15 text-emerald-300"
+                                        : "bg-amber-500/15 text-amber-300"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`h-1.5 w-1.5 rounded-full ${
+                                        mod.completed ? "bg-emerald-400" : "bg-amber-400"
+                                      }`}
                                     />
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center justify-between text-sm font-medium text-slate-700">
-                                    <span>Pendientes</span>
-                                    <span>{pendingShare}%</span>
-                                  </div>
-                                  <div className="mt-2 h-4 rounded-full bg-slate-200">
-                                    <div
-                                      className="h-4 rounded-full bg-[#ff6b2c]"
-                                      style={{ width: `${pendingShare}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-2xl border border-[#d8cfbd] bg-[#f8f4ea] px-4 py-3">
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                                    Objetivo
-                                  </p>
-                                  <p className="mt-2 text-lg font-semibold text-[#23395d]">
-                                    Completar el 100% del grupo
-                                  </p>
-                                </div>
-                                <div className="rounded-2xl border border-[#d8cfbd] bg-[#f8f4ea] px-4 py-3">
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                                    Estado
-                                  </p>
-                                  <p className="mt-2 text-lg font-semibold text-[#23395d]">
-                                    {pendingServices.length === 0 ? "Ciclo cerrado" : "Requiere seguimiento"}
-                                  </p>
-                                </div>
+                                    {mod.label}: {mod.completed ? "Completo" : "Incompleto"}
+                                  </span>
+                                ))}
                               </div>
                             </div>
-                          </div>
-
-                          <div className="grid gap-4 lg:grid-cols-2">
-                            <div className="rounded-[24px] border border-[#d8cfbd] bg-white/85 p-4">
-                              <div className="flex items-center justify-between gap-3 border-b border-[#e8dfcf] pb-3">
-                                <div>
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                                    Completos
-                                  </p>
-                                  <h3 className="mt-1 text-lg font-semibold text-[#23395d]">
-                                    Dependencias al dia
-                                  </h3>
-                                </div>
-                                <span className="rounded-full bg-[#f3c623] px-3 py-1 text-xs font-semibold text-[#23395d]">
-                                  {completedServices.length}
-                                </span>
-                              </div>
-
-                              <div className="mt-4 space-y-2">
-                                {completedServices.length > 0 ? (
-                                  completedServices.map((service) => (
-                                    <article
-                                      key={service.id}
-                                      className="rounded-2xl border border-[#eedb94] bg-[#fff7d7] px-4 py-3"
-                                    >
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                          <h4 className="text-sm font-semibold uppercase leading-5 text-[#23395d]">
-                                            {service.name}
-                                          </h4>
-                                          <p className="mt-1 text-xs text-slate-600">
-                                            {service.rows.length} fila
-                                            {service.rows.length === 1 ? "" : "s"} registradas
-                                          </p>
-                                        </div>
-                                        <span className="rounded-full bg-[#23395d] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
-                                          Completo
-                                        </span>
-                                      </div>
-                                    </article>
-                                  ))
-                                ) : (
-                                  <div className="rounded-2xl border border-dashed border-[#d8cfbd] bg-[#f8f4ea] px-4 py-6 text-sm text-slate-500">
-                                    Aun no hay dependencias completadas en este grupo.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="rounded-[24px] border border-[#d8cfbd] bg-white/85 p-4">
-                              <div className="flex items-center justify-between gap-3 border-b border-[#e8dfcf] pb-3">
-                                <div>
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                                    Pendientes
-                                  </p>
-                                  <h3 className="mt-1 text-lg font-semibold text-[#23395d]">
-                                    Dependencias por capturar
-                                  </h3>
-                                </div>
-                                <span className="rounded-full bg-[#ff6b2c] px-3 py-1 text-xs font-semibold text-white">
-                                  {pendingServices.length}
-                                </span>
-                              </div>
-
-                              <div className="mt-4 space-y-2">
-                                {pendingServices.length > 0 ? (
-                                  pendingServices.map((service) => (
-                                    <article
-                                      key={service.id}
-                                      className="rounded-2xl border border-[#ffc7ab] bg-[#fff0e8] px-4 py-3"
-                                    >
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                          <h4 className="text-sm font-semibold uppercase leading-5 text-[#23395d]">
-                                            {service.name}
-                                          </h4>
-                                          <p className="mt-1 text-xs text-slate-600">
-                                            {service.rows.length} fila
-                                            {service.rows.length === 1 ? "" : "s"} pendientes de revisar
-                                          </p>
-                                        </div>
-                                        <span className="rounded-full bg-[#ff6b2c] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
-                                          Pendiente
-                                        </span>
-                                      </div>
-                                    </article>
-                                  ))
-                                ) : (
-                                  <div className="rounded-2xl border border-dashed border-[#d8cfbd] bg-[#f8f4ea] px-4 py-6 text-sm text-slate-500">
-                                    No hay pendientes en este grupo.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                          ))}
                         </div>
                       </section>
                     );
