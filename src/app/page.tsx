@@ -3634,30 +3634,6 @@ export default function Home() {
             </section>
           ) : null}
 
-          {currentService ? (
-            <section
-              className={`rounded-[24px] border px-5 py-4 text-center shadow-lg ${
-                isFormLocked
-                  ? "border-rose-500/70 bg-rose-950/40 text-rose-100"
-                  : "border-emerald-500/40 bg-emerald-950/30 text-emerald-100"
-              }`}
-            >
-              <p className="text-lg font-semibold">
-                {isFormLocked ? "FORMULARIO BLOQUEADO" : "FORMULARIO HABILITADO"}
-              </p>
-              <p className="mt-1 text-sm sm:text-base">
-                {!serviceProfile.permissions.canEdit
-                  ? "El administrador desactivo temporalmente tu permiso de captura."
-                  : isDateLocked
-                    ? `La captura solo esta disponible en los primeros ${captureWindow.totalDays} dias habiles del mes. El ultimo dia habil fue ${SHORT_DATE_FORMATTER.format(captureWindow.lastOpenDay)}.`
-                    : isReopenedLate
-                      ? "Captura reabierta por un supervisor: puedes registrar fuera de tus dias habiles."
-                      : `Captura abierta. Hoy corresponde al dia habil ${captureWindow.activeDayNumber} de ${captureWindow.totalDays}.`}
-              </p>
-              <p className="mt-1 text-sm text-slate-200/80">Dias habilitados: {openDaysLabel}</p>
-            </section>
-          ) : null}
-
           <section className={`rounded-[20px] px-5 py-4 text-center text-lg font-semibold shadow-lg ${isLightPanelTheme ? "border border-slate-200 bg-white text-slate-900" : "bg-[#202c41] text-slate-100"}`}>
             <time suppressHydrationWarning>{DATE_TIME_FORMATTER.format(now)}</time>
           </section>
@@ -3759,6 +3735,25 @@ export default function Home() {
                 <p className="mt-1 text-sm text-slate-300">
                   Captura mensual por centro de costos — {currentService.name} · {periodLabel}
                 </p>
+                <div
+                  className={`mt-3 rounded-2xl border px-4 py-3 text-sm ${
+                    isFormLocked
+                      ? "border-rose-500/60 bg-rose-950/40 text-rose-100"
+                      : "border-emerald-500/40 bg-emerald-950/30 text-emerald-100"
+                  }`}
+                >
+                  <span className="font-semibold">
+                    {isFormLocked ? "FORMULARIO BLOQUEADO" : "FORMULARIO HABILITADO"}
+                  </span>
+                  {" — "}
+                  {!serviceProfile.permissions.canEdit
+                    ? "El administrador desactivo temporalmente tu permiso de captura."
+                    : isDateLocked
+                      ? `La captura solo esta disponible en los primeros ${captureWindow.totalDays} dias habiles del mes. El ultimo dia habil fue ${SHORT_DATE_FORMATTER.format(captureWindow.lastOpenDay)}.`
+                      : isReopenedLate
+                        ? "Captura reabierta por un supervisor: puedes registrar fuera de tus dias habiles."
+                        : `Captura abierta. Hoy corresponde al dia habil ${captureWindow.activeDayNumber} de ${captureWindow.totalDays}. Dias habilitados: ${openDaysLabel}.`}
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse text-xs text-slate-100">
