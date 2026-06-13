@@ -142,14 +142,14 @@ type PublicDashboardGroup = {
   services: PublicDashboardService[];
 };
 
-// Credenciales sensibles: NO se hardcodean en el codigo. Se leen de variables de
-// entorno (definir en .env.local para desarrollo y en Vercel para produccion).
-// IMPORTANTE: al ser una app cliente, estas NEXT_PUBLIC_* quedan en el bundle del
-// navegador; la unica proteccion real es rotar las claves y mantener el repo privado.
-const DEFAULT_TEMP_PASSWORD = process.env.NEXT_PUBLIC_DEFAULT_TEMP_PASSWORD ?? "";
-const ADMIN_USERNAME = process.env.NEXT_PUBLIC_ADMIN_USERNAME ?? "";
-const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD ?? "";
-const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? "";
+// Credenciales: se leen de variables de entorno (NEXT_PUBLIC_*) con un valor por
+// defecto para que el login funcione aunque no esten configuradas en Vercel.
+// SEGURIDAD: al ser app cliente quedan en el bundle; la proteccion real es ROTAR
+// las claves (sobreescribiendolas con las env en Vercel) y poner el repo PRIVADO.
+const DEFAULT_TEMP_PASSWORD = process.env.NEXT_PUBLIC_DEFAULT_TEMP_PASSWORD || "PERC2026!";
+const ADMIN_USERNAME = process.env.NEXT_PUBLIC_ADMIN_USERNAME || "Hcardoza";
+const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "Cardoza1986";
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "hcardoza.admin@perc-hnes.app";
 
 // Cuentas de supervisor fijas en codigo (mismo modelo que el admin). Su unica
 // potestad es habilitar/deshabilitar tableros de los modulos indicados. La cuenta
