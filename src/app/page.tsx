@@ -208,7 +208,7 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "laboratorio-de-biologia-molecular": "apoyo",
   "banco-de-sangre": "apoyo",
   "alimentacion-y-dieta": "apoyo",
-  "estudio-de-radiologia": "medica",
+  "estudio-de-radiologia": "apoyo",
   "resonancia-magnetica": "medica",
   tomografia: "medica",
   ultrasonografia: "medica",
@@ -1508,6 +1508,46 @@ export default function Home() {
   const periodLabel = useMemo(() => getPeriodLabel(periodId), [periodId]);
   // Año del periodo que se cierra (puede ser el anterior en enero). Lo usa el tablero.
   const currentYear = useMemo(() => Number.parseInt(periodId.split("-")[0], 10), [periodId]);
+  // Estructura ESTATICA del tablero (desde SERVICE_DEFINITIONS): asegura que las
+  // tarjetas y los meses SIEMPRE se rendericen aunque Firestore falle/tarde. El
+  // estado real de completo se superpone cuando los datos cargan.
+  const fallbackDashboardGroups = useMemo<PublicDashboardGroup[]>(
+    () =>
+      buildServiceGroups().map((group) => ({
+        ...group,
+        services: group.services.map((service) => {
+          const modules: PublicModuleStatus[] = [{ label: "PERC", completed: false }];
+          if (getSepsTemplate(service.id)) {
+            modules.push({ label: "SEPS", completed: false });
+          }
+          if (getHorasTemplate(service.id)) {
+            modules.push({ label: "Horas", completed: false });
+          }
+          return { ...service, completed: false, modules };
+        }),
+      })),
+    [],
+  );
+  const fallbackDashboardMonths = useMemo<PublicDashboardMonth[]>(
+    () =>
+      Array.from({ length: 12 }, (_, index) => {
+        const monthDate = new Date(currentYear, index, 1, 12, 0, 0, 0);
+        const monthId = getPeriodId(monthDate);
+        return {
+          periodId: monthId,
+          label: PERIOD_FORMATTER.format(monthDate),
+          completedServices: 0,
+          totalServices: SERVICE_DEFINITIONS.length,
+          isCurrentMonth: monthId === periodId,
+          isOpen: true,
+        };
+      }),
+    [currentYear, periodId],
+  );
+  const dashboardGroups =
+    publicDashboardGroups.length > 0 ? publicDashboardGroups : fallbackDashboardGroups;
+  const dashboardMonths =
+    publicDashboardMonths.length > 0 ? publicDashboardMonths : fallbackDashboardMonths;
   const welcomeName = useMemo(() => {
     return serviceProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Usuario";
   }, [serviceProfile?.name, user?.displayName, user?.email]);
@@ -4686,7 +4726,7 @@ export default function Home() {
                         className="h-24 rounded-2xl border border-white/10 bg-white/5"
                       />
                     ))
-                  : publicDashboardMonths.map((month) => {
+                  : dashboardMonths.map((month) => {
                       const monthProgress = Math.round(
                         (month.completedServices / Math.max(month.totalServices, 1)) * 100,
                       );
@@ -4746,7 +4786,7 @@ export default function Home() {
                       </div>
                     </div>
                   ))
-                : publicDashboardGroups.map((group) => {
+                : dashboardGroups.map((group) => {
                     const groupCompleted = group.services.filter((service) => service.completed)
                       .length;
 
