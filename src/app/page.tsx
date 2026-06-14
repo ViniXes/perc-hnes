@@ -1461,7 +1461,8 @@ export default function Home() {
   const [isExportingMonthlyReport, setIsExportingMonthlyReport] = useState(false);
   const [adminBusyUserId, setAdminBusyUserId] = useState("");
   const [calendarOverrides, setCalendarOverrides] = useState<Record<string, string[]>>({});
-  const [publicDashboardMonths, setPublicDashboardMonths] = useState<PublicDashboardMonth[]>([]);
+  // El calendario anual se quito de la vista; conservamos el setter por compatibilidad.
+  const [, setPublicDashboardMonths] = useState<PublicDashboardMonth[]>([]);
   const [publicDashboardGroups, setPublicDashboardGroups] = useState<PublicDashboardGroup[]>([]);
   const [publicCompletedCount, setPublicCompletedCount] = useState(0);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
@@ -1528,26 +1529,8 @@ export default function Home() {
       })),
     [],
   );
-  const fallbackDashboardMonths = useMemo<PublicDashboardMonth[]>(
-    () =>
-      Array.from({ length: 12 }, (_, index) => {
-        const monthDate = new Date(currentYear, index, 1, 12, 0, 0, 0);
-        const monthId = getPeriodId(monthDate);
-        return {
-          periodId: monthId,
-          label: PERIOD_FORMATTER.format(monthDate),
-          completedServices: 0,
-          totalServices: SERVICE_DEFINITIONS.length,
-          isCurrentMonth: monthId === periodId,
-          isOpen: true,
-        };
-      }),
-    [currentYear, periodId],
-  );
   const dashboardGroups =
     publicDashboardGroups.length > 0 ? publicDashboardGroups : fallbackDashboardGroups;
-  const dashboardMonths =
-    publicDashboardMonths.length > 0 ? publicDashboardMonths : fallbackDashboardMonths;
   const welcomeName = useMemo(() => {
     return serviceProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Usuario";
   }, [serviceProfile?.name, user?.displayName, user?.email]);
@@ -4711,63 +4694,6 @@ export default function Home() {
           </div>
 
           <div className="relative space-y-6">
-            <div className="rounded-[24px] border border-white/10 bg-[#162034]/90 p-5 shadow-[0_24px_80px_rgba(3,7,18,0.28)] backdrop-blur">
-              <h2 className="text-lg font-semibold text-white">Calendario de cierre mensual</h2>
-              <p className="mt-2 text-sm text-slate-300">
-                Cada mes muestra cuantas dependencias completaron su captura. El mes activo se
-                resalta automaticamente.
-              </p>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {isLoadingDashboard
-                  ? Array.from({ length: 12 }, (_, index) => (
-                      <div
-                        key={`month-skeleton-${index}`}
-                        className="h-24 rounded-2xl border border-white/10 bg-white/5"
-                      />
-                    ))
-                  : dashboardMonths.map((month) => {
-                      const monthProgress = Math.round(
-                        (month.completedServices / Math.max(month.totalServices, 1)) * 100,
-                      );
-
-                      return (
-                        <div
-                          key={month.periodId}
-                          className={`rounded-2xl border px-4 py-4 ${
-                            month.isCurrentMonth
-                              ? "border-cyan-400/40 bg-cyan-500/10"
-                              : month.completedServices > 0
-                                ? "border-emerald-400/20 bg-emerald-500/10"
-                                : "border-white/10 bg-white/5"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold uppercase tracking-wide text-white">
-                              {month.label}
-                            </p>
-                            <span className="rounded-full bg-white/10 px-2 py-1 text-[11px] font-semibold text-slate-200">
-                              {month.completedServices}/{month.totalServices}
-                            </span>
-                          </div>
-                          <p className="mt-2 text-xs text-slate-300">
-                            {month.isCurrentMonth ? "Mes actual" : "Periodo mensual"}
-                          </p>
-                          <div className="mt-3 h-2 rounded-full bg-white/10">
-                            <div
-                              className="h-2 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-300"
-                              style={{ width: `${monthProgress}%` }}
-                            />
-                          </div>
-                          <p className="mt-3 text-xs text-slate-400">
-                            {month.isOpen ? "Ventana calculada" : "Ventana ajustada por calendario"}
-                          </p>
-                        </div>
-                      );
-                    })}
-              </div>
-            </div>
-
             <div className="space-y-4">
               {isLoadingDashboard
                 ? Array.from({ length: 3 }, (_, groupIndex) => (
