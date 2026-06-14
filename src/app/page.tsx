@@ -2721,6 +2721,15 @@ export default function Home() {
   }
 
   function handleRemoveHorasEmployee(index: number) {
+    const target = horasEmployees[index];
+    const employeeName = target?.name.trim();
+    const confirmLabel = employeeName ? `a "${employeeName}"` : "este empleado";
+    const confirmed = window.confirm(
+      `¿Estás seguro de que querés eliminar ${confirmLabel} de la lista?\n\nEsta acción no se puede deshacer.`,
+    );
+    if (!confirmed) {
+      return;
+    }
     setHorasEmployees((current) => current.filter((_, i) => i !== index));
   }
 
