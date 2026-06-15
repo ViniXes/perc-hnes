@@ -1447,6 +1447,7 @@ export default function Home() {
   const [sepsValues, setSepsValues] = useState<SepsValues>({});
   const [isSavingSeps, setIsSavingSeps] = useState(false);
   const [horasEmployees, setHorasEmployees] = useState<HorasEmployee[]>([]);
+  const [horasEmployeeToRemove, setHorasEmployeeToRemove] = useState<number | null>(null);
   const [isSavingHoras, setIsSavingHoras] = useState(false);
   // "Completo" del modulo Horas: solo true cuando el usuario GUARDO (no por el seed).
   const [horasSaved, setHorasSaved] = useState(false);
@@ -2721,16 +2722,21 @@ export default function Home() {
   }
 
   function handleRemoveHorasEmployee(index: number) {
-    const target = horasEmployees[index];
-    const employeeName = target?.name.trim();
-    const confirmLabel = employeeName ? `a "${employeeName}"` : "este empleado";
-    const confirmed = window.confirm(
-      `¿Estás seguro de que querés eliminar ${confirmLabel} de la lista?\n\nEsta acción no se puede deshacer.`,
-    );
-    if (!confirmed) {
+    // Abre el modal de confirmacion (reemplaza el window.confirm nativo).
+    setHorasEmployeeToRemove(index);
+  }
+
+  function cancelRemoveHorasEmployee() {
+    setHorasEmployeeToRemove(null);
+  }
+
+  function confirmRemoveHorasEmployee() {
+    if (horasEmployeeToRemove === null) {
       return;
     }
+    const index = horasEmployeeToRemove;
     setHorasEmployees((current) => current.filter((_, i) => i !== index));
+    setHorasEmployeeToRemove(null);
   }
 
   async function handleSaveHoras() {
@@ -3528,6 +3534,7 @@ export default function Home() {
       horasEmployees.reduce((acc, emp) => acc + horasNum(emp, col), 0);
 
     const horasSection = horasTemplate ? (
+      <>
       <section
         id="panel-horas"
         className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
@@ -3662,6 +3669,85 @@ export default function Home() {
           + Agregar empleado
         </button>
       </section>
+
+      {horasEmployeeToRemove !== null ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-horas-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={cancelRemoveHorasEmployee}
+        >
+          {/* Fondo difuminado */}
+          <div className="modal-fade-in absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
+
+          {/* Tarjeta */}
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))" }}
+            className="modal-pop-in relative w-full max-w-md overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+          >
+            {/* Franja superior de acento */}
+            <div className="h-1.5 w-full bg-gradient-to-r from-rose-500 via-rose-400 to-orange-400" />
+
+            <div className="px-7 pb-7 pt-6">
+              <div className="flex items-start gap-4">
+                {/* Icono */}
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-500/15 ring-1 ring-inset ring-rose-400/30">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-6 w-6 text-rose-300"
+                  >
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <h3 id="remove-horas-title" className="text-lg font-semibold text-white">
+                    Eliminar empleado
+                  </h3>
+                  <p className="mt-1.5 text-sm leading-6 text-slate-300">
+                    ¿Seguro que querés eliminar a{" "}
+                    <span className="font-semibold text-white">
+                      {horasEmployees[horasEmployeeToRemove]?.name.trim() || "este empleado"}
+                    </span>{" "}
+                    de la lista de distribución de horas?
+                  </p>
+                  <p className="mt-2 text-xs font-medium text-rose-300/90">
+                    Esta acción no se puede deshacer.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={cancelRemoveHorasEmployee}
+                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/20"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmRemoveHorasEmployee}
+                  className="rounded-2xl bg-gradient-to-r from-rose-500 to-rose-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-900/40 transition hover:from-rose-400 hover:to-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-300/50"
+                >
+                  Sí, eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      </>
     ) : currentService ? (
       <section
         id="panel-horas"
