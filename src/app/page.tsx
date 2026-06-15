@@ -4057,34 +4057,6 @@ export default function Home() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 xl:flex">
-                {currentService ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleSave}
-                      disabled={isSaving || isFormLocked}
-                      className="rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
-                    >
-                      {isSaving ? "Guardando..." : "Guardar datos"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void loadSavedData(true)}
-                      disabled={isLoadingData}
-                      className="rounded-2xl bg-violet-500/80 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80"
-                    >
-                      {isLoadingData ? "Recuperando..." : "Recuperar datos"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleClearTable}
-                      className="rounded-2xl bg-slate-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-500"
-                    >
-                      Limpiar tabla
-                    </button>
-                  </>
-                ) : null}
-
                 {isAdmin ? (
                   <>
                     <button
@@ -4302,6 +4274,33 @@ export default function Home() {
                     })}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Acciones del tabulador PERC (guardar/recuperar/limpiar este mes). */}
+              <div className="flex flex-col gap-3 border-t border-white/10 bg-[#1b2537] px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                <button
+                  type="button"
+                  onClick={handleClearTable}
+                  className="rounded-2xl bg-slate-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500"
+                >
+                  Limpiar tabla
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void loadSavedData(true)}
+                  disabled={isLoadingData}
+                  className="rounded-2xl bg-violet-500/80 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80"
+                >
+                  {isLoadingData ? "Recuperando..." : "Recuperar datos"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving || isFormLocked}
+                  className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+                >
+                  {isSaving ? "Guardando..." : "Guardar datos"}
+                </button>
               </div>
             </section>
           ) : (
