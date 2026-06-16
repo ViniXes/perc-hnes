@@ -107,7 +107,9 @@ export type AreaDefinition = {
 const DISTRIBUCION_AREAS: AreaDefinition[] = SERVICE_DEFINITIONS.map((service) => ({
   id: service.id,
   name: service.name,
-  modules: ["distribucion"],
+  // Todos los servicios capturan PERC; ademas Distribucion de Horas por defecto.
+  // Los que tienen SEPS u otra combinacion se ajustan en AREA_OVERRIDES.
+  modules: ["perc", "distribucion"],
 }));
 
 // -----------------------------------------------------------------------------
@@ -137,6 +139,18 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "banco-de-sangre": ["perc", "sesps", "distribucion"],
   // Farmacia: PERC (ya existe), SEPS y Horas.
   "servicio-farmaceutico": ["perc", "sesps", "distribucion"],
+  // Radiologia (agrupa Resonancia, Tomografia, Estudio de radiologia y Ultrasonografia): PERC.
+  radiologia: ["perc"],
+  // Asesores de Medicamentos: SOLO Distribucion de Horas.
+  "asesores-de-medicamentos": ["distribucion"],
+  // Servicios PERC/SERV (productividad). Por ahora solo PERC; SEPS y Horas se
+  // agregan cuando lleguen sus plantillas:
+  //   - maxima-emergencia: ["perc", "sesps", "distribucion"]
+  //   - centro-quirurgico: ["perc", "sesps", "distribucion"]
+  //   - clinica-de-empleados: ["perc", "distribucion"]
+  "maxima-emergencia": ["perc"],
+  "centro-quirurgico": ["perc"],
+  "clinica-de-empleados": ["perc"],
   // PENDIENTE: completar el resto con el listado de PERC y SESPS.
 };
 

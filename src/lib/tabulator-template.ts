@@ -53,40 +53,28 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: ["398_1-Vacunacion | Actividad", "398_2-Vacunacion | Dosis aplicada"],
   },
   {
+    // Laboratorio clinico incluye tambien Biologia molecular (530_1).
     id: "laboratorio-clinico",
     name: "Laboratorio clinico",
     rows: [
       "518_1-Laboratorio clinico | Examen",
       "518_2-Laboratorio clinico | Prueba",
+      "530_1-Laboratorio de biologia molecular | Examen",
     ],
   },
   {
-    id: "laboratorio-de-biologia-molecular",
-    name: "Laboratorio de biologia molecular",
-    rows: ["530_1-Laboratorio de biologia molecular | Examen"],
-  },
-  {
-    id: "resonancia-magnetica",
-    name: "Resonancia magnetica",
+    // Radiologia: un solo servicio que agrupa Resonancia, Tomografia, Estudio de
+    // radiologia y Ultrasonografia (todas sus filas juntas).
+    id: "radiologia",
+    name: "Radiologia",
     rows: [
       "538_1-Resonancia magnetica | Estudio",
       "538_2-Resonancia magnetica | Placas",
+      "541_1-Tomografia | Estudio",
+      "541_2-Tomografia | Placas",
+      "791_1-Estudio de radiologia | Estudio",
+      "559_1-Ultrasonografia | Estudio",
     ],
-  },
-  {
-    id: "tomografia",
-    name: "Tomografia",
-    rows: ["541_1-Tomografia | Estudio", "541_2-Tomografia | Placas"],
-  },
-  {
-    id: "estudio-de-radiologia",
-    name: "Estudio de radiologia",
-    rows: ["791_1-Estudio de radiologia | Estudio"],
-  },
-  {
-    id: "ultrasonografia",
-    name: "Ultrasonografia",
-    rows: ["559_1-Ultrasonografia | Estudio"],
   },
   {
     id: "estudios-gastroclinicos",
@@ -94,23 +82,21 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: ["776_1-Estudios gastroclinicos | Procedimiento"],
   },
   {
+    // Fisioterapia: servicio propio (Terapia fisica).
     id: "terapia-fisica",
-    name: "Terapia fisica",
+    name: "Fisioterapia",
     rows: ["562_1-Terapia fisica | Sesion"],
   },
   {
+    // Terapia Respiratoria agrupa Terapia respiratoria y Rehabilitacion pulmonar.
     id: "terapia-respiratoria",
     name: "Terapia respiratoria",
     rows: [
       "566_1-Terapia respiratoria | Sesion",
       "566_2-Terapia respiratoria | Atencion",
       "566_3-Terapia respiratoria | Nebulizacion",
+      "570_1-Rehabilitacion pulmonar | Sesion",
     ],
-  },
-  {
-    id: "rehabilitacion-pulmonar",
-    name: "Rehabilitacion pulmonar",
-    rows: ["570_1-Rehabilitacion pulmonar | Sesion"],
   },
   {
     id: "banco-de-sangre",
@@ -124,7 +110,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   },
   {
     id: "unidad-de-hemodinamia",
-    name: "Unidad de hemodinamia",
+    name: "Unidad de Intervencionismo Endovascular",
     rows: [
       "579_1-Unidad de hemodinamia | Procedimiento",
       "579_2-Unidad de hemodinamia | Estudio",
@@ -136,7 +122,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   // (ver downloadAdminExcelReport). Por eso las filas son identicas en ambos.
   {
     id: "hemodialisis",
-    name: "UCI Hemodialisis",
+    name: "UCI Extracorporea",
     rows: [
       "268_1-Hemodialisis | Procedimiento",
       "268_2-Hemodialisis | Paciente",
@@ -146,7 +132,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   },
   {
     id: "hemodialisis-medicina-interna",
-    name: "Medicina Interna Hemodialisis",
+    name: "MI/Extracorporea",
     rows: [
       "268_1-Hemodialisis | Procedimiento",
       "268_2-Hemodialisis | Paciente",
@@ -156,7 +142,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   },
   {
     id: "servicio-farmaceutico",
-    name: "Servicio farmaceutico",
+    name: "Farmacia",
     rows: [
       "593_1-Servicio farmaceutico | Receta",
       "593_2-Servicio farmaceutico | Prescripcion",
@@ -167,12 +153,12 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   },
   {
     id: "rehablitacion-psicosocial",
-    name: "Rehablitacion psicosocial",
+    name: "Psicologia",
     rows: ["803_1-Rehablitacion psicosocial | Atencion"],
   },
   {
     id: "alimentacion-y-dieta",
-    name: "Alimentacion y dieta",
+    name: "Nutricion",
     rows: [
       "750_1-Alimentacion enteral | Preparacion",
       "750_2-Alimentacion enteral | Paciente",
@@ -184,7 +170,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   },
   {
     id: "central-de-esterilizacion",
-    name: "Central de esterilizacion",
+    name: "CEYE",
     rows: [
       "662_1-Central de esterilizacion | Paquete",
       "662_2-Central de esterilizacion | Metro cubico",
@@ -206,7 +192,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   // (ver downloadAdminExcelReport). Por eso la fila es identica en ambos.
   {
     id: "almacen",
-    name: "Almacen Insumos",
+    name: "Depto. de Abastecimiento",
     rows: ["721_1-Almacen | Despacho"],
   },
   {
@@ -225,7 +211,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   },
   {
     id: "transporte-general",
-    name: "Transporte general",
+    name: "Transporte",
     rows: [
       "664_1-Transporte general | Traslado",
       "664_2-Transporte general | Kilometro",
@@ -257,6 +243,29 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     id: "docencia-e-investigacion",
     name: "Docencia e investigacion",
     rows: ["702_1-Docencia e investigacion | Capacitacion"],
+  },
+  // Servicios con PERC/SERV (productividad por servicio): no usan la grilla de
+  // centros de costo, solo unos pocos numeros (ver PERC_SERV_FIELDS en page.tsx).
+  {
+    id: "maxima-emergencia",
+    name: "Maxima Emergencia",
+    rows: [],
+  },
+  {
+    id: "centro-quirurgico",
+    name: "Centro Quirurgico",
+    rows: [],
+  },
+  {
+    id: "clinica-de-empleados",
+    name: "Clinica de Empleados",
+    rows: [],
+  },
+  {
+    // Asesores de Medicamentos: SOLO reporta Distribucion de Horas (sin PERC).
+    id: "asesores-de-medicamentos",
+    name: "Asesores de Medicamentos",
+    rows: [],
   },
 ];
 

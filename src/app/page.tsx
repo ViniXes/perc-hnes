@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   type Auth,
   type AuthError,
@@ -160,25 +160,28 @@ type SupervisorAccount = {
   firstName: string;
   lastName: string;
   modules: ModuleId[];
+  // Si es true, esta cuenta entra con permisos de administrador completo.
+  admin?: boolean;
 };
 
 const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
   {
-    username: "sup.flor",
+    username: "ffuentes",
     password: DEFAULT_TEMP_PASSWORD,
     firstName: "Flor de Maria",
     lastName: "Fuentes Urbina",
     modules: ["perc", "sesps", "distribucion"],
+    admin: true,
   },
   {
-    username: "sup.roberto",
+    username: "rcenteno",
     password: DEFAULT_TEMP_PASSWORD,
     firstName: "Dr. Roberto",
     lastName: "Cenento Zambrano",
     modules: ["perc", "sesps", "distribucion"],
   },
   {
-    username: "sup.juancarlos",
+    username: "jcmiranda",
     password: DEFAULT_TEMP_PASSWORD,
     firstName: "Juan Carlos",
     lastName: "Miranda Marroquin",
@@ -189,6 +192,143 @@ const FIRESTORE_SETUP_MESSAGE = `Firestore no esta creado o configurado en este 
 const FIRESTORE_DISABLED_STORAGE_KEY = "perc-hnes.firestore-disabled";
 const PANEL_THEME_STORAGE_KEY = "perc-hnes.panel-theme";
 const ADMIN_USERS_CACHE_STORAGE_KEY = "perc-hnes.admin-users-cache";
+
+// --- Preferencias de personalizacion (menu Configuracion), guardadas en el navegador. ---
+const UI_PREFS_STORAGE_KEY = "perc-hnes.ui-prefs";
+type UiPrefs = {
+  font: string;
+  fontSize: string;
+  accent: string;
+  background: string;
+  showClock: boolean;
+  showGreeting: boolean;
+};
+const DEFAULT_UI_PREFS: UiPrefs = {
+  font: "sans",
+  fontSize: "normal",
+  accent: "dorado",
+  background: "default",
+  showClock: true,
+  showGreeting: false,
+};
+const FONT_OPTIONS: { id: string; label: string; stack: string }[] = [
+  { id: "sans", label: "Moderna", stack: "var(--font-sans), system-ui, sans-serif" },
+  { id: "serif", label: "Clásica", stack: 'Georgia, "Times New Roman", serif' },
+  { id: "rounded", label: "Redondeada", stack: '"Trebuchet MS", "Segoe UI", sans-serif' },
+  { id: "mono", label: "Monoespaciada", stack: 'ui-monospace, "Courier New", monospace' },
+];
+const FONT_SIZE_OPTIONS: { id: string; label: string; px: number }[] = [
+  { id: "normal", label: "Normal", px: 16 },
+  { id: "grande", label: "Grande", px: 17.5 },
+  { id: "xl", label: "Más grande", px: 19 },
+];
+const ACCENT_OPTIONS: { id: string; label: string; accent: string; ink: string }[] = [
+  { id: "dorado", label: "Dorado", accent: "#c79a4f", ink: "#17140c" },
+  { id: "azul", label: "Azul", accent: "#3b82f6", ink: "#ffffff" },
+  { id: "verde", label: "Verde", accent: "#10b981", ink: "#053226" },
+  { id: "violeta", label: "Violeta", accent: "#8b5cf6", ink: "#ffffff" },
+];
+const BACKGROUND_OPTIONS: { id: string; label: string; css: string | null }[] = [
+  { id: "default", label: "Por defecto", css: null },
+  { id: "azul", label: "Azul noche", css: "linear-gradient(160deg, #0b1220, #12233f)" },
+  { id: "violeta", label: "Violeta", css: "linear-gradient(160deg, #140f24, #271845)" },
+  { id: "verde", label: "Bosque", css: "linear-gradient(160deg, #0c1a14, #122a1f)" },
+  { id: "grafito", label: "Grafito", css: "linear-gradient(160deg, #0e1013, #1b1f25)" },
+];
+// Preguntas frecuentes del asistente virtual (robot).
+const ASSISTANT_FAQS: { q: string; a: string }[] = [
+  {
+    q: "¿Cómo ingreso mis datos?",
+    a: "Abrí tu tabulador (PERC, SEPS u Horas) desde el menú, completá las casillas y tocá «Guardar» al pie de la tabla.",
+  },
+  {
+    q: "¿Hasta cuándo puedo cargar?",
+    a: "PERC y SEPS cierran el 3er día hábil a las 2:30 PM; Distribución de Horas el 5º día hábil a las 2:30 PM. SEPS reabre el 6º día hábil.",
+  },
+  {
+    q: "No puedo cargar, está bloqueado",
+    a: "Si ya pasó el plazo, usá «Solicitar habilitar» en el menú para pedirle a un supervisor o al admin que te reabra el tablero.",
+  },
+  {
+    q: "¿Cómo veo meses anteriores?",
+    a: "En cada tabulador usá el selector de «Mes». Los meses con datos aparecen en verde. Es solo lectura (salvo que seas admin).",
+  },
+  {
+    q: "¿Cómo cambio mi contraseña?",
+    a: "Menú → «Cambiar contraseña». Podés mostrar u ocultar la clave tocando el ojito.",
+  },
+  {
+    q: "En Horas, ¿cómo relleno rápido?",
+    a: "Escribí un valor y arrastrá el cuadradito de la esquina de la casilla hacia abajo: copia ese valor en toda la columna.",
+  },
+  {
+    q: "¿Cómo personalizo la vista?",
+    a: "Menú → «Configuración»: podés cambiar tipografía, tamaño de letra, tema, color de acento y fondo.",
+  },
+  {
+    q: "¿Qué significan los colores verde y ámbar?",
+    a: "Verde = completo o ya cargado. Ámbar = pendiente o incompleto. En el selector de mes, verde es un mes con datos guardados.",
+  },
+  {
+    q: "¿Qué es PERC, SEPS y Horas?",
+    a: "PERC es la productividad por centros de costo; SEPS es la captura estadística diaria; Distribución de Horas reparte las horas del personal por servicio.",
+  },
+  {
+    q: "Olvidé mi contraseña",
+    a: "Pedile al administrador un «Reset clave» desde Usuarios y permisos: te asignan una clave temporal que cambiás al entrar.",
+  },
+  {
+    q: "¿Puedo editar un mes pasado?",
+    a: "Solo el administrador puede editar meses anteriores. Los servicios pueden verlos en modo solo lectura desde el selector de mes.",
+  },
+  {
+    q: "¿Cómo descargo el Excel mensual?",
+    a: "Si sos administrador: Menú → «Excel mensual» → «Descargar Excel». Sale con los datos disponibles al momento.",
+  },
+  {
+    q: "¿Cómo cierro sesión?",
+    a: "En el menú lateral, abajo, tocá «Cerrar sesión».",
+  },
+  {
+    q: "¿Cómo agrego o quito empleados en Horas?",
+    a: "En la tabla de Horas usá «+ Agregar empleado». Para quitar, tocá la ✕ de la fila; te pedirá confirmación.",
+  },
+];
+
+// Busca la mejor respuesta segun palabras clave de la pregunta del usuario.
+function answerAssistant(query: string): string {
+  const q = query.toLowerCase();
+  let best: { q: string; a: string } | null = null;
+  let bestScore = 0;
+  for (const faq of ASSISTANT_FAQS) {
+    const words = `${faq.q} ${faq.a}`
+      .toLowerCase()
+      .split(/[^a-záéíóúñ]+/)
+      .filter((w) => w.length > 3);
+    let score = 0;
+    for (const w of words) {
+      if (q.includes(w)) score += 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = faq;
+    }
+  }
+  if (best && bestScore > 0) {
+    return best.a;
+  }
+  return "No encontré esa respuesta exacta 🤔. Probá tocando una de las preguntas sugeridas de abajo, o escribila con otras palabras.";
+}
+
+function getFontStack(id: string) {
+  return (FONT_OPTIONS.find((f) => f.id === id) || FONT_OPTIONS[0]).stack;
+}
+function getAccentOption(id: string) {
+  return ACCENT_OPTIONS.find((a) => a.id === id) || ACCENT_OPTIONS[0];
+}
+function getBackgroundCss(id: string) {
+  return (BACKGROUND_OPTIONS.find((b) => b.id === id) || BACKGROUND_OPTIONS[0]).css;
+}
 
 const SERVICE_GROUP_LABELS: Record<string, string> = {
   direccion: "Direccion",
@@ -201,26 +341,25 @@ const SERVICE_GROUP_LABELS: Record<string, string> = {
 const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   almacen: "direccion",
   "almacen-medicamentos": "direccion",
+  "asesores-de-medicamentos": "direccion",
   "docencia-e-investigacion": "direccion",
   "servicio-farmaceutico": "direccion",
   "trabajo-social": "apoyo",
   "laboratorio-clinico": "apoyo",
-  "laboratorio-de-biologia-molecular": "apoyo",
   "banco-de-sangre": "apoyo",
   "alimentacion-y-dieta": "apoyo",
-  "estudio-de-radiologia": "apoyo",
-  "resonancia-magnetica": "medica",
-  tomografia: "medica",
-  ultrasonografia: "medica",
+  radiologia: "medica",
   "estudios-gastroclinicos": "medica",
   "unidad-de-hemodinamia": "medica",
   hemodialisis: "medica",
   "hemodialisis-medicina-interna": "medica",
   "terapia-fisica": "medica",
   "terapia-respiratoria": "medica",
-  "rehabilitacion-pulmonar": "medica",
   "rehablitacion-psicosocial": "medica",
   vacunacion: "medica",
+  "maxima-emergencia": "medica",
+  "centro-quirurgico": "medica",
+  "clinica-de-empleados": "apoyo",
   "central-de-esterilizacion": "enfermeria",
   aseo: "administrativa",
   lavanderia: "administrativa",
@@ -232,33 +371,66 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
 const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   vacunacion: "dep.vacunacion",
   "laboratorio-clinico": "dep.laboratorio",
-  "laboratorio-de-biologia-molecular": "dep.biologia",
-  "resonancia-magnetica": "dep.resonancia",
-  tomografia: "dep.tomografia",
-  "estudio-de-radiologia": "dep.radiologia",
-  ultrasonografia: "dep.ultrasonografia",
+  radiologia: "dep.radiologia",
   "estudios-gastroclinicos": "dep.gastro",
   "terapia-fisica": "dep.fisioterapia",
   "terapia-respiratoria": "dep.terapiaresp",
-  "rehabilitacion-pulmonar": "dep.rehabpulmonar",
   "banco-de-sangre": "dep.bancosangre",
   "unidad-de-hemodinamia": "dep.hemodinamia",
-  hemodialisis: "dep.hemodialisis",
-  "hemodialisis-medicina-interna": "dep.hemodialisis.mi",
+  hemodialisis: "dep.uci.extracorporea",
+  "hemodialisis-medicina-interna": "dep.mi.extracorporea",
   "servicio-farmaceutico": "dep.farmacia",
   "rehablitacion-psicosocial": "dep.psicosocial",
   "alimentacion-y-dieta": "dep.alimentacion",
   "central-de-esterilizacion": "dep.esterilizacion",
   "saneamiento-ambiental": "dep.saneamiento",
   aseo: "dep.aseo",
-  almacen: "dep.almacen",
+  almacen: "dep.abastecimiento",
+  "asesores-de-medicamentos": "dep.almacen",
   "almacen-medicamentos": "dep.almacen.med",
   lavanderia: "dep.lavanderia",
   "transporte-general": "dep.transporte",
   mantenimiento: "dep.mantenimiento",
   "trabajo-social": "dep.trabajosocial",
   "docencia-e-investigacion": "dep.docencia",
+  "maxima-emergencia": "dep.emergencia",
+  "centro-quirurgico": "dep.centroquirurgico",
+  "clinica-de-empleados": "dep.clinicaempleados",
 };
+
+// Icono (emoji) por servicio, segun su nombre. Se muestra al lado del nombre.
+const SERVICE_EMOJI_BY_ID: Record<string, string> = {
+  vacunacion: "💉",
+  "laboratorio-clinico": "🧪",
+  radiologia: "🩻",
+  "estudios-gastroclinicos": "🔬",
+  "terapia-fisica": "🤸",
+  "terapia-respiratoria": "🫁",
+  "banco-de-sangre": "🩸",
+  "unidad-de-hemodinamia": "🫀",
+  hemodialisis: "💧",
+  "hemodialisis-medicina-interna": "💧",
+  "servicio-farmaceutico": "💊",
+  "rehablitacion-psicosocial": "🧠",
+  "alimentacion-y-dieta": "🥗",
+  "central-de-esterilizacion": "♻️",
+  "saneamiento-ambiental": "🌿",
+  aseo: "🧹",
+  almacen: "📦",
+  "almacen-medicamentos": "💊",
+  lavanderia: "🧺",
+  "transporte-general": "🚐",
+  mantenimiento: "🔧",
+  "trabajo-social": "🤝",
+  "docencia-e-investigacion": "📚",
+  "maxima-emergencia": "🚑",
+  "centro-quirurgico": "🔪",
+  "clinica-de-empleados": "🩺",
+  "asesores-de-medicamentos": "📋",
+};
+function getServiceEmoji(serviceId: string | null | undefined) {
+  return (serviceId && SERVICE_EMOJI_BY_ID[serviceId]) || "🏥";
+}
 
 // Iconos del menu lateral (SVG inline, sin dependencias). Heredan el color del
 // texto via `currentColor`, asi funcionan igual en modo claro y oscuro y en el
@@ -342,16 +514,55 @@ const IconSun = (
   </svg>
 );
 
+const IconDashboard = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
+    <rect x="13.5" y="3.5" width="7" height="4.5" rx="1" />
+    <rect x="13.5" y="11" width="7" height="9.5" rx="1" />
+    <rect x="3.5" y="13" width="7" height="7.5" rx="1" />
+  </svg>
+);
+
+const IconMessage = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M4 5.5h16a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H9l-4 3.5V16H4a.5.5 0 0 1-.5-.5V6a.5.5 0 0 1 .5-.5Z" />
+    <path d="M8 9.5h8M8 12.5h5" />
+  </svg>
+);
+
+const IconDollar = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M12 2.5v19" />
+    <path d="M16.5 6.7C16 5.2 14.2 4.3 12 4.3S8 5.4 8 7.1c0 1.7 1.9 2.4 4 2.9s4 1.2 4 2.9c0 1.7-1.8 2.8-4 2.8s-4-.9-4.5-2.4" />
+  </svg>
+);
+
+const IconChart = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M4 20V4" />
+    <path d="M4 20h16" />
+    <path d="M8 20v-6M12.5 20V8M17 20v-9" />
+  </svg>
+);
+
 // Icono por id de item del sidebar. Lo que no esta aqui conserva su badge de letras
 // (PERC -> PE, SEPS -> SE, etc., segun pidio el usuario).
 const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-overview": IconHome,
+  "panel-tabulator": IconDollar,
+  "panel-module-perc": IconDollar,
+  "panel-seps": IconChart,
+  "panel-module-sesps": IconChart,
   "panel-module-distribucion": IconClock,
   "panel-horas": IconClock,
   "panel-calendar": IconGear,
   "panel-admin-export": IconFile,
   "panel-users": IconUsers,
   "panel-capture-toggle": IconKey,
+  "panel-avance": IconDashboard,
+  "panel-requests": IconMessage,
+  "panel-request-form": IconMessage,
+  "panel-config": IconGear,
 };
 
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
@@ -474,6 +685,25 @@ function getCaptureOverrideId(periodId: string, serviceId: string, moduleId: Mod
   return `${periodId}__${serviceId}__${moduleId}`;
 }
 
+// Solicitud de un servicio para que le habiliten un tablero fuera de plazo.
+type CaptureRequest = {
+  id: string;
+  periodId: string;
+  periodLabel: string;
+  serviceId: string;
+  serviceName: string;
+  moduleId: ModuleId;
+  requestedByName: string;
+  requestedByUid: string;
+  status: "pending" | "approved" | "rejected";
+  note?: string;
+  resolvedByName?: string;
+};
+
+function getModuleLabel(moduleId: ModuleId) {
+  return moduleId === "perc" ? "PERC" : moduleId === "sesps" ? "SEPS" : "Distribución de Horas";
+}
+
 // Estado efectivo de captura: el override manual manda sobre la ventana natural.
 function effectiveCaptureOpen(
   naturalIsOpen: boolean,
@@ -509,7 +739,35 @@ function applyFixedValues(table: TableValues) {
   }
 }
 
+// PERC/SERV: servicios que reportan productividad con pocos numeros (no la grilla
+// de centros de costo). Cada servicio define sus campos. Se guarda en la misma
+// coleccion serviceTabulators (modulo "perc"), con la fila PERC_SERV_ROW.
+const PERC_SERV_ROW = "perc-serv";
+const PERC_SERV_FIELDS: Record<string, { key: string; label: string; placeholder: string }[]> = {
+  "maxima-emergencia": [
+    { key: "atencion", label: "Atención", placeholder: "Número de atenciones" },
+    { key: "procedimiento", label: "Procedimiento", placeholder: "Número de procedimientos" },
+    { key: "pacientes", label: "Pacientes", placeholder: "Número de pacientes" },
+  ],
+  "centro-quirurgico": [
+    { key: "intervenciones", label: "Intervención Quirúrgica", placeholder: "Número de intervenciones" },
+    { key: "procedimientos", label: "Procedimiento", placeholder: "Número de procedimientos" },
+  ],
+  "clinica-de-empleados": [
+    { key: "consulta", label: "Consulta", placeholder: "Número de consultas" },
+    { key: "procedimiento", label: "Procedimiento", placeholder: "Número de procedimientos" },
+  ],
+};
+function getPercServFields(serviceId: string | null | undefined) {
+  return (serviceId && PERC_SERV_FIELDS[serviceId]) || null;
+}
+
 function buildEmptyTable(service: ServiceDefinition): TableValues {
+  const servFields = getPercServFields(service.id);
+  if (servFields) {
+    return { [PERC_SERV_ROW]: Object.fromEntries(servFields.map((f) => [f.key, ""])) };
+  }
+
   const table: TableValues = Object.fromEntries(
     service.rows.map((row) => [
       row,
@@ -525,6 +783,22 @@ function mergeWithTemplate(
   service: ServiceDefinition,
   savedValues?: Record<string, Record<string, unknown>>,
 ) {
+  const servFields = getPercServFields(service.id);
+  if (servFields) {
+    const template: TableValues = {
+      [PERC_SERV_ROW]: Object.fromEntries(servFields.map((f) => [f.key, ""])),
+    };
+    if (savedValues) {
+      for (const f of servFields) {
+        const cellValue = savedValues[PERC_SERV_ROW]?.[f.key];
+        if (cellValue !== undefined && cellValue !== null) {
+          template[PERC_SERV_ROW][f.key] = String(cellValue);
+        }
+      }
+    }
+    return template;
+  }
+
   const template = buildEmptyTable(service);
 
   if (!savedValues) {
@@ -565,6 +839,16 @@ function isSameCalendarDay(left: Date, right: Date) {
   );
 }
 
+// Hora de cierre diario de la captura: 2:30 PM (14:30) del ultimo dia habil de la ventana.
+const CAPTURE_CLOSE_HOUR = 14;
+const CAPTURE_CLOSE_MINUTE = 30;
+function isBeforeDailyCutoff(date: Date) {
+  return (
+    date.getHours() < CAPTURE_CLOSE_HOUR ||
+    (date.getHours() === CAPTURE_CLOSE_HOUR && date.getMinutes() < CAPTURE_CLOSE_MINUTE)
+  );
+}
+
 function getFirstBusinessDays(referenceDate: Date, blockedDates: string[], totalDays: number) {
   const current = new Date(
     referenceDate.getFullYear(),
@@ -600,10 +884,15 @@ function getCaptureWindow(
     isSameCalendarDay(day, referenceDate),
   );
 
+  // El ultimo dia habil de la ventana cierra a las 2:30 PM; los dias previos, todo el dia.
+  const isLastOpenDay = activeDayIndex === openDays.length - 1;
+  const isOpen =
+    activeDayIndex >= 0 && (!isLastOpenDay || isBeforeDailyCutoff(referenceDate));
+
   return {
     openDays,
     totalDays,
-    isOpen: activeDayIndex >= 0,
+    isOpen,
     activeDayNumber: activeDayIndex + 1,
     lastOpenDay: openDays[openDays.length - 1],
   };
@@ -621,14 +910,31 @@ function getSepsWindow(referenceDate: Date, blockedDates: string[]) {
     blockedDates,
     MODULE_CAPTURE_DAYS.sesps,
   );
-  const inClosing = closeDays.some((day) => isSameCalendarDay(day, referenceDate));
-  const calendarDay = referenceDate.getDate();
-  const reopenDay = 6;
+  // El cierre cierra a las 2:30 PM del ultimo (3er) dia habil.
+  const lastCloseDay = closeDays[closeDays.length - 1];
+  const onLastCloseDay = isSameCalendarDay(lastCloseDay, referenceDate);
+  const inClosing =
+    closeDays.some((day) => isSameCalendarDay(day, referenceDate)) &&
+    (!onLastCloseDay || isBeforeDailyCutoff(referenceDate));
+
+  // Reapertura en el 6to DIA HABIL del mes, a las 00:00.
+  const businessDaysToReopen = getFirstBusinessDays(referenceDate, blockedDates, 6);
+  const reopenDate = businessDaysToReopen[businessDaysToReopen.length - 1];
+  const reopenStart = new Date(
+    reopenDate.getFullYear(),
+    reopenDate.getMonth(),
+    reopenDate.getDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+  const reopenReached = referenceDate.getTime() >= reopenStart.getTime();
 
   let phase: SepsPhase;
   if (inClosing) {
     phase = "cierre";
-  } else if (calendarDay >= reopenDay) {
+  } else if (reopenReached) {
     phase = "captura";
   } else {
     phase = "transicion";
@@ -643,8 +949,8 @@ function getSepsWindow(referenceDate: Date, blockedDates: string[]) {
     isOpen: phase !== "transicion",
     periodId,
     closeDays,
-    reopenDay,
-    lastCloseDay: closeDays[closeDays.length - 1],
+    reopenDay: reopenDate.getDate(),
+    lastCloseDay,
   };
 }
 
@@ -698,6 +1004,123 @@ function getPeriodLabel(periodId: string) {
   }
 
   return PERIOD_FORMATTER.format(new Date(year, month - 1, 1));
+}
+
+// Etiqueta corta del periodo: "Febrero - 2026" (mes con inicial mayuscula + ano).
+const MONTH_NAME_FORMATTER = new Intl.DateTimeFormat("es-ES", { month: "long" });
+function getShortPeriodLabel(periodId: string) {
+  const [yearText, monthText] = periodId.split("-");
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return periodId;
+  }
+
+  const monthName = MONTH_NAME_FORMATTER.format(new Date(year, month - 1, 1));
+  const capitalized = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+  return `${capitalized} - ${year}`;
+}
+
+// Lista de periodos recientes para el selector de historial: arranca en `latestPeriodId`
+// (el mes de captura) y retrocede `count` meses. Devuelve [{ id, monthName, year }].
+type RecentPeriod = { id: string; monthName: string; year: number };
+function buildRecentPeriods(latestPeriodId: string, count: number): RecentPeriod[] {
+  const [yearText, monthText] = latestPeriodId.split("-");
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return [{ id: latestPeriodId, monthName: latestPeriodId, year: 0 }];
+  }
+
+  const periods: RecentPeriod[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const date = new Date(year, month - 1 - i, 1);
+    const id = getPeriodId(date);
+    const monthName = MONTH_NAME_FORMATTER.format(date);
+    periods.push({
+      id,
+      monthName: monthName.charAt(0).toUpperCase() + monthName.slice(1),
+      year: date.getFullYear(),
+    });
+  }
+
+  return periods;
+}
+
+// Menu desplegable de meses (historial). Alineado, con verde = tiene datos, gris = vacio.
+function HistoryMonthSelect(props: {
+  options: RecentPeriod[];
+  currentPeriod: string;
+  activePeriod: string;
+  dataPeriods: Set<string>;
+  loading: boolean;
+  onSelect: (period: string) => void;
+}) {
+  const { options, currentPeriod, activePeriod, dataPeriods, loading, onSelect } = props;
+  const [open, setOpen] = useState(false);
+  const active = options.find((option) => option.id === activePeriod);
+  const activeLabel = active ? `${active.monthName} - ${active.year}` : activePeriod;
+
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        disabled={loading}
+        onClick={() => setOpen((value) => !value)}
+        className="flex min-w-[200px] items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm font-semibold text-white outline-none transition hover:border-violet-400 disabled:opacity-50"
+      >
+        <span>
+          {activeLabel}
+          {activePeriod === currentPeriod ? " (actual)" : ""}
+        </span>
+        <span className={`text-slate-400 transition ${open ? "rotate-180" : ""}`}>▾</span>
+      </button>
+
+      {open ? (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 z-50 mt-2 max-h-72 w-60 overflow-auto rounded-xl border border-white/10 bg-[#1b2537] p-1 shadow-2xl shadow-black/50">
+            {options.map((option) => {
+              const hasData = dataPeriods.has(option.id);
+              const isActive = option.id === activePeriod;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    onSelect(option.id);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-4 rounded-lg px-3 py-2 text-sm transition ${
+                    isActive ? "bg-violet-500/20" : "hover:bg-white/5"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${
+                        hasData ? "bg-emerald-400" : "bg-slate-600"
+                      }`}
+                    />
+                    <span className={`font-medium ${hasData ? "text-emerald-300" : "text-slate-400"}`}>
+                      {option.monthName}
+                    </span>
+                  </span>
+                  <span
+                    className={`tabular-nums ${hasData ? "text-emerald-300/80" : "text-slate-500"}`}
+                  >
+                    {option.year}
+                    {option.id === currentPeriod ? " ·" : ""}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 function sanitizeNumericValue(value: string) {
@@ -1199,15 +1622,21 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
     ...group,
     services: group.services.map((service) => {
       const percDone = currentCompletedServices.has(service.id);
-      // PERC (grid de centros de costo) aplica a todos. SEPS/Horas solo si tienen plantilla.
-      const modules: PublicModuleStatus[] = [{ label: "PERC", completed: percDone }];
+      // PERC solo si el servicio tiene el modulo PERC (los "solo Horas" no salen en PERC).
+      const hasPerc = getAreaById(service.id)?.modules.includes("perc") ?? false;
+      const modules: PublicModuleStatus[] = [];
+      if (hasPerc) {
+        modules.push({ label: "PERC", completed: percDone });
+      }
       if (getSepsTemplate(service.id)) {
         modules.push({ label: "SEPS", completed: sepsDone.has(service.id) });
       }
       if (getHorasTemplate(service.id)) {
         modules.push({ label: "Horas", completed: horasDone.has(service.id) });
       }
-      return { ...service, completed: percDone, modules };
+      // "Completo" del servicio: si hace PERC, manda PERC; si no, su modulo de Horas.
+      const completed = hasPerc ? percDone : horasDone.has(service.id);
+      return { ...service, completed, modules };
     }),
   }));
 
@@ -1278,10 +1707,10 @@ async function ensureSupervisorProfile(currentUser: User, account: SupervisorAcc
       firstName: account.firstName,
       lastName: account.lastName,
       name: displayName,
-      role: "supervisor",
+      role: account.admin ? "admin" : "supervisor",
       isActive: true,
       mustChangePassword: true,
-      permissions: getDefaultPermissions("supervisor"),
+      permissions: getDefaultPermissions(account.admin ? "admin" : "supervisor"),
       supervisorModules: account.modules,
       updatedAt: serverTimestamp(),
     },
@@ -1298,10 +1727,10 @@ function buildSupervisorProfile(uid: string, account: SupervisorAccount) {
     firstName: account.firstName,
     lastName: account.lastName,
     name: buildFullName(account.firstName, account.lastName, account.username),
-    role: "supervisor",
+    role: account.admin ? "admin" : "supervisor",
     isActive: true,
     mustChangePassword: true,
-    permissions: getDefaultPermissions("supervisor"),
+    permissions: getDefaultPermissions(account.admin ? "admin" : "supervisor"),
     supervisorModules: account.modules,
   });
 }
@@ -1443,24 +1872,69 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  // Mes que se esta viendo en cada tabulador. null = mes de captura actual.
+  const [percViewPeriod, setPercViewPeriod] = useState<string | null>(null);
+  const [sepsViewPeriod, setSepsViewPeriod] = useState<string | null>(null);
+  const [horasViewPeriod, setHorasViewPeriod] = useState<string | null>(null);
+  // Arrastre tipo Excel en Horas: copia un valor hacia abajo por columna.
+  const [fillDrag, setFillDrag] = useState<{
+    col: string;
+    startRow: number;
+    endRow: number;
+    value: string;
+  } | null>(null);
+  // Meses que YA tienen datos guardados (para pintar verde/gris en el selector).
+  const [percDataPeriods, setPercDataPeriods] = useState<Set<string>>(new Set());
+  const [sepsDataPeriods, setSepsDataPeriods] = useState<Set<string>>(new Set());
+  const [horasDataPeriods, setHorasDataPeriods] = useState<Set<string>>(new Set());
+  // Servicio que el ADMIN elige para ver/editar (el admin no tiene servicio propio).
+  const [adminSelectedServiceId, setAdminSelectedServiceId] = useState<string>("");
   const [tableValues, setTableValues] = useState<TableValues>({});
   const [sepsValues, setSepsValues] = useState<SepsValues>({});
   const [isSavingSeps, setIsSavingSeps] = useState(false);
+  const [isLoadingSeps, setIsLoadingSeps] = useState(false);
+  // Tablas SEPS abiertas (colapsables). Por defecto solo la primera.
+  const [openSepsTables, setOpenSepsTables] = useState<Set<string>>(new Set());
+  // Grupos de "Habilitar tableros" abiertos (colapsables). Por defecto solo el primero.
+  const [openOverrideGroups, setOpenOverrideGroups] = useState<Set<string>>(() => {
+    const groups = buildServiceGroups();
+    return new Set(groups[0] ? [groups[0].id] : []);
+  });
   const [horasEmployees, setHorasEmployees] = useState<HorasEmployee[]>([]);
   const [horasEmployeeToRemove, setHorasEmployeeToRemove] = useState<number | null>(null);
   const [isSavingHoras, setIsSavingHoras] = useState(false);
+  const [isLoadingHoras, setIsLoadingHoras] = useState(false);
   // "Completo" del modulo Horas: solo true cuando el usuario GUARDO (no por el seed).
   const [horasSaved, setHorasSaved] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showPasswordText, setShowPasswordText] = useState(false);
+  const [showUsersModal, setShowUsersModal] = useState(false);
+  const [showBoardModal, setShowBoardModal] = useState(false);
+  // Menu lateral colapsable: en PC se contrae para dar espacio; en movil es cajon.
+  const [menuOpen, setMenuOpen] = useState(true);
+  // Mini estadistica por modulo (PERC/SEPS/Horas) al tocar el menu del modulo.
+  const [showStatsModal, setShowStatsModal] = useState(false);
+  const [statsModule, setStatsModule] = useState<ModuleId>("perc");
+  // Bandeja de solicitudes de habilitacion de tableros.
+  const [captureRequests, setCaptureRequests] = useState<CaptureRequest[]>([]);
+  const [showRequestsModal, setShowRequestsModal] = useState(false);
+  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [requestModuleId, setRequestModuleId] = useState<ModuleId>("perc");
+  const [isSendingRequest, setIsSendingRequest] = useState(false);
+  const [requestBusyId, setRequestBusyId] = useState("");
   const [adminUsers, setAdminUsers] = useState<ManagedUser[]>([]);
   const [adminDrafts, setAdminDrafts] = useState<Record<string, AdminDraft>>({});
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isCreatingManagedUser, setIsCreatingManagedUser] = useState(false);
   const [isExportingMonthlyReport, setIsExportingMonthlyReport] = useState(false);
   const [adminBusyUserId, setAdminBusyUserId] = useState("");
+  // Usuario seleccionado en la vista maestro-detalle de "Usuarios y permisos".
+  const [adminSelectedUserUid, setAdminSelectedUserUid] = useState<string | null>(null);
+  const [adminUserQuery, setAdminUserQuery] = useState("");
   const [calendarOverrides, setCalendarOverrides] = useState<Record<string, string[]>>({});
   // El calendario anual se quito de la vista; conservamos el setter por compatibilidad.
   const [, setPublicDashboardMonths] = useState<PublicDashboardMonth[]>([]);
@@ -1468,7 +1942,9 @@ export default function Home() {
   const [publicCompletedCount, setPublicCompletedCount] = useState(0);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
   const [calendarEditorPeriodId, setCalendarEditorPeriodId] = useState(() => getPeriodId(new Date()));
-  const [calendarDraftDate, setCalendarDraftDate] = useState("");
+  // Rango de fechas no habiles a agregar de una sola vez (Desde / Hasta).
+  const [calendarRangeStart, setCalendarRangeStart] = useState("");
+  const [calendarRangeEnd, setCalendarRangeEnd] = useState("");
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
   // Overrides de tableros (reabiertos/cerrados) por id `${periodId}__${serviceId}__${moduleId}`.
   const [captureOverrides, setCaptureOverrides] = useState<CaptureOverridesMap>({});
@@ -1477,6 +1953,13 @@ export default function Home() {
     getClosingPeriodId(new Date()),
   );
   const [overrideBusyKey, setOverrideBusyKey] = useState("");
+  // Modal para elegir mes/año al "Abrir" un tablero en Habilitar tableros.
+  const [captureOpenTarget, setCaptureOpenTarget] = useState<{
+    serviceId: string;
+    serviceName: string;
+    moduleId: ModuleId;
+  } | null>(null);
+  const [captureOpenPeriod, setCaptureOpenPeriod] = useState("");
   const [overrideServiceQuery, setOverrideServiceQuery] = useState("");
   const [activeSidebarSection, setActiveSidebarSection] = useState("panel-overview");
   const [panelTheme, setPanelTheme] = useState<"dark" | "light">(() => {
@@ -1489,10 +1972,75 @@ export default function Home() {
   });
   const [firestoreUnavailable, setFirestoreUnavailable] = useState(false);
   const [firestoreStatusReady, setFirestoreStatusReady] = useState(false);
+  // Asistente virtual (robot) con preguntas frecuentes (chat interactivo).
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantMsgs, setAssistantMsgs] = useState<{ from: "bot" | "user"; text: string }[]>([]);
+  const [assistantInput, setAssistantInput] = useState("");
+  function pushAssistant(question: string) {
+    const q = question.trim();
+    if (!q) return;
+    setAssistantMsgs((current) => [
+      ...current,
+      { from: "user", text: q },
+      { from: "bot", text: answerAssistant(q) },
+    ]);
+    setAssistantInput("");
+  }
+  function openAssistant() {
+    setAssistantOpen((open) => {
+      const next = !open;
+      if (next) {
+        setAssistantMsgs((current) =>
+          current.length > 0
+            ? current
+            : [
+                {
+                  from: "bot",
+                  text: "¡Hola! 🤖 Soy el asistente de PULSO. Escribí tu pregunta o tocá una de las sugeridas.",
+                },
+              ],
+        );
+      }
+      return next;
+    });
+  }
+  // Preferencias de personalizacion (menu Configuracion).
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [uiPrefs, setUiPrefs] = useState<UiPrefs>(() => {
+    if (typeof window === "undefined") {
+      return DEFAULT_UI_PREFS;
+    }
+    try {
+      const raw = window.localStorage.getItem(UI_PREFS_STORAGE_KEY);
+      if (raw) {
+        return { ...DEFAULT_UI_PREFS, ...(JSON.parse(raw) as Partial<UiPrefs>) };
+      }
+    } catch {
+      // Ignorar JSON invalido.
+    }
+    return DEFAULT_UI_PREFS;
+  });
+  const updateUiPrefs = useCallback((patch: Partial<UiPrefs>) => {
+    setUiPrefs((current) => {
+      const next = { ...current, ...patch };
+      try {
+        window.localStorage.setItem(UI_PREFS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Ignorar errores de almacenamiento.
+      }
+      return next;
+    });
+  }, []);
 
+  // Servicio efectivo: el admin usa el que elige; el resto, su servicio asignado.
+  const isAdminLike =
+    !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
+  const effectiveServiceId = isAdminLike
+    ? adminSelectedServiceId || undefined
+    : serviceProfile?.serviceId;
   const currentService = useMemo(
-    () => getServiceById(serviceProfile?.serviceId),
-    [serviceProfile?.serviceId],
+    () => getServiceById(effectiveServiceId),
+    [effectiveServiceId],
   );
   // periodId = periodo de PRODUCCION que se captura/cierra = MES ANTERIOR.
   // windowPeriodId = mes calendario actual, donde ocurre la ventana de captura y al
@@ -1518,7 +2066,11 @@ export default function Home() {
       buildServiceGroups().map((group) => ({
         ...group,
         services: group.services.map((service) => {
-          const modules: PublicModuleStatus[] = [{ label: "PERC", completed: false }];
+          const hasPerc = getAreaById(service.id)?.modules.includes("perc") ?? false;
+          const modules: PublicModuleStatus[] = [];
+          if (hasPerc) {
+            modules.push({ label: "PERC", completed: false });
+          }
           if (getSepsTemplate(service.id)) {
             modules.push({ label: "SEPS", completed: false });
           }
@@ -1555,12 +2107,12 @@ export default function Home() {
   }, [captureOverrides, captureWindow.isOpen, currentService, periodId]);
   // SEPS: plantilla del servicio (si tiene), ventana de doble fase y estado efectivo.
   const sepsTemplate = useMemo(
-    () => getSepsTemplate(serviceProfile?.serviceId),
-    [serviceProfile?.serviceId],
+    () => getSepsTemplate(effectiveServiceId),
+    [effectiveServiceId],
   );
   const horasTemplate = useMemo(
-    () => getHorasTemplate(serviceProfile?.serviceId),
-    [serviceProfile?.serviceId],
+    () => getHorasTemplate(effectiveServiceId),
+    [effectiveServiceId],
   );
   const sepsWindow = useMemo(
     () => getSepsWindow(now, currentBlockedDates),
@@ -1652,6 +2204,13 @@ export default function Home() {
     }
 
     return new Date(year, month - 1, 1, 12, 0, 0, 0);
+  }, [calendarEditorPeriodId]);
+  // Al cambiar el mes a configurar, el rango "Desde/Hasta" salta a ese mes automaticamente.
+  useEffect(() => {
+    if (calendarEditorPeriodId) {
+      setCalendarRangeStart(`${calendarEditorPeriodId}-01`);
+      setCalendarRangeEnd(`${calendarEditorPeriodId}-01`);
+    }
   }, [calendarEditorPeriodId]);
   const calendarPreviewWindow = useMemo(() => {
     if (!calendarPreviewDate) {
@@ -1898,6 +2457,158 @@ export default function Home() {
       cancelled = true;
     };
   }, [horasTemplate, periodId, firestoreUnavailable, user]);
+
+  // Al cargar la plantilla SEPS, deja abierta solo la primera tabla.
+  useEffect(() => {
+    if (sepsTemplate && sepsTemplate.tables.length > 0) {
+      setOpenSepsTables(new Set([sepsTemplate.tables[0].id]));
+    } else {
+      setOpenSepsTables(new Set());
+    }
+  }, [sepsTemplate]);
+
+  // Meses con datos guardados por modulo (para colorear el selector de historial).
+  useEffect(() => {
+    if (firestoreUnavailable || !user || !currentService) {
+      setPercDataPeriods(new Set());
+      setSepsDataPeriods(new Set());
+      setHorasDataPeriods(new Set());
+      return;
+    }
+
+    let cancelled = false;
+    const serviceId = currentService.id;
+
+    const collectPeriods = async (coll: string) => {
+      const snap = await getDocs(
+        query(collection(db, coll), where("serviceId", "==", serviceId)),
+      );
+      const set = new Set<string>();
+      snap.forEach((item) => {
+        const value = (item.data() as { periodId?: unknown }).periodId;
+        if (typeof value === "string") {
+          set.add(value);
+        }
+      });
+      return set;
+    };
+
+    void (async () => {
+      try {
+        const [perc, seps, horas] = await Promise.all([
+          collectPeriods("serviceTabulators"),
+          collectPeriods("sepsTabulators"),
+          collectPeriods("horasTabulators"),
+        ]);
+        if (!cancelled) {
+          setPercDataPeriods(perc);
+          setSepsDataPeriods(seps);
+          setHorasDataPeriods(horas);
+        }
+      } catch (presenceError) {
+        await handleFirestoreError(presenceError);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentService, firestoreUnavailable, user]);
+
+  // Carga las solicitudes de habilitacion (bandeja). La coleccion es chica.
+  useEffect(() => {
+    if (firestoreUnavailable || !user || !firestoreStatusReady) {
+      setCaptureRequests([]);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const snap = await getDocs(collection(db, "captureRequests"));
+        if (cancelled) {
+          return;
+        }
+        const list: CaptureRequest[] = [];
+        snap.forEach((item) => {
+          const data = item.data() as Record<string, unknown>;
+          list.push({
+            id: item.id,
+            periodId: String(data.periodId ?? ""),
+            periodLabel: String(data.periodLabel ?? ""),
+            serviceId: String(data.serviceId ?? ""),
+            serviceName: String(data.serviceName ?? ""),
+            moduleId: (data.moduleId as ModuleId) ?? "perc",
+            requestedByName: String(data.requestedByName ?? ""),
+            requestedByUid: String(data.requestedByUid ?? ""),
+            status: (data.status as CaptureRequest["status"]) ?? "pending",
+            note: typeof data.note === "string" ? data.note : undefined,
+            resolvedByName:
+              typeof data.resolvedByName === "string" ? data.resolvedByName : undefined,
+          });
+        });
+        setCaptureRequests(list);
+      } catch {
+        // Si faltan reglas de captureRequests, no debe romper la app.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, firestoreUnavailable, firestoreStatusReady]);
+
+  // En pantallas chicas el menu arranca cerrado (cajon); en PC, abierto.
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1280) {
+      setMenuOpen(false);
+    }
+  }, []);
+
+  // Aplica el tamaño de letra elegido (escala todo, basado en rem).
+  useEffect(() => {
+    const px = FONT_SIZE_OPTIONS.find((option) => option.id === uiPrefs.fontSize)?.px ?? 16;
+    const root = document.documentElement;
+    root.style.fontSize = `${px}px`;
+    return () => {
+      root.style.fontSize = "";
+    };
+  }, [uiPrefs.fontSize]);
+
+  // Auto-cierre de los mensajes tipo toast (exito y error).
+  useEffect(() => {
+    if (!message) {
+      return;
+    }
+    const timer = window.setTimeout(() => setMessage(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+  useEffect(() => {
+    if (!error) {
+      return;
+    }
+    const timer = window.setTimeout(() => setError(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
+  // Al soltar el mouse, confirma el arrastre: copia el valor a todas las filas cubiertas.
+  useEffect(() => {
+    if (!fillDrag) {
+      return;
+    }
+    const onUp = () => {
+      setHorasEmployees((current) =>
+        current.map((emp, i) =>
+          i >= fillDrag.startRow && i <= fillDrag.endRow
+            ? { ...emp, hours: { ...emp.hours, [fillDrag.col]: fillDrag.value } }
+            : emp,
+        ),
+      );
+      setFillDrag(null);
+    };
+    window.addEventListener("mouseup", onUp);
+    return () => window.removeEventListener("mouseup", onUp);
+  }, [fillDrag]);
 
   async function fetchManagedUsers() {
     const snapshot = await getDocs(collection(db, "serviceUsers"));
@@ -2158,6 +2869,64 @@ export default function Home() {
     }
   }
 
+  // Carga el PERC de un mes especifico para el historial. Si es el mes de captura,
+  // vuelve al modo normal (editable); si es un mes anterior, queda en modo historial.
+  async function loadPercHistory(period: string) {
+    if (!currentService || firestoreUnavailable) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setIsLoadingData(true);
+
+    try {
+      const values = await fetchSavedDataForPeriod(currentService, period);
+      setTableValues(values);
+      setPercViewPeriod(period === periodId ? null : period);
+
+      if (period !== periodId) {
+        setMessage(`Mostrando historial de ${getPeriodLabel(period)}.`);
+      } else {
+        setMessage(`Volviste al mes de captura (${periodLabel}).`);
+      }
+    } catch (loadError) {
+      if (await handleFirestoreError(loadError)) {
+        return;
+      }
+      setError("No pudimos cargar el historial de ese mes.");
+    } finally {
+      setIsLoadingData(false);
+    }
+  }
+
+  // El admin elige un servicio para ver/editar sus tabuladores e historial.
+  async function handleAdminSelectService(serviceId: string) {
+    setAdminSelectedServiceId(serviceId);
+    setPercViewPeriod(null);
+    setError("");
+    setMessage("");
+
+    const service = getServiceById(serviceId);
+    if (!service || firestoreUnavailable) {
+      setTableValues({});
+      return;
+    }
+
+    setIsLoadingData(true);
+    try {
+      const values = await fetchSavedDataForPeriod(service, periodId);
+      setTableValues(values);
+    } catch (loadError) {
+      if (await handleFirestoreError(loadError)) {
+        return;
+      }
+      setTableValues(buildEmptyTable(service));
+    } finally {
+      setIsLoadingData(false);
+    }
+  }
+
   async function loadAdminUsers() {
     if (!isAdmin || firestoreUnavailable) {
       return;
@@ -2233,26 +3002,48 @@ export default function Home() {
     }
   }
 
-  function handleAddBlockedDate() {
-    if (!calendarEditorPeriodId || !calendarDraftDate.startsWith(calendarEditorPeriodId)) {
-      setError("Selecciona una fecha que pertenezca al mes configurado.");
+  function handleAddBlockedRange() {
+    if (!calendarEditorPeriodId || !calendarRangeStart || !calendarRangeEnd) {
+      setError("Selecciona el rango de fechas (Desde y Hasta).");
+      return;
+    }
+
+    // Ordena el rango por si lo pusieron al reves.
+    const start = calendarRangeStart <= calendarRangeEnd ? calendarRangeStart : calendarRangeEnd;
+    const end = calendarRangeStart <= calendarRangeEnd ? calendarRangeEnd : calendarRangeStart;
+
+    // Genera todas las fechas del rango que pertenezcan al mes configurado.
+    const datesInRange: string[] = [];
+    const [sy, sm, sd] = start.split("-").map((value) => Number.parseInt(value, 10));
+    const [ey, em, ed] = end.split("-").map((value) => Number.parseInt(value, 10));
+    const cursor = new Date(sy, sm - 1, sd, 12, 0, 0, 0);
+    const limit = new Date(ey, em - 1, ed, 12, 0, 0, 0);
+
+    while (cursor.getTime() <= limit.getTime()) {
+      const key = getDateKey(cursor);
+      if (key.startsWith(calendarEditorPeriodId)) {
+        datesInRange.push(key);
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    if (datesInRange.length === 0) {
+      setError("El rango no tiene fechas dentro del mes configurado.");
       return;
     }
 
     setCalendarOverrides((currentOverrides) => {
       const currentDates = currentOverrides[calendarEditorPeriodId] || [];
-
-      if (currentDates.includes(calendarDraftDate)) {
-        return currentOverrides;
-      }
-
+      const merged = Array.from(new Set([...currentDates, ...datesInRange])).sort();
       return {
         ...currentOverrides,
-        [calendarEditorPeriodId]: [...currentDates, calendarDraftDate].sort(),
+        [calendarEditorPeriodId]: merged,
       };
     });
-    setCalendarDraftDate("");
     setError("");
+    setMessage(
+      `Se agregaron ${datesInRange.length} fecha(s) no habiles. Recorda "Guardar calendario".`,
+    );
   }
 
   function handleRemoveBlockedDate(dateKey: string) {
@@ -2303,6 +3094,7 @@ export default function Home() {
     serviceId: string,
     moduleId: ModuleId,
     nextState: CaptureOverrideState | null,
+    period?: string,
   ) {
     if (!serviceProfile?.permissions.canToggleCapture || firestoreUnavailable) {
       return;
@@ -2312,7 +3104,8 @@ export default function Home() {
       return;
     }
 
-    const overrideId = getCaptureOverrideId(overridePanelPeriodId, serviceId, moduleId);
+    const targetPeriod = period ?? overridePanelPeriodId;
+    const overrideId = getCaptureOverrideId(targetPeriod, serviceId, moduleId);
     setOverrideBusyKey(overrideId);
     setError("");
     setMessage("");
@@ -2322,7 +3115,7 @@ export default function Home() {
         await deleteDoc(doc(db, "captureOverrides", overrideId));
       } else {
         await setDoc(doc(db, "captureOverrides", overrideId), {
-          periodId: overridePanelPeriodId,
+          periodId: targetPeriod,
           serviceId,
           moduleId,
           state: nextState,
@@ -2345,7 +3138,7 @@ export default function Home() {
 
       setMessage(
         nextState === "open"
-          ? "Tablero habilitado para captura."
+          ? `Tablero habilitado para captura de ${getPeriodLabel(targetPeriod)}.`
           : nextState === "closed"
             ? "Tablero deshabilitado."
             : "Tablero devuelto a su ventana normal.",
@@ -2358,6 +3151,103 @@ export default function Home() {
       setError("No pudimos actualizar el estado del tablero.");
     } finally {
       setOverrideBusyKey("");
+    }
+  }
+
+  // Un servicio solicita que le habiliten un tablero (porque no cargo a tiempo).
+  async function sendCaptureRequest(moduleId: ModuleId) {
+    if (!user || !currentService || !serviceProfile || firestoreUnavailable) {
+      return;
+    }
+
+    const requestPeriod = moduleId === "sesps" ? sepsPeriodId : periodId;
+    const requestId = `${requestPeriod}__${currentService.id}__${moduleId}`;
+
+    setIsSendingRequest(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await setDoc(doc(db, "captureRequests", requestId), {
+        periodId: requestPeriod,
+        periodLabel: getPeriodLabel(requestPeriod),
+        serviceId: currentService.id,
+        serviceName: currentService.name,
+        moduleId,
+        requestedByName: serviceProfile.name,
+        requestedByUid: user.uid,
+        status: "pending",
+        updatedAt: serverTimestamp(),
+      });
+
+      const newRequest: CaptureRequest = {
+        id: requestId,
+        periodId: requestPeriod,
+        periodLabel: getPeriodLabel(requestPeriod),
+        serviceId: currentService.id,
+        serviceName: currentService.name,
+        moduleId,
+        requestedByName: serviceProfile.name,
+        requestedByUid: user.uid,
+        status: "pending",
+      };
+      setCaptureRequests((current) => [
+        newRequest,
+        ...current.filter((item) => item.id !== requestId),
+      ]);
+
+      setShowRequestForm(false);
+      setMessage(
+        `Solicitud enviada: habilitar ${getModuleLabel(moduleId)} (${getPeriodLabel(requestPeriod)}). Un supervisor o el admin la revisara.`,
+      );
+    } catch (requestError) {
+      if (await handleFirestoreError(requestError)) {
+        return;
+      }
+      setError("No pudimos enviar la solicitud. Intentalo de nuevo.");
+    } finally {
+      setIsSendingRequest(false);
+    }
+  }
+
+  // El supervisor/admin marca una solicitud como aprobada o rechazada.
+  async function resolveCaptureRequest(request: CaptureRequest, status: "approved" | "rejected") {
+    if (!serviceProfile || firestoreUnavailable) {
+      return;
+    }
+    if (!isAdmin && !serviceProfile.supervisorModules.includes(request.moduleId)) {
+      return;
+    }
+
+    setRequestBusyId(request.id);
+    setError("");
+    setMessage("");
+
+    try {
+      await setDoc(
+        doc(db, "captureRequests", request.id),
+        { status, resolvedByName: serviceProfile.name, resolvedAt: serverTimestamp() },
+        { merge: true },
+      );
+      setCaptureRequests((current) =>
+        current.map((item) =>
+          item.id === request.id
+            ? { ...item, status, resolvedByName: serviceProfile.name }
+            : item,
+        ),
+      );
+      setMessage(
+        status === "approved"
+          ? `Solicitud aprobada. Recorda habilitar ${getModuleLabel(request.moduleId)} en "Habilitar tableros".`
+          : "Solicitud rechazada.",
+      );
+    } catch (resolveError) {
+      if (await handleFirestoreError(resolveError)) {
+        return;
+      }
+      setError("No pudimos actualizar la solicitud.");
+    } finally {
+      setRequestBusyId("");
     }
   }
 
@@ -2574,13 +3464,24 @@ export default function Home() {
       return;
     }
 
-    if (!serviceProfile.permissions.canEdit) {
+    // Mes destino: el que se este viendo (historial) o el de captura actual.
+    const targetPeriod = percViewPeriod ?? periodId;
+    const targetPeriodLabel = getPeriodLabel(targetPeriod);
+    const editingHistory = percViewPeriod !== null;
+
+    if (editingHistory && !isAdmin) {
+      setError("Solo el administrador puede editar meses anteriores.");
+      setMessage("");
+      return;
+    }
+
+    if (!serviceProfile.permissions.canEdit && !isAdmin) {
       setError("Tu cuenta no tiene permiso de captura en este momento.");
       setMessage("");
       return;
     }
 
-    if (!currentServiceCaptureOpen) {
+    if (!editingHistory && !currentServiceCaptureOpen && !isAdmin) {
       setError("El periodo de captura esta cerrado para este mes.");
       setMessage("");
       return;
@@ -2594,10 +3495,10 @@ export default function Home() {
 
     try {
       await setDoc(
-        doc(db, "serviceTabulators", `${periodId}__${currentService.id}`),
+        doc(db, "serviceTabulators", `${targetPeriod}__${currentService.id}`),
         {
-          periodId,
-          periodLabel,
+          periodId: targetPeriod,
+          periodLabel: targetPeriodLabel,
           serviceId: currentService.id,
           serviceName: currentService.name,
           headers: TABULATOR_HEADERS,
@@ -2613,7 +3514,7 @@ export default function Home() {
       setTableValues(normalizedValues);
       await refreshPublicDashboard(false);
 
-      setMessage(`Datos guardados correctamente para ${currentService.name}.`);
+      setMessage(`Datos guardados correctamente para ${currentService.name} (${targetPeriodLabel}).`);
     } catch (saveError) {
       if (await handleFirestoreError(saveError)) {
         return;
@@ -2642,13 +3543,23 @@ export default function Home() {
       return;
     }
 
-    if (!serviceProfile.permissions.canEdit) {
+    const targetPeriod = sepsViewPeriod ?? sepsPeriodId;
+    const targetPeriodLabel = getPeriodLabel(targetPeriod);
+    const editingHistory = sepsViewPeriod !== null;
+
+    if (editingHistory && !isAdmin) {
+      setError("Solo el administrador puede editar meses anteriores.");
+      setMessage("");
+      return;
+    }
+
+    if (!serviceProfile.permissions.canEdit && !isAdmin) {
       setError("Tu cuenta no tiene permiso de captura en este momento.");
       setMessage("");
       return;
     }
 
-    if (!sepsCaptureOpen) {
+    if (!editingHistory && !sepsCaptureOpen && !isAdmin) {
       setError("La captura SEPS esta cerrada en este momento.");
       setMessage("");
       return;
@@ -2658,14 +3569,14 @@ export default function Home() {
     setError("");
     setMessage("");
 
-    const normalizedValues = mergeSepsWithTemplate(sepsTemplate, sepsPeriodId, sepsValues);
+    const normalizedValues = mergeSepsWithTemplate(sepsTemplate, targetPeriod, sepsValues);
 
     try {
       await setDoc(
-        doc(db, "sepsTabulators", `${sepsPeriodId}__${sepsTemplate.serviceId}`),
+        doc(db, "sepsTabulators", `${targetPeriod}__${sepsTemplate.serviceId}`),
         {
-          periodId: sepsPeriodId,
-          periodLabel: sepsPeriodLabel,
+          periodId: targetPeriod,
+          periodLabel: targetPeriodLabel,
           module: "sesps",
           serviceId: sepsTemplate.serviceId,
           serviceName: currentService?.name || sepsTemplate.serviceId,
@@ -2678,7 +3589,8 @@ export default function Home() {
       );
 
       setSepsValues(normalizedValues);
-      setMessage(`Tabulador SEPS guardado correctamente (${sepsPeriodLabel}).`);
+      setSepsDataPeriods((prev) => new Set(prev).add(targetPeriod));
+      setMessage(`Tabulador SEPS guardado correctamente (${targetPeriodLabel}).`);
     } catch (saveError) {
       if (await handleFirestoreError(saveError)) {
         return;
@@ -2688,6 +3600,70 @@ export default function Home() {
     } finally {
       setIsSavingSeps(false);
     }
+  }
+
+  // Recupera lo guardado de SEPS para el periodo actual (vuelve a leer de Firestore).
+  async function loadSavedSeps() {
+    if (!sepsTemplate || firestoreUnavailable) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setIsLoadingSeps(true);
+
+    try {
+      const values = await fetchSepsDataForPeriod(sepsTemplate, sepsPeriodId);
+      setSepsValues(values);
+      setMessage(`Datos SEPS recuperados (${sepsPeriodLabel}).`);
+    } catch (loadError) {
+      if (await handleFirestoreError(loadError)) {
+        return;
+      }
+      setError("No pudimos recuperar los datos SEPS guardados.");
+    } finally {
+      setIsLoadingSeps(false);
+    }
+  }
+
+  // Carga el SEPS de un mes especifico para el historial (solo lectura salvo admin).
+  async function loadSepsHistory(period: string) {
+    if (!sepsTemplate || firestoreUnavailable) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setIsLoadingSeps(true);
+
+    try {
+      const values = await fetchSepsDataForPeriod(sepsTemplate, period);
+      setSepsValues(values);
+      setSepsViewPeriod(period === sepsPeriodId ? null : period);
+
+      if (period !== sepsPeriodId) {
+        setMessage(`Mostrando historial SEPS de ${getPeriodLabel(period)}.`);
+      } else {
+        setMessage(`Volviste al mes de captura SEPS (${sepsPeriodLabel}).`);
+      }
+    } catch (loadError) {
+      if (await handleFirestoreError(loadError)) {
+        return;
+      }
+      setError("No pudimos cargar el historial SEPS de ese mes.");
+    } finally {
+      setIsLoadingSeps(false);
+    }
+  }
+
+  // Limpia la tabla SEPS localmente (no borra lo guardado en Firestore).
+  function handleClearSeps() {
+    if (!sepsTemplate) {
+      return;
+    }
+    setSepsValues(buildEmptySeps(sepsTemplate, sepsPeriodId));
+    setMessage("Tabla SEPS limpiada localmente. Puedes volver a cargar o guardar nuevos datos.");
+    setError("");
   }
 
   // --- Distribucion de Horas (empleados) ---
@@ -2744,13 +3720,23 @@ export default function Home() {
       return;
     }
 
-    if (!serviceProfile.permissions.canEdit) {
+    const targetPeriod = horasViewPeriod ?? periodId;
+    const targetPeriodLabel = getPeriodLabel(targetPeriod);
+    const editingHistory = horasViewPeriod !== null;
+
+    if (editingHistory && !isAdmin) {
+      setError("Solo el administrador puede editar meses anteriores.");
+      setMessage("");
+      return;
+    }
+
+    if (!serviceProfile.permissions.canEdit && !isAdmin) {
       setError("Tu cuenta no tiene permiso de captura en este momento.");
       setMessage("");
       return;
     }
 
-    if (!currentServiceCaptureOpen) {
+    if (!editingHistory && !currentServiceCaptureOpen && !isAdmin) {
       setError("La captura de Distribucion de Horas esta cerrada en este momento.");
       setMessage("");
       return;
@@ -2767,10 +3753,10 @@ export default function Home() {
 
     try {
       await setDoc(
-        doc(db, "horasTabulators", `${periodId}__${horasTemplate.serviceId}`),
+        doc(db, "horasTabulators", `${targetPeriod}__${horasTemplate.serviceId}`),
         {
-          periodId,
-          periodLabel,
+          periodId: targetPeriod,
+          periodLabel: targetPeriodLabel,
           module: "distribucion",
           serviceId: horasTemplate.serviceId,
           serviceName: currentService?.name || horasTemplate.serviceId,
@@ -2784,7 +3770,8 @@ export default function Home() {
       );
 
       setHorasSaved(true);
-      setMessage(`Distribucion de Horas guardada correctamente (${periodLabel}).`);
+      setHorasDataPeriods((prev) => new Set(prev).add(targetPeriod));
+      setMessage(`Distribucion de Horas guardada correctamente (${targetPeriodLabel}).`);
     } catch (saveError) {
       if (await handleFirestoreError(saveError)) {
         return;
@@ -2793,6 +3780,72 @@ export default function Home() {
     } finally {
       setIsSavingHoras(false);
     }
+  }
+
+  // Recupera los empleados guardados de Horas para el periodo actual.
+  async function loadSavedHoras() {
+    if (!horasTemplate || firestoreUnavailable) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setIsLoadingHoras(true);
+
+    try {
+      const result = await fetchHorasForPeriod(horasTemplate, periodId);
+      setHorasEmployees(result.employees);
+      setHorasSaved(result.saved);
+      setMessage(`Distribucion de Horas recuperada (${periodLabel}).`);
+    } catch (loadError) {
+      if (await handleFirestoreError(loadError)) {
+        return;
+      }
+      setError("No pudimos recuperar la Distribucion de Horas guardada.");
+    } finally {
+      setIsLoadingHoras(false);
+    }
+  }
+
+  // Carga las Horas de un mes especifico para el historial (solo lectura salvo admin).
+  async function loadHorasHistory(period: string) {
+    if (!horasTemplate || firestoreUnavailable) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setIsLoadingHoras(true);
+
+    try {
+      const result = await fetchHorasForPeriod(horasTemplate, period);
+      setHorasEmployees(result.employees);
+      setHorasSaved(result.saved);
+      setHorasViewPeriod(period === periodId ? null : period);
+
+      if (period !== periodId) {
+        setMessage(`Mostrando historial de Horas de ${getPeriodLabel(period)}.`);
+      } else {
+        setMessage(`Volviste al mes de captura de Horas (${periodLabel}).`);
+      }
+    } catch (loadError) {
+      if (await handleFirestoreError(loadError)) {
+        return;
+      }
+      setError("No pudimos cargar el historial de Horas de ese mes.");
+    } finally {
+      setIsLoadingHoras(false);
+    }
+  }
+
+  // Limpia la tabla de Horas localmente (no borra lo guardado en Firestore).
+  function handleClearHoras() {
+    if (!horasTemplate) {
+      return;
+    }
+    setHorasEmployees(seedHorasEmployees(horasTemplate));
+    setMessage("Tabla de Horas limpiada localmente. Puedes volver a cargar o guardar nuevos datos.");
+    setError("");
   }
 
   async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
@@ -2835,6 +3888,7 @@ export default function Home() {
 
       setNewPassword("");
       setConfirmPassword("");
+      setShowPasswordModal(false);
       setMessage("Contrasena actualizada correctamente.");
     } catch (passwordError) {
       setError(getAuthErrorMessage(passwordError));
@@ -3000,6 +4054,44 @@ export default function Home() {
     const isReopenedLate = currentServiceCaptureOpen && !captureWindow.isOpen;
     const isPermissionLocked = !currentService || !serviceProfile.permissions.canEdit;
     const isFormLocked = isDateLocked || isPermissionLocked;
+    // Historial PERC: mes activo, si es historial, y si la edicion esta bloqueada.
+    const activePercPeriod = percViewPeriod ?? periodId;
+    const isPercHistory = percViewPeriod !== null;
+    const percReadOnly = isPercHistory && !isAdmin;
+    // El admin nunca queda bloqueado; el servicio: historial = solo lectura, mes actual = ventana.
+    const percEditingBlocked = isAdmin ? false : isPercHistory ? true : isFormLocked;
+    const percHistoryOptions = buildRecentPeriods(periodId, 12);
+
+    // Selector de mes reutilizable (PERC/SEPS/Horas). Pinta verde el mes con datos, gris el vacio.
+    const renderHistorySelector = (config: {
+      options: RecentPeriod[];
+      currentPeriod: string;
+      activePeriod: string;
+      isHistory: boolean;
+      readOnly: boolean;
+      dataPeriods: Set<string>;
+      loading: boolean;
+      onSelect: (period: string) => void;
+    }) => (
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-sm text-slate-300">
+          <span className="font-medium">Mes:</span>
+          <HistoryMonthSelect
+            options={config.options}
+            currentPeriod={config.currentPeriod}
+            activePeriod={config.activePeriod}
+            dataPeriods={config.dataPeriods}
+            loading={config.loading}
+            onSelect={config.onSelect}
+          />
+        </div>
+        {config.isHistory ? (
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-200">
+            {config.readOnly ? "HISTORIAL · SOLO LECTURA" : "HISTORIAL · EDICION ADMIN"}
+          </span>
+        ) : null}
+      </div>
+    );
     const isLightPanelTheme = panelTheme === "light";
     const openDaysLabel = captureWindow.openDays
       .map((day) => SHORT_DATE_FORMATTER.format(day))
@@ -3038,20 +4130,38 @@ export default function Home() {
               />
             </label>
 
-            <label className="mt-4 block">
-              <span className="text-sm font-medium text-slate-200">Agregar fecha no habil</span>
-              <input
-                value={calendarDraftDate}
-                onChange={(event) => setCalendarDraftDate(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
-                type="date"
-              />
-            </label>
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              <label className="block">
+                <span className="text-sm font-medium text-slate-200">Desde</span>
+                <input
+                  value={calendarRangeStart}
+                  min={`${calendarEditorPeriodId}-01`}
+                  max={`${calendarEditorPeriodId}-31`}
+                  onChange={(event) => setCalendarRangeStart(event.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
+                  type="date"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-200">Hasta</span>
+                <input
+                  value={calendarRangeEnd}
+                  min={`${calendarEditorPeriodId}-01`}
+                  max={`${calendarEditorPeriodId}-31`}
+                  onChange={(event) => setCalendarRangeEnd(event.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
+                  type="date"
+                />
+              </label>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Podés marcar un solo día (Desde = Hasta) o varios de una vez (ej. 3 al 6).
+            </p>
 
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                onClick={handleAddBlockedDate}
+                onClick={handleAddBlockedRange}
                 className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
               >
                 Agregar
@@ -3071,7 +4181,11 @@ export default function Home() {
             <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
               <h3 className="text-lg font-semibold text-white">Fechas excluidas</h3>
               <p className="mt-2 text-sm text-slate-300">
-                Usa esta lista para vacaciones, feriados extraordinarios o cierres.
+                Usa esta lista para vacaciones, feriados extraordinarios o cierres.{" "}
+                <span className="font-semibold text-emerald-300">
+                  Tocá una fecha para volver a habilitarla
+                </span>{" "}
+                (si la marcaste por error).
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2">
@@ -3081,9 +4195,11 @@ export default function Home() {
                       key={dateKey}
                       type="button"
                       onClick={() => handleRemoveBlockedDate(dateKey)}
-                      className="rounded-full border border-rose-400/40 bg-rose-950/30 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-900/40"
+                      title="Tocar para habilitar este día (quitarlo de excluidas)"
+                      className="group inline-flex items-center gap-1.5 rounded-full border border-rose-400/40 bg-rose-950/30 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:border-emerald-400/50 hover:bg-emerald-900/30 hover:text-emerald-100"
                     >
-                      {dateKey} ×
+                      {dateKey}
+                      <span className="text-sm leading-none">×</span>
                     </button>
                   ))
                 ) : (
@@ -3171,6 +4287,16 @@ export default function Home() {
           disabled={isBusy}
           onChange={(event) => {
             const value = event.target.value;
+            if (value === "open") {
+              // Abrir pide mes/año en un modal para evitar abrir el periodo equivocado.
+              setCaptureOpenPeriod(overridePanelPeriodId);
+              setCaptureOpenTarget({
+                serviceId: service.id,
+                serviceName: service.name,
+                moduleId,
+              });
+              return;
+            }
             void handleToggleCapture(
               service.id,
               moduleId,
@@ -3179,9 +4305,24 @@ export default function Home() {
           }}
           className={`w-full cursor-pointer rounded-lg border px-2 py-1.5 text-xs font-semibold outline-none transition focus:ring-2 focus:ring-amber-400/40 disabled:opacity-50 ${tone}`}
         >
-          <option value="auto">● Automatico</option>
-          <option value="open">▲ Abrir</option>
-          <option value="closed">■ Cerrar</option>
+          <option
+            value="auto"
+            style={{ backgroundColor: isLightPanelTheme ? "#ffffff" : "#1b2537", color: isLightPanelTheme ? "#334155" : "#e2e8f0" }}
+          >
+            ● Automatico
+          </option>
+          <option
+            value="open"
+            style={{ backgroundColor: isLightPanelTheme ? "#ffffff" : "#1b2537", color: isLightPanelTheme ? "#047857" : "#6ee7b7" }}
+          >
+            ▲ Abrir
+          </option>
+          <option
+            value="closed"
+            style={{ backgroundColor: isLightPanelTheme ? "#ffffff" : "#1b2537", color: isLightPanelTheme ? "#be123c" : "#fda4af" }}
+          >
+            ■ Cerrar
+          </option>
         </select>
       );
     };
@@ -3263,18 +4404,46 @@ export default function Home() {
               Ningun servicio coincide con la busqueda.
             </p>
           ) : (
-            overrideGroups.map((group) => (
+            overrideGroups.map((group) => {
+              const groupOpen = openOverrideGroups.has(group.id);
+              return (
               <div
                 key={group.id}
                 className={`overflow-hidden rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10 bg-[#1b2537]"}`}
               >
-                <div className={`flex items-center justify-between px-4 py-2.5 ${isLightPanelTheme ? "bg-slate-50" : "bg-white/5"}`}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenOverrideGroups((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(group.id)) {
+                        next.delete(group.id);
+                      } else {
+                        next.add(group.id);
+                      }
+                      return next;
+                    })
+                  }
+                  className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition ${isLightPanelTheme ? "bg-slate-50 hover:bg-slate-100" : "bg-white/5 hover:bg-white/10"}`}
+                >
                   <h3 className="text-sm font-semibold uppercase tracking-wide">{group.title}</h3>
-                  <span className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-                    {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
+                  <span className="flex items-center gap-2">
+                    <span className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                      {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
+                    </span>
+                    <span
+                      aria-hidden
+                      className={`flex h-6 w-6 items-center justify-center rounded-md text-base font-bold leading-none ${
+                        isLightPanelTheme
+                          ? "border border-slate-300 bg-white text-slate-600"
+                          : "border border-white/15 bg-white/5 text-cyan-200"
+                      }`}
+                    >
+                      {groupOpen ? "−" : "+"}
+                    </span>
                   </span>
-                </div>
-                <div className="overflow-x-auto">
+                </button>
+                <div className={`overflow-x-auto ${groupOpen ? "" : "hidden"}`}>
                   <table className="w-full border-collapse text-left text-sm">
                     <thead>
                       <tr className={isLightPanelTheme ? "text-slate-500" : "text-slate-400"}>
@@ -3304,7 +4473,8 @@ export default function Home() {
                   </table>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </section>
@@ -3324,6 +4494,12 @@ export default function Home() {
     const sepsRowTotal = (row: { key: string; readOnly?: boolean; sumOf?: string[] }) =>
       sepsDayColumns.reduce((acc, day) => acc + sepsDayCell(row, day), 0);
     const sepsLocked = !sepsCaptureOpen || !serviceProfile.permissions.canEdit;
+    // Historial SEPS: mes activo, modo lectura y bloqueo de edicion.
+    const activeSepsPeriod = sepsViewPeriod ?? sepsPeriodId;
+    const isSepsHistory = sepsViewPeriod !== null;
+    const sepsHistReadOnly = isSepsHistory && !isAdmin;
+    const sepsEditingBlocked = isAdmin ? false : isSepsHistory ? true : sepsLocked;
+    const sepsHistoryOptions = buildRecentPeriods(sepsPeriodId, 12);
     const sepsPhaseLabel =
       sepsWindow.phase === "cierre"
         ? `Cierre del mes ${sepsPeriodLabel} (hasta el 3er dia habil)`
@@ -3355,16 +4531,19 @@ export default function Home() {
             >
               {sepsLocked ? "BLOQUEADO" : "HABILITADO"}
             </span>
-            <button
-              type="button"
-              onClick={() => void handleSaveSeps()}
-              disabled={isSavingSeps || sepsLocked}
-              className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
-            >
-              {isSavingSeps ? "Guardando..." : "Guardar SEPS"}
-            </button>
           </div>
         </div>
+
+        {renderHistorySelector({
+          options: sepsHistoryOptions,
+          currentPeriod: sepsPeriodId,
+          activePeriod: activeSepsPeriod,
+          isHistory: isSepsHistory,
+          readOnly: sepsHistReadOnly,
+          dataPeriods: sepsDataPeriods,
+          loading: isLoadingSeps,
+          onSelect: (period) => void loadSepsHistory(period),
+        })}
 
         <p className="mt-3 rounded-xl border border-white/10 bg-[#1b2537] px-4 py-2 text-sm text-slate-200">
           {sepsPhaseLabel}. Los totales y la fila de suma se calculan solos.
@@ -3392,15 +4571,41 @@ export default function Home() {
               i = j;
             }
 
+            const tableOpen = openSepsTables.has(table.id);
+
             return (
               <div key={table.id} className="overflow-hidden rounded-2xl border border-white/10">
-                <div className="bg-white/5 px-4 py-3">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide">{table.title}</h3>
-                  {table.subtitle ? (
-                    <p className="mt-1 text-xs text-slate-300">{table.subtitle}</p>
-                  ) : null}
-                </div>
-                <div className="overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenSepsTables((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(table.id)) {
+                        next.delete(table.id);
+                      } else {
+                        next.add(table.id);
+                      }
+                      return next;
+                    })
+                  }
+                  className="flex w-full items-center justify-between gap-3 bg-white/5 px-4 py-3 text-left transition hover:bg-white/10"
+                >
+                  <span>
+                    <span className="block text-sm font-semibold uppercase tracking-wide text-slate-100">
+                      {table.title}
+                    </span>
+                    {table.subtitle ? (
+                      <span className="mt-1 block text-xs text-slate-300">{table.subtitle}</span>
+                    ) : null}
+                  </span>
+                  <span
+                    aria-hidden
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-lg font-bold leading-none text-cyan-200"
+                  >
+                    {tableOpen ? "−" : "+"}
+                  </span>
+                </button>
+                <div className={`overflow-x-auto ${tableOpen ? "" : "hidden"}`}>
                   <table className="border-collapse text-xs text-slate-100">
                     <thead>
                       <tr className="bg-white/5 text-slate-300">
@@ -3453,7 +4658,7 @@ export default function Home() {
                                   onChange={(event) =>
                                     handleSepsCellChange(row.key, day, event.target.value)
                                   }
-                                  disabled={sepsLocked}
+                                  disabled={sepsEditingBlocked}
                                   inputMode="numeric"
                                   className="w-9 rounded border border-white/10 bg-[#1b2537] px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 disabled:opacity-50"
                                 />
@@ -3471,6 +4676,54 @@ export default function Home() {
               </div>
             );
           })}
+        </div>
+
+        {/* Acciones del tabulador SEPS. En historial cambia segun el rol. */}
+        <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div>
+            {isSepsHistory ? (
+              <button
+                type="button"
+                onClick={() => void loadSepsHistory(sepsPeriodId)}
+                disabled={isLoadingSeps}
+                className="rounded-2xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+              >
+                ← Volver al mes actual
+              </button>
+            ) : null}
+          </div>
+
+          {sepsHistReadOnly ? (
+            <p className="text-sm font-medium text-amber-200">Vista de historial — solo lectura.</p>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <button
+                type="button"
+                onClick={handleClearSeps}
+                className="rounded-2xl bg-slate-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500"
+              >
+                Limpiar tabla
+              </button>
+              {!isSepsHistory ? (
+                <button
+                  type="button"
+                  onClick={() => void loadSavedSeps()}
+                  disabled={isLoadingSeps}
+                  className="rounded-2xl bg-violet-500/80 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80"
+                >
+                  {isLoadingSeps ? "Recuperando..." : "Recuperar datos"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleSaveSeps()}
+                disabled={isSavingSeps || sepsEditingBlocked}
+                className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+              >
+                {isSavingSeps ? "Guardando..." : isSepsHistory ? "Guardar cambios del mes" : "Guardar SEPS"}
+              </button>
+            </div>
+          )}
         </div>
       </section>
     ) : null;
@@ -3524,14 +4777,18 @@ export default function Home() {
     // Seccion "Distribucion de Horas": aun sin plantilla propia. Da un destino con
     // titulo al hacer clic en el menu Distribucion de Horas. Va al final.
     const horasLocked = !currentServiceCaptureOpen || !serviceProfile.permissions.canEdit;
+    // Historial Horas: mes activo, modo lectura y bloqueo de edicion.
+    const activeHorasPeriod = horasViewPeriod ?? periodId;
+    const isHorasHistory = horasViewPeriod !== null;
+    const horasHistReadOnly = isHorasHistory && !isAdmin;
+    const horasEditingBlocked = isAdmin ? false : isHorasHistory ? true : horasLocked;
+    const horasHistoryOptions = buildRecentPeriods(periodId, 12);
     const horasNum = (emp: HorasEmployee, col: string) => {
       const n = Number.parseInt(emp.hours[col] ?? "", 10);
       return Number.isFinite(n) ? n : 0;
     };
     const horasRowTotal = (emp: HorasEmployee) =>
       horasTemplate ? horasTemplate.columns.reduce((acc, col) => acc + horasNum(emp, col), 0) : 0;
-    const horasColTotal = (col: string) =>
-      horasEmployees.reduce((acc, emp) => acc + horasNum(emp, col), 0);
 
     const horasSection = horasTemplate ? (
       <>
@@ -3558,16 +4815,19 @@ export default function Home() {
             >
               {horasLocked ? "BLOQUEADO" : "HABILITADO"}
             </span>
-            <button
-              type="button"
-              onClick={() => void handleSaveHoras()}
-              disabled={isSavingHoras || horasLocked}
-              className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
-            >
-              {isSavingHoras ? "Guardando..." : "Guardar Horas"}
-            </button>
           </div>
         </div>
+
+        {renderHistorySelector({
+          options: horasHistoryOptions,
+          currentPeriod: periodId,
+          activePeriod: activeHorasPeriod,
+          isHistory: isHorasHistory,
+          readOnly: horasHistReadOnly,
+          dataPeriods: horasDataPeriods,
+          loading: isLoadingHoras,
+          onSelect: (period) => void loadHorasHistory(period),
+        })}
 
         <p className="mt-3 rounded-xl border border-white/10 bg-[#1b2537] px-4 py-2 text-sm text-slate-200">
           Horas por empleado distribuidas en los centros de costo. El <strong>comentario</strong>{" "}
@@ -3599,7 +4859,7 @@ export default function Home() {
                     <input
                       value={emp.comment}
                       onChange={(event) => handleHorasComment(index, event.target.value)}
-                      disabled={horasLocked}
+                      disabled={horasEditingBlocked}
                       placeholder="(opcional)"
                       className="w-40 rounded border border-amber-400/20 bg-[#1b2537] px-2 py-1.5 text-amber-100 outline-none focus:border-amber-400 disabled:opacity-50"
                     />
@@ -3608,22 +4868,51 @@ export default function Home() {
                     <input
                       value={emp.name}
                       onChange={(event) => handleHorasName(index, event.target.value)}
-                      disabled={horasLocked}
+                      disabled={horasEditingBlocked}
                       placeholder="Nombre"
                       className="w-64 rounded border border-white/10 bg-[#1b2537] px-2 py-1.5 outline-none focus:border-cyan-400 disabled:opacity-50"
                     />
                   </td>
-                  {horasTemplate.columns.map((col) => (
-                    <td key={col} className="px-2 py-1.5 text-center">
-                      <input
-                        value={emp.hours[col] ?? ""}
-                        onChange={(event) => handleHorasHour(index, col, event.target.value)}
-                        disabled={horasLocked}
-                        inputMode="numeric"
-                        className="w-16 rounded border border-white/10 bg-[#1b2537] px-1 py-1.5 text-center outline-none focus:border-cyan-400 disabled:opacity-50"
-                      />
-                    </td>
-                  ))}
+                  {horasTemplate.columns.map((col) => {
+                    const inFillRange =
+                      fillDrag !== null &&
+                      fillDrag.col === col &&
+                      index >= fillDrag.startRow &&
+                      index <= fillDrag.endRow;
+                    return (
+                      <td key={col} className="group relative px-2 py-1.5 text-center">
+                        <input
+                          value={emp.hours[col] ?? ""}
+                          onChange={(event) => handleHorasHour(index, col, event.target.value)}
+                          onMouseEnter={() => {
+                            if (fillDrag && fillDrag.col === col && index >= fillDrag.startRow) {
+                              setFillDrag({ ...fillDrag, endRow: index });
+                            }
+                          }}
+                          disabled={horasEditingBlocked}
+                          inputMode="numeric"
+                          className={`w-16 rounded border bg-[#1b2537] px-1 py-1.5 text-center outline-none focus:border-cyan-400 disabled:opacity-50 ${
+                            inFillRange ? "border-cyan-400 ring-1 ring-cyan-400 bg-cyan-500/10" : "border-white/10"
+                          }`}
+                        />
+                        {!horasEditingBlocked ? (
+                          <span
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              setFillDrag({
+                                col,
+                                startRow: index,
+                                endRow: index,
+                                value: emp.hours[col] ?? "",
+                              });
+                            }}
+                            title="Arrastra hacia abajo para copiar este valor"
+                            className="absolute bottom-1 right-2 h-2.5 w-2.5 cursor-ns-resize rounded-sm border border-[#1b2537] bg-cyan-400 opacity-0 transition group-hover:opacity-100"
+                          />
+                        ) : null}
+                      </td>
+                    );
+                  })}
                   <td className="bg-[#243049] px-3 py-1.5 text-center font-semibold text-cyan-100">
                     {horasRowTotal(emp)}
                   </td>
@@ -3631,7 +4920,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => handleRemoveHorasEmployee(index)}
-                      disabled={horasLocked}
+                      disabled={horasEditingBlocked}
                       title="Quitar empleado"
                       className="rounded-lg bg-rose-500/15 px-2 py-1 text-rose-200 transition hover:bg-rose-500/25 disabled:opacity-40"
                     >
@@ -3641,33 +4930,66 @@ export default function Home() {
                 </tr>
               ))}
             </tbody>
-            <tfoot>
-              <tr className="border-t border-white/10 bg-white/5 font-semibold">
-                <td className="px-3 py-2" colSpan={3}>
-                  TOTAL
-                </td>
-                {horasTemplate.columns.map((col) => (
-                  <td key={col} className="px-3 py-2 text-center text-cyan-100">
-                    {horasColTotal(col)}
-                  </td>
-                ))}
-                <td className="bg-[#243049] px-3 py-2 text-center text-cyan-100">
-                  {horasEmployees.reduce((acc, emp) => acc + horasRowTotal(emp), 0)}
-                </td>
-                <td />
-              </tr>
-            </tfoot>
           </table>
         </div>
 
-        <button
-          type="button"
-          onClick={handleAddHorasEmployee}
-          disabled={horasLocked}
-          className="mt-4 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
-        >
-          + Agregar empleado
-        </button>
+        <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            {!horasHistReadOnly ? (
+              <button
+                type="button"
+                onClick={handleAddHorasEmployee}
+                disabled={horasEditingBlocked}
+                className="rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+              >
+                + Agregar empleado
+              </button>
+            ) : null}
+            {isHorasHistory ? (
+              <button
+                type="button"
+                onClick={() => void loadHorasHistory(periodId)}
+                disabled={isLoadingHoras}
+                className="rounded-2xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+              >
+                ← Volver al mes actual
+              </button>
+            ) : null}
+          </div>
+
+          {/* Acciones del tabulador Horas. En historial cambia segun el rol. */}
+          {horasHistReadOnly ? (
+            <p className="text-sm font-medium text-amber-200">Vista de historial — solo lectura.</p>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              <button
+                type="button"
+                onClick={handleClearHoras}
+                className="rounded-2xl bg-slate-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500"
+              >
+                Limpiar tabla
+              </button>
+              {!isHorasHistory ? (
+                <button
+                  type="button"
+                  onClick={() => void loadSavedHoras()}
+                  disabled={isLoadingHoras}
+                  className="rounded-2xl bg-violet-500/80 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80"
+                >
+                  {isLoadingHoras ? "Recuperando..." : "Recuperar datos"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleSaveHoras()}
+                disabled={isSavingHoras || horasEditingBlocked}
+                className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+              >
+                {isSavingHoras ? "Guardando..." : isHorasHistory ? "Guardar cambios del mes" : "Guardar Horas"}
+              </button>
+            </div>
+          )}
+        </div>
       </section>
 
       {horasEmployeeToRemove !== null ? (
@@ -3764,6 +5086,24 @@ export default function Home() {
       </section>
     ) : null;
 
+    // Solicitudes visibles para el usuario actual (admin: todas; supervisor: sus modulos).
+    const visibleRequests = isAdmin
+      ? captureRequests
+      : isSupervisor
+        ? captureRequests.filter((req) => serviceProfile.supervisorModules.includes(req.moduleId))
+        : [];
+    const pendingRequestCount = visibleRequests.filter((req) => req.status === "pending").length;
+    // El servicio logueado puede solicitar habilitacion si tiene un tablero propio.
+    const canRequestEnable = !!currentService && !isAdmin && !isSupervisor;
+    // Modulos que el servicio puede solicitar (los que le aplican).
+    const requestableModules: ModuleId[] = currentService
+      ? ([
+          "perc" as ModuleId,
+          ...(sepsTemplate ? (["sesps"] as ModuleId[]) : []),
+          ...(horasTemplate ? (["distribucion"] as ModuleId[]) : []),
+        ])
+      : [];
+
     const sidebarItems = [
       {
         id: "panel-overview",
@@ -3772,6 +5112,12 @@ export default function Home() {
         badge: "IN",
       },
       ...moduleSidebarItems,
+      {
+        id: "panel-config",
+        label: "Configuración",
+        detail: "Personalizá tu vista",
+        badge: "CF",
+      },
       ...(isAdmin
         ? [
             {
@@ -3804,6 +5150,26 @@ export default function Home() {
             },
           ]
         : []),
+      ...(isSupervisor || isAdmin
+        ? [
+            {
+              id: "panel-requests",
+              label: "Solicitudes",
+              detail: "Pedidos de habilitacion",
+              badge: pendingRequestCount > 0 ? String(pendingRequestCount) : "SO",
+            },
+          ]
+        : []),
+      ...(canRequestEnable
+        ? [
+            {
+              id: "panel-request-form",
+              label: "Solicitar habilitar",
+              detail: "Pedir reapertura de un tablero",
+              badge: "SO",
+            },
+          ]
+        : []),
     ];
 
     const moduleSections =
@@ -3816,18 +5182,10 @@ export default function Home() {
               : "border border-white/10 bg-[#202c41]"
           }`}
         >
-          <div className="mb-5">
-            <p className={`text-sm uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-sky-700" : "text-cyan-200/80"}`}>
-              Menus del area
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold">
-              Tus menus ({visibleModules.length} de {MODULE_DEFINITIONS.length})
+          <div className="mb-4">
+            <h2 className={`text-xs font-semibold uppercase tracking-[0.18em] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+              Menús del área ({visibleModules.length}/{MODULE_DEFINITIONS.length})
             </h2>
-            <p className={`mt-2 max-w-3xl text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-              {isAdmin
-                ? "Como administrador ves los tres menus. Cada area vera unicamente los que tenga asignados."
-                : "Esta area accede solo a los menus mostrados. El control de completo / incompleto aplica a cada uno."}
-            </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -3909,13 +5267,37 @@ export default function Home() {
 
     return (
       <main
+        style={
+          {
+            fontFamily: getFontStack(uiPrefs.font),
+            "--accent": getAccentOption(uiPrefs.accent).accent,
+            "--accent-btn": getAccentOption(uiPrefs.accent).accent,
+            "--accent-ink": getAccentOption(uiPrefs.accent).ink,
+            ...(getBackgroundCss(uiPrefs.background)
+              ? { backgroundImage: getBackgroundCss(uiPrefs.background) as string }
+              : {}),
+          } as CSSProperties
+        }
         className={`panel-shell ${
           isLightPanelTheme ? "theme-light" : "theme-dark"
         } min-h-screen px-4 py-6 sm:px-7 lg:px-10`}
       >
-        <div className="mx-auto grid max-w-[1850px] gap-6 xl:grid-cols-[290px_minmax(0,1fr)]">
+        <div
+          className={`mx-auto grid max-w-[1850px] grid-cols-1 gap-6 ${
+            menuOpen ? "xl:grid-cols-[290px_minmax(0,1fr)]" : "xl:grid-cols-1"
+          }`}
+        >
+          {/* Fondo oscuro detras del cajon (solo movil/cuando esta abierto). */}
+          {menuOpen ? (
+            <div
+              onClick={() => setMenuOpen(false)}
+              className="fixed inset-0 z-40 bg-black/50 xl:hidden"
+            />
+          ) : null}
           <aside
-            className={`self-start rounded-[24px] p-4 shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:sticky xl:top-6 ${
+            className={`self-start overflow-y-auto rounded-[24px] p-4 shadow-[0_24px_80px_rgba(3,7,18,0.22)] transition-transform duration-200 fixed inset-y-0 left-0 z-50 w-[290px] max-w-[85vw] xl:z-auto xl:w-auto xl:max-w-none xl:translate-x-0 xl:transition-none xl:sticky xl:top-6 ${
+              menuOpen ? "translate-x-0" : "-translate-x-full xl:hidden"
+            } ${
               isLightPanelTheme
                 ? "border border-slate-200 bg-[#eef2fb] text-slate-900"
                 : "border border-white/10 bg-[#1b2537] text-slate-100"
@@ -3935,8 +5317,10 @@ export default function Home() {
                 isLightPanelTheme ? "bg-white" : "bg-[#202c41]"
               }`}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1f255f] text-sm font-bold text-white">
-                {serviceProfile.username.slice(0, 2).toUpperCase()}
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1f255f] text-lg font-bold text-white">
+                {currentService
+                  ? getServiceEmoji(currentService.id)
+                  : serviceProfile.username.slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0">
                 <p className={`truncate text-[13px] font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{welcomeName}</p>
@@ -3949,31 +5333,74 @@ export default function Home() {
             <nav className="mt-5 space-y-1">
               {sidebarItems.map((item) => {
                 const isActive = activeSidebarSection === item.id;
+                // Alerta roja cuando hay solicitudes pendientes.
+                const hasAlert = item.id === "panel-requests" && pendingRequestCount > 0;
 
                 return (
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => handleSidebarNavigation(item.id)}
+                    onClick={() => {
+                      if (item.id.startsWith("panel-module-")) {
+                        // Menu de modulo sin servicio (admin/supervisor): mini estadistica.
+                        setStatsModule(item.id.replace("panel-module-", "") as ModuleId);
+                        setShowStatsModal(true);
+                      } else if (item.id === "panel-users") {
+                        setShowUsersModal(true);
+                        void loadAdminUsers();
+                      } else if (item.id === "panel-avance") {
+                        setShowBoardModal(true);
+                      } else if (item.id === "panel-requests") {
+                        setShowRequestsModal(true);
+                      } else if (item.id === "panel-request-form") {
+                        setRequestModuleId(requestableModules[0] ?? "perc");
+                        setShowRequestForm(true);
+                      } else if (item.id === "panel-config") {
+                        setShowConfigModal(true);
+                      } else {
+                        handleSidebarNavigation(item.id);
+                      }
+                      // En movil, cerrar el cajon despues de elegir.
+                      if (typeof window !== "undefined" && window.innerWidth < 1280) {
+                        setMenuOpen(false);
+                      }
+                    }}
                     title={item.detail}
                     className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition ${
-                      isActive
-                        ? "border-[#cad5ee] bg-[#e8eefb] shadow-sm"
-                        : isLightPanelTheme
-                          ? "border-transparent bg-transparent hover:border-slate-200 hover:bg-white/80"
-                          : "border-transparent bg-transparent hover:border-white/10 hover:bg-white/5"
+                      hasAlert
+                        ? "border-rose-400/60 bg-rose-500/15 hover:bg-rose-500/25"
+                        : isActive
+                          ? "border-[#cad5ee] bg-[#e8eefb] shadow-sm"
+                          : isLightPanelTheme
+                            ? "border-transparent bg-transparent hover:border-slate-200 hover:bg-white/80"
+                            : "border-transparent bg-transparent hover:border-white/10 hover:bg-white/5"
                     }`}
                   >
                     <span
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold uppercase tracking-[0.12em] ${
-                        isActive
-                          ? "bg-[#1f255f] text-white"
-                          : "bg-slate-100 text-slate-500"
+                      className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                        hasAlert
+                          ? "bg-rose-500 text-white"
+                          : isActive
+                            ? "bg-[#1f255f] text-white"
+                            : "bg-slate-100 text-slate-500"
                       }`}
                     >
                       {SIDEBAR_ICON_BY_ID[item.id] ?? item.badge}
+                      {hasAlert ? (
+                        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white ring-2 ring-[#0e1626]">
+                          {pendingRequestCount}
+                        </span>
+                      ) : null}
                     </span>
-                    <span className={`block truncate text-[13px] font-medium ${isLightPanelTheme ? "text-slate-900" : "text-slate-100"}`}>
+                    <span
+                      className={`block truncate text-[13px] font-medium ${
+                        hasAlert
+                          ? "text-rose-200"
+                          : isLightPanelTheme
+                            ? "text-slate-900"
+                            : "text-slate-100"
+                      }`}
+                    >
                       {item.label}
                     </span>
                   </button>
@@ -3996,7 +5423,14 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                onClick={() => handleSidebarNavigation("panel-security")}
+                onClick={() => {
+                  setError("");
+                  setMessage("");
+                  setNewPassword("");
+                  setConfirmPassword("");
+                  setShowPasswordText(false);
+                  setShowPasswordModal(true);
+                }}
                 className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition ${
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
@@ -4020,64 +5454,71 @@ export default function Home() {
           </aside>
 
           <div className="min-w-0 space-y-6">
+            {/* Boton de menu (hamburguesa) PEGAJOSO: queda fijo arriba al bajar. */}
+            <div className="sticky top-3 z-30 w-fit">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((value) => !value)}
+                aria-label={menuOpen ? "Ocultar menú" : "Mostrar menú"}
+                className={`inline-flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-semibold shadow-lg ring-1 transition ${
+                  isLightPanelTheme
+                    ? "border-amber-300/60 bg-white text-slate-800 ring-amber-300/40 hover:bg-amber-50"
+                    : "border-amber-400/40 bg-[#202c41] text-amber-100 ring-amber-400/30 hover:bg-[#243049]"
+                }`}
+              >
+                <span className="flex flex-col gap-[3.5px]">
+                  <span className="block h-0.5 w-5 rounded-full bg-amber-400" />
+                  <span className="block h-0.5 w-5 rounded-full bg-amber-400" />
+                  <span className="block h-0.5 w-5 rounded-full bg-amber-400" />
+                </span>
+                {menuOpen ? "Ocultar menú" : "Menú"}
+              </button>
+            </div>
+
+            {/* Widgets opcionales (Configuracion): saludo y reloj. */}
+            {uiPrefs.showGreeting || uiPrefs.showClock ? (
+              <div
+                className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl px-4 py-3 ${
+                  isLightPanelTheme
+                    ? "border border-slate-200 bg-white text-slate-900"
+                    : "border border-white/10 bg-[#202c41] text-slate-100"
+                }`}
+              >
+                {uiPrefs.showGreeting ? (
+                  <p className="text-sm font-semibold">
+                    Hola, {welcomeName} 👋
+                  </p>
+                ) : (
+                  <span />
+                )}
+                {uiPrefs.showClock ? (
+                  <p className="text-sm font-medium text-slate-400">
+                    <time suppressHydrationWarning>{DATE_TIME_FORMATTER.format(now)}</time>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {moduleSections}
             <section
               id="panel-overview"
-              className={`rounded-[28px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.45)] ${
+              className={`rounded-2xl px-5 py-3.5 shadow-[0_24px_80px_rgba(3,7,18,0.45)] ${
                 isLightPanelTheme
                   ? "border border-slate-200 bg-white text-slate-900"
                   : "border border-white/10 bg-[#202c41]"
               }`}
             >
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <p className={`text-sm uppercase tracking-[0.3em] ${isLightPanelTheme ? "text-violet-700" : "text-violet-200/80"}`}>
-                  PERC HNES
-                </p>
-                <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">
+              <div className="min-w-0">
+                <h1 className="truncate text-base font-semibold sm:text-lg">
                   {currentService
-                    ? `Ingreso de Datos - ${periodLabel} - ${currentService.name}`
+                    ? `${currentService.name} · ${periodLabel}`
                     : isSupervisor
-                      ? "Panel de Supervision"
-                      : "Modulo de Administracion"}
+                      ? "Panel de Supervisión"
+                      : "Módulo de Administración"}
                 </h1>
-                <p className={`mt-3 text-sm sm:text-base ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                  Usuario: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{welcomeName}</span>
-                  {" · "}
-                  Rol: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{isAdmin ? "Administrador" : isSupervisor ? "Supervisor" : "Servicio"}</span>
-                  {" · "}
-                  Acceso: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{serviceProfile.username}</span>
-                  {currentService ? (
-                    <>
-                      {" · "}
-                      Servicio: <span className={`font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{currentService.name}</span>
-                    </>
-                  ) : null}
-                </p>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 xl:flex">
-                {isAdmin ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void handleExportMonthlyReport()}
-                      disabled={isExportingMonthlyReport}
-                      className="rounded-2xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-cyan-300"
-                    >
-                      {isExportingMonthlyReport ? "Generando Excel..." : "Descargar Excel"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void loadAdminUsers()}
-                      disabled={isLoadingUsers}
-                      className="rounded-2xl bg-amber-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-amber-300"
-                    >
-                      {isLoadingUsers ? "Actualizando..." : "Actualizar usuarios"}
-                    </button>
-                  </>
-                ) : null}
-
                 <button
                   type="button"
                   onClick={handleSignOut}
@@ -4089,30 +5530,50 @@ export default function Home() {
             </div>
             </section>
 
-          {serviceProfile.mustChangePassword ? (
-            <section className="rounded-[24px] border border-amber-500/50 bg-amber-950/35 px-5 py-4 text-center text-amber-50 shadow-lg">
-              <p className="text-lg font-semibold">CONTRASENA TEMPORAL ACTIVA</p>
-              <p className="mt-1 text-sm sm:text-base">
-                Esta cuenta fue creada con una clave generica. Cambiala antes de continuar con el
-                uso normal del sistema.
-              </p>
-            </section>
-          ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {serviceProfile.mustChangePassword ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                Clave temporal — cambiala desde &quot;Cambiar contraseña&quot;.
+              </span>
+            ) : (
+              <span />
+            )}
+            <span className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+              <time suppressHydrationWarning>{DATE_TIME_FORMATTER.format(now)}</time>
+            </span>
+          </div>
 
-          <section className={`rounded-[20px] px-5 py-4 text-center text-lg font-semibold shadow-lg ${isLightPanelTheme ? "border border-slate-200 bg-white text-slate-900" : "bg-[#202c41] text-slate-100"}`}>
-            <time suppressHydrationWarning>{DATE_TIME_FORMATTER.format(now)}</time>
-          </section>
-
-          {error ? (
-            <p className="rounded-2xl border border-rose-500/40 bg-rose-950/40 px-4 py-3 text-sm text-rose-100">
-              {error}
-            </p>
-          ) : null}
-
-          {message ? (
-            <p className="rounded-2xl border border-emerald-500/40 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-100">
-              {message}
-            </p>
+          {/* Toasts sutiles (esquina) para exito/error. Se desvanecen solos. */}
+          {error || message ? (
+            <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex w-full max-w-xs flex-col gap-2">
+              {error ? (
+                <div className="modal-pop-in pointer-events-auto flex items-start gap-2 rounded-xl border border-rose-400/30 bg-[#241016]/95 px-4 py-3 text-sm text-rose-100 shadow-xl backdrop-blur">
+                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-rose-400" />
+                  <span className="flex-1">{error}</span>
+                  <button
+                    type="button"
+                    onClick={() => setError("")}
+                    className="shrink-0 text-rose-300/70 transition hover:text-rose-100"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : null}
+              {message ? (
+                <div className="modal-pop-in pointer-events-auto flex items-start gap-2 rounded-xl border border-emerald-400/30 bg-[#0f1f1a]/95 px-4 py-3 text-sm text-emerald-100 shadow-xl backdrop-blur">
+                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                  <span className="flex-1">{message}</span>
+                  <button
+                    type="button"
+                    onClick={() => setMessage("")}
+                    className="shrink-0 text-emerald-300/70 transition hover:text-emerald-100"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : null}
+            </div>
           ) : null}
 
           {adminCalendarSection}
@@ -4183,6 +5644,34 @@ export default function Home() {
             </section>
           ) : null}
 
+          {isAdmin ? (
+            <section className="rounded-[24px] border border-amber-400/25 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-200/80">
+                Administrador · Ver tabuladores
+              </p>
+              <h2 className="mt-1 text-2xl font-bold text-white">Elegir servicio</h2>
+              <p className="mt-1 text-sm text-slate-300">
+                Selecciona un servicio para ver y editar sus tabuladores (PERC, SEPS y Horas) y su
+                historial por mes.
+              </p>
+              <label className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <span className="text-sm font-medium text-slate-200">Servicio:</span>
+                <select
+                  value={adminSelectedServiceId}
+                  onChange={(event) => void handleAdminSelectService(event.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm font-semibold text-white outline-none focus:border-amber-400 sm:max-w-md"
+                >
+                  <option value="">— Selecciona un servicio —</option>
+                  {SERVICE_DEFINITIONS.map((service) => (
+                    <option key={service.id} value={service.id}>
+                      {service.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </section>
+          ) : null}
+
           {currentService ? (
             <section
               id="panel-tabulator"
@@ -4190,32 +5679,75 @@ export default function Home() {
             >
               <div className="border-b border-white/10 bg-[#1b2537] px-5 py-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-violet-200/80">
-                  Tabulador · PERC
+                  Tabulador · {getPercServFields(currentService.id) ? "PERC/SERV" : "PERC"}
                 </p>
-                <h2 className="mt-1 text-2xl font-bold text-white">PERC</h2>
+                <h2 className="mt-1 text-2xl font-bold text-white">
+                  {getPercServFields(currentService.id) ? "PERC/SERV" : "PERC"}
+                </h2>
                 <p className="mt-1 text-sm text-slate-300">
-                  Captura mensual por centro de costos — {currentService.name} · {periodLabel}
+                  {getPercServFields(currentService.id)
+                    ? "Productividad por servicio"
+                    : "Captura mensual por centro de costos"}{" "}
+                  — {currentService.name} · {getPeriodLabel(activePercPeriod)}
                 </p>
-                <div
-                  className={`mt-3 rounded-2xl border px-4 py-3 text-sm ${
-                    isFormLocked
-                      ? "border-rose-500/60 bg-rose-950/40 text-rose-100"
-                      : "border-emerald-500/40 bg-emerald-950/30 text-emerald-100"
-                  }`}
-                >
-                  <span className="font-semibold">
-                    {isFormLocked ? "FORMULARIO BLOQUEADO" : "FORMULARIO HABILITADO"}
+
+                {/* Selector de mes (historial). Mes actual = captura; meses previos = consulta. */}
+                {renderHistorySelector({
+                  options: percHistoryOptions,
+                  currentPeriod: periodId,
+                  activePeriod: activePercPeriod,
+                  isHistory: isPercHistory,
+                  readOnly: percReadOnly,
+                  dataPeriods: percDataPeriods,
+                  loading: isLoadingData,
+                  onSelect: (period) => void loadPercHistory(period),
+                })}
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      isFormLocked
+                        ? "bg-rose-500/15 text-rose-200"
+                        : "bg-emerald-500/15 text-emerald-200"
+                    }`}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        isFormLocked ? "bg-rose-400" : "bg-emerald-400"
+                      }`}
+                    />
+                    {isFormLocked ? "Bloqueado" : "Habilitado"}
                   </span>
-                  {" — "}
-                  {!serviceProfile.permissions.canEdit
-                    ? "El administrador desactivo temporalmente tu permiso de captura."
-                    : isDateLocked
-                      ? `La captura solo esta disponible en los primeros ${captureWindow.totalDays} dias habiles del mes. El ultimo dia habil fue ${SHORT_DATE_FORMATTER.format(captureWindow.lastOpenDay)}.`
-                      : isReopenedLate
-                        ? "Captura reabierta por un supervisor: puedes registrar fuera de tus dias habiles."
-                        : `Captura abierta. Hoy corresponde al dia habil ${captureWindow.activeDayNumber} de ${captureWindow.totalDays}. Dias habilitados: ${openDaysLabel}.`}
+                  <span className="text-xs text-slate-400">
+                    {!serviceProfile.permissions.canEdit
+                      ? "El administrador desactivo temporalmente tu permiso de captura."
+                      : isDateLocked
+                        ? `Captura solo en los primeros ${captureWindow.totalDays} dias habiles. Ultimo: ${SHORT_DATE_FORMATTER.format(captureWindow.lastOpenDay)}.`
+                        : isReopenedLate
+                          ? "Reabierta por un supervisor: podes registrar fuera de tus dias habiles."
+                          : `Dia habil ${captureWindow.activeDayNumber} de ${captureWindow.totalDays}.`}
+                  </span>
                 </div>
               </div>
+              {getPercServFields(currentService.id) ? (
+                <div className="grid gap-4 px-5 py-5 sm:grid-cols-2">
+                  {getPercServFields(currentService.id)!.map((field) => (
+                    <label key={field.key} className="block">
+                      <span className="text-sm font-medium text-slate-200">{field.label}</span>
+                      <input
+                        value={tableValues[PERC_SERV_ROW]?.[field.key] ?? ""}
+                        onChange={(event) =>
+                          handleCellChange(PERC_SERV_ROW, field.key, event.target.value)
+                        }
+                        disabled={percEditingBlocked}
+                        inputMode="numeric"
+                        placeholder={field.placeholder}
+                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse text-xs text-slate-100">
                   <thead>
@@ -4259,7 +5791,7 @@ export default function Home() {
                               onChange={(event) =>
                                 handleCellChange(row, header, event.target.value)
                               }
-                              disabled={isFormLocked || rowIsFixed}
+                              disabled={percEditingBlocked || rowIsFixed}
                               readOnly={rowIsFixed}
                               title={rowIsFixed ? "Valor fijo (automatico, no editable)" : undefined}
                               inputMode="numeric"
@@ -4275,32 +5807,60 @@ export default function Home() {
                   </tbody>
                 </table>
               </div>
+              )}
 
-              {/* Acciones del tabulador PERC (guardar/recuperar/limpiar este mes). */}
-              <div className="flex flex-col gap-3 border-t border-white/10 bg-[#1b2537] px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-                <button
-                  type="button"
-                  onClick={handleClearTable}
-                  className="rounded-2xl bg-slate-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500"
-                >
-                  Limpiar tabla
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void loadSavedData(true)}
-                  disabled={isLoadingData}
-                  className="rounded-2xl bg-violet-500/80 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80"
-                >
-                  {isLoadingData ? "Recuperando..." : "Recuperar datos"}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={isSaving || isFormLocked}
-                  className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
-                >
-                  {isSaving ? "Guardando..." : "Guardar datos"}
-                </button>
+              {/* Acciones del tabulador PERC. En historial cambia segun el rol. */}
+              <div className="flex flex-col gap-3 border-t border-white/10 bg-[#1b2537] px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                <div>
+                  {isPercHistory ? (
+                    <button
+                      type="button"
+                      onClick={() => void loadPercHistory(periodId)}
+                      disabled={isLoadingData}
+                      className="rounded-2xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                    >
+                      ← Volver al mes actual
+                    </button>
+                  ) : null}
+                </div>
+
+                {percReadOnly ? (
+                  <p className="text-sm font-medium text-amber-200">
+                    Vista de historial — solo lectura.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={handleClearTable}
+                      className="rounded-2xl bg-slate-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500"
+                    >
+                      Limpiar tabla
+                    </button>
+                    {!isPercHistory ? (
+                      <button
+                        type="button"
+                        onClick={() => void loadSavedData(true)}
+                        disabled={isLoadingData}
+                        className="rounded-2xl bg-violet-500/80 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80"
+                      >
+                        {isLoadingData ? "Recuperando..." : "Recuperar datos"}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={isSaving || percEditingBlocked}
+                      className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+                    >
+                      {isSaving
+                        ? "Guardando..."
+                        : isPercHistory
+                          ? "Guardar cambios del mes"
+                          : "Guardar datos"}
+                    </button>
+                  </div>
+                )}
               </div>
             </section>
           ) : (
@@ -4317,76 +5877,153 @@ export default function Home() {
 
           {horasSection}
 
-          <section
-            id="panel-security"
-            className="rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
-          >
-            <div className="mb-5">
-              <p className="text-sm uppercase tracking-[0.2em] text-violet-200/80">
-                Seguridad
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold">Cambiar contrasena</h2>
-              <p className="mt-2 text-sm text-slate-300">
-                {isAdmin
-                  ? "El acceso administrador principal usa las credenciales fijas solicitadas."
-                  : "La clave inicial es generica para las cuentas nuevas. Cada usuario puede cambiarla desde aqui."}
-              </p>
-            </div>
-
-            {isAdmin ? (
-              <div className="rounded-2xl border border-amber-400/30 bg-amber-950/30 px-4 py-4 text-sm text-amber-50">
-                La cuenta de administrador usa credenciales fijas gestionadas fuera de la
-                aplicacion (variables de entorno). Para cambiarlas, actualiza el entorno y rota
-                la clave en Firebase.
-              </div>
-            ) : (
-              <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto]" onSubmit={handleChangePassword}>
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-200">Nueva contrasena</span>
-                  <input
-                    value={newPassword}
-                    onChange={(event) => setNewPassword(event.target.value)}
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-violet-500"
-                    minLength={6}
-                    placeholder="Minimo 6 caracteres"
-                    type="password"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-200">Confirmar contrasena</span>
-                  <input
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-violet-500"
-                    minLength={6}
-                    placeholder="Repite la nueva clave"
-                    type="password"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isChangingPassword}
-                  className="mt-6 rounded-2xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800"
-                >
-                  {isChangingPassword ? "Actualizando..." : "Cambiar clave"}
-                </button>
-              </form>
-            )}
-          </section>
-
-          {isAdmin ? (
-            <section
-              id="panel-users"
-              className="rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+          {showPasswordModal ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="change-password-title"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              onClick={() => setShowPasswordModal(false)}
             >
+              <div className="modal-fade-in absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
+
+              <div
+                onClick={(event) => event.stopPropagation()}
+                style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))" }}
+                className="modal-pop-in relative w-full max-w-lg overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+              >
+                <div className="h-1.5 w-full bg-gradient-to-r from-violet-500 via-violet-400 to-cyan-400" />
+
+                <div className="px-7 pb-7 pt-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300/90">
+                        Seguridad
+                      </p>
+                      <h3 id="change-password-title" className="mt-1 text-xl font-semibold text-white">
+                        Cambiar contraseña
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswordModal(false)}
+                      aria-label="Cerrar"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {isAdmin ? (
+                    <div className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-950/30 px-4 py-4 text-sm text-amber-50">
+                      La cuenta de administrador usa credenciales fijas gestionadas fuera de la
+                      aplicacion (variables de entorno). Para cambiarlas, actualiza el entorno y rota
+                      la clave en Firebase.
+                    </div>
+                  ) : (
+                    <form className="mt-5 space-y-4" onSubmit={handleChangePassword}>
+                      <label className="block">
+                        <span className="text-sm font-medium text-slate-200">Nueva contraseña</span>
+                        <div className="relative mt-2">
+                          <input
+                            value={newPassword}
+                            onChange={(event) => setNewPassword(event.target.value)}
+                            className="w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 pr-12 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-violet-500"
+                            minLength={6}
+                            placeholder="Minimo 6 caracteres"
+                            type={showPasswordText ? "text" : "password"}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPasswordText((value) => !value)}
+                            aria-label={showPasswordText ? "Ocultar contraseña" : "Mostrar contraseña"}
+                            title={showPasswordText ? "Ocultar contraseña" : "Mostrar contraseña"}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-white"
+                          >
+                            {showPasswordText ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                                <path d="M9.88 9.88a3 3 0 0 0 4.24 4.24" />
+                                <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                                <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                                <line x1="2" y1="2" x2="22" y2="22" />
+                              </svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </label>
+
+                      <label className="block">
+                        <span className="text-sm font-medium text-slate-200">Confirmar contraseña</span>
+                        <input
+                          value={confirmPassword}
+                          onChange={(event) => setConfirmPassword(event.target.value)}
+                          className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-violet-500"
+                          minLength={6}
+                          placeholder="Repite la nueva clave"
+                          type={showPasswordText ? "text" : "password"}
+                        />
+                      </label>
+
+                      <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswordModal(false)}
+                          className="rounded-2xl border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isChangingPassword}
+                          className="rounded-2xl bg-gradient-to-r from-violet-500 to-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-900/40 transition hover:from-violet-400 hover:to-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isChangingPassword ? "Actualizando..." : "Cambiar clave"}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {isAdmin && showUsersModal ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4"
+              onClick={() => setShowUsersModal(false)}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
+              <section
+                onClick={(event) => event.stopPropagation()}
+                id="panel-users"
+                className="modal-pop-in relative my-8 w-full max-w-6xl rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-2xl shadow-black/50"
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowUsersModal(false)}
+                  aria-label="Cerrar"
+                  className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                >
+                  ✕
+                </button>
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-sm uppercase tracking-[0.2em] text-amber-200/80">
                     Administrador
                   </p>
-                  <h2 className="mt-2 text-2xl font-semibold">Usuarios y permisos</h2>
+                  <h2 className="mt-2 text-2xl font-semibold">
+                    Usuarios y permisos
+                    {isLoadingUsers ? (
+                      <span className="ml-3 text-sm font-medium text-amber-300">Actualizando…</span>
+                    ) : null}
+                  </h2>
                   <p className="mt-2 max-w-3xl text-sm text-slate-300">
                     Desde aqui puedes activar o bloquear cuentas, asignar servicios, cambiar roles,
                     permitir o negar captura y forzar cambio de contrasena mediante correo de
@@ -4492,8 +6129,8 @@ export default function Home() {
                               disabled={Boolean(assignedUser)}
                             >
                               {assignedUser
-                                ? `${service.name} - asignado a ${assignedUser.name}`
-                                : service.name}
+                                ? `${getServiceEmoji(service.id)} ${service.name} - asignado a ${assignedUser.name}`
+                                : `${getServiceEmoji(service.id)} ${service.name}`}
                             </option>
                           );
                         })}
@@ -4561,7 +6198,10 @@ export default function Home() {
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <h4 className="text-sm font-semibold text-white">{service.name}</h4>
+                              <h4 className="text-sm font-semibold text-white">
+                                <span className="mr-1">{getServiceEmoji(service.id)}</span>
+                                {service.name}
+                              </h4>
                               <p className="mt-1 text-xs text-slate-300">
                                 Usuario: {getServiceUsername(service.id)}
                               </p>
@@ -4588,65 +6228,130 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="min-w-[1400px] border-collapse text-sm text-slate-100">
-                  <thead>
-                    <tr className="bg-[#1a2334] text-left">
-                      <th className="px-4 py-3 font-semibold">Responsable</th>
-                      <th className="px-4 py-3 font-semibold">Usuario</th>
-                      <th className="px-4 py-3 font-semibold">Correo</th>
-                      <th className="px-4 py-3 font-semibold">Servicio</th>
-                      <th className="px-4 py-3 font-semibold">Rol</th>
-                      <th className="px-4 py-3 font-semibold">Activo</th>
-                      <th className="px-4 py-3 font-semibold">Captura</th>
-                      <th className="px-4 py-3 font-semibold">Gestiona usuarios</th>
-                      <th className="px-4 py-3 font-semibold">Debe cambiar clave</th>
-                      <th className="px-4 py-3 font-semibold">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {adminUsers.map((managedUser) => {
-                      const draft = adminDrafts[managedUser.uid];
-                      const busy = adminBusyUserId === managedUser.uid;
+              {(() => {
+                const q = adminUserQuery.trim().toLowerCase();
+                const listed = adminUsers.filter((u) => {
+                  if (!q) return true;
+                  const d = adminDrafts[u.uid];
+                  const svcName = getServiceById(d?.serviceId)?.name || "";
+                  return (
+                    (d?.name || "").toLowerCase().includes(q) ||
+                    (d?.username || "").toLowerCase().includes(q) ||
+                    svcName.toLowerCase().includes(q)
+                  );
+                });
+                const selectedUid =
+                  adminSelectedUserUid && listed.some((u) => u.uid === adminSelectedUserUid)
+                    ? adminSelectedUserUid
+                    : listed[0]?.uid ?? null;
+                const selectedUser = adminUsers.find((u) => u.uid === selectedUid) || null;
+                const draft = selectedUser ? adminDrafts[selectedUser.uid] : null;
+                const busy = selectedUser ? adminBusyUserId === selectedUser.uid : false;
+                const initials = (s: string) =>
+                  (s || "?")
+                    .split(" ")
+                    .map((w) => w.charAt(0))
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .join("")
+                    .toUpperCase() || "?";
 
-                      if (!draft) {
-                        return null;
-                      }
+                return (
+                  <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+                    {/* Lista (maestro) */}
+                    <div className="flex flex-col rounded-2xl border border-white/10 bg-[#1b2537]">
+                      <div className="border-b border-white/10 p-2.5">
+                        <input
+                          value={adminUserQuery}
+                          onChange={(event) => setAdminUserQuery(event.target.value)}
+                          placeholder="Buscar usuario o servicio…"
+                          className="w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-amber-400"
+                        />
+                      </div>
+                      <div className="max-h-[55vh] overflow-y-auto p-1.5">
+                        {listed.length === 0 ? (
+                          <p className="px-3 py-6 text-center text-sm text-slate-400">
+                            Sin resultados.
+                          </p>
+                        ) : (
+                          listed.map((u) => {
+                            const d = adminDrafts[u.uid];
+                            if (!d) return null;
+                            const isSel = u.uid === selectedUid;
+                            return (
+                              <button
+                                key={u.uid}
+                                type="button"
+                                onClick={() => setAdminSelectedUserUid(u.uid)}
+                                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${
+                                  isSel ? "bg-amber-500/15" : "hover:bg-white/5"
+                                }`}
+                              >
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[11px] font-bold text-slate-200">
+                                  {initials(d.name || d.username)}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium text-white">
+                                    {d.name}
+                                  </span>
+                                  <span className="block truncate text-[11px] text-slate-400">
+                                    {getServiceById(d.serviceId)
+                                      ? `${getServiceEmoji(d.serviceId)} ${getServiceById(d.serviceId)?.name}`
+                                      : d.role === "admin"
+                                        ? "Administrador"
+                                        : "Sin servicio"}
+                                  </span>
+                                </span>
+                                <span
+                                  className={`h-2 w-2 shrink-0 rounded-full ${
+                                    d.isActive ? "bg-emerald-400" : "bg-slate-600"
+                                  }`}
+                                />
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
 
-                      return (
-                        <tr key={managedUser.uid} className="border-t border-white/10 align-top">
-                          <td className="px-4 py-4">
-                            <p className="font-semibold text-white">{draft.name}</p>
-                            {managedUser.dui ? (
-                              <p className="mt-1 text-xs text-slate-300">DUI: {managedUser.dui}</p>
-                            ) : null}
-                            {managedUser.phone ? (
-                              <p className="mt-1 text-xs text-slate-300">
-                                Telefono: {managedUser.phone}
-                              </p>
-                            ) : null}
-                            <p className="mt-1 break-all font-mono text-xs text-slate-400">
-                              {managedUser.uid}
-                            </p>
-                          </td>
-                          <td className="px-4 py-4 font-mono text-sm text-cyan-200">{draft.username}</td>
-                          <td className="px-4 py-4 text-slate-200">{draft.email}</td>
-                          <td className="px-4 py-4">
+                    {/* Detalle / edicion */}
+                    {draft && selectedUser ? (
+                      <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-5">
+                        <div className="flex items-start gap-3 border-b border-white/10 pb-4">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-base font-bold text-amber-200">
+                            {initials(draft.name || draft.username)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-lg font-semibold text-white">{draft.name}</p>
+                            <p className="truncate font-mono text-xs text-cyan-200">{draft.username}</p>
+                            <p className="truncate text-xs text-slate-400">{draft.email}</p>
+                          </div>
+                          <span
+                            className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                              draft.role === "admin"
+                                ? "bg-violet-500/20 text-violet-200"
+                                : "bg-white/10 text-slate-300"
+                            }`}
+                          >
+                            {draft.role === "admin" ? "Admin" : "Servicio"}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="text-xs font-medium text-slate-400">Servicio</span>
                             <select
                               value={draft.serviceId}
                               onChange={(event) =>
-                                updateAdminDraft(managedUser.uid, {
-                                  serviceId: event.target.value,
-                                })
+                                updateAdminDraft(selectedUser.uid, { serviceId: event.target.value })
                               }
-                              className="w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400"
+                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400"
                             >
                               <option value="">Sin servicio</option>
                               {SERVICE_DEFINITIONS.map((service) => {
                                 const assignedUser = assignedServiceUsers.get(service.id);
                                 const isTakenByAnotherUser =
-                                  Boolean(assignedUser) && assignedUser?.uid !== managedUser.uid;
-
+                                  Boolean(assignedUser) && assignedUser?.uid !== selectedUser.uid;
                                 return (
                                   <option
                                     key={service.id}
@@ -4654,121 +6359,825 @@ export default function Home() {
                                     disabled={isTakenByAnotherUser}
                                   >
                                     {isTakenByAnotherUser
-                                      ? `${service.name} - asignado a ${assignedUser?.name}`
-                                      : service.name}
+                                      ? `${getServiceEmoji(service.id)} ${service.name} - asignado a ${assignedUser?.name}`
+                                      : `${getServiceEmoji(service.id)} ${service.name}`}
                                   </option>
                                 );
                               })}
                             </select>
-                          </td>
-                          <td className="px-4 py-4">
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-medium text-slate-400">Rol</span>
                             <select
                               value={draft.role}
                               onChange={(event) => {
                                 const nextRole = event.target.value as UserRole;
-                                updateAdminDraft(managedUser.uid, {
+                                updateAdminDraft(selectedUser.uid, {
                                   role: nextRole,
                                   canManageUsers: nextRole === "admin",
                                 });
                               }}
-                              className="w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400"
+                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400"
                             >
                               <option value="service">Servicio</option>
                               <option value="admin">Administrador</option>
                             </select>
-                          </td>
-                          <td className="px-4 py-4">
-                            <label className="flex items-center gap-2">
-                              <input
-                                checked={draft.isActive}
-                                onChange={(event) =>
-                                  updateAdminDraft(managedUser.uid, {
-                                    isActive: event.target.checked,
-                                  })
-                                }
-                                className="h-4 w-4 rounded border-white/20"
-                                type="checkbox"
-                              />
-                              <span>{draft.isActive ? "Si" : "No"}</span>
-                            </label>
-                          </td>
-                          <td className="px-4 py-4">
-                            <label className="flex items-center gap-2">
-                              <input
-                                checked={draft.canEdit}
-                                onChange={(event) =>
-                                  updateAdminDraft(managedUser.uid, {
-                                    canEdit: event.target.checked,
-                                  })
-                                }
-                                className="h-4 w-4 rounded border-white/20"
-                                type="checkbox"
-                              />
-                              <span>{draft.canEdit ? "Si" : "No"}</span>
-                            </label>
-                          </td>
-                          <td className="px-4 py-4">
-                            <label className="flex items-center gap-2">
-                              <input
-                                checked={draft.canManageUsers}
-                                onChange={(event) =>
-                                  updateAdminDraft(managedUser.uid, {
-                                    canManageUsers: event.target.checked,
-                                    role: event.target.checked ? "admin" : draft.role,
-                                  })
-                                }
-                                className="h-4 w-4 rounded border-white/20"
-                                disabled={draft.role !== "admin"}
-                                type="checkbox"
-                              />
-                              <span>{draft.canManageUsers ? "Si" : "No"}</span>
-                            </label>
-                          </td>
-                          <td className="px-4 py-4">
-                            <label className="flex items-center gap-2">
-                              <input
-                                checked={draft.mustChangePassword}
-                                onChange={(event) =>
-                                  updateAdminDraft(managedUser.uid, {
-                                    mustChangePassword: event.target.checked,
-                                  })
-                                }
-                                className="h-4 w-4 rounded border-white/20"
-                                type="checkbox"
-                              />
-                              <span>{draft.mustChangePassword ? "Si" : "No"}</span>
-                            </label>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void handleAdminSave(managedUser.uid)}
-                                disabled={busy}
-                                className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-amber-300"
-                              >
-                                {busy ? "Guardando..." : "Guardar"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void handleAdminSendReset(managedUser.uid, managedUser)
-                                }
-                                disabled={busy}
-                                className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800"
-                              >
-                                Reset clave
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+                          </label>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateAdminDraft(selectedUser.uid, { isActive: !draft.isActive })}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                              draft.isActive ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                            }`}
+                          >
+                            {draft.isActive ? "✓ " : ""}Activo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateAdminDraft(selectedUser.uid, { canEdit: !draft.canEdit })}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                              draft.canEdit ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                            }`}
+                          >
+                            {draft.canEdit ? "✓ " : ""}Captura
+                          </button>
+                          <button
+                            type="button"
+                            disabled={draft.role !== "admin"}
+                            onClick={() => updateAdminDraft(selectedUser.uid, { canManageUsers: !draft.canManageUsers })}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${
+                              draft.canManageUsers ? "bg-violet-500/20 text-violet-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                            }`}
+                          >
+                            {draft.canManageUsers ? "✓ " : ""}Gestiona usuarios
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateAdminDraft(selectedUser.uid, { mustChangePassword: !draft.mustChangePassword })}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                              draft.mustChangePassword ? "bg-amber-500/15 text-amber-300" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                            }`}
+                          >
+                            {draft.mustChangePassword ? "✓ " : ""}Debe cambiar clave
+                          </button>
+                        </div>
+
+                        <div className="mt-5 flex gap-2 border-t border-white/10 pt-4">
+                          <button
+                            type="button"
+                            onClick={() => void handleAdminSave(selectedUser.uid)}
+                            disabled={busy}
+                            className="flex-1 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {busy ? "Guardando..." : "Guardar cambios"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleAdminSendReset(selectedUser.uid, selectedUser)}
+                            disabled={busy}
+                            className="rounded-xl border border-violet-400/40 bg-violet-500/15 px-4 py-2.5 text-sm font-semibold text-violet-200 transition hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Reset clave
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center rounded-2xl border border-dashed border-white/10 p-10 text-sm text-slate-400">
+                        Seleccioná un usuario de la lista para editarlo.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              </section>
+            </div>
           ) : null}
+
+          {(isSupervisor || isAdmin) && showBoardModal ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4"
+              onClick={() => setShowBoardModal(false)}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                className="modal-pop-in relative my-8 w-full max-w-5xl rounded-[24px] border border-white/10 bg-[#0e1626] p-5 shadow-2xl shadow-black/50"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300/90">
+                      Tablero de avance
+                    </p>
+                    <h2 className="mt-1 text-xl font-semibold text-white">
+                      Estado por servicio — {periodLabel}
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowBoardModal(false)}
+                    aria-label="Cerrar"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {dashboardGroups.map((group) => {
+                    const groupCompleted = group.services.filter((service) => service.completed)
+                      .length;
+                    return (
+                      <section
+                        key={group.id}
+                        className="rounded-2xl border border-white/10 bg-[#162032] p-4"
+                      >
+                        <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+                          <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-200">
+                            {group.title}
+                          </h3>
+                          <span className="rounded-full bg-white/5 px-3 py-1 text-[11px] font-semibold text-slate-300">
+                            {groupCompleted}/{group.services.length}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                          {group.services.map((service) => (
+                            <div
+                              key={service.id}
+                              className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5"
+                            >
+                              <p className="truncate text-[13px] font-semibold text-white" title={service.name}>
+                                <span className="mr-1">{getServiceEmoji(service.id)}</span>
+                                {service.name}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                                {service.modules.map((mod) => (
+                                  <span
+                                    key={mod.label}
+                                    className={`text-[11px] font-semibold ${
+                                      mod.completed ? "text-emerald-400" : "text-amber-400"
+                                    }`}
+                                  >
+                                    {mod.label}: {mod.completed ? "Completo" : "Incompleto"}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {(isAdmin || isSupervisor) && showStatsModal
+            ? (() => {
+                const statsLabel =
+                  statsModule === "perc" ? "PERC" : statsModule === "sesps" ? "SEPS" : "Horas";
+                const statsServices = dashboardGroups
+                  .flatMap((g) => g.services)
+                  .filter((s) => s.modules.some((m) => m.label === statsLabel));
+                const completos = statsServices.filter(
+                  (s) => s.modules.find((m) => m.label === statsLabel)?.completed,
+                );
+                const incompletos = statsServices.filter(
+                  (s) => !s.modules.find((m) => m.label === statsLabel)?.completed,
+                );
+                const total = statsServices.length;
+                const pct = total > 0 ? Math.round((completos.length / total) * 100) : 0;
+                return (
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4"
+                    onClick={() => setShowStatsModal(false)}
+                  >
+                    <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
+                    <div
+                      onClick={(event) => event.stopPropagation()}
+                      className="modal-pop-in relative my-8 w-full max-w-lg rounded-3xl border border-white/10 bg-[#0e1626] p-6 shadow-2xl shadow-black/50"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300/90">
+                            Avance · {statsLabel}
+                          </p>
+                          <h3 className="mt-1 text-xl font-semibold text-white">
+                            {getPeriodLabel(statsModule === "sesps" ? sepsPeriodId : periodId)}
+                          </h3>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowStatsModal(false)}
+                          aria-label="Cerrar"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Resumen */}
+                      <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                        <div className="flex items-end justify-between">
+                          <div>
+                            <p className="text-3xl font-bold leading-none text-white">
+                              {completos.length}
+                              <span className="text-lg font-medium text-slate-400"> / {total}</span>
+                            </p>
+                            <p className="mt-1 text-xs text-slate-400">servicios completos</p>
+                          </div>
+                          <span className="text-2xl font-bold text-emerald-300">{pct}%</span>
+                        </div>
+                        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <div className="mt-3 flex items-center gap-4 text-xs">
+                          <span className="flex items-center gap-1.5 text-slate-300">
+                            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                            {completos.length} completos
+                          </span>
+                          <span className="flex items-center gap-1.5 text-slate-300">
+                            <span className="h-2 w-2 rounded-full bg-amber-400" />
+                            {incompletos.length} incompletos
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Lista alineada (completos primero) */}
+                      <div className="mt-4 grid gap-1.5 sm:grid-cols-2">
+                        {[...completos, ...incompletos].map((s) => {
+                          const done = s.modules.find((m) => m.label === statsLabel)?.completed;
+                          return (
+                            <div
+                              key={s.id}
+                              className="flex items-center gap-2.5 rounded-lg bg-white/[0.03] px-3 py-2"
+                            >
+                              <span
+                                className={`h-2 w-2 shrink-0 rounded-full ${
+                                  done ? "bg-emerald-400" : "bg-amber-400"
+                                }`}
+                              />
+                              <span className="flex-1 truncate text-[13px] text-slate-200" title={s.name}>
+                                <span className="mr-1">{getServiceEmoji(s.id)}</span>
+                                {s.name}
+                              </span>
+                              <span
+                                className={`shrink-0 text-[11px] font-semibold ${
+                                  done ? "text-emerald-300" : "text-amber-300"
+                                }`}
+                              >
+                                {done ? "Completo" : "Pendiente"}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
+            : null}
+
+          {captureOpenTarget ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              onClick={() => setCaptureOpenTarget(null)}
+            >
+              <div className="modal-fade-in absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))" }}
+                className="modal-pop-in relative w-full max-w-md overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+              >
+                <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400" />
+                <div className="px-7 pb-7 pt-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300/90">
+                    Habilitar tablero
+                  </p>
+                  <h3 className="mt-1 text-xl font-semibold text-white">
+                    {captureOpenTarget.serviceName}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-300">
+                    Módulo:{" "}
+                    <span className="font-semibold text-white">
+                      {captureOpenTarget.moduleId === "perc"
+                        ? "PERC"
+                        : captureOpenTarget.moduleId === "sesps"
+                          ? "SEPS"
+                          : "Distribución de Horas"}
+                    </span>
+                  </p>
+
+                  <label className="mt-5 block">
+                    <span className="text-sm font-medium text-slate-200">Mes y año a habilitar</span>
+                    <input
+                      value={captureOpenPeriod}
+                      onChange={(event) => setCaptureOpenPeriod(event.target.value)}
+                      type="month"
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                    />
+                    {captureOpenPeriod ? (
+                      <span className="mt-2 block text-xs font-medium text-emerald-300">
+                        Se habilitará: {getPeriodLabel(captureOpenPeriod)}
+                      </span>
+                    ) : null}
+                  </label>
+
+                  <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setCaptureOpenTarget(null)}
+                      className="rounded-2xl border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!captureOpenPeriod}
+                      onClick={() => {
+                        const target = captureOpenTarget;
+                        const period = captureOpenPeriod;
+                        setOverridePanelPeriodId(period);
+                        void handleToggleCapture(target.serviceId, target.moduleId, "open", period);
+                        setCaptureOpenTarget(null);
+                      }}
+                      className="rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-900/40 transition hover:from-emerald-400 hover:to-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Habilitar este mes
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Bandeja de solicitudes (admin / supervisores). */}
+          {(isAdmin || isSupervisor) && showRequestsModal ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4"
+              onClick={() => setShowRequestsModal(false)}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                className="modal-pop-in relative my-8 w-full max-w-3xl rounded-[24px] border border-white/10 bg-[#0e1626] p-5 shadow-2xl shadow-black/50"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300/90">
+                      Bandeja
+                    </p>
+                    <h2 className="mt-1 text-xl font-semibold text-white">
+                      Solicitudes de habilitación
+                      {pendingRequestCount > 0 ? (
+                        <span className="ml-3 rounded-full bg-amber-500/20 px-3 py-1 text-sm font-semibold text-amber-200">
+                          {pendingRequestCount} pendientes
+                        </span>
+                      ) : null}
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRequestsModal(false)}
+                    aria-label="Cerrar"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {visibleRequests.length === 0 ? (
+                  <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-slate-300">
+                    No hay solicitudes por ahora.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {[...visibleRequests]
+                      .sort((a, b) => (a.status === "pending" ? -1 : 1) - (b.status === "pending" ? -1 : 1))
+                      .map((req) => {
+                        const lateMarks = captureRequests.filter(
+                          (item) => item.serviceId === req.serviceId,
+                        ).length;
+                        const canResolve =
+                          isAdmin || serviceProfile.supervisorModules.includes(req.moduleId);
+                        return (
+                          <div
+                            key={req.id}
+                            className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-white">
+                                {req.serviceName} ·{" "}
+                                <span className="text-cyan-200">{getModuleLabel(req.moduleId)}</span>
+                              </p>
+                              <p className="mt-0.5 text-xs text-slate-300">
+                                {getShortPeriodLabel(req.periodId)} · solicitó {req.requestedByName} ·{" "}
+                                <span className="text-rose-300">Marcas: {lateMarks}</span>
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {req.status === "pending" ? (
+                                canResolve ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={requestBusyId === req.id}
+                                      onClick={() => void resolveCaptureRequest(req, "approved")}
+                                      className="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:opacity-50"
+                                    >
+                                      Aprobar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={requestBusyId === req.id}
+                                      onClick={() => void resolveCaptureRequest(req, "rejected")}
+                                      className="rounded-xl bg-rose-500/80 px-4 py-2 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:opacity-50"
+                                    >
+                                      Rechazar
+                                    </button>
+                                  </>
+                                ) : (
+                                  <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-200">
+                                    Pendiente
+                                  </span>
+                                )
+                              ) : (
+                                <span
+                                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                    req.status === "approved"
+                                      ? "bg-emerald-500/15 text-emerald-200"
+                                      : "bg-rose-500/15 text-rose-200"
+                                  }`}
+                                >
+                                  {req.status === "approved" ? "Aprobada" : "Rechazada"}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Formulario para que el servicio solicite habilitar un tablero. */}
+          {canRequestEnable && showRequestForm ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              onClick={() => setShowRequestForm(false)}
+            >
+              <div className="modal-fade-in absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))" }}
+                className="modal-pop-in relative w-full max-w-md overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+              >
+                <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 via-amber-400 to-cyan-400" />
+                <div className="px-7 pb-7 pt-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300/90">
+                    Solicitar habilitación
+                  </p>
+                  <h3 className="mt-1 text-xl font-semibold text-white">
+                    {currentService?.name}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-300">
+                    Elegí el tablero que necesitás que te reabran. Llega a los supervisores y al admin.
+                  </p>
+
+                  <label className="mt-5 block">
+                    <span className="text-sm font-medium text-slate-200">Tablero</span>
+                    <select
+                      value={requestModuleId}
+                      onChange={(event) => setRequestModuleId(event.target.value as ModuleId)}
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm font-semibold text-white outline-none focus:border-amber-400"
+                    >
+                      {requestableModules.map((mod) => (
+                        <option key={mod} value={mod} style={{ backgroundColor: "#1b2537", color: "#e2e8f0" }}>
+                          {getModuleLabel(mod)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowRequestForm(false)}
+                      className="rounded-2xl border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSendingRequest}
+                      onClick={() => void sendCaptureRequest(requestModuleId)}
+                      className="rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-amber-900/40 transition hover:from-amber-400 hover:to-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSendingRequest ? "Enviando..." : "Enviar solicitud"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Modal de Configuracion: personalizacion del usuario. */}
+          {showConfigModal ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4"
+              onClick={() => setShowConfigModal(false)}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))" }}
+                className="modal-pop-in relative my-8 w-full max-w-lg overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+              >
+                <div className="h-1.5 w-full bg-gradient-to-r from-cyan-400 via-violet-400 to-amber-400" />
+                <div className="px-6 pb-6 pt-5">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-white">Configuración</h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowConfigModal(false)}
+                      aria-label="Cerrar"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="space-y-5">
+                    {/* Tema */}
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Tema</p>
+                      <div className="flex gap-2">
+                        {(["light", "dark"] as const).map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setPanelTheme(t)}
+                            className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                              panelTheme === t
+                                ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
+                                : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                            }`}
+                          >
+                            {t === "light" ? "Claro" : "Oscuro"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Color de acento */}
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Color de acento</p>
+                      <div className="flex flex-wrap gap-2">
+                        {ACCENT_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => updateUiPrefs({ accent: opt.id })}
+                            className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+                              uiPrefs.accent === opt.id
+                                ? "border-white/40 bg-white/10 text-white"
+                                : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                            }`}
+                          >
+                            <span className="h-4 w-4 rounded-full" style={{ backgroundColor: opt.accent }} />
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Tipografia */}
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Tipografía</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {FONT_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => updateUiPrefs({ font: opt.id })}
+                            style={{ fontFamily: opt.stack }}
+                            className={`rounded-xl border px-3 py-2 text-sm transition ${
+                              uiPrefs.font === opt.id
+                                ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
+                                : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Tamaño de letra */}
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Tamaño de letra</p>
+                      <div className="flex gap-2">
+                        {FONT_SIZE_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => updateUiPrefs({ fontSize: opt.id })}
+                            className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                              uiPrefs.fontSize === opt.id
+                                ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
+                                : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Fondo */}
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Fondo</p>
+                      <div className="flex flex-wrap gap-2">
+                        {BACKGROUND_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => updateUiPrefs({ background: opt.id })}
+                            className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+                              uiPrefs.background === opt.id
+                                ? "border-white/40 bg-white/10 text-white"
+                                : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                            }`}
+                          >
+                            <span
+                              className="h-4 w-6 rounded border border-white/20"
+                              style={opt.css ? { backgroundImage: opt.css } : { backgroundColor: "var(--bg)" }}
+                            />
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Widgets */}
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Widgets</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => updateUiPrefs({ showGreeting: !uiPrefs.showGreeting })}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                            uiPrefs.showGreeting ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                          }`}
+                        >
+                          {uiPrefs.showGreeting ? "✓ " : ""}Saludo de bienvenida
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateUiPrefs({ showClock: !uiPrefs.showClock })}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                            uiPrefs.showClock ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                          }`}
+                        >
+                          {uiPrefs.showClock ? "✓ " : ""}Reloj y fecha
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateUiPrefs(DEFAULT_UI_PREFS);
+                      }}
+                      className="text-xs font-medium text-slate-400 underline-offset-2 hover:underline"
+                    >
+                      Restablecer a los valores por defecto
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Asistente virtual (robot medico) - abajo a la izquierda. */}
+          <div className="fixed bottom-5 left-20 z-40 flex flex-col items-start gap-3">
+            {assistantOpen ? (
+              <div className="modal-pop-in flex h-[60vh] max-h-[460px] w-[320px] max-w-[82vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/50">
+                <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-cyan-500/25 to-violet-500/25 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🤖</span>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Asistente PULSO</p>
+                      <p className="flex items-center gap-1 text-[10px] text-emerald-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> En línea
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAssistantOpen(false)}
+                    aria-label="Cerrar asistente"
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Mensajes */}
+                <div className="flex-1 space-y-2 overflow-y-auto p-3">
+                  {assistantMsgs.map((msg, index) => (
+                    <p
+                      key={index}
+                      className={`w-fit max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-6 ${
+                        msg.from === "user"
+                          ? "ml-auto rounded-tr-sm bg-cyan-500/20 font-medium text-cyan-100"
+                          : "rounded-tl-sm bg-white/5 text-slate-200"
+                      }`}
+                    >
+                      {msg.text}
+                    </p>
+                  ))}
+                </div>
+
+                {/* Sugerencias rapidas */}
+                <div className="flex gap-1.5 overflow-x-auto border-t border-white/10 px-2.5 py-2">
+                  {ASSISTANT_FAQS.slice(0, 6).map((faq, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => pushAssistant(faq.q)}
+                      className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-300 transition hover:border-cyan-400/40 hover:bg-cyan-500/10"
+                    >
+                      {faq.q}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Entrada de texto */}
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    pushAssistant(assistantInput);
+                  }}
+                  className="flex items-center gap-2 border-t border-white/10 p-2.5"
+                >
+                  <input
+                    value={assistantInput}
+                    onChange={(event) => setAssistantInput(event.target.value)}
+                    placeholder="Escribí tu pregunta…"
+                    className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!assistantInput.trim()}
+                    className="shrink-0 rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+                  >
+                    Enviar
+                  </button>
+                </form>
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={openAssistant}
+              aria-label="Asistente virtual"
+              className={`flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 shadow-xl shadow-cyan-900/40 ring-2 ring-white/20 transition hover:scale-105 ${
+                assistantOpen ? "" : "bot-float"
+              }`}
+            >
+              {/* Robot medico */}
+              <svg viewBox="0 0 48 48" className="h-9 w-9" aria-hidden="true">
+                <line x1="24" y1="3" x2="24" y2="9" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
+                <circle cx="24" cy="3.5" r="2.4" fill="#ffffff" />
+                <rect x="9" y="9" width="30" height="24" rx="9" fill="#ffffff" />
+                <circle cx="18.5" cy="20" r="3.1" fill="#0e7490" />
+                <circle cx="29.5" cy="20" r="3.1" fill="#0e7490" />
+                <rect x="19" y="26" width="10" height="2.6" rx="1.3" fill="#0e7490" />
+                <path d="M22.6 35 h2.8 v2.4 h2.4 v2.8 h-2.4 v2.4 h-2.8 v-2.4 h-2.4 v-2.8 h2.4 z" fill="#ef4444" />
+              </svg>
+            </button>
+          </div>
         </div>
         </div>
       </main>
@@ -4780,11 +7189,43 @@ export default function Home() {
       <section className="grid min-h-screen grid-cols-1 lg:grid-cols-[1.2fr_500px]">
         <div className="relative flex min-h-[45vh] flex-col gap-8 overflow-y-auto bg-slate-950 px-6 py-8 text-white sm:px-10 lg:min-h-screen lg:px-14">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.22),transparent_28%),radial-gradient(circle_at_80%_15%,rgba(16,185,129,0.18),transparent_25%),linear-gradient(150deg,#020617_0%,#111827_55%,#172554_100%)]" />
-          <div className="relative flex items-center justify-between">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-violet-200">
-              PERC HNES
-            </p>
-            <div className="h-2.5 w-2.5 rounded-full bg-emerald-300 shadow-[0_0_24px_rgba(110,231,183,0.85)]" />
+          <div className="relative flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              {/* Logo PULSO: badge dorado con linea de pulso (electro). */}
+              <svg viewBox="0 0 48 48" className="h-11 w-11 shrink-0" aria-hidden="true">
+                <defs>
+                  <linearGradient id="pulsoGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stopColor="#e3c07f" />
+                    <stop offset="1" stopColor="#b6863c" />
+                  </linearGradient>
+                </defs>
+                <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoGrad)" />
+                <path
+                  d="M7 25 H16 L19.5 15 L25 35 L29 25 H41"
+                  fill="none"
+                  stroke="#1b1206"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <div>
+                <p className="text-2xl font-bold tracking-wide text-white">PULSO</p>
+                <p className="text-[10px] font-medium uppercase leading-tight tracking-[0.16em] text-violet-200/80">
+                  Plataforma Única de Logística
+                  <br />y Servicios Operativos
+                </p>
+              </div>
+            </div>
+            {/* Nombre del Hospital. */}
+            <div className="text-right">
+              <p className="text-sm font-bold leading-tight tracking-wide text-white">
+                Hospital Nacional
+              </p>
+              <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-emerald-200/80">
+                El Salvador
+              </p>
+            </div>
           </div>
 
           <div className="relative space-y-6">
@@ -4834,6 +7275,7 @@ export default function Home() {
                                 className="truncate text-[13px] font-semibold text-white"
                                 title={service.name}
                               >
+                                <span className="mr-1">{getServiceEmoji(service.id)}</span>
                                 {service.name}
                               </p>
                               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
@@ -4856,6 +7298,10 @@ export default function Home() {
                   })}
             </div>
           </div>
+
+          <p className="relative mt-auto pt-4 text-xs text-slate-400">
+            Powered by <span className="font-semibold text-slate-300">ESDOMED</span> · versión 1.6.2.6
+          </p>
         </div>
 
         <div className="px-5 py-10 sm:px-8 lg:py-8">
@@ -4887,15 +7333,30 @@ export default function Home() {
                 </button>
               </section>
             ) : (
-              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                <div className="mb-7">
-                  <p className="text-sm font-medium text-violet-700">Acceso</p>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-tight">Iniciar sesion</h2>
-                  <p className="mt-3 text-sm leading-6 text-slate-500">
-                    Las cuentas de servicio se crean manualmente desde el panel del administrador.
-                    Cada usuario entra con su cuenta asignada y cambia su contrasena en el primer
-                    ingreso.
-                  </p>
+              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(20,18,12,0.10)] sm:p-9">
+                <div className="mb-7 flex flex-col items-center text-center">
+                  {/* Logo PULSO en el login. */}
+                  <svg viewBox="0 0 48 48" className="h-14 w-14" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="pulsoGradLogin" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stopColor="#22d3ee" />
+                        <stop offset="1" stopColor="#7c3aed" />
+                      </linearGradient>
+                    </defs>
+                    <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoGradLogin)" />
+                    <path
+                      d="M7 25 H16 L19.5 15 L25 35 L29 25 H41"
+                      fill="none"
+                      stroke="#ffffff"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-900">
+                    Bienvenido a PULSO
+                  </h2>
+                  <p className="mt-1.5 text-sm text-slate-500">Iniciá sesión para continuar</p>
                 </div>
 
                 <form className="space-y-5" onSubmit={handleSubmit}>
@@ -4914,16 +7375,39 @@ export default function Home() {
 
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">Contrasena</span>
-                    <input
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
-                      minLength={6}
-                      name="password"
-                      placeholder="Ingresa tu clave"
-                      required
-                      type="password"
-                    />
+                    <div className="relative mt-2">
+                      <input
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
+                        minLength={6}
+                        name="password"
+                        placeholder="Ingresa tu clave"
+                        required
+                        type={showPasswordText ? "text" : "password"}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordText((value) => !value)}
+                        aria-label={showPasswordText ? "Ocultar contraseña" : "Mostrar contraseña"}
+                        title={showPasswordText ? "Ocultar contraseña" : "Mostrar contraseña"}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
+                      >
+                        {showPasswordText ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                            <path d="M9.88 9.88a3 3 0 0 0 4.24 4.24" />
+                            <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                            <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                            <line x1="2" y1="2" x2="22" y2="22" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                   </label>
 
                   {error ? (

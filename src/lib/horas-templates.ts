@@ -10,6 +10,16 @@ export type HorasTemplate = {
 };
 
 export const HORAS_TEMPLATES: Record<string, HorasTemplate> = {
+  "asesores-de-medicamentos": {
+    serviceId: "asesores-de-medicamentos",
+    establishment: "HOSPITAL NACIONAL EL SALVADOR",
+    columns: ["ADMINISTRACION"],
+    seedEmployees: [
+      "Ana Lydia Moran Morales",
+      "Fernando Ernesto Preza Franco",
+      "César Guillermo Cartagena Benítez",
+    ],
+  },
   "banco-de-sangre": {
     serviceId: "banco-de-sangre",
     establishment: "HOSPITAL NACIONAL EL SALVADOR",
