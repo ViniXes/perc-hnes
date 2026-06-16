@@ -129,8 +129,8 @@ const DISTRIBUCION_AREAS: AreaDefinition[] = SERVICE_DEFINITIONS.map((service) =
 // entradas nuevas en NEW_AREAS (abajo).
 
 const AREA_OVERRIDES: Record<string, ModuleId[]> = {
-  // Trabajo Social: ademas de Distribucion de Horas, ahora captura SEPS.
-  "trabajo-social": ["sesps", "distribucion"],
+  // Trabajo Social: PERC, SEPS y Distribucion de Horas.
+  "trabajo-social": ["perc", "sesps", "distribucion"],
   // Laboratorio Clinico: PERC, SEPS (matricial por examen) y Horas.
   "laboratorio-clinico": ["perc", "sesps", "distribucion"],
   // Psicologia (= Rehablitacion psicosocial): captura PERC (pendiente), SEPS y Horas.
