@@ -51,6 +51,8 @@ import {
   getDayColumns,
   getSepsRows,
   getSepsTemplate,
+  SEPS_LAB_PROC_COLS,
+  SEPS_LAB_RESULT_COLS,
   type SepsTemplate,
 } from "@/lib/seps-templates";
 import { getHorasTemplate, type HorasTemplate } from "@/lib/horas-templates";
@@ -1360,14 +1362,24 @@ async function fetchSavedDataForPeriod(service: ServiceDefinition, periodId: str
 type SepsValues = Record<string, Record<string, string>>;
 
 function buildEmptySeps(template: SepsTemplate, periodId: string): SepsValues {
-  const days = getDayColumns(periodId);
   const values: SepsValues = {};
 
+  // Formato matricial (Laboratorio): filas = examenes; columnas = RESULTADOS + PROCEDENCIA.
+  if (template.kind === "matrix") {
+    const cols = [...SEPS_LAB_RESULT_COLS, ...SEPS_LAB_PROC_COLS].map((c) => c.key);
+    for (const section of template.sections ?? []) {
+      for (const exam of section.exams) {
+        values[exam.key] = Object.fromEntries(cols.map((c) => [c, ""]));
+      }
+    }
+    return values;
+  }
+
+  const days = getDayColumns(periodId);
   for (const row of getSepsRows(template)) {
     if (row.readOnly) {
       continue;
     }
-
     values[row.key] = Object.fromEntries(days.map((day) => [day, ""]));
   }
 
@@ -1976,15 +1988,18 @@ export default function Home() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantMsgs, setAssistantMsgs] = useState<{ from: "bot" | "user"; text: string }[]>([]);
   const [assistantInput, setAssistantInput] = useState("");
+  const [botTyping, setBotTyping] = useState(false);
   function pushAssistant(question: string) {
     const q = question.trim();
     if (!q) return;
-    setAssistantMsgs((current) => [
-      ...current,
-      { from: "user", text: q },
-      { from: "bot", text: answerAssistant(q) },
-    ]);
+    setAssistantMsgs((current) => [...current, { from: "user", text: q }]);
     setAssistantInput("");
+    setBotTyping(true);
+    const answer = answerAssistant(q);
+    window.setTimeout(() => {
+      setAssistantMsgs((current) => [...current, { from: "bot", text: answer }]);
+      setBotTyping(false);
+    }, 750);
   }
   function openAssistant() {
     setAssistantOpen((open) => {
@@ -2035,9 +2050,12 @@ export default function Home() {
   // Servicio efectivo: el admin usa el que elige; el resto, su servicio asignado.
   const isAdminLike =
     !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
-  const effectiveServiceId = isAdminLike
-    ? adminSelectedServiceId || undefined
-    : serviceProfile?.serviceId;
+  const isSupervisorLike = serviceProfile?.role === "supervisor";
+  // El admin y los supervisores eligen el servicio a ver; el resto usa el suyo.
+  const effectiveServiceId =
+    isAdminLike || isSupervisorLike
+      ? adminSelectedServiceId || undefined
+      : serviceProfile?.serviceId;
   const currentService = useMemo(
     () => getServiceById(effectiveServiceId),
     [effectiveServiceId],
@@ -2458,10 +2476,13 @@ export default function Home() {
     };
   }, [horasTemplate, periodId, firestoreUnavailable, user]);
 
-  // Al cargar la plantilla SEPS, deja abierta solo la primera tabla.
+  // Al cargar la plantilla SEPS, deja abierta solo la primera tabla/seccion.
   useEffect(() => {
-    if (sepsTemplate && sepsTemplate.tables.length > 0) {
-      setOpenSepsTables(new Set([sepsTemplate.tables[0].id]));
+    if (sepsTemplate?.kind === "matrix") {
+      const first = sepsTemplate.sections?.[0]?.title;
+      setOpenSepsTables(new Set(first ? [first] : []));
+    } else if (sepsTemplate && (sepsTemplate.tables?.length ?? 0) > 0) {
+      setOpenSepsTables(new Set([sepsTemplate.tables![0].id]));
     } else {
       setOpenSepsTables(new Set());
     }
@@ -4550,7 +4571,140 @@ export default function Home() {
         </p>
 
         <div className="mt-5 space-y-6">
-          {sepsTemplate.tables.map((table) => {
+          {sepsTemplate.kind === "matrix"
+            ? (sepsTemplate.sections ?? []).map((section) => {
+                const sectionOpen = openSepsTables.has(section.title);
+                return (
+                  <div key={section.title} className="overflow-hidden rounded-2xl border border-white/10">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenSepsTables((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(section.title)) {
+                            next.delete(section.title);
+                          } else {
+                            next.add(section.title);
+                          }
+                          return next;
+                        })
+                      }
+                      className="flex w-full items-center justify-between gap-3 bg-white/5 px-4 py-3 text-left transition hover:bg-white/10"
+                    >
+                      <span className="text-sm font-semibold uppercase tracking-wide text-slate-100">
+                        {section.title}{" "}
+                        <span className="text-xs font-normal text-slate-400">
+                          ({section.exams.length})
+                        </span>
+                      </span>
+                      <span
+                        aria-hidden
+                        className="flex h-6 w-6 items-center justify-center rounded-md border border-white/15 bg-white/5 text-base font-bold leading-none text-cyan-200"
+                      >
+                        {sectionOpen ? "−" : "+"}
+                      </span>
+                    </button>
+                    <div className={`overflow-x-auto ${sectionOpen ? "" : "hidden"}`}>
+                      <table className="border-collapse text-xs text-slate-100">
+                        <thead>
+                          <tr className="bg-white/5 text-slate-300">
+                            <th className="sticky left-0 z-10 min-w-[260px] bg-[#243049] px-3 py-2 text-left font-medium">
+                              Examen
+                            </th>
+                            {SEPS_LAB_RESULT_COLS.map((col) => (
+                              <th key={col.key} className="px-2 py-2 text-center font-medium">
+                                {col.label}
+                              </th>
+                            ))}
+                            <th className="bg-[#243049] px-2 py-2 text-center font-semibold text-cyan-100">
+                              Total
+                            </th>
+                            {SEPS_LAB_PROC_COLS.map((col) => (
+                              <th key={col.key} className="px-2 py-2 text-center font-medium">
+                                {col.label}
+                              </th>
+                            ))}
+                            <th className="bg-[#243049] px-2 py-2 text-center font-semibold text-cyan-100">
+                              TOTAL
+                            </th>
+                            <th className="bg-[#243049] px-3 py-2 text-center font-semibold text-cyan-100">
+                              Cuadre
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {section.exams.map((exam) => {
+                            const vals = sepsValues[exam.key] || {};
+                            const num = (k: string) => {
+                              const n = Number.parseInt(vals[k] ?? "", 10);
+                              return Number.isFinite(n) ? n : 0;
+                            };
+                            const resultTotal = SEPS_LAB_RESULT_COLS.reduce((a, c) => a + num(c.key), 0);
+                            const procTotal = SEPS_LAB_PROC_COLS.reduce((a, c) => a + num(c.key), 0);
+                            // En el Excel, el total de RESULTADOS y el de PROCEDENCIA estan
+                            // construidos para dar el mismo numero. Si no cuadran, se avisa.
+                            const hasData = resultTotal > 0 || procTotal > 0;
+                            const mismatch = hasData && resultTotal !== procTotal;
+                            const totalCellClass = mismatch
+                              ? "bg-[#241016] px-2 py-1.5 text-center font-semibold text-rose-300"
+                              : "bg-[#243049] px-2 py-1.5 text-center font-semibold text-cyan-100";
+                            return (
+                              <tr key={exam.key} className="border-t border-white/5">
+                                <th
+                                  className="sticky left-0 z-10 max-w-[260px] truncate border-r border-white/10 bg-[#3a465d] px-3 py-1.5 text-left text-[11px] font-medium text-slate-100"
+                                  title={`${exam.code} — ${exam.name}`}
+                                >
+                                  <span className="text-cyan-200">{exam.code}</span> {exam.name}
+                                </th>
+                                {SEPS_LAB_RESULT_COLS.map((col) => (
+                                  <td key={col.key} className="px-1 py-1 text-center">
+                                    <input
+                                      value={vals[col.key] ?? ""}
+                                      onChange={(event) =>
+                                        handleSepsCellChange(exam.key, col.key, event.target.value)
+                                      }
+                                      disabled={sepsEditingBlocked}
+                                      inputMode="numeric"
+                                      className="w-12 rounded border border-white/10 bg-[#1b2537] px-1 py-1 text-center outline-none focus:border-cyan-400 disabled:opacity-50"
+                                    />
+                                  </td>
+                                ))}
+                                <td className={totalCellClass}>{resultTotal}</td>
+                                {SEPS_LAB_PROC_COLS.map((col) => (
+                                  <td key={col.key} className="px-1 py-1 text-center">
+                                    <input
+                                      value={vals[col.key] ?? ""}
+                                      onChange={(event) =>
+                                        handleSepsCellChange(exam.key, col.key, event.target.value)
+                                      }
+                                      disabled={sepsEditingBlocked}
+                                      inputMode="numeric"
+                                      className="w-12 rounded border border-white/10 bg-[#1b2537] px-1 py-1 text-center outline-none focus:border-cyan-400 disabled:opacity-50"
+                                    />
+                                  </td>
+                                ))}
+                                <td className={totalCellClass}>{procTotal}</td>
+                                <td className="px-3 py-1.5 text-center">
+                                  {mismatch ? (
+                                    <span className="whitespace-nowrap rounded-md bg-rose-500/10 px-2 py-1 text-[11px] font-semibold text-rose-300">
+                                      ⚠ Debe sumar lo mismo
+                                    </span>
+                                  ) : hasData ? (
+                                    <span className="text-emerald-300">✓</span>
+                                  ) : (
+                                    <span className="text-slate-500">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })
+            : (sepsTemplate.tables ?? []).map((table) => {
             const hasGroups = table.rows.some((row) => row.group);
             // rowSpan por grupo (solo en la primera fila del grupo).
             const groupSpan: Record<number, number> = {};
@@ -4734,12 +4888,20 @@ export default function Home() {
       sesps: "SE",
       distribucion: "DH",
     };
-    const currentArea = getAreaById(serviceProfile.serviceId);
+    const currentArea = getAreaById(effectiveServiceId);
     const visibleModules: ModuleDefinition[] = isAdmin
       ? MODULE_DEFINITIONS
-      : currentArea
-        ? getAreaModules(currentArea)
-        : [];
+      : isSupervisor
+        ? currentArea
+          ? getAreaModules(currentArea).filter((mod) =>
+              serviceProfile.supervisorModules.includes(mod.id),
+            )
+          : []
+        : currentArea
+          ? getAreaModules(currentArea)
+          : [];
+    // Si la seccion de un modulo debe mostrarse para este usuario/servicio.
+    const showModule = (moduleId: ModuleId) => visibleModules.some((vm) => vm.id === moduleId);
     const getModuleUiStatus = (mod: ModuleDefinition): "completo" | "incompleto" => {
       // El grid de centros de costo (tableValues) es el tabulador PERC.
       if (mod.id === "perc") {
@@ -5644,15 +5806,16 @@ export default function Home() {
             </section>
           ) : null}
 
-          {isAdmin ? (
+          {isAdmin || isSupervisor ? (
             <section className="rounded-[24px] border border-amber-400/25 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-200/80">
-                Administrador · Ver tabuladores
+                {isAdmin ? "Administrador · Ver tabuladores" : "Supervisión · Consolidado"}
               </p>
               <h2 className="mt-1 text-2xl font-bold text-white">Elegir servicio</h2>
               <p className="mt-1 text-sm text-slate-300">
-                Selecciona un servicio para ver y editar sus tabuladores (PERC, SEPS y Horas) y su
-                historial por mes.
+                {isAdmin
+                  ? "Selecciona un servicio para ver y editar sus tabuladores (PERC, SEPS y Horas) y su historial por mes."
+                  : "Selecciona un servicio para ver lo que cargó en los tableros que supervisás (solo lectura)."}
               </p>
               <label className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
                 <span className="text-sm font-medium text-slate-200">Servicio:</span>
@@ -5662,9 +5825,16 @@ export default function Home() {
                   className="w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm font-semibold text-white outline-none focus:border-amber-400 sm:max-w-md"
                 >
                   <option value="">— Selecciona un servicio —</option>
-                  {SERVICE_DEFINITIONS.map((service) => (
+                  {SERVICE_DEFINITIONS.filter(
+                    (service) =>
+                      isAdmin ||
+                      (getAreaById(service.id)?.modules.some((m) =>
+                        serviceProfile.supervisorModules.includes(m),
+                      ) ??
+                        false),
+                  ).map((service) => (
                     <option key={service.id} value={service.id}>
-                      {service.name}
+                      {getServiceEmoji(service.id)} {service.name}
                     </option>
                   ))}
                 </select>
@@ -5672,7 +5842,7 @@ export default function Home() {
             </section>
           ) : null}
 
-          {currentService ? (
+          {currentService && showModule("perc") ? (
             <section
               id="panel-tabulator"
               className="overflow-hidden rounded-[24px] border border-cyan-400/20 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
@@ -5863,19 +6033,20 @@ export default function Home() {
                 )}
               </div>
             </section>
-          ) : (
+          ) : currentService ? null : (
             <section className="rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
-              <h2 className="text-xl font-semibold">Cuenta sin tabulador asignado</h2>
+              <h2 className="text-xl font-semibold">Selecciona un servicio</h2>
               <p className="mt-2 text-sm leading-6 text-slate-300">
-                Esta cuenta puede administrar usuarios y permisos, pero no tiene un servicio
-                operativo asignado para captura.
+                {isSupervisor
+                  ? "Elegí un servicio arriba para ver sus tableros."
+                  : "Esta cuenta puede administrar usuarios y permisos, pero no tiene un servicio operativo asignado para captura."}
               </p>
             </section>
           )}
 
-          {sepsSection}
+          {showModule("sesps") ? sepsSection : null}
 
-          {horasSection}
+          {showModule("distribucion") ? horasSection : null}
 
           {showPasswordModal ? (
             <div
@@ -7079,8 +7250,8 @@ export default function Home() {
             </div>
           ) : null}
 
-          {/* Asistente virtual (robot medico) - abajo a la izquierda. */}
-          <div className="fixed bottom-5 left-20 z-40 flex flex-col items-start gap-3">
+          {/* Asistente virtual (robot medico) - abajo a la derecha. */}
+          <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
             {assistantOpen ? (
               <div className="modal-pop-in flex h-[60vh] max-h-[460px] w-[320px] max-w-[82vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/50">
                 <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-cyan-500/25 to-violet-500/25 px-4 py-3">
@@ -7117,6 +7288,13 @@ export default function Home() {
                       {msg.text}
                     </p>
                   ))}
+                  {botTyping ? (
+                    <div className="flex w-fit items-center gap-1 rounded-2xl rounded-tl-sm bg-white/5 px-3 py-2.5">
+                      <span className="bot-dot h-1.5 w-1.5 rounded-full bg-slate-300" />
+                      <span className="bot-dot h-1.5 w-1.5 rounded-full bg-slate-300" style={{ animationDelay: "0.15s" }} />
+                      <span className="bot-dot h-1.5 w-1.5 rounded-full bg-slate-300" style={{ animationDelay: "0.3s" }} />
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Sugerencias rapidas */}
@@ -7162,18 +7340,26 @@ export default function Home() {
               type="button"
               onClick={openAssistant}
               aria-label="Asistente virtual"
-              className={`flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 shadow-xl shadow-cyan-900/40 ring-2 ring-white/20 transition hover:scale-105 ${
+              className={`flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 shadow-xl shadow-cyan-900/40 ring-2 ring-white/20 transition hover:scale-105 ${
                 assistantOpen ? "" : "bot-float"
               }`}
             >
               {/* Robot medico */}
-              <svg viewBox="0 0 48 48" className="h-9 w-9" aria-hidden="true">
+              <svg viewBox="0 0 48 48" className="h-8 w-8" aria-hidden="true">
                 <line x1="24" y1="3" x2="24" y2="9" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
                 <circle cx="24" cy="3.5" r="2.4" fill="#ffffff" />
                 <rect x="9" y="9" width="30" height="24" rx="9" fill="#ffffff" />
                 <circle cx="18.5" cy="20" r="3.1" fill="#0e7490" />
                 <circle cx="29.5" cy="20" r="3.1" fill="#0e7490" />
-                <rect x="19" y="26" width="10" height="2.6" rx="1.3" fill="#0e7490" />
+                <rect
+                  x="19"
+                  y="26"
+                  width="10"
+                  height="2.6"
+                  rx="1.3"
+                  fill="#0e7490"
+                  className={botTyping ? "bot-talk" : ""}
+                />
                 <path d="M22.6 35 h2.8 v2.4 h2.4 v2.8 h-2.4 v2.4 h-2.8 v-2.4 h-2.4 v-2.8 h2.4 z" fill="#ef4444" />
               </svg>
             </button>

@@ -11,6 +11,7 @@
 
 import { BANCO_SANGRE_TEMPLATE } from "@/lib/seps-banco-sangre";
 import { FARMACIA_TEMPLATE } from "@/lib/seps-farmacia";
+import { LABORATORIO_TEMPLATE } from "@/lib/seps-laboratorio";
 import { NUTRICION_TEMPLATE } from "@/lib/seps-nutricion";
 import { PSICOLOGIA_TEMPLATE } from "@/lib/seps-psicologia";
 
@@ -38,11 +39,38 @@ export type SepsTable = {
   rows: SepsRow[];
 };
 
+// --- Formato MATRICIAL (Laboratorio): filas = examenes; columnas fijas de
+// RESULTADOS (suman "total") y PROCEDENCIA (suman "TOTAL"). ---
+export type SepsExam = { key: string; code: string; name: string };
+export type SepsSection = { title: string; exams: SepsExam[] };
+
+/** Columnas del bloque RESULTADOS (su suma = "total"). */
+export const SEPS_LAB_RESULT_COLS: { key: string; label: string }[] = [
+  { key: "r_normal", label: "1-Normal" },
+  { key: "r_negativo", label: "2-Negativo" },
+  { key: "r_anormal", label: "3-Anormal" },
+  { key: "r_positivo", label: "4-Positivo" },
+  { key: "r_inadecuada", label: "5-M. inadecuada" },
+  { key: "r_otro", label: "6-Otro" },
+];
+/** Columnas del bloque PROCEDENCIA (su suma = "TOTAL"). */
+export const SEPS_LAB_PROC_COLS: { key: string; label: string }[] = [
+  { key: "p_hosp", label: "2-Hosp" },
+  { key: "p_emer", label: "3-Emer" },
+  { key: "p_referi", label: "4-Referi" },
+  { key: "p_otro", label: "5-Otro" },
+];
+
 export type SepsTemplate = {
   serviceId: string;
   /** Establecimiento fijo que va en el encabezado. */
   establishment: string;
-  tables: SepsTable[];
+  /** "daily" (por defecto) = tabulador diario; "matrix" = por examen (Laboratorio). */
+  kind?: "daily" | "matrix";
+  /** Tablas del formato diario. */
+  tables?: SepsTable[];
+  /** Secciones del formato matricial (Laboratorio). */
+  sections?: SepsSection[];
 };
 
 // -----------------------------------------------------------------------------
@@ -116,6 +144,8 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "banco-de-sangre": BANCO_SANGRE_TEMPLATE,
   // Farmacia.
   "servicio-farmaceutico": FARMACIA_TEMPLATE,
+  // Laboratorio Clinico (formato matricial por examen).
+  "laboratorio-clinico": LABORATORIO_TEMPLATE,
 };
 
 export function getSepsTemplate(serviceId: string | null | undefined): SepsTemplate | null {
@@ -132,7 +162,7 @@ export function hasSepsTemplate(serviceId: string | null | undefined): boolean {
 
 /** Todas las filas de todas las tablas de una plantilla (orden estable). */
 export function getSepsRows(template: SepsTemplate): SepsRow[] {
-  return template.tables.flatMap((table) => table.rows);
+  return (template.tables ?? []).flatMap((table) => table.rows);
 }
 
 /** Numero de dias del mes de un periodo "YYYY-MM" (1..28/29/30/31). */

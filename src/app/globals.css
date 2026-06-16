@@ -231,3 +231,21 @@ body {
   50% { transform: translateY(-7px); }
 }
 .bot-float { animation: botFloat 3s ease-in-out infinite; }
+
+/* Robot "hablando": la boca se mueve. */
+@keyframes botTalk {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.35); }
+}
+.bot-talk {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: botTalk 0.28s ease-in-out infinite;
+}
+
+/* Puntos de "escribiendo...". */
+@keyframes botDot {
+  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-3px); }
+}
+.bot-dot { animation: botDot 1s infinite; }
