@@ -1,15 +1,52 @@
 // AUTO-GENERADO (formato Distribucion de Horas: empleados x centros de costo).
 // Mismo formato para todas las areas; cambian las columnas (centros) y empleados.
+/** Empleado sembrado: solo nombre, o nombre + DUI (documento de identidad). */
+export type HorasSeed = string | { name: string; dui?: string };
+
 export type HorasTemplate = {
   serviceId: string;
   establishment: string;
   /** Centros de costo a los que el area distribuye horas (columnas). */
   columns: string[];
   /** Empleados iniciales (editable: se pueden agregar/quitar). */
-  seedEmployees: string[];
+  seedEmployees: HorasSeed[];
 };
 
 export const HORAS_TEMPLATES: Record<string, HorasTemplate> = {
+  esdomed: {
+    serviceId: "esdomed",
+    establishment: "HOSPITAL NACIONAL EL SALVADOR",
+    columns: ["ADMINISTRACION"],
+    seedEmployees: [
+      { dui: "03596842-9", name: "HEBER BENJAMIN CARDOZA GUEVARA" },
+      { dui: "01658710-9", name: "BORIS ANDREE RODRIGUEZ QUINTANILLA" },
+      { dui: "03676985-2", name: "JUAN CARLOS MIRANDA MARROQUIN" },
+      { dui: "04505539-1", name: "JOSE DANIEL HERNANDEZ ZEPEDA" },
+      { dui: "05760583-5", name: "VINICIO ALEXANDER HERNANDEZ QUIJANO" },
+      { dui: "04304339-8", name: "ALFONSO MONTES GUTIERREZ" },
+      { dui: "05060484-6", name: "DENYS RICARDO ALVAREZ SORTO" },
+      { dui: "03598713-0", name: "DIEGO IVAN LOPEZ" },
+      { dui: "05548384-7", name: "FERNANDO JAVIER GALVEZ SAMPSON" },
+      { dui: "02430226-2", name: "PILAR DEL CARMEN CANDRAY AMAYA" },
+      { dui: "00529335-7", name: "HENRY OMAR MACIAS BARRIENTOS" },
+      { dui: "04800141-4", name: "BRENDA MARGARITA RAMIREZ OVIEDO" },
+      { dui: "05837047-5", name: "LUIS FERNANDO AMAYA GRANDE" },
+      { dui: "03231178-8", name: "BILLIE NAPOLEON CRUZ GARCIA" },
+      { dui: "02989402-8", name: "CARLOS RODIL SALEGIO SALINAS" },
+      { dui: "05080791-5", name: "VANESSA FABIOLA NAVES LARIN" },
+      { dui: "05298662-6", name: "GABRIELA ALEJANDRA CALPAÑO RODRIGUEZ" },
+      { dui: "03614327-6", name: "CARLA SOFIA GIRON CERNA" },
+      { dui: "03979953-9", name: "OSCAR ALEXANDER GUARDADO GUEVARA" },
+      { dui: "05649041-5", name: "VIOLETA SARAI CASTRO ORELLANA" },
+      { dui: "04297389-1", name: "VANESSA TATIANA HERRERA ALAS" },
+      { dui: "03532673-2", name: "BARTIMEO OLIVERIO LOPEZ PICHINTE" },
+      { dui: "01980666-7", name: "CARLOS ABRAHAM MONTOYA ARROYO" },
+      { dui: "05258503-0", name: "KARLA ALEJANDRA GARCIA DIAZ" },
+      { dui: "06656459-1", name: "BEATRIZ ALEJANDRA BARRERA DE VASQUEZ" },
+      { dui: "05513800-2", name: "ANDREA GABRIELA FLORES MANGANDI" },
+      { dui: "06342595-0", name: "ALEJANDRO GABRIEL HERNANDEZ HERRERA" },
+    ],
+  },
   "asesores-de-medicamentos": {
     serviceId: "asesores-de-medicamentos",
     establishment: "HOSPITAL NACIONAL EL SALVADOR",

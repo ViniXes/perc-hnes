@@ -30,37 +30,42 @@ body {
 }
 
 .panel-shell.theme-dark {
-  --bg: #0e1013;
-  --surface: #181a1f;       /* tarjeta principal */
-  --surface-2: #131519;     /* tarjeta interna / sidebar */
-  --surface-3: #20242b;     /* inputs / elevado */
-  --chip: #262a31;          /* badges, avatar, chips neutros */
-  --border: rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(212, 175, 106, 0.30);
-  --text: #e9e6df;
-  --text-muted: #b1aca2;
-  --text-faint: #837f76;
-  --accent: #d4af6a;        /* dorado: texto, bordes, detalles */
-  --accent-btn: #c79a4f;    /* dorado lleno para botones */
-  --accent-ink: #17140c;    /* texto sobre acento lleno */
-  --shadow-card: 0 24px 70px rgba(0, 0, 0, 0.45);
+  --bg: #0a0f1c;            /* azul marino profundo (igual que el login) */
+  --surface: #0e1626;       /* tarjeta principal */
+  --surface-2: #101a2e;     /* tarjeta interna / sidebar */
+  --surface-3: #18233a;     /* inputs / elevado */
+  --chip: #1a2740;          /* badges, avatar, chips neutros */
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(34, 211, 238, 0.35);
+  --text: #e7ecf5;
+  --text-muted: #9fb0cc;
+  --text-faint: #6b7a95;
+  --accent: #38d6ee;        /* cian: texto, bordes, detalles */
+  --accent-btn: #22d3ee;    /* cian lleno para botones */
+  --accent-ink: #07131f;    /* texto sobre acento lleno */
+  --shadow-card: 0 24px 70px rgba(0, 0, 0, 0.50);
+  /* Resplandores sutiles como en la pantalla de login. */
+  background-image:
+    radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.06), transparent 34%),
+    radial-gradient(circle at 100% 100%, rgba(124, 58, 237, 0.07), transparent 40%);
+  background-attachment: fixed;
 }
 
 .panel-shell.theme-light {
-  --bg: #f6f4ef;
+  --bg: #eef2f7;            /* gris frio claro (combina con el acento cian) */
   --surface: #ffffff;
-  --surface-2: #faf8f3;
-  --surface-3: #f0ede6;
-  --chip: #efece4;
-  --border: rgba(28, 25, 20, 0.10);
-  --border-strong: rgba(176, 125, 35, 0.32);
-  --text: #232019;
-  --text-muted: #5d594f;
-  --text-faint: #8b867c;
-  --accent: #a9781f;
-  --accent-btn: #b8862f;
-  --accent-ink: #ffffff;
-  --shadow-card: 0 18px 45px rgba(20, 18, 12, 0.07);
+  --surface-2: #f6f8fb;
+  --surface-3: #eef2f7;
+  --chip: #e7edf5;
+  --border: rgba(15, 23, 42, 0.10);
+  --border-strong: rgba(8, 145, 178, 0.35);
+  --text: #0f172a;
+  --text-muted: #475569;
+  --text-faint: #8590a3;
+  --accent: #0e7490;        /* cian/teal oscuro: texto, bordes, detalles */
+  --accent-btn: #0891b2;    /* cian para botones */
+  --accent-ink: #ffffff;    /* texto blanco sobre el boton */
+  --shadow-card: 0 18px 45px rgba(15, 23, 42, 0.08);
 }
 
 /* ----- Superficies (se voltean con el tema) -------------------------------- */
@@ -212,6 +217,27 @@ body {
 /* Inputs/textos placeholder en claro, legibles. */
 .panel-shell.theme-light .text-slate-200,
 .panel-shell.theme-light .text-slate-300 { color: var(--text-muted); }
+
+/* ----- Armonizacion modo claro: componentes nuevos (tablero, config, menu, captura) ----- */
+/* Superficies translucidas nuevas -> superficie del tema (si no, quedan invisibles). */
+.panel-shell.theme-light .bg-white\/\[0\.03\],
+.panel-shell.theme-light .bg-white\/\[0\.04\],
+.panel-shell.theme-light .bg-white\/\[0\.06\] { background-color: var(--surface-2); }
+
+/* Texto cian/acento con opacidad -> acento del tema (legible sobre claro). */
+.panel-shell.theme-light .text-cyan-300\/90,
+.panel-shell.theme-light .text-cyan-200\/90 { color: var(--accent); }
+
+/* Tintes cian de fondo -> tinte suave del acento (chips/badges/seleccion). */
+.panel-shell.theme-light .bg-cyan-500\/10,
+.panel-shell.theme-light .bg-cyan-500\/15 { background-color: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+/* Texto faint sobre superficies claras: un poco mas oscuro para que se lea. */
+.panel-shell.theme-light .text-slate-400 { color: var(--text-muted); }
+
+/* Mantener iconos y letras en BLANCO sobre chips/botones con degradado. */
+.panel-shell.theme-light .bg-gradient-to-br.text-white,
+.panel-shell.theme-light .bg-gradient-to-r.text-white { color: #ffffff; }
 
 /* ----- Modal de confirmación (eliminar empleado en Distribución de Horas) --- */
 @keyframes modalFadeIn {

@@ -145,6 +145,8 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   radiologia: ["perc"],
   // Asesores de Medicamentos: SOLO Distribucion de Horas.
   "asesores-de-medicamentos": ["distribucion"],
+  // ESDOMED: SOLO Distribucion de Horas.
+  esdomed: ["distribucion"],
   // Servicios PERC/SERV (productividad). Por ahora solo PERC; SEPS y Horas se
   // agregan cuando lleguen sus plantillas:
   //   - maxima-emergencia: ["perc", "sesps", "distribucion"]

@@ -238,88 +238,208 @@ const BACKGROUND_OPTIONS: { id: string; label: string; css: string | null }[] = 
   { id: "grafito", label: "Grafito", css: "linear-gradient(160deg, #0e1013, #1b1f25)" },
 ];
 // Preguntas frecuentes del asistente virtual (robot).
-const ASSISTANT_FAQS: { q: string; a: string }[] = [
+// Categorias del asistente (para navegar los temas por pestañas).
+const ASSISTANT_CATEGORIES = ["Captura", "Plazos", "Cuenta", "Vista", "Sistema"] as const;
+type AssistantCategory = (typeof ASSISTANT_CATEGORIES)[number];
+
+// Base de conocimiento del asistente. `kw` son palabras clave extra (sinonimos)
+// para mejorar la coincidencia con lo que escribe el usuario.
+const ASSISTANT_FAQS: { q: string; a: string; cat: AssistantCategory; kw?: string[] }[] = [
+  // ---- Captura ----
   {
+    cat: "Captura",
     q: "¿Cómo ingreso mis datos?",
-    a: "Abrí tu tabulador (PERC, SEPS u Horas) desde el menú, completá las casillas y tocá «Guardar» al pie de la tabla.",
+    a: "Abrí tu tabulador (PERC, SEPS u Horas) desde el menú, completá las casillas y tocá «Guardar» al pie de la tabla. Cada módulo guarda por separado.",
+    kw: ["ingresar", "cargar", "llenar", "capturar", "registrar", "datos", "guardar"],
   },
   {
+    cat: "Captura",
+    q: "¿Cómo guardo lo que cargué?",
+    a: "Al pie de cada tabla hay un botón «Guardar». Mientras la captura esté abierta podés guardar y volver a editar las veces que necesités; cada guardado reemplaza el anterior del mes.",
+    kw: ["guardar", "grabar", "salvar", "boton"],
+  },
+  {
+    cat: "Captura",
+    q: "En Horas, ¿cómo relleno rápido?",
+    a: "Escribí un valor en una casilla y arrastrá el cuadradito de su esquina inferior hacia abajo: copia ese valor en toda la columna, como en Excel (solo hacia abajo).",
+    kw: ["rellenar", "arrastrar", "copiar", "rapido", "excel", "columna"],
+  },
+  {
+    cat: "Captura",
+    q: "¿Cómo agrego o quito empleados en Horas?",
+    a: "En la tabla de Horas usá «+ Agregar empleado» para sumar una fila. Para quitar, tocá la ✕ de la fila; te pedirá confirmación antes de borrarla.",
+    kw: ["empleado", "agregar", "quitar", "eliminar", "borrar", "persona", "fila"],
+  },
+  {
+    cat: "Captura",
+    q: "¿Para qué sirve la columna DUI en Horas?",
+    a: "El DUI (documento de identidad) va antes del nombre del empleado y se guarda junto a su registro. Es un campo de texto: escribilo con guion, por ejemplo 01234567-8.",
+    kw: ["dui", "documento", "identidad", "cedula", "numero"],
+  },
+  {
+    cat: "Captura",
+    q: "¿Para qué es el comentario en Horas?",
+    a: "El comentario (maternidad, vacaciones, permiso, etc.) es solo de apoyo durante la captura y NO se guarda en el historial ni en el consolidado.",
+    kw: ["comentario", "nota", "maternidad", "vacaciones", "permiso"],
+  },
+  {
+    cat: "Captura",
+    q: "En Laboratorio, ¿qué es el cuadre?",
+    a: "En el SEPS de Laboratorio el total de RESULTADOS debe ser igual al total de PROCEDENCIA. Si no coinciden, la fila se marca en rojo con «Debe sumar lo mismo». Corregí los valores hasta que cuadren.",
+    kw: ["laboratorio", "cuadre", "resultados", "procedencia", "rojo", "suma", "total", "examen"],
+  },
+  {
+    cat: "Captura",
+    q: "¿Solo se aceptan números?",
+    a: "Sí, en las casillas de horas y de estadística solo se aceptan números. El nombre, DUI y comentario sí admiten texto.",
+    kw: ["numero", "letras", "texto", "casilla"],
+  },
+  // ---- Plazos ----
+  {
+    cat: "Plazos",
     q: "¿Hasta cuándo puedo cargar?",
     a: "PERC y SEPS cierran el 3er día hábil a las 2:30 PM; Distribución de Horas el 5º día hábil a las 2:30 PM. SEPS reabre el 6º día hábil.",
+    kw: ["plazo", "fecha", "cierre", "cuando", "limite", "hora", "dia", "habil"],
   },
   {
+    cat: "Plazos",
     q: "No puedo cargar, está bloqueado",
-    a: "Si ya pasó el plazo, usá «Solicitar habilitar» en el menú para pedirle a un supervisor o al admin que te reabra el tablero.",
+    a: "Si ya pasó el plazo, usá «Solicitar habilitar» en el menú para pedirle a un supervisor o al administrador que te reabra el tablero.",
+    kw: ["bloqueado", "cerrado", "no puedo", "deshabilitado", "habilitar", "solicitar", "reabrir"],
   },
   {
-    q: "¿Cómo veo meses anteriores?",
-    a: "En cada tabulador usá el selector de «Mes». Los meses con datos aparecen en verde. Es solo lectura (salvo que seas admin).",
+    cat: "Plazos",
+    q: "¿Cómo solicito que me habiliten?",
+    a: "Menú → «Solicitar habilitar»: elegí el módulo y el mes, y enviás la solicitud. Un supervisor o el admin la aprueba y te reabre la captura.",
+    kw: ["solicitar", "solicitud", "habilitar", "permiso", "pedir", "reabrir"],
   },
   {
+    cat: "Plazos",
+    q: "¿Cuándo reabre SEPS?",
+    a: "SEPS vuelve a abrir el 6º día hábil del mes para ajustes, después de su primer cierre del 3er día hábil.",
+    kw: ["reabre", "seps", "abre", "reapertura", "sexto"],
+  },
+  // ---- Cuenta ----
+  {
+    cat: "Cuenta",
     q: "¿Cómo cambio mi contraseña?",
-    a: "Menú → «Cambiar contraseña». Podés mostrar u ocultar la clave tocando el ojito.",
+    a: "Menú → «Cambiar contraseña». Escribí la nueva clave y confirmá; podés mostrarla u ocultarla tocando el ojito.",
+    kw: ["contraseña", "clave", "cambiar", "password", "ojito"],
   },
   {
-    q: "En Horas, ¿cómo relleno rápido?",
-    a: "Escribí un valor y arrastrá el cuadradito de la esquina de la casilla hacia abajo: copia ese valor en toda la columna.",
-  },
-  {
-    q: "¿Cómo personalizo la vista?",
-    a: "Menú → «Configuración»: podés cambiar tipografía, tamaño de letra, tema, color de acento y fondo.",
-  },
-  {
-    q: "¿Qué significan los colores verde y ámbar?",
-    a: "Verde = completo o ya cargado. Ámbar = pendiente o incompleto. En el selector de mes, verde es un mes con datos guardados.",
-  },
-  {
-    q: "¿Qué es PERC, SEPS y Horas?",
-    a: "PERC es la productividad por centros de costo; SEPS es la captura estadística diaria; Distribución de Horas reparte las horas del personal por servicio.",
-  },
-  {
+    cat: "Cuenta",
     q: "Olvidé mi contraseña",
-    a: "Pedile al administrador un «Reset clave» desde Usuarios y permisos: te asignan una clave temporal que cambiás al entrar.",
+    a: "Pedile al administrador un «Reset de clave» desde Usuarios y permisos: te asignan una clave temporal que cambiás al entrar.",
+    kw: ["olvide", "recuperar", "reset", "perdi", "contraseña", "clave"],
   },
   {
-    q: "¿Puedo editar un mes pasado?",
-    a: "Solo el administrador puede editar meses anteriores. Los servicios pueden verlos en modo solo lectura desde el selector de mes.",
-  },
-  {
-    q: "¿Cómo descargo el Excel mensual?",
-    a: "Si sos administrador: Menú → «Excel mensual» → «Descargar Excel». Sale con los datos disponibles al momento.",
-  },
-  {
+    cat: "Cuenta",
     q: "¿Cómo cierro sesión?",
     a: "En el menú lateral, abajo, tocá «Cerrar sesión».",
+    kw: ["cerrar", "salir", "sesion", "logout", "desconectar"],
   },
   {
-    q: "¿Cómo agrego o quito empleados en Horas?",
-    a: "En la tabla de Horas usá «+ Agregar empleado». Para quitar, tocá la ✕ de la fila; te pedirá confirmación.",
+    cat: "Cuenta",
+    q: "¿Qué puede hacer cada rol?",
+    a: "Los servicios cargan sus propios tabuladores. Los supervisores ven y consolidan su división. El administrador ve todo, edita meses pasados, gestiona usuarios y habilita tableros.",
+    kw: ["rol", "permiso", "supervisor", "administrador", "admin", "servicio", "quien"],
+  },
+  // ---- Vista ----
+  {
+    cat: "Vista",
+    q: "¿Cómo veo meses anteriores?",
+    a: "En cada tabulador usá el selector de «Mes». Los meses con datos aparecen en verde y los vacíos en gris. Es solo lectura (salvo que seas admin).",
+    kw: ["mes", "anterior", "historial", "pasado", "ver", "selector"],
+  },
+  {
+    cat: "Vista",
+    q: "¿Puedo editar un mes pasado?",
+    a: "Solo el administrador puede editar meses anteriores. Los servicios y supervisores los ven en modo solo lectura desde el selector de mes.",
+    kw: ["editar", "mes", "pasado", "anterior", "modificar", "historial"],
+  },
+  {
+    cat: "Vista",
+    q: "¿Qué significan los colores verde y ámbar?",
+    a: "Verde = completo o ya cargado. Ámbar = pendiente o incompleto. En el selector de mes, verde es un mes con datos guardados y gris uno sin datos.",
+    kw: ["color", "verde", "ambar", "amarillo", "gris", "completo", "incompleto"],
+  },
+  {
+    cat: "Vista",
+    q: "¿Cómo personalizo la vista?",
+    a: "Menú → «Configuración»: podés cambiar tipografía, tamaño de letra, tema (claro/oscuro), color de acento y fondo de pantalla.",
+    kw: ["personalizar", "configuracion", "tema", "tipografia", "fondo", "color", "letra", "claro", "oscuro"],
+  },
+  // ---- Sistema ----
+  {
+    cat: "Sistema",
+    q: "¿Qué es PULSO?",
+    a: "PULSO (Plataforma Única de Logística y Servicios Operativos) es el sistema del Hospital Nacional El Salvador para capturar productividad (PERC), estadística (SEPS) y distribución de horas del personal.",
+    kw: ["pulso", "sistema", "que es", "plataforma", "hospital"],
+  },
+  {
+    cat: "Sistema",
+    q: "¿Qué es PERC, SEPS y Horas?",
+    a: "PERC es la productividad por centros de costo; SEPS es la captura estadística (diaria o por examen); Distribución de Horas reparte las horas del personal por servicio. El orden siempre es PERC, SEPS y luego Horas.",
+    kw: ["perc", "seps", "horas", "modulo", "diferencia", "significa"],
+  },
+  {
+    cat: "Sistema",
+    q: "¿Por qué no veo los tres módulos?",
+    a: "Cada servicio tiene habilitados solo los módulos que le corresponden. Por ejemplo, ESDOMED y Asesores de Medicamentos solo reportan Distribución de Horas. Si creés que falta uno, avisá al administrador.",
+    kw: ["modulo", "falta", "no veo", "no aparece", "esdomed", "solo horas"],
+  },
+  {
+    cat: "Sistema",
+    q: "¿Cómo descargo el Excel mensual?",
+    a: "Si sos administrador: Menú → «Excel mensual» → «Descargar Excel». Sale con los datos disponibles al momento de la descarga.",
+    kw: ["excel", "descargar", "reporte", "consolidado", "mensual", "exportar"],
+  },
+  {
+    cat: "Sistema",
+    q: "¿Quién consolida la información?",
+    a: "El administrador (y los supervisores en su división) ven el consolidado de todos los servicios. Cada servicio solo ve y carga lo suyo.",
+    kw: ["consolida", "consolidado", "junta", "resumen", "supervisor", "admin"],
   },
 ];
 
+// Normaliza acentos y aplica un par de sinonimos comunes para la busqueda.
+function normalizeAssistant(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\bclave\b/g, "contraseña")
+    .replace(/\bborrar\b/g, "quitar")
+    .replace(/\beliminar\b/g, "quitar");
+}
+
 // Busca la mejor respuesta segun palabras clave de la pregunta del usuario.
 function answerAssistant(query: string): string {
-  const q = query.toLowerCase();
-  let best: { q: string; a: string } | null = null;
+  const q = normalizeAssistant(query);
+  const qWords = q.split(/[^a-zñ0-9]+/).filter((w) => w.length > 2);
+  let best: (typeof ASSISTANT_FAQS)[number] | null = null;
   let bestScore = 0;
   for (const faq of ASSISTANT_FAQS) {
-    const words = `${faq.q} ${faq.a}`
-      .toLowerCase()
-      .split(/[^a-záéíóúñ]+/)
-      .filter((w) => w.length > 3);
+    const haystack = normalizeAssistant(`${faq.q} ${faq.a} ${(faq.kw ?? []).join(" ")}`);
+    const words = haystack.split(/[^a-zñ0-9]+/).filter((w) => w.length > 2);
     let score = 0;
+    // Coincidencia por palabra de la base presente en la pregunta.
     for (const w of words) {
       if (q.includes(w)) score += 1;
+    }
+    // Bonus fuerte si alguna keyword aparece tal cual en la pregunta del usuario.
+    for (const k of faq.kw ?? []) {
+      if (qWords.includes(normalizeAssistant(k))) score += 3;
     }
     if (score > bestScore) {
       bestScore = score;
       best = faq;
     }
   }
-  if (best && bestScore > 0) {
+  if (best && bestScore >= 2) {
     return best.a;
   }
-  return "No encontré esa respuesta exacta 🤔. Probá tocando una de las preguntas sugeridas de abajo, o escribila con otras palabras.";
+  return "No encontré una respuesta exacta. Probá con otras palabras o tocá un tema de abajo (Captura, Plazos, Cuenta, Vista, Sistema). Si es algo puntual de tus datos, lo mejor es avisar al administrador.";
 }
 
 function getFontStack(id: string) {
@@ -346,18 +466,19 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "asesores-de-medicamentos": "direccion",
   "docencia-e-investigacion": "direccion",
   "servicio-farmaceutico": "direccion",
+  esdomed: "direccion",
   "trabajo-social": "apoyo",
   "laboratorio-clinico": "apoyo",
   "banco-de-sangre": "apoyo",
   "alimentacion-y-dieta": "apoyo",
-  radiologia: "medica",
+  radiologia: "apoyo",
+  "terapia-fisica": "apoyo",
+  "rehablitacion-psicosocial": "apoyo",
   "estudios-gastroclinicos": "medica",
   "unidad-de-hemodinamia": "medica",
   hemodialisis: "medica",
   "hemodialisis-medicina-interna": "medica",
-  "terapia-fisica": "medica",
   "terapia-respiratoria": "medica",
-  "rehablitacion-psicosocial": "medica",
   vacunacion: "medica",
   "maxima-emergencia": "medica",
   "centro-quirurgico": "medica",
@@ -400,38 +521,206 @@ const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   "clinica-de-empleados": "dep.clinicaempleados",
 };
 
-// Icono (emoji) por servicio, segun su nombre. Se muestra al lado del nombre.
-const SERVICE_EMOJI_BY_ID: Record<string, string> = {
-  vacunacion: "💉",
-  "laboratorio-clinico": "🧪",
-  radiologia: "🩻",
-  "estudios-gastroclinicos": "🔬",
-  "terapia-fisica": "🤸",
-  "terapia-respiratoria": "🫁",
-  "banco-de-sangre": "🩸",
-  "unidad-de-hemodinamia": "🫀",
-  hemodialisis: "💧",
-  "hemodialisis-medicina-interna": "💧",
-  "servicio-farmaceutico": "💊",
-  "rehablitacion-psicosocial": "🧠",
-  "alimentacion-y-dieta": "🥗",
-  "central-de-esterilizacion": "♻️",
-  "saneamiento-ambiental": "🌿",
-  aseo: "🧹",
-  almacen: "📦",
-  "almacen-medicamentos": "💊",
-  lavanderia: "🧺",
-  "transporte-general": "🚐",
-  mantenimiento: "🔧",
-  "trabajo-social": "🤝",
-  "docencia-e-investigacion": "📚",
-  "maxima-emergencia": "🚑",
-  "centro-quirurgico": "🔪",
-  "clinica-de-empleados": "🩺",
-  "asesores-de-medicamentos": "📋",
+
+// --- Iconos SVG por servicio (reemplazan a los emojis) -----------------------
+// Trazos tipo "lucide": stroke currentColor, hereda el color del texto.
+const SERVICE_ICON_PATHS: Record<string, ReactNode> = {
+  syringe: (
+    <>
+      <path d="m18 2 4 4" /><path d="m17 7 3-3" />
+      <path d="M19 9 8.7 19.3c-1 1-2.5 1-3.4 0l-.6-.6c-1-1-1-2.5 0-3.4L15 5" />
+      <path d="m9 11 4 4" /><path d="m5 19-3 3" /><path d="m14 4 6 6" />
+    </>
+  ),
+  flask: (
+    <>
+      <path d="M14.5 2v17.5a2.5 2.5 0 0 1-5 0V2" /><path d="M8.5 2h7" /><path d="M14.5 16h-5" />
+    </>
+  ),
+  scan: (
+    <>
+      <path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" />
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+      <path d="M7 12h10" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+    </>
+  ),
+  activity: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
+  wind: (
+    <>
+      <path d="M12.8 19.6A2 2 0 1 0 14 16H2" /><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2" />
+      <path d="M9.8 4.4A2 2 0 1 1 11 8H2" />
+    </>
+  ),
+  droplet: <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />,
+  heart: (
+    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+  ),
+  pill: (
+    <>
+      <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" />
+      <path d="m8.5 8.5 7 7" />
+    </>
+  ),
+  face: (
+    <>
+      <circle cx="12" cy="12" r="9" /><path d="M9 10h.01" /><path d="M15 10h.01" />
+      <path d="M9 15c1 1 2 1 3 1s2 0 3-1" />
+    </>
+  ),
+  utensils: (
+    <>
+      <path d="M3 2v7c0 1.1.9 2 2 2a2 2 0 0 0 2-2V2" /><path d="M7 2v20" />
+      <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
+    </>
+  ),
+  recycle: (
+    <>
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 21v-5h5" />
+    </>
+  ),
+  leaf: (
+    <>
+      <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
+      <path d="M2 21c0-3 1.85-5.36 5.08-6" />
+    </>
+  ),
+  sparkles: (
+    <path d="m12 3-1.9 5.8-5.8 1.9 5.8 1.9L12 18l1.9-5.8 5.8-1.9-5.8-1.9z" />
+  ),
+  package: (
+    <>
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22V12" />
+    </>
+  ),
+  shirt: (
+    <path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z" />
+  ),
+  truck: (
+    <>
+      <path d="M10 17h4V5H2v12h3" />
+      <path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1" />
+      <circle cx="7.5" cy="17.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" />
+    </>
+  ),
+  wrench: (
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+  ),
+  users: (
+    <>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </>
+  ),
+  book: (
+    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+  ),
+  cross: (
+    <path d="M11 2a2 2 0 0 0-2 2v5H4a2 2 0 0 0-2 2v2c0 1.1.9 2 2 2h5v5c0 1.1.9 2 2 2h2a2 2 0 0 0 2-2v-5h5a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-5V4a2 2 0 0 0-2-2h-2z" />
+  ),
+  scissors: (
+    <>
+      <circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
+      <path d="M20 4 8.12 15.88" /><path d="M14.47 14.48 20 20" /><path d="M8.12 8.12 12 12" />
+    </>
+  ),
+  clipboard: (
+    <>
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    </>
+  ),
+  building: (
+    <>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M9 9h.01M15 9h.01M9 13h.01M15 13h.01" />
+      <path d="M10 21v-3a2 2 0 0 1 4 0v3" />
+    </>
+  ),
 };
-function getServiceEmoji(serviceId: string | null | undefined) {
-  return (serviceId && SERVICE_EMOJI_BY_ID[serviceId]) || "🏥";
+
+const SERVICE_ICON_BY_ID: Record<string, keyof typeof SERVICE_ICON_PATHS> = {
+  vacunacion: "syringe",
+  "laboratorio-clinico": "flask",
+  radiologia: "scan",
+  "estudios-gastroclinicos": "search",
+  "terapia-fisica": "activity",
+  "terapia-respiratoria": "wind",
+  "banco-de-sangre": "droplet",
+  "unidad-de-hemodinamia": "heart",
+  hemodialisis: "droplet",
+  "hemodialisis-medicina-interna": "droplet",
+  "servicio-farmaceutico": "pill",
+  "rehablitacion-psicosocial": "face",
+  "alimentacion-y-dieta": "utensils",
+  "central-de-esterilizacion": "recycle",
+  "saneamiento-ambiental": "leaf",
+  aseo: "sparkles",
+  almacen: "package",
+  "almacen-medicamentos": "pill",
+  lavanderia: "shirt",
+  "transporte-general": "truck",
+  mantenimiento: "wrench",
+  "trabajo-social": "users",
+  "docencia-e-investigacion": "book",
+  "maxima-emergencia": "cross",
+  "centro-quirurgico": "scissors",
+  "clinica-de-empleados": "activity",
+  "asesores-de-medicamentos": "clipboard",
+  esdomed: "clipboard",
+};
+
+function ServiceIcon({
+  serviceId,
+  className = "h-4 w-4",
+}: {
+  serviceId: string | null | undefined;
+  className?: string;
+}) {
+  const key = (serviceId && SERVICE_ICON_BY_ID[serviceId]) || "building";
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      {SERVICE_ICON_PATHS[key]}
+    </svg>
+  );
+}
+
+// Logo de PULSO (solo la marca, sin texto): badge en degradado con linea de pulso.
+function PulsoMark({ className = "h-7 w-7" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id="pulsoMarkGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#22d3ee" />
+          <stop offset="1" stopColor="#7c3aed" />
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoMarkGrad)" />
+      <path
+        d="M7 25 H16 L19.5 15 L25 35 L29 25 H41"
+        fill="none"
+        stroke="#ffffff"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 // Iconos del menu lateral (SVG inline, sin dependencias). Heredan el color del
@@ -1438,18 +1727,24 @@ function hasAnySepsValue(values: SepsValues | undefined) {
 // ---- Distribucion de Horas (empleados x centros de costo) ------------------
 // Filas dinamicas (el usuario agrega/quita empleados). hours: { columna -> horas }.
 // El comentario es transitorio (ayuda durante la captura); NO va al consolidado.
-type HorasEmployee = { name: string; comment: string; hours: Record<string, string> };
+type HorasEmployee = { name: string; dui: string; comment: string; hours: Record<string, string> };
 
-function buildEmptyHorasEmployee(template: HorasTemplate, name = ""): HorasEmployee {
+function buildEmptyHorasEmployee(template: HorasTemplate, name = "", dui = ""): HorasEmployee {
   return {
     name,
+    dui,
     comment: "",
     hours: Object.fromEntries(template.columns.map((col) => [col, ""])),
   };
 }
 
 function seedHorasEmployees(template: HorasTemplate): HorasEmployee[] {
-  return template.seedEmployees.map((name) => buildEmptyHorasEmployee(template, name));
+  return template.seedEmployees.map((seed) => {
+    // El seed puede ser solo nombre (string) o { name, dui }.
+    const name = typeof seed === "string" ? seed : seed.name;
+    const dui = typeof seed === "string" ? "" : seed.dui ?? "";
+    return buildEmptyHorasEmployee(template, name.trim(), dui.trim());
+  });
 }
 
 function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEmployee[] {
@@ -1463,14 +1758,20 @@ function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEm
       const rawHours = (row.hours ?? {}) as Record<string, unknown>;
       return {
         name: typeof row.name === "string" ? row.name : "",
+        dui: typeof row.dui === "string" ? row.dui : "",
         comment: typeof row.comment === "string" ? row.comment : "",
         hours: Object.fromEntries(
           template.columns.map((col) => [col, String(rawHours[col] ?? "")]),
         ),
       };
     })
-    // Conservar filas con nombre o algun dato.
-    .filter((emp) => emp.name.trim() !== "" || Object.values(emp.hours).some((h) => h.trim() !== ""));
+    // Conservar filas con nombre, DUI o algun dato.
+    .filter(
+      (emp) =>
+        emp.name.trim() !== "" ||
+        emp.dui.trim() !== "" ||
+        Object.values(emp.hours).some((h) => h.trim() !== ""),
+    );
 
   return list.length > 0 ? list : seedHorasEmployees(template);
 }
@@ -1989,6 +2290,7 @@ export default function Home() {
   const [assistantMsgs, setAssistantMsgs] = useState<{ from: "bot" | "user"; text: string }[]>([]);
   const [assistantInput, setAssistantInput] = useState("");
   const [botTyping, setBotTyping] = useState(false);
+  const [assistantCat, setAssistantCat] = useState<AssistantCategory>("Captura");
   function pushAssistant(question: string) {
     const q = question.trim();
     if (!q) return;
@@ -2005,16 +2307,24 @@ export default function Home() {
     setAssistantOpen((open) => {
       const next = !open;
       if (next) {
-        setAssistantMsgs((current) =>
-          current.length > 0
-            ? current
-            : [
-                {
-                  from: "bot",
-                  text: "¡Hola! 🤖 Soy el asistente de PULSO. Escribí tu pregunta o tocá una de las sugeridas.",
-                },
-              ],
-        );
+        setAssistantMsgs((current) => {
+          if (current.length > 0) return current;
+          const quien = isAdmin
+            ? "Veo que entraste como administrador."
+            : currentService?.name
+              ? `Estás en ${currentService.name}.`
+              : "";
+          return [
+            {
+              from: "bot",
+              text: `¡Hola! Soy el asistente de PULSO. ${quien} Puedo ayudarte con la captura, los plazos de cierre, tu cuenta, la vista y cómo funciona el sistema.`.trim(),
+            },
+            {
+              from: "bot",
+              text: "Elegí un tema abajo o escribime tu pregunta con tus propias palabras.",
+            },
+          ];
+        });
       }
       return next;
     });
@@ -3698,6 +4008,10 @@ export default function Home() {
     updateHorasEmployee(index, { name: value });
   }
 
+  function handleHorasDui(index: number, value: string) {
+    updateHorasEmployee(index, { dui: value });
+  }
+
   function handleHorasComment(index: number, value: string) {
     updateHorasEmployee(index, { comment: value });
   }
@@ -4126,32 +4440,32 @@ export default function Home() {
             : "border border-cyan-400/20 bg-[#202c41]"
         }`}
       >
-        <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className={`text-sm uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-sky-700" : "text-cyan-200/80"}`}>
+            <p className={`text-xs uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-sky-700" : "text-cyan-200/80"}`}>
               Configuracion mensual
             </p>
-            <h2 className="mt-2 text-2xl font-semibold">Modificar dias habiles por mes</h2>
-            <p className={`mt-2 max-w-3xl text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+            <h2 className="mt-1 text-xl font-semibold">Modificar dias habiles por mes</h2>
+            <p className={`mt-1 max-w-3xl text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
               Configura arriba el calendario operativo del mes. El sistema movera la captura a los
               siguientes dias habiles si agregas cierres, feriados o vacaciones.
             </p>
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
-          <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
+        <div className="grid gap-3 xl:grid-cols-[280px_1fr]">
+          <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-3">
             <label className="block">
               <span className="text-sm font-medium text-slate-200">Mes a configurar</span>
               <input
                 value={calendarEditorPeriodId}
                 onChange={(event) => setCalendarEditorPeriodId(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
+                className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
                 type="month"
               />
             </label>
 
-            <div className="mt-4 grid grid-cols-1 gap-3">
+            <div className="mt-3 grid grid-cols-1 gap-2">
               <label className="block">
                 <span className="text-sm font-medium text-slate-200">Desde</span>
                 <input
@@ -4159,7 +4473,7 @@ export default function Home() {
                   min={`${calendarEditorPeriodId}-01`}
                   max={`${calendarEditorPeriodId}-31`}
                   onChange={(event) => setCalendarRangeStart(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
+                  className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
                   type="date"
                 />
               </label>
@@ -4170,7 +4484,7 @@ export default function Home() {
                   min={`${calendarEditorPeriodId}-01`}
                   max={`${calendarEditorPeriodId}-31`}
                   onChange={(event) => setCalendarRangeEnd(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none focus:border-cyan-400"
+                  className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
                   type="date"
                 />
               </label>
@@ -4179,29 +4493,29 @@ export default function Home() {
               Podés marcar un solo día (Desde = Hasta) o varios de una vez (ej. 3 al 6).
             </p>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-3 flex gap-2">
               <button
                 type="button"
                 onClick={handleAddBlockedRange}
-                className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-white/25 hover:bg-white/10"
               >
-                Agregar
+                + Agregar fecha
               </button>
               <button
                 type="button"
                 onClick={() => void handleSaveCalendarOverride()}
                 disabled={isSavingCalendar}
-                className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800"
+                className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSavingCalendar ? "Guardando..." : "Guardar calendario"}
               </button>
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
-              <h3 className="text-lg font-semibold text-white">Fechas excluidas</h3>
-              <p className="mt-2 text-sm text-slate-300">
+          <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-3">
+              <h3 className="text-base font-semibold text-white">Fechas excluidas</h3>
+              <p className="mt-1.5 text-xs text-slate-300">
                 Usa esta lista para vacaciones, feriados extraordinarios o cierres.{" "}
                 <span className="font-semibold text-emerald-300">
                   Tocá una fecha para volver a habilitarla
@@ -4229,18 +4543,22 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
-              <h3 className="text-lg font-semibold text-white">Vista previa</h3>
-              <p className="mt-2 text-sm text-slate-300">
+            <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-3">
+              <h3 className="text-base font-semibold text-white">Vista previa</h3>
+              <p className="mt-1.5 text-xs text-slate-300">
                 Primeros dias habiles que quedaran abiertos para captura.
               </p>
 
-              <div className="mt-4 space-y-2">
+              <div className="mt-3 space-y-1.5">
                 {calendarPreviewWindow ? (
                   calendarPreviewWindow.openDays.map((day, index) => (
                     <div
                       key={getDateKey(day)}
-                      className="rounded-xl border border-cyan-400/20 bg-cyan-950/20 px-3 py-2 text-sm text-cyan-100"
+                      className={`rounded-lg border px-3 py-1.5 text-xs ${
+                        isLightPanelTheme
+                          ? "border-slate-200 bg-slate-50 text-slate-700"
+                          : "border-cyan-400/20 bg-cyan-950/20 text-cyan-100"
+                      }`}
                     >
                       Dia habil {index + 1}: {DATE_TIME_FORMATTER.format(day).split(", ")[0]}
                     </div>
@@ -4285,66 +4603,44 @@ export default function Home() {
     const overrideTotalCells = SERVICE_DEFINITIONS.length * toggleableModules.length;
     const overrideAutoCount = overrideTotalCells - overrideOpenCount - overrideClosedCount;
 
-    const overrideStateSelect = (service: ServiceDefinition, moduleId: ModuleId) => {
+    const overrideStateChip = (service: ServiceDefinition, moduleId: ModuleId) => {
       const overrideId = getCaptureOverrideId(overridePanelPeriodId, service.id, moduleId);
       const state = captureOverrides[overrideId];
       const isBusy = overrideBusyKey === overrideId;
+
+      // Un solo chip que cicla: Auto -> Abrir (pide mes) -> Cerrado -> Auto.
+      const handleCycle = () => {
+        if (state === "open") {
+          void handleToggleCapture(service.id, moduleId, "closed");
+        } else if (state === "closed") {
+          void handleToggleCapture(service.id, moduleId, null);
+        } else {
+          setCaptureOpenPeriod(overridePanelPeriodId);
+          setCaptureOpenTarget({ serviceId: service.id, serviceName: service.name, moduleId });
+        }
+      };
+
+      const label = state === "open" ? "Abierto" : state === "closed" ? "Cerrado" : "Auto";
       const tone =
         state === "open"
-          ? isLightPanelTheme
-            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-            : "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+          ? "bg-emerald-500/10 text-emerald-300"
           : state === "closed"
-            ? isLightPanelTheme
-              ? "border-rose-300 bg-rose-50 text-rose-700"
-              : "border-rose-400/40 bg-rose-500/15 text-rose-200"
-            : isLightPanelTheme
-              ? "border-slate-200 bg-white text-slate-500"
-              : "border-white/10 bg-white/5 text-slate-300";
+            ? "bg-rose-500/10 text-rose-300"
+            : "bg-white/5 text-slate-400";
+      const dot =
+        state === "open" ? "bg-emerald-400" : state === "closed" ? "bg-rose-400" : "bg-slate-500";
 
       return (
-        <select
-          value={state ?? "auto"}
+        <button
+          type="button"
+          onClick={handleCycle}
           disabled={isBusy}
-          onChange={(event) => {
-            const value = event.target.value;
-            if (value === "open") {
-              // Abrir pide mes/año en un modal para evitar abrir el periodo equivocado.
-              setCaptureOpenPeriod(overridePanelPeriodId);
-              setCaptureOpenTarget({
-                serviceId: service.id,
-                serviceName: service.name,
-                moduleId,
-              });
-              return;
-            }
-            void handleToggleCapture(
-              service.id,
-              moduleId,
-              value === "auto" ? null : (value as CaptureOverrideState),
-            );
-          }}
-          className={`w-full cursor-pointer rounded-lg border px-2 py-1.5 text-xs font-semibold outline-none transition focus:ring-2 focus:ring-amber-400/40 disabled:opacity-50 ${tone}`}
+          title="Clic para cambiar: Auto → Abrir → Cerrar"
+          className={`inline-flex w-[88px] items-center justify-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition hover:brightness-110 disabled:opacity-50 ${tone}`}
         >
-          <option
-            value="auto"
-            style={{ backgroundColor: isLightPanelTheme ? "#ffffff" : "#1b2537", color: isLightPanelTheme ? "#334155" : "#e2e8f0" }}
-          >
-            ● Automatico
-          </option>
-          <option
-            value="open"
-            style={{ backgroundColor: isLightPanelTheme ? "#ffffff" : "#1b2537", color: isLightPanelTheme ? "#047857" : "#6ee7b7" }}
-          >
-            ▲ Abrir
-          </option>
-          <option
-            value="closed"
-            style={{ backgroundColor: isLightPanelTheme ? "#ffffff" : "#1b2537", color: isLightPanelTheme ? "#be123c" : "#fda4af" }}
-          >
-            ■ Cerrar
-          </option>
-        </select>
+          <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+          {label}
+        </button>
       );
     };
 
@@ -4354,19 +4650,19 @@ export default function Home() {
         className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
           isLightPanelTheme
             ? "border border-slate-200 bg-white text-slate-900"
-            : "border border-amber-400/20 bg-[#202c41]"
+            : "border border-white/10 bg-[#202c41]"
         }`}
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className={`text-sm uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-amber-700" : "text-amber-200/80"}`}>
+            <p className={`text-xs uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-sky-700" : "text-cyan-200/80"}`}>
               Habilitar tableros
             </p>
-            <h2 className="mt-2 text-2xl font-semibold">Reabrir o cerrar captura por servicio</h2>
-            <p className={`mt-2 max-w-3xl text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-              Cambia el estado de un servicio por modulo. <strong>Automatico</strong> sigue la
-              ventana normal de dias habiles; <strong>Abrir</strong> reabre la captura tardia y{" "}
-              <strong>Cerrar</strong> la bloquea.
+            <h2 className="mt-1 text-xl font-semibold">Reabrir o cerrar captura por servicio</h2>
+            <p className={`mt-1 max-w-3xl text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+              Tocá el estado de cada módulo para cambiarlo (Auto → Abrir → Cerrar).{" "}
+              <strong>Automatico</strong> sigue la ventana normal de dias habiles;{" "}
+              <strong>Abrir</strong> reabre la captura tardia y <strong>Cerrar</strong> la bloquea.
             </p>
           </div>
           <label className="block shrink-0">
@@ -4376,7 +4672,7 @@ export default function Home() {
             <input
               value={overridePanelPeriodId}
               onChange={(event) => setOverridePanelPeriodId(event.target.value)}
-              className={`mt-2 w-full rounded-2xl px-3 py-2.5 text-sm outline-none focus:border-amber-400 ${
+              className={`mt-1.5 w-full rounded-2xl px-3 py-2 text-sm outline-none focus:border-cyan-400 ${
                 isLightPanelTheme
                   ? "border border-slate-200 bg-white text-slate-900"
                   : "border border-white/10 bg-[#2a3448] text-white"
@@ -4387,7 +4683,7 @@ export default function Home() {
         </div>
 
         {/* Resumen de estado + buscador */}
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2">
             {[
               { label: "Automatico", count: overrideAutoCount, dot: "bg-slate-400" },
@@ -4409,7 +4705,7 @@ export default function Home() {
             value={overrideServiceQuery}
             onChange={(event) => setOverrideServiceQuery(event.target.value)}
             placeholder="Buscar servicio..."
-            className={`w-full rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-400 sm:w-64 ${
+            className={`w-full rounded-xl px-3 py-2 text-sm outline-none focus:border-cyan-400 sm:w-64 ${
               isLightPanelTheme
                 ? "border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"
                 : "border border-white/10 bg-[#2a3448] text-white placeholder:text-slate-500"
@@ -4419,7 +4715,7 @@ export default function Home() {
         </div>
 
         {/* Grupos por division */}
-        <div className="mt-5 space-y-4">
+        <div className="mt-4 space-y-2.5">
           {overrideGroups.length === 0 ? (
             <p className={`rounded-2xl border border-dashed px-4 py-8 text-center text-sm ${isLightPanelTheme ? "border-slate-200 text-slate-500" : "border-white/10 text-slate-400"}`}>
               Ningun servicio coincide con la busqueda.
@@ -4427,10 +4723,26 @@ export default function Home() {
           ) : (
             overrideGroups.map((group) => {
               const groupOpen = openOverrideGroups.has(group.id);
+              // Resumen de overrides de la division (para mostrarlo en la barra).
+              let gOpen = 0;
+              let gClosed = 0;
+              for (const s of group.services) {
+                for (const m of toggleableModules) {
+                  const st = captureOverrides[getCaptureOverrideId(overridePanelPeriodId, s.id, m)];
+                  if (st === "open") gOpen += 1;
+                  else if (st === "closed") gClosed += 1;
+                }
+              }
               return (
               <div
                 key={group.id}
-                className={`overflow-hidden rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10 bg-[#1b2537]"}`}
+                className={`overflow-hidden rounded-2xl border transition ${
+                  isLightPanelTheme
+                    ? "border-slate-200"
+                    : groupOpen
+                      ? "border-cyan-400/30 bg-[#1b2537]"
+                      : "border-white/10 bg-[#1b2537]"
+                }`}
               >
                 <button
                   type="button"
@@ -4445,24 +4757,37 @@ export default function Home() {
                       return next;
                     })
                   }
-                  className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition ${isLightPanelTheme ? "bg-slate-50 hover:bg-slate-100" : "bg-white/5 hover:bg-white/10"}`}
+                  className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${isLightPanelTheme ? "hover:bg-slate-50" : "hover:bg-white/5"}`}
                 >
-                  <h3 className="text-sm font-semibold uppercase tracking-wide">{group.title}</h3>
-                  <span className="flex items-center gap-2">
-                    <span className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-                      {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
+                  <span aria-hidden className={`h-7 w-1 shrink-0 rounded-full ${groupOpen ? "bg-cyan-400" : "bg-white/15"}`} />
+                  <h3 className="flex-1 text-sm font-semibold uppercase tracking-wide">{group.title}</h3>
+                  {gOpen > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      {gOpen}
                     </span>
-                    <span
-                      aria-hidden
-                      className={`flex h-6 w-6 items-center justify-center rounded-md text-base font-bold leading-none ${
-                        isLightPanelTheme
-                          ? "border border-slate-300 bg-white text-slate-600"
-                          : "border border-white/15 bg-white/5 text-cyan-200"
-                      }`}
-                    >
-                      {groupOpen ? "−" : "+"}
+                  ) : null}
+                  {gClosed > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-semibold text-rose-300">
+                      <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                      {gClosed}
                     </span>
+                  ) : null}
+                  <span className={`hidden text-xs sm:inline ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                    {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
                   </span>
+                  <svg
+                    aria-hidden
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${groupOpen ? "rotate-180" : ""}`}
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
                 </button>
                 <div className={`overflow-x-auto ${groupOpen ? "" : "hidden"}`}>
                   <table className="w-full border-collapse text-left text-sm">
@@ -4484,8 +4809,8 @@ export default function Home() {
                         >
                           <td className="px-4 py-2 font-medium">{service.name}</td>
                           {toggleableModules.map((moduleId) => (
-                            <td key={moduleId} className="px-3 py-2">
-                              {overrideStateSelect(service, moduleId)}
+                            <td key={moduleId} className="px-3 py-2 text-center">
+                              {overrideStateChip(service, moduleId)}
                             </td>
                           ))}
                         </tr>
@@ -5002,37 +5327,47 @@ export default function Home() {
             <thead>
               <tr className="bg-white/5 text-slate-300">
                 <th className="px-2 py-2 text-center font-medium">#</th>
-                <th className="px-3 py-2 text-left font-medium">Comentario</th>
-                <th className="px-3 py-2 text-left font-medium">Nombre del empleado</th>
+                <th className="px-2 py-2 text-left font-medium">Comentario</th>
+                <th className="px-2 py-2 text-left font-medium">DUI</th>
+                <th className="w-full px-2 py-2 text-left font-medium">Nombre del empleado</th>
                 {horasTemplate.columns.map((col) => (
-                  <th key={col} className="px-3 py-2 text-center font-medium">
+                  <th key={col} className="px-2 py-2 text-center font-medium">
                     {col}
                   </th>
                 ))}
-                <th className="bg-[#243049] px-3 py-2 text-center font-semibold">Total</th>
+                <th className="bg-[#243049] px-2 py-2 text-center font-semibold">Total</th>
                 <th className="px-2 py-2" />
               </tr>
             </thead>
             <tbody>
               {horasEmployees.map((emp, index) => (
                 <tr key={index} className="border-t border-white/5">
-                  <td className="px-2 py-1.5 text-center text-slate-400">{index + 1}</td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-1 text-center text-slate-400">{index + 1}</td>
+                  <td className="px-1.5 py-1">
                     <input
                       value={emp.comment}
                       onChange={(event) => handleHorasComment(index, event.target.value)}
                       disabled={horasEditingBlocked}
                       placeholder="(opcional)"
-                      className="w-40 rounded border border-amber-400/20 bg-[#1b2537] px-2 py-1.5 text-amber-100 outline-none focus:border-amber-400 disabled:opacity-50"
+                      className="w-32 rounded border border-amber-400/20 bg-[#1b2537] px-2 py-1 text-amber-100 outline-none focus:border-amber-400 disabled:opacity-50"
                     />
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-1.5 py-1">
+                    <input
+                      value={emp.dui}
+                      onChange={(event) => handleHorasDui(index, event.target.value)}
+                      disabled={horasEditingBlocked}
+                      placeholder="DUI"
+                      className="w-28 rounded border border-white/10 bg-[#1b2537] px-2 py-1 outline-none focus:border-cyan-400 disabled:opacity-50"
+                    />
+                  </td>
+                  <td className="px-1.5 py-1">
                     <input
                       value={emp.name}
                       onChange={(event) => handleHorasName(index, event.target.value)}
                       disabled={horasEditingBlocked}
                       placeholder="Nombre"
-                      className="w-64 rounded border border-white/10 bg-[#1b2537] px-2 py-1.5 outline-none focus:border-cyan-400 disabled:opacity-50"
+                      className="w-full min-w-[14rem] rounded border border-white/10 bg-[#1b2537] px-2 py-1 outline-none focus:border-cyan-400 disabled:opacity-50"
                     />
                   </td>
                   {horasTemplate.columns.map((col) => {
@@ -5042,7 +5377,7 @@ export default function Home() {
                       index >= fillDrag.startRow &&
                       index <= fillDrag.endRow;
                     return (
-                      <td key={col} className="group relative px-2 py-1.5 text-center">
+                      <td key={col} className="group relative px-1.5 py-1 text-center">
                         <input
                           value={emp.hours[col] ?? ""}
                           onChange={(event) => handleHorasHour(index, col, event.target.value)}
@@ -5075,10 +5410,10 @@ export default function Home() {
                       </td>
                     );
                   })}
-                  <td className="bg-[#243049] px-3 py-1.5 text-center font-semibold text-cyan-100">
+                  <td className="bg-[#243049] px-2 py-1 text-center font-semibold text-cyan-100">
                     {horasRowTotal(emp)}
                   </td>
-                  <td className="px-2 py-1.5 text-center">
+                  <td className="px-1.5 py-1 text-center">
                     <button
                       type="button"
                       onClick={() => handleRemoveHorasEmployee(index)}
@@ -5479,17 +5814,20 @@ export default function Home() {
                 isLightPanelTheme ? "bg-white" : "bg-[#202c41]"
               }`}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1f255f] text-lg font-bold text-white">
-                {currentService
-                  ? getServiceEmoji(currentService.id)
-                  : serviceProfile.username.slice(0, 2).toUpperCase()}
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1f255f] text-sm font-bold text-white">
+                {currentService ? (
+                  <ServiceIcon serviceId={currentService.id} className="h-5 w-5 text-cyan-200" />
+                ) : (
+                  serviceProfile.username.slice(0, 2).toUpperCase()
+                )}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className={`truncate text-[13px] font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{welcomeName}</p>
                 <p className="truncate text-xs text-[#4f6aa3]">
                   {currentService?.name || (isAdmin ? "Administrador del sistema" : serviceProfile.email)}
                 </p>
               </div>
+              <PulsoMark className="ml-1 h-8 w-8 shrink-0 opacity-90" />
             </div>
 
             <nav className="mt-5 space-y-1">
@@ -5543,8 +5881,8 @@ export default function Home() {
                         hasAlert
                           ? "bg-rose-500 text-white"
                           : isActive
-                            ? "bg-[#1f255f] text-white"
-                            : "bg-slate-100 text-slate-500"
+                            ? "bg-gradient-to-br from-cyan-500 to-violet-600 text-white shadow-sm shadow-cyan-900/40"
+                            : "bg-white/5 text-slate-100 ring-1 ring-white/10"
                       }`}
                     >
                       {SIDEBAR_ICON_BY_ID[item.id] ?? item.badge}
@@ -5578,7 +5916,7 @@ export default function Home() {
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-100 ring-1 ring-white/10">
                   {isLightPanelTheme ? IconMoon : IconSun}
                 </span>
                 <span>{isLightPanelTheme ? "Modo oscuro" : "Modo claro"}</span>
@@ -5597,17 +5935,17 @@ export default function Home() {
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  PW
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-100 ring-1 ring-white/10">
+                  {IconKey}
                 </span>
                 <span>Cambiar contrasena</span>
               </button>
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-[#8a2d2d] transition hover:bg-white"
+                className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-300"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#fbe8e8] text-[#8a2d2d]">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 ring-1 ring-white/10 transition group-hover:bg-rose-500/15 group-hover:text-rose-300">
                   {IconLogout}
                 </span>
                 <span>Cerrar sesion</span>
@@ -5834,7 +6172,7 @@ export default function Home() {
                         false),
                   ).map((service) => (
                     <option key={service.id} value={service.id}>
-                      {getServiceEmoji(service.id)} {service.name}
+                      {service.name}
                     </option>
                   ))}
                 </select>
@@ -6300,8 +6638,8 @@ export default function Home() {
                               disabled={Boolean(assignedUser)}
                             >
                               {assignedUser
-                                ? `${getServiceEmoji(service.id)} ${service.name} - asignado a ${assignedUser.name}`
-                                : `${getServiceEmoji(service.id)} ${service.name}`}
+                                ? `${service.name} - asignado a ${assignedUser.name}`
+                                : service.name}
                             </option>
                           );
                         })}
@@ -6370,7 +6708,7 @@ export default function Home() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <h4 className="text-sm font-semibold text-white">
-                                <span className="mr-1">{getServiceEmoji(service.id)}</span>
+                                <ServiceIcon serviceId={service.id} className="mr-1.5 inline h-4 w-4 shrink-0 align-[-3px] text-cyan-300/90" />
                                 {service.name}
                               </h4>
                               <p className="mt-1 text-xs text-slate-300">
@@ -6466,11 +6804,19 @@ export default function Home() {
                                     {d.name}
                                   </span>
                                   <span className="block truncate text-[11px] text-slate-400">
-                                    {getServiceById(d.serviceId)
-                                      ? `${getServiceEmoji(d.serviceId)} ${getServiceById(d.serviceId)?.name}`
-                                      : d.role === "admin"
-                                        ? "Administrador"
-                                        : "Sin servicio"}
+                                    {getServiceById(d.serviceId) ? (
+                                      <>
+                                        <ServiceIcon
+                                          serviceId={d.serviceId}
+                                          className="mr-1 inline h-3.5 w-3.5 align-[-2px] text-cyan-300/90"
+                                        />
+                                        {getServiceById(d.serviceId)?.name}
+                                      </>
+                                    ) : d.role === "admin" ? (
+                                      "Administrador"
+                                    ) : (
+                                      "Sin servicio"
+                                    )}
                                   </span>
                                 </span>
                                 <span
@@ -6530,8 +6876,8 @@ export default function Home() {
                                     disabled={isTakenByAnotherUser}
                                   >
                                     {isTakenByAnotherUser
-                                      ? `${getServiceEmoji(service.id)} ${service.name} - asignado a ${assignedUser?.name}`
-                                      : `${getServiceEmoji(service.id)} ${service.name}`}
+                                      ? `${service.name} - asignado a ${assignedUser?.name}`
+                                      : service.name}
                                   </option>
                                 );
                               })}
@@ -6637,9 +6983,9 @@ export default function Home() {
               <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
               <div
                 onClick={(event) => event.stopPropagation()}
-                className="modal-pop-in relative my-8 w-full max-w-5xl rounded-[24px] border border-white/10 bg-[#0e1626] p-5 shadow-2xl shadow-black/50"
+                className="modal-pop-in relative my-2 max-h-[95vh] w-full max-w-6xl overflow-y-auto rounded-[24px] border border-white/10 bg-[#0e1626] p-4 shadow-2xl shadow-black/50"
               >
-                <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300/90">
                       Tablero de avance
@@ -6658,16 +7004,16 @@ export default function Home() {
                   </button>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-2.5">
                   {dashboardGroups.map((group) => {
                     const groupCompleted = group.services.filter((service) => service.completed)
                       .length;
                     return (
                       <section
                         key={group.id}
-                        className="rounded-2xl border border-white/10 bg-[#162032] p-4"
+                        className="rounded-2xl border border-white/10 bg-[#162032] p-3"
                       >
-                        <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+                        <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-2">
                           <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-200">
                             {group.title}
                           </h3>
@@ -6675,30 +7021,92 @@ export default function Home() {
                             {groupCompleted}/{group.services.length}
                           </span>
                         </div>
-                        <div className="mt-3 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                          {group.services.map((service) => (
-                            <div
-                              key={service.id}
-                              className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5"
-                            >
-                              <p className="truncate text-[13px] font-semibold text-white" title={service.name}>
-                                <span className="mr-1">{getServiceEmoji(service.id)}</span>
-                                {service.name}
-                              </p>
-                              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                                {service.modules.map((mod) => (
-                                  <span
-                                    key={mod.label}
-                                    className={`text-[11px] font-semibold ${
-                                      mod.completed ? "text-emerald-400" : "text-amber-400"
-                                    }`}
-                                  >
-                                    {mod.label}: {mod.completed ? "Completo" : "Incompleto"}
+                        <div className="mt-2.5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                          {group.services.map((service) => {
+                            const total = service.modules.length;
+                            const done = service.modules.filter((m) => m.completed).length;
+                            const allDone = total > 0 && done === total;
+                            const circ = 2 * Math.PI * 13;
+                            const pct = total > 0 ? done / total : 0;
+                            const ringColor = done > 0 ? "#22d3ee" : "#475569";
+                            return (
+                              <div
+                                key={service.id}
+                                className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-2 transition ${
+                                  allDone
+                                    ? "border-cyan-400/30 bg-cyan-500/[0.06]"
+                                    : "border-white/10 bg-white/[0.04]"
+                                }`}
+                              >
+                                {/* Anillo de avance */}
+                                <div className="relative h-9 w-9 shrink-0">
+                                  <svg viewBox="0 0 32 32" className="h-9 w-9 -rotate-90">
+                                    <circle
+                                      cx="16"
+                                      cy="16"
+                                      r="13"
+                                      fill="none"
+                                      stroke="rgba(255,255,255,0.10)"
+                                      strokeWidth="3"
+                                    />
+                                    <circle
+                                      cx="16"
+                                      cy="16"
+                                      r="13"
+                                      fill="none"
+                                      stroke={ringColor}
+                                      strokeWidth="3"
+                                      strokeLinecap="round"
+                                      strokeDasharray={`${pct * circ} ${circ}`}
+                                    />
+                                  </svg>
+                                  <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white">
+                                    {done}/{total}
                                   </span>
-                                ))}
+                                </div>
+                                {/* Servicio + modulos */}
+                                <div className="min-w-0 flex-1">
+                                  <p
+                                    className="truncate text-[13px] font-semibold text-white"
+                                    title={service.name}
+                                  >
+                                    <ServiceIcon serviceId={service.id} className="mr-1.5 inline h-4 w-4 shrink-0 align-[-3px] text-cyan-300/90" />
+                                    {service.name}
+                                  </p>
+                                  <div className="mt-1.5 flex flex-wrap gap-1">
+                                    {service.modules.map((mod) => (
+                                      <span
+                                        key={mod.label}
+                                        className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                          mod.completed
+                                            ? "bg-cyan-500/10 text-cyan-300"
+                                            : "bg-white/5 text-slate-400"
+                                        }`}
+                                      >
+                                        {mod.completed ? (
+                                          <svg
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="3"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            className="h-2.5 w-2.5"
+                                            aria-hidden="true"
+                                          >
+                                            <path d="M20 6 9 17l-5-5" />
+                                          </svg>
+                                        ) : (
+                                          <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                                        )}
+                                        {mod.label}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </section>
                     );
@@ -6799,7 +7207,7 @@ export default function Home() {
                                 }`}
                               />
                               <span className="flex-1 truncate text-[13px] text-slate-200" title={s.name}>
-                                <span className="mr-1">{getServiceEmoji(s.id)}</span>
+                                <ServiceIcon serviceId={s.id} className="mr-1.5 inline h-4 w-4 shrink-0 align-[-3px] text-cyan-300/90" />
                                 {s.name}
                               </span>
                               <span
@@ -7084,68 +7492,87 @@ export default function Home() {
                 style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))" }}
                 className="modal-pop-in relative my-8 w-full max-w-lg overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
               >
-                <div className="h-1.5 w-full bg-gradient-to-r from-cyan-400 via-violet-400 to-amber-400" />
-                <div className="px-6 pb-6 pt-5">
+                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+                <div className="max-h-[85vh] overflow-y-auto px-5 pb-5 pt-5">
                   <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-white">Configuración</h3>
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 text-white">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+                          <circle cx="12" cy="12" r="3" />
+                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+                        </svg>
+                      </span>
+                      <div>
+                        <h3 className="text-base font-semibold text-white">Configuración</h3>
+                        <p className="text-[11px] text-slate-400">Personalizá tu vista</p>
+                      </div>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setShowConfigModal(false)}
                       aria-label="Cerrar"
-                      className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
                     >
                       ✕
                     </button>
                   </div>
 
-                  <div className="space-y-5">
+                  <div className="space-y-3">
                     {/* Tema */}
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Tema</p>
-                      <div className="flex gap-2">
+                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-sm font-semibold text-white">Tema</p>
+                      <div className="mt-2.5 grid grid-cols-2 gap-2">
                         {(["light", "dark"] as const).map((t) => (
                           <button
                             key={t}
                             type="button"
                             onClick={() => setPanelTheme(t)}
-                            className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                            className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                               panelTheme === t
                                 ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
                                 : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
                             }`}
                           >
+                            {t === "light" ? IconSun : IconMoon}
                             {t === "light" ? "Claro" : "Oscuro"}
                           </button>
                         ))}
                       </div>
-                    </div>
+                    </section>
 
                     {/* Color de acento */}
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Color de acento</p>
-                      <div className="flex flex-wrap gap-2">
-                        {ACCENT_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => updateUiPrefs({ accent: opt.id })}
-                            className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
-                              uiPrefs.accent === opt.id
-                                ? "border-white/40 bg-white/10 text-white"
-                                : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                            }`}
-                          >
-                            <span className="h-4 w-4 rounded-full" style={{ backgroundColor: opt.accent }} />
-                            {opt.label}
-                          </button>
-                        ))}
+                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-sm font-semibold text-white">Color de acento</p>
+                      <div className="mt-2.5 flex flex-wrap gap-2.5">
+                        {ACCENT_OPTIONS.map((opt) => {
+                          const selected = uiPrefs.accent === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => updateUiPrefs({ accent: opt.id })}
+                              aria-label={opt.label}
+                              title={opt.label}
+                              className={`relative flex h-8 w-8 items-center justify-center rounded-full ring-2 transition ${
+                                selected ? "ring-white" : "ring-transparent hover:ring-white/30"
+                              }`}
+                              style={{ backgroundColor: opt.accent }}
+                            >
+                              {selected ? (
+                                <svg viewBox="0 0 24 24" fill="none" stroke={opt.ink} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                                  <path d="M20 6 9 17l-5-5" />
+                                </svg>
+                              ) : null}
+                            </button>
+                          );
+                        })}
                       </div>
-                    </div>
+                    </section>
 
                     {/* Tipografia */}
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Tipografía</p>
-                      <div className="grid grid-cols-2 gap-2">
+                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-sm font-semibold text-white">Tipografía</p>
+                      <div className="mt-2.5 grid grid-cols-2 gap-2">
                         {FONT_OPTIONS.map((opt) => (
                           <button
                             key={opt.id}
@@ -7162,41 +7589,42 @@ export default function Home() {
                           </button>
                         ))}
                       </div>
-                    </div>
+                    </section>
 
                     {/* Tamaño de letra */}
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Tamaño de letra</p>
-                      <div className="flex gap-2">
-                        {FONT_SIZE_OPTIONS.map((opt) => (
+                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-sm font-semibold text-white">Tamaño de letra</p>
+                      <div className="mt-2.5 flex gap-2">
+                        {FONT_SIZE_OPTIONS.map((opt, i) => (
                           <button
                             key={opt.id}
                             type="button"
                             onClick={() => updateUiPrefs({ fontSize: opt.id })}
-                            className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-3 py-2 transition ${
                               uiPrefs.fontSize === opt.id
                                 ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
                                 : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
                             }`}
                           >
-                            {opt.label}
+                            <span style={{ fontSize: `${12 + i * 3}px` }} className="font-bold leading-none">A</span>
+                            <span className="text-xs font-semibold">{opt.label}</span>
                           </button>
                         ))}
                       </div>
-                    </div>
+                    </section>
 
                     {/* Fondo */}
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Fondo</p>
-                      <div className="flex flex-wrap gap-2">
+                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-sm font-semibold text-white">Fondo</p>
+                      <div className="mt-2.5 flex flex-wrap gap-2">
                         {BACKGROUND_OPTIONS.map((opt) => (
                           <button
                             key={opt.id}
                             type="button"
                             onClick={() => updateUiPrefs({ background: opt.id })}
-                            className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+                            className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-medium transition ${
                               uiPrefs.background === opt.id
-                                ? "border-white/40 bg-white/10 text-white"
+                                ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
                                 : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
                             }`}
                           >
@@ -7208,17 +7636,17 @@ export default function Home() {
                           </button>
                         ))}
                       </div>
-                    </div>
+                    </section>
 
                     {/* Widgets */}
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Widgets</p>
-                      <div className="flex flex-wrap gap-2">
+                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-sm font-semibold text-white">Widgets</p>
+                      <div className="mt-2.5 flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={() => updateUiPrefs({ showGreeting: !uiPrefs.showGreeting })}
                           className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                            uiPrefs.showGreeting ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                            uiPrefs.showGreeting ? "bg-cyan-500/15 text-cyan-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
                           }`}
                         >
                           {uiPrefs.showGreeting ? "✓ " : ""}Saludo de bienvenida
@@ -7227,20 +7655,20 @@ export default function Home() {
                           type="button"
                           onClick={() => updateUiPrefs({ showClock: !uiPrefs.showClock })}
                           className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                            uiPrefs.showClock ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                            uiPrefs.showClock ? "bg-cyan-500/15 text-cyan-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
                           }`}
                         >
                           {uiPrefs.showClock ? "✓ " : ""}Reloj y fecha
                         </button>
                       </div>
-                    </div>
+                    </section>
 
                     <button
                       type="button"
                       onClick={() => {
                         updateUiPrefs(DEFAULT_UI_PREFS);
                       }}
-                      className="text-xs font-medium text-slate-400 underline-offset-2 hover:underline"
+                      className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10"
                     >
                       Restablecer a los valores por defecto
                     </button>
@@ -7253,14 +7681,32 @@ export default function Home() {
           {/* Asistente virtual (robot medico) - abajo a la derecha. */}
           <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
             {assistantOpen ? (
-              <div className="modal-pop-in flex h-[60vh] max-h-[460px] w-[320px] max-w-[82vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/50">
+              <div className="modal-pop-in flex h-[66vh] max-h-[540px] w-[350px] max-w-[88vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/50">
                 <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-cyan-500/25 to-violet-500/25 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">🤖</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 ring-1 ring-white/30">
+                      <svg viewBox="0 0 40 40" className="h-6 w-6" aria-hidden="true">
+                        <line x1="20" y1="4" x2="20" y2="9" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+                        <circle cx="20" cy="3.4" r="2.1" fill="#ffffff" />
+                        <rect x="3.5" y="16" width="3.6" height="8.5" rx="1.8" fill="#ffffff" />
+                        <rect x="32.9" y="16" width="3.6" height="8.5" rx="1.8" fill="#ffffff" />
+                        <rect x="7" y="9" width="26" height="22" rx="8.5" fill="#ffffff" />
+                        <circle cx="15" cy="19" r="2.7" fill="#6d28d9" />
+                        <circle cx="25" cy="19" r="2.7" fill="#6d28d9" />
+                        <path
+                          d="M14.5 24.5 q5.5 4.5 11 0"
+                          stroke="#0891b2"
+                          strokeWidth="2.1"
+                          strokeLinecap="round"
+                          fill="none"
+                          className={botTyping ? "bot-talk" : ""}
+                        />
+                      </svg>
+                    </span>
                     <div>
                       <p className="text-sm font-semibold text-white">Asistente PULSO</p>
                       <p className="flex items-center gap-1 text-[10px] text-emerald-300">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> En línea
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> En línea · guía del sistema
                       </p>
                     </div>
                   </div>
@@ -7297,18 +7743,36 @@ export default function Home() {
                   ) : null}
                 </div>
 
-                {/* Sugerencias rapidas */}
-                <div className="flex gap-1.5 overflow-x-auto border-t border-white/10 px-2.5 py-2">
-                  {ASSISTANT_FAQS.slice(0, 6).map((faq, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => pushAssistant(faq.q)}
-                      className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-300 transition hover:border-cyan-400/40 hover:bg-cyan-500/10"
-                    >
-                      {faq.q}
-                    </button>
-                  ))}
+                {/* Temas (categorias) + sugerencias: una sola barra delgada, scroll horizontal */}
+                <div className="border-t border-white/10 bg-white/[0.02]">
+                  <div className="flex gap-1.5 overflow-x-auto px-2.5 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {ASSISTANT_CATEGORIES.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setAssistantCat(cat)}
+                        className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                          assistantCat === cat
+                            ? "bg-gradient-to-br from-cyan-500 to-violet-600 text-white shadow-sm shadow-cyan-900/40"
+                            : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-1.5 overflow-x-auto px-2.5 pb-2 pt-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {ASSISTANT_FAQS.filter((faq) => faq.cat === assistantCat).map((faq, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => pushAssistant(faq.q)}
+                        className="shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-300 transition hover:border-cyan-400/40 hover:bg-cyan-500/10"
+                      >
+                        {faq.q}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Entrada de texto */}
@@ -7340,27 +7804,32 @@ export default function Home() {
               type="button"
               onClick={openAssistant}
               aria-label="Asistente virtual"
-              className={`flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 shadow-xl shadow-cyan-900/40 ring-2 ring-white/20 transition hover:scale-105 ${
+              className={`flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 shadow-lg shadow-cyan-900/40 ring-2 ring-white/20 transition hover:scale-105 ${
                 assistantOpen ? "" : "bot-float"
               }`}
             >
-              {/* Robot medico */}
-              <svg viewBox="0 0 48 48" className="h-8 w-8" aria-hidden="true">
-                <line x1="24" y1="3" x2="24" y2="9" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
-                <circle cx="24" cy="3.5" r="2.4" fill="#ffffff" />
-                <rect x="9" y="9" width="30" height="24" rx="9" fill="#ffffff" />
-                <circle cx="18.5" cy="20" r="3.1" fill="#0e7490" />
-                <circle cx="29.5" cy="20" r="3.1" fill="#0e7490" />
-                <rect
-                  x="19"
-                  y="26"
-                  width="10"
-                  height="2.6"
-                  rx="1.3"
-                  fill="#0e7490"
+              {/* Robot asistente */}
+              <svg viewBox="0 0 40 40" className="h-7 w-7" aria-hidden="true">
+                {/* antena */}
+                <line x1="20" y1="4" x2="20" y2="9" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+                <circle cx="20" cy="3.4" r="2.1" fill="#ffffff" />
+                {/* audifonos de asistente */}
+                <rect x="3.5" y="16" width="3.6" height="8.5" rx="1.8" fill="#ffffff" />
+                <rect x="32.9" y="16" width="3.6" height="8.5" rx="1.8" fill="#ffffff" />
+                {/* cabeza */}
+                <rect x="7" y="9" width="26" height="22" rx="8.5" fill="#ffffff" />
+                {/* ojos */}
+                <circle cx="15" cy="19" r="2.7" fill="#6d28d9" />
+                <circle cx="25" cy="19" r="2.7" fill="#6d28d9" />
+                {/* sonrisa (se mueve al escribir) */}
+                <path
+                  d="M14.5 24.5 q5.5 4.5 11 0"
+                  stroke="#0891b2"
+                  strokeWidth="2.1"
+                  strokeLinecap="round"
+                  fill="none"
                   className={botTyping ? "bot-talk" : ""}
                 />
-                <path d="M22.6 35 h2.8 v2.4 h2.4 v2.8 h-2.4 v2.4 h-2.8 v-2.4 h-2.4 v-2.8 h2.4 z" fill="#ef4444" />
               </svg>
             </button>
           </div>
@@ -7451,33 +7920,90 @@ export default function Home() {
                           </span>
                         </div>
 
-                        <div className="mt-3 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                          {group.services.map((service) => (
-                            <div
-                              key={service.id}
-                              className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5"
-                            >
-                              <p
-                                className="truncate text-[13px] font-semibold text-white"
-                                title={service.name}
+                        <div className="mt-2.5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                          {group.services.map((service) => {
+                            const total = service.modules.length;
+                            const done = service.modules.filter((m) => m.completed).length;
+                            const allDone = total > 0 && done === total;
+                            const circ = 2 * Math.PI * 13;
+                            const pct = total > 0 ? done / total : 0;
+                            const ringColor = done > 0 ? "#22d3ee" : "#475569";
+                            return (
+                              <div
+                                key={service.id}
+                                className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-2 transition ${
+                                  allDone
+                                    ? "border-cyan-400/30 bg-cyan-500/[0.06]"
+                                    : "border-white/10 bg-white/[0.04]"
+                                }`}
                               >
-                                <span className="mr-1">{getServiceEmoji(service.id)}</span>
-                                {service.name}
-                              </p>
-                              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                                {service.modules.map((mod) => (
-                                  <span
-                                    key={mod.label}
-                                    className={`text-[11px] font-semibold ${
-                                      mod.completed ? "text-emerald-400" : "text-amber-400"
-                                    }`}
-                                  >
-                                    {mod.label}: {mod.completed ? "Completo" : "Incompleto"}
+                                <div className="relative h-9 w-9 shrink-0">
+                                  <svg viewBox="0 0 32 32" className="h-9 w-9 -rotate-90">
+                                    <circle
+                                      cx="16"
+                                      cy="16"
+                                      r="13"
+                                      fill="none"
+                                      stroke="rgba(255,255,255,0.10)"
+                                      strokeWidth="3"
+                                    />
+                                    <circle
+                                      cx="16"
+                                      cy="16"
+                                      r="13"
+                                      fill="none"
+                                      stroke={ringColor}
+                                      strokeWidth="3"
+                                      strokeLinecap="round"
+                                      strokeDasharray={`${pct * circ} ${circ}`}
+                                    />
+                                  </svg>
+                                  <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white">
+                                    {done}/{total}
                                   </span>
-                                ))}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p
+                                    className="truncate text-[13px] font-semibold text-white"
+                                    title={service.name}
+                                  >
+                                    <ServiceIcon serviceId={service.id} className="mr-1.5 inline h-4 w-4 shrink-0 align-[-3px] text-cyan-300/90" />
+                                    {service.name}
+                                  </p>
+                                  <div className="mt-1.5 flex flex-wrap gap-1">
+                                    {service.modules.map((mod) => (
+                                      <span
+                                        key={mod.label}
+                                        className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                          mod.completed
+                                            ? "bg-cyan-500/10 text-cyan-300"
+                                            : "bg-white/5 text-slate-400"
+                                        }`}
+                                      >
+                                        {mod.completed ? (
+                                          <svg
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="3"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            className="h-2.5 w-2.5"
+                                            aria-hidden="true"
+                                          >
+                                            <path d="M20 6 9 17l-5-5" />
+                                          </svg>
+                                        ) : (
+                                          <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                                        )}
+                                        {mod.label}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </section>
                     );
@@ -7485,87 +8011,105 @@ export default function Home() {
             </div>
           </div>
 
-          <p className="relative mt-auto pt-4 text-xs text-slate-400">
-            Powered by <span className="font-semibold text-slate-300">ESDOMED</span> · versión 1.6.2.6
-          </p>
         </div>
 
-        <div className="px-5 py-10 sm:px-8 lg:py-8">
-          <div className="w-full max-w-md lg:sticky lg:top-6 lg:ml-auto">
+        <div className="relative flex items-start bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-5 py-10 sm:px-8 lg:py-8 lg:pt-28">
+          <div className="sticky top-4 ml-auto w-full max-w-md self-start lg:top-28">
             {isLoadingSession ? (
-              <div className="rounded-[24px] border border-slate-200 bg-white p-8 shadow-sm">
-                <div className="h-3 w-28 rounded-full bg-slate-200" />
-                <div className="mt-6 h-12 rounded-2xl bg-slate-100" />
-                <div className="mt-4 h-12 rounded-2xl bg-slate-100" />
-                <div className="mt-4 h-12 rounded-2xl bg-slate-100" />
+              <div className="rounded-[28px] border border-white/10 bg-[#0e1626]/80 p-8 shadow-2xl shadow-black/60 backdrop-blur-xl">
+                <div className="h-3 w-28 rounded-full bg-white/10" />
+                <div className="mt-6 h-12 rounded-2xl bg-white/5" />
+                <div className="mt-4 h-12 rounded-2xl bg-white/5" />
+                <div className="mt-4 h-12 rounded-2xl bg-white/5" />
               </div>
             ) : user && !serviceProfile ? (
-              <section className="rounded-[24px] border border-slate-200 bg-white p-7 shadow-sm">
-                <p className="text-sm font-medium text-violet-700">Sesion activa</p>
-                <h2 className="mt-2 text-3xl font-semibold tracking-tight">
+              <section className="rounded-[28px] border border-white/10 bg-[#0e1626]/80 p-7 shadow-2xl shadow-black/60 backdrop-blur-xl">
+                <p className="text-sm font-medium text-cyan-300">Sesion activa</p>
+                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">
                   Perfil pendiente o bloqueado
                 </h2>
                 {error ? (
-                  <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  <p className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
                     {error}
                   </p>
                 ) : null}
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="mt-8 w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  className="mt-8 w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:opacity-90"
                 >
                   Cerrar sesion
                 </button>
               </section>
             ) : (
-              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(20,18,12,0.10)] sm:p-9">
+              <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#0e1626]/80 p-6 shadow-2xl shadow-black/60 backdrop-blur-xl sm:p-9">
+                {/* Resplandores de fondo */}
+                <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-cyan-500/20 blur-3xl" />
+                <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-20 h-56 w-56 rounded-full bg-violet-600/20 blur-3xl" />
+                <div className="relative">
                 <div className="mb-7 flex flex-col items-center text-center">
-                  {/* Logo PULSO en el login. */}
-                  <svg viewBox="0 0 48 48" className="h-14 w-14" aria-hidden="true">
-                    <defs>
-                      <linearGradient id="pulsoGradLogin" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0" stopColor="#22d3ee" />
-                        <stop offset="1" stopColor="#7c3aed" />
-                      </linearGradient>
-                    </defs>
-                    <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoGradLogin)" />
-                    <path
-                      d="M7 25 H16 L19.5 15 L25 35 L29 25 H41"
-                      fill="none"
-                      stroke="#ffffff"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-900">
+                  {/* Logo PULSO con resplandor */}
+                  <span className="relative flex h-16 w-16 items-center justify-center">
+                    <span aria-hidden className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-600 opacity-60 blur-lg" />
+                    <svg viewBox="0 0 48 48" className="relative h-16 w-16 drop-shadow-lg" aria-hidden="true">
+                      <defs>
+                        <linearGradient id="pulsoGradLogin" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0" stopColor="#22d3ee" />
+                          <stop offset="1" stopColor="#7c3aed" />
+                        </linearGradient>
+                      </defs>
+                      <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoGradLogin)" />
+                      <path
+                        d="M7 25 H16 L19.5 15 L25 35 L29 25 H41"
+                        fill="none"
+                        stroke="#ffffff"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <h2 className="mt-4 text-3xl font-bold tracking-tight text-white">
                     Bienvenido a PULSO
                   </h2>
-                  <p className="mt-1.5 text-sm text-slate-500">Iniciá sesión para continuar</p>
+                  <p className="mt-1.5 text-sm text-slate-400">Iniciá sesión para continuar</p>
                 </div>
 
                 <form className="space-y-5" onSubmit={handleSubmit}>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Correo o usuario</span>
-                    <input
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
-                      name="email"
-                      placeholder="correo@hospital.com o Hcardoza"
-                      required
-                      type="text"
-                    />
+                    <span className="text-sm font-medium text-slate-300">Correo o usuario</span>
+                    <div className="relative mt-2">
+                      <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                      </span>
+                      <input
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-3 pl-11 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+                        name="email"
+                        placeholder="correo@hospital.com o Hcardoza"
+                        required
+                        type="text"
+                      />
+                    </div>
                   </label>
 
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-700">Contrasena</span>
+                    <span className="text-sm font-medium text-slate-300">Contrasena</span>
                     <div className="relative mt-2">
+                      <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                          <rect x="3" y="11" width="18" height="11" rx="2" />
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                      </span>
                       <input
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
-                        className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-3 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-600 focus:ring-4 focus:ring-violet-100"
+                        className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-3 pl-11 pr-12 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
                         minLength={6}
                         name="password"
                         placeholder="Ingresa tu clave"
@@ -7577,7 +8121,7 @@ export default function Home() {
                         onClick={() => setShowPasswordText((value) => !value)}
                         aria-label={showPasswordText ? "Ocultar contraseña" : "Mostrar contraseña"}
                         title={showPasswordText ? "Ocultar contraseña" : "Mostrar contraseña"}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-white"
                       >
                         {showPasswordText ? (
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
@@ -7597,13 +8141,13 @@ export default function Home() {
                   </label>
 
                   {error ? (
-                    <div className="space-y-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    <div className="space-y-3 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
                       <p>{error}</p>
                       {firestoreUnavailable ? (
                         <button
                           type="button"
                           onClick={handleRetryFirestore}
-                          className="rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-600"
+                          className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400"
                         >
                           Reintentar Firestore
                         </button>
@@ -7612,21 +8156,33 @@ export default function Home() {
                   ) : null}
 
                   {message ? (
-                    <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    <p className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
                       {message}
                     </p>
                   ) : null}
 
                   <button
                     disabled={isSubmitting}
-                    className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    className="w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     type="submit"
                   >
                     {isSubmitting ? "Procesando..." : "Entrar al sistema"}
                   </button>
                 </form>
+                </div>
               </section>
             )}
+
+            {/* Creditos del equipo desarrollador, debajo del modal de login. */}
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-center backdrop-blur-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Desarrollado por
+              </p>
+              <p className="mt-1 bg-gradient-to-r from-cyan-300 to-violet-300 bg-clip-text text-base font-bold tracking-wide text-transparent">
+                ESDOMED
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Versión 1.6.2.6</p>
+            </div>
           </div>
         </div>
       </section>

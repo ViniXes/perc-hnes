@@ -267,6 +267,12 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     name: "Asesores de Medicamentos",
     rows: [],
   },
+  {
+    // ESDOMED: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "esdomed",
+    name: "ESDOMED",
+    rows: [],
+  },
 ];
 
 export const SERVICE_COUNT = SERVICE_DEFINITIONS.length;
