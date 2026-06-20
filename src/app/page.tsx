@@ -176,6 +176,14 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
     admin: true,
   },
   {
+    username: "Amontes",
+    password: DEFAULT_TEMP_PASSWORD,
+    firstName: "Alfonso",
+    lastName: "Montes Gutierrez",
+    modules: ["perc", "sesps", "distribucion"],
+    admin: true,
+  },
+  {
     username: "rcenteno",
     password: DEFAULT_TEMP_PASSWORD,
     firstName: "Dr. Roberto",
@@ -853,6 +861,7 @@ const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-avance": IconDashboard,
   "panel-requests": IconMessage,
   "panel-request-form": IconMessage,
+  "panel-docs": IconFile,
   "panel-config": IconGear,
 };
 
@@ -1034,6 +1043,78 @@ function applyFixedValues(table: TableValues) {
 // de centros de costo). Cada servicio define sus campos. Se guarda en la misma
 // coleccion serviceTabulators (modulo "perc"), con la fila PERC_SERV_ROW.
 const PERC_SERV_ROW = "perc-serv";
+
+// =============================================================================
+// Documentos (control anual de entregas a Calidad) — proceso INDEPENDIENTE de
+// PERC/SEPS/Horas. Matriz: dependencias x documentos (POA, MOF, Evaluacion
+// trimestral). Cada celda: "entregado" | "pendiente" | "" (en blanco). Solo el
+// admin y ffuentes editan; el resto solo visualiza. Se guarda en Firestore en la
+// coleccion "documentControl" (un doc por año).
+// =============================================================================
+const DOC_COLUMNS: { key: string; label: string }[] = [
+  { key: "poa", label: "POA" },
+  { key: "mof", label: "MOF" },
+  { key: "evaluacion", label: "Evaluación Trimestral" },
+];
+
+// Estados posibles de cada celda y el orden de rotacion al hacer clic (editores).
+type DocStatus = "" | "entregado" | "pendiente";
+const DOC_STATUS_CYCLE: DocStatus[] = ["", "entregado", "pendiente"];
+const DOC_STATUS_LABEL: Record<DocStatus, string> = {
+  "": "—",
+  entregado: "Entregado",
+  pendiente: "Pendiente de entrega",
+};
+
+const DOC_DEPENDENCIAS: string[] = [
+  "Unidad Financiera Institucional",
+  "Unidad de Auditoria Interna",
+  "Unidad Asesora de Medicamentos e Insumos",
+  "Servicio de Farmacia",
+  "Unidad de Planificacion y Calidad",
+  "Estadistica y Documentos Medicos",
+  "Unidad Juridica",
+  "Unidad de Comunicaciones",
+  "Unidad de Epidemiologia",
+  "Unidad de Convenios",
+  "Unidad de Cumplimiento",
+  "Subdireccion Medica",
+  "Subdireccion Administrativa",
+  "Unidad de Desarrollo Profesional",
+  "Division Medica",
+  "Division de Enfermeria",
+  "Division de Servicios de Diagnostico y Apoyo",
+  "Departamento de Medicina Preventiva",
+  "Unidad de Admisiones",
+  "Departamento de Medicina Interna",
+  "Departamento de Cirugia",
+  "Departamento de Medicina Critica",
+  "Unidad de Terapia Intervencionista Endovascular",
+  "Unidad de Cuidados Paliativos",
+  "Central de Esterilizacion y Equipos",
+  "Departamento de Nutricion",
+  "Departamento de Radiologia e Imágenes",
+  "Departamento de Laboratorios",
+  "Servicios de Psicologia",
+  "Servicio de Trabajo Social",
+  "Servicio de Fisioterapia",
+  "Clinica de Empleados",
+  "Unidad de Compras Publicas",
+  "Departamento de Servicios Varios",
+  "Departamento de Recursos Humanos",
+  "Departamento de Abastecimiento",
+  "Departamento de Conservacion y Mantenimiento",
+  "Departamento de Tecnologia y Comunicaciones",
+  "Servicio de Lavanderia",
+  "Unidad de Gestion Documental",
+];
+
+// Clave estable por dependencia (no cambia aunque se edite el nombre visible).
+function getDocKey(index: number) {
+  return `dep-${index}`;
+}
+
+type DocValues = Record<string, Record<string, DocStatus>>;
 const PERC_SERV_FIELDS: Record<string, { key: string; label: string; placeholder: string }[]> = {
   "maxima-emergencia": [
     { key: "atencion", label: "Atención", placeholder: "Número de atenciones" },
@@ -1052,6 +1133,72 @@ const PERC_SERV_FIELDS: Record<string, { key: string; label: string; placeholder
 function getPercServFields(serviceId: string | null | undefined) {
   return (serviceId && PERC_SERV_FIELDS[serviceId]) || null;
 }
+
+// Plantilla COMPLETA del consolidado "Produccion de Servicio" (PERC por servicios):
+// Centro de Produccion | Unidades de Produccion | Cantidad. Incluye TODOS los
+// centros del Excel oficial. Las unidades con `serviceId`+`key` toman su Cantidad
+// del servicio que la captura en el sistema (Maxima Emergencia, Clinica de
+// Empleados y Centro Quirurgico). El resto queda en blanco hasta que lleguen sus
+// datos (se completaran mas adelante).
+const PERC_SERV_CONSOLIDADO: {
+  centro: string;
+  serviceId?: string;
+  units: { label: string; key?: string }[];
+}[] = [
+  {
+    centro: "66__01101 - Hospitalizacion medicina interna",
+    units: [{ label: "1__Egreso" }, { label: "2__Dco" }, { label: "6__N. Camas" }],
+  },
+  {
+    centro: "95__01206 - Hospitalizacion cirugia general",
+    units: [{ label: "1__Egreso" }, { label: "2__Dco" }, { label: "6__N. Camas" }],
+  },
+  {
+    centro: "745__02014 - Hospitalizacion servicios por convenios",
+    units: [{ label: "1__Egreso" }, { label: "2__Dco" }, { label: "6__N. Camas" }],
+  },
+  {
+    centro: "166__05001 - Unidad de cuidados intensivos",
+    units: [{ label: "1__Transferencia" }, { label: "2__Dco" }, { label: "6__N. Camas" }],
+  },
+  {
+    centro: "179__05101 - Unidad de cuidados intermedios",
+    units: [{ label: "1__Transferencia" }, { label: "2__Dco" }, { label: "6__N. Camas" }],
+  },
+  {
+    centro: "201__10001 - Emergencias",
+    serviceId: "maxima-emergencia",
+    units: [
+      { label: "1__Atencion", key: "atencion" },
+      { label: "2__Procedimiento", key: "procedimiento" },
+      { label: "3__Paciente", key: "pacientes" },
+    ],
+  },
+  {
+    centro: "743__15053 - Clinica empresarial",
+    serviceId: "clinica-de-empleados",
+    units: [
+      { label: "1__Consulta", key: "consulta" },
+      { label: "2__Procedimiento", key: "procedimiento" },
+    ],
+  },
+  {
+    centro: "806__33060 - Centro quirurgico",
+    serviceId: "centro-quirurgico",
+    units: [
+      { label: "1__Intervencion quirurgica", key: "intervenciones" },
+      { label: "2__Procedimiento", key: "procedimientos" },
+    ],
+  },
+  {
+    centro: "767__5014 - Unidad de cuidados especiales",
+    units: [{ label: "1__Dco" }, { label: "2__Transferencia" }, { label: "6__N. Camas" }],
+  },
+  {
+    centro: "766__70016 - Servicio de apoyo a riiss",
+    units: [{ label: "1__Atencion" }],
+  },
+];
 
 function buildEmptyTable(service: ServiceDefinition): TableValues {
   const servFields = getPercServFields(service.id);
@@ -1501,7 +1648,8 @@ function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: stri
 
     return `<tr><td style="border:1px solid #cbd5e1;padding:6px;font-weight:700;">${escapeHtml(row)}</td>${cells}</tr>`;
   }).join("");
-  const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Consolidado ${periodId}</title></head><body><table>${`<thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody>`}</table></body></html>`;
+
+  const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Produccion Distribuida ${periodId}</title></head><body><table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
   const blob = new Blob(["\ufeff", documentHtml], {
     type: "application/vnd.ms-excel;charset=utf-8;",
   });
@@ -1509,7 +1657,59 @@ function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: stri
   const link = window.document.createElement("a");
 
   link.href = url;
-  link.download = `consolidado-${periodId}.xls`;
+  link.download = `produccion-distribuida-${periodId}.xls`;
+  window.document.body.appendChild(link);
+  link.click();
+  window.document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}
+
+// Descarga el consolidado "Produccion de Servicio" (plantilla COMPLETA) en un .xls
+// aparte: Centro de Produccion | Unidades de Produccion | Cantidad. Las 3 areas con
+// captura traen su numero del mes; el resto queda en blanco hasta cargar sus datos.
+function downloadServiceProductionReport(overview: AdminOverviewEntry[], periodId: string) {
+  const valuesByService = new Map<string, Record<string, Record<string, unknown>>>();
+  for (const entry of overview) {
+    valuesByService.set(entry.service.id, entry.values);
+  }
+
+  const headerCells = ["Centro de Producción", "Unidades de Producción", "Cantidad"]
+    .map(
+      (header) =>
+        `<th style="background:#dbe7ff;border:1px solid #cbd5e1;padding:8px;font-weight:700;">${escapeHtml(header)}</th>`,
+    )
+    .join("");
+
+  const bodyRows = PERC_SERV_CONSOLIDADO.map((svc) => {
+    const servValues = svc.serviceId
+      ? valuesByService.get(svc.serviceId)?.[PERC_SERV_ROW] || {}
+      : {};
+    return svc.units
+      .map((unit, index) => {
+        // La Cantidad siempre lleva un valor: si no se capturo nada, va 0 (nunca vacia).
+        let qty = "0";
+        if (unit.key) {
+          const parsed = Number.parseFloat(String(servValues[unit.key] ?? ""));
+          qty = Number.isFinite(parsed) ? formatConsolidatedNumber(parsed) : "0";
+        }
+        const centroCell =
+          index === 0
+            ? `<td rowspan="${svc.units.length}" style="border:1px solid #cbd5e1;padding:6px;font-weight:700;vertical-align:middle;">${escapeHtml(svc.centro)}</td>`
+            : "";
+        return `<tr>${centroCell}<td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(unit.label)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(qty)}</td></tr>`;
+      })
+      .join("");
+  }).join("");
+
+  const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Produccion de Servicio ${periodId}</title></head><body><table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
+  const blob = new Blob([documentHtml], {
+    type: "application/vnd.ms-excel;charset=utf-8;",
+  });
+  const url = window.URL.createObjectURL(blob);
+  const link = window.document.createElement("a");
+
+  link.href = url;
+  link.download = `produccion-de-servicio-${periodId}.xls`;
   window.document.body.appendChild(link);
   link.click();
   window.document.body.removeChild(link);
@@ -2244,6 +2444,7 @@ export default function Home() {
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isCreatingManagedUser, setIsCreatingManagedUser] = useState(false);
   const [isExportingMonthlyReport, setIsExportingMonthlyReport] = useState(false);
+  const [isExportingServiceProduction, setIsExportingServiceProduction] = useState(false);
   const [adminBusyUserId, setAdminBusyUserId] = useState("");
   // Usuario seleccionado en la vista maestro-detalle de "Usuarios y permisos".
   const [adminSelectedUserUid, setAdminSelectedUserUid] = useState<string | null>(null);
@@ -2331,6 +2532,12 @@ export default function Home() {
   }
   // Preferencias de personalizacion (menu Configuracion).
   const [showConfigModal, setShowConfigModal] = useState(false);
+  // Documentos (control anual de entregas a Calidad).
+  const [showDocsModal, setShowDocsModal] = useState(false);
+  const [docsValues, setDocsValues] = useState<DocValues>({});
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsSaving, setDocsSaving] = useState(false);
+  const [docsLoaded, setDocsLoaded] = useState(false);
   const [uiPrefs, setUiPrefs] = useState<UiPrefs>(() => {
     if (typeof window === "undefined") {
       return DEFAULT_UI_PREFS;
@@ -3303,6 +3510,111 @@ export default function Home() {
       setError(getAuthErrorMessage(exportError));
     } finally {
       setIsExportingMonthlyReport(false);
+    }
+  }
+
+  async function handleExportServiceProduction() {
+    if (!isAdmin || firestoreUnavailable) {
+      return;
+    }
+
+    setIsExportingServiceProduction(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const overview = await fetchAdminOverviewForPeriod(periodId);
+      downloadServiceProductionReport(overview, periodId);
+      setMessage(`Producción de Servicio generada para el periodo ${periodLabel}.`);
+    } catch (exportError) {
+      if (await handleFirestoreError(exportError)) {
+        return;
+      }
+
+      setError(getAuthErrorMessage(exportError));
+    } finally {
+      setIsExportingServiceProduction(false);
+    }
+  }
+
+  // --- Documentos (control anual de entregas a Calidad) ---
+  // Editan solo admin y ffuentes (ffuentes ya es admin); el resto solo visualiza.
+  const canEditDocs = isAdmin;
+
+  async function loadDocs() {
+    setDocsLoading(true);
+    try {
+      const snap = await getDoc(doc(db, "documentControl", String(currentYear)));
+      const saved = (snap.exists() ? (snap.data() as { values?: unknown }).values : null) || {};
+      const savedMap = saved as Record<string, Record<string, unknown>>;
+      const values: DocValues = {};
+      DOC_DEPENDENCIAS.forEach((_, i) => {
+        const key = getDocKey(i);
+        const row = savedMap[key] || {};
+        values[key] = Object.fromEntries(
+          DOC_COLUMNS.map((col) => {
+            const v = row[col.key];
+            return [col.key, v === "entregado" || v === "pendiente" ? v : ""];
+          }),
+        ) as Record<string, DocStatus>;
+      });
+      setDocsValues(values);
+      setDocsLoaded(true);
+    } catch (docError) {
+      if (await handleFirestoreError(docError)) {
+        return;
+      }
+      setError("No pudimos cargar el control de documentos.");
+    } finally {
+      setDocsLoading(false);
+    }
+  }
+
+  function openDocsModal() {
+    setShowDocsModal(true);
+    if (!docsLoaded && !firestoreUnavailable) {
+      void loadDocs();
+    }
+  }
+
+  function handleDocsCellCycle(depKey: string, colKey: string) {
+    if (!canEditDocs) {
+      return;
+    }
+    setDocsValues((current) => {
+      const currentStatus = (current[depKey]?.[colKey] ?? "") as DocStatus;
+      const index = DOC_STATUS_CYCLE.indexOf(currentStatus);
+      const next = DOC_STATUS_CYCLE[(index + 1) % DOC_STATUS_CYCLE.length];
+      return { ...current, [depKey]: { ...(current[depKey] || {}), [colKey]: next } };
+    });
+  }
+
+  async function handleSaveDocs() {
+    if (!canEditDocs || firestoreUnavailable) {
+      return;
+    }
+    setDocsSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      await setDoc(
+        doc(db, "documentControl", String(currentYear)),
+        {
+          year: currentYear,
+          values: docsValues,
+          updatedAt: serverTimestamp(),
+          updatedBy: user?.email || "",
+        },
+        { merge: true },
+      );
+      setMessage("Control de documentos guardado correctamente.");
+    } catch (docError) {
+      if (await handleFirestoreError(docError)) {
+        return;
+      }
+      setError(getAuthErrorMessage(docError));
+    } finally {
+      setDocsSaving(false);
     }
   }
 
@@ -5610,6 +5922,12 @@ export default function Home() {
       },
       ...moduleSidebarItems,
       {
+        id: "panel-docs",
+        label: "DOCS-POA/MOF",
+        detail: "Control de entregas a Calidad",
+        badge: "DO",
+      },
+      {
         id: "panel-config",
         label: "Configuración",
         detail: "Personalizá tu vista",
@@ -5857,6 +6175,8 @@ export default function Home() {
                         setShowRequestForm(true);
                       } else if (item.id === "panel-config") {
                         setShowConfigModal(true);
+                      } else if (item.id === "panel-docs") {
+                        openDocsModal();
                       } else {
                         handleSidebarNavigation(item.id);
                       }
@@ -6122,22 +6442,32 @@ export default function Home() {
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Descarga</p>
-                  <h3 className="mt-2 text-xl font-semibold text-white">Archivo del periodo {periodLabel}</h3>
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Descargas</p>
+                  <h3 className="mt-2 text-xl font-semibold text-white">Consolidados del periodo {periodLabel}</h3>
                   <p className="mt-2 text-sm text-slate-300">
-                    El archivo incluye todos los servicios, sus filas y todos los centros de costos del
-                    mes actual.
+                    Dos archivos separados: <strong>Producción Distribuida</strong> (centros de costo) y{" "}
+                    <strong>Producción de Servicio</strong> (plantilla completa por centro de producción).
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => void handleExportMonthlyReport()}
-                    disabled={isExportingMonthlyReport}
-                    className="mt-5 rounded-2xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-cyan-300"
-                  >
-                    {isExportingMonthlyReport ? "Generando Excel..." : "Descargar Excel mensual"}
-                  </button>
+                  <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => void handleExportMonthlyReport()}
+                      disabled={isExportingMonthlyReport}
+                      className="rounded-2xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-cyan-300"
+                    >
+                      {isExportingMonthlyReport ? "Generando..." : "Producción Distribuida"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleExportServiceProduction()}
+                      disabled={isExportingServiceProduction}
+                      className="rounded-2xl border border-cyan-400/40 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isExportingServiceProduction ? "Generando..." : "Producción de Servicio"}
+                    </button>
+                  </div>
                   <p className="mt-3 text-xs text-slate-300">
-                    El archivo saldra con los datos disponibles al momento de la descarga.
+                    Cada archivo sale con los datos disponibles al momento de la descarga.
                   </p>
                 </div>
               </div>
@@ -7673,6 +8003,147 @@ export default function Home() {
                       Restablecer a los valores por defecto
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Modal de Documentos (control anual de entregas a Calidad). */}
+          {showDocsModal ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4"
+              onClick={() => setShowDocsModal(false)}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                  backgroundColor: "var(--surface, #0e1626)",
+                  borderColor: "var(--border, rgba(255,255,255,0.08))",
+                }}
+                className="modal-pop-in relative my-6 w-full max-w-3xl overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+              >
+                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+                <div className="flex items-center justify-between gap-3 px-5 pt-5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 text-white">
+                      {IconFile}
+                    </span>
+                    <div>
+                      <h3 className="text-base font-semibold text-white">DOCS-POA/MOF</h3>
+                      <p className="text-[11px] text-slate-400">
+                        Control de entregas a Calidad · {currentYear}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDocsModal(false)}
+                    aria-label="Cerrar"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 px-5 pt-3 text-[11px]">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Entregado
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> Pendiente de entrega
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 font-semibold text-slate-400">
+                    — Sin definir
+                  </span>
+                  <span className="text-slate-400">
+                    {canEditDocs ? "· Tocá una celda para cambiar su estado" : "· Solo lectura"}
+                  </span>
+                </div>
+
+                <div className="max-h-[58vh] overflow-y-auto px-5 py-4">
+                  {docsLoading ? (
+                    <p className="py-10 text-center text-sm text-slate-400">Cargando…</p>
+                  ) : (
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="text-slate-400">
+                          <th className="sticky top-0 z-10 bg-[#0e1626] px-2 py-2 text-left font-medium">
+                            Dependencia
+                          </th>
+                          {DOC_COLUMNS.map((col) => (
+                            <th
+                              key={col.key}
+                              className="sticky top-0 z-10 w-[150px] bg-[#0e1626] px-2 py-2 text-center font-medium"
+                            >
+                              {col.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {DOC_DEPENDENCIAS.map((dep, index) => {
+                          const key = getDocKey(index);
+                          return (
+                            <tr key={key} className="border-t border-white/5">
+                              <td className="py-1.5 pr-3 text-[12px] text-slate-200">{dep}</td>
+                              {DOC_COLUMNS.map((col) => {
+                                const status = (docsValues[key]?.[col.key] ?? "") as DocStatus;
+                                const tone =
+                                  status === "entregado"
+                                    ? "bg-emerald-500/15 text-emerald-300"
+                                    : status === "pendiente"
+                                      ? "bg-amber-500/15 text-amber-300"
+                                      : "bg-white/5 text-slate-500";
+                                const label = DOC_STATUS_LABEL[status];
+                                return (
+                                  <td key={col.key} className="px-1.5 py-1.5 text-center">
+                                    {canEditDocs ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDocsCellCycle(key, col.key)}
+                                        className={`inline-flex w-full items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold transition hover:brightness-110 ${tone}`}
+                                      >
+                                        {label}
+                                      </button>
+                                    ) : (
+                                      <span
+                                        className={`inline-flex w-full items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold ${tone}`}
+                                      >
+                                        {label}
+                                      </span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 border-t border-white/10 px-5 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowDocsModal(false)}
+                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10"
+                  >
+                    Cerrar
+                  </button>
+                  {canEditDocs ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveDocs()}
+                      disabled={docsSaving || docsLoading}
+                      className="rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {docsSaving ? "Guardando…" : "Guardar cambios"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
