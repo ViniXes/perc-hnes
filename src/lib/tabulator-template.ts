@@ -186,10 +186,11 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     name: "Aseo",
     rows: ["648_1-Aseo | Metro cuadrado"],
   },
-  // Almacen se divide en DOS servicios/areas que capturan por separado la MISMA
-  // fila 721_1 (uno por Insumos, otro por Medicamentos). En el consolidado oficial
-  // ambos se SUMAN columna por columna en el unico bloque "721-Almacen"
-  // (ver downloadAdminExcelReport). Por eso la fila es identica en ambos.
+  // Almacen lo capturan por separado TRES servicios/areas con la MISMA fila 721_1
+  // (Depto. de Abastecimiento, Almacen Medicamentos y Asesores de Medicamentos).
+  // En el consolidado oficial los tres se SUMAN columna por columna en el unico
+  // bloque "721-Almacen" (ver downloadAdminExcelReport). Por eso la fila es
+  // identica en todos.
   {
     id: "almacen",
     name: "Depto. de Abastecimiento",
@@ -262,10 +263,13 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: [],
   },
   {
-    // Asesores de Medicamentos: SOLO reporta Distribucion de Horas (sin PERC).
+    // Asesores de Medicamentos: ademas de Distribucion de Horas, captura la MISMA
+    // fila 721_1 que los otros almacenes. En el consolidado se SUMA columna por
+    // columna con "almacen" y "almacen-medicamentos" en el bloque "721-Almacen"
+    // (la suma es automatica porque la clave de fila es identica).
     id: "asesores-de-medicamentos",
     name: "Asesores de Medicamentos",
-    rows: [],
+    rows: ["721_1-Almacen | Despacho"],
   },
   {
     // ESDOMED: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).

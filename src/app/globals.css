@@ -8,6 +8,19 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+/* Ocultar las barras de scroll en toda la app (el scroll sigue funcionando,
+   con dedo en movil y con rueda/trackpad en PC). Evita la barra gruesa que
+   muestran los navegadores de escritorio. */
+* {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* Edge/IE antiguos */
+}
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;                  /* Chrome, Safari, Edge nuevos */
+}
+
 /* =============================================================================
    Tema del modulo administrativo (panel-shell)
    -----------------------------------------------------------------------------

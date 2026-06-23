@@ -399,7 +399,7 @@ const ASSISTANT_FAQS: { q: string; a: string; cat: AssistantCategory; kw?: strin
   {
     cat: "Sistema",
     q: "¿Cómo descargo el Excel mensual?",
-    a: "Si sos administrador: Menú → «Excel mensual» → «Descargar Excel». Sale con los datos disponibles al momento de la descarga.",
+    a: "Si sos administrador: Menú → «Consolidados PERC» → «Descargar Excel». Sale con los datos disponibles al momento de la descarga.",
     kw: ["excel", "descargar", "reporte", "consolidado", "mensual", "exportar"],
   },
   {
@@ -844,6 +844,20 @@ const IconChart = (
   </svg>
 );
 
+const IconWrench = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M15.6 6.4a3.8 3.8 0 0 0-4.7 4.9l-6.1 6.1a1.4 1.4 0 0 0 0 2l.8.8a1.4 1.4 0 0 0 2 0l6.1-6.1a3.8 3.8 0 0 0 4.9-4.7l-2.3 2.3-2.4-.6-.6-2.4 2.3-2.3Z" />
+  </svg>
+);
+
+const IconCalendar = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <rect x="3.5" y="4.5" width="17" height="16" rx="2" />
+    <path d="M3.5 9.5h17M8 3v3M16 3v3" />
+    <path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2" />
+  </svg>
+);
+
 // Icono por id de item del sidebar. Lo que no esta aqui conserva su badge de letras
 // (PERC -> PE, SEPS -> SE, etc., segun pidio el usuario).
 const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
@@ -854,7 +868,7 @@ const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-module-sesps": IconChart,
   "panel-module-distribucion": IconClock,
   "panel-horas": IconClock,
-  "panel-calendar": IconGear,
+  "panel-calendar": IconCalendar,
   "panel-admin-export": IconFile,
   "panel-users": IconUsers,
   "panel-capture-toggle": IconKey,
@@ -862,7 +876,7 @@ const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-requests": IconMessage,
   "panel-request-form": IconMessage,
   "panel-docs": IconFile,
-  "panel-config": IconGear,
+  "panel-config": IconWrench,
 };
 
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
@@ -870,6 +884,15 @@ const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
   day: "numeric",
   month: "long",
   year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+// Version compacta de fecha/hora para movil (ej. "23/06/26, 14:30").
+const DATE_TIME_FORMATTER_SHORT = new Intl.DateTimeFormat("es-HN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
 });
@@ -1113,6 +1136,206 @@ const DOC_DEPENDENCIAS: string[] = [
 function getDocKey(index: number) {
   return `dep-${index}`;
 }
+
+// Icono SVG por tipo de servicio/dependencia (sin emojis). El primero que
+// coincide gana, por eso el orden importa.
+const DEP_ICON_PROPS = {
+  width: 17,
+  height: 17,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.7,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+function getDepIcon(name: string) {
+  const n = name.toLowerCase();
+  const has = (...keys: string[]) => keys.some((k) => n.includes(k));
+
+  // Farmacia / medicamentos / insumos
+  if (has("farmacia", "medicament", "insumo")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+        <path d="M12 8.5v7M8.5 12h7" />
+      </svg>
+    );
+  }
+  // Laboratorio
+  if (has("laborator")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <path d="M9 3h6M10 3v6L5.6 18.4A1.8 1.8 0 0 0 7.2 21h9.6a1.8 1.8 0 0 0 1.6-2.6L14 9V3" />
+        <path d="M8 15h8" />
+      </svg>
+    );
+  }
+  // Radiología / imágenes
+  if (has("radiolog", "imagen", "imágen")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <rect x="3" y="4.5" width="18" height="12.5" rx="2" />
+        <path d="M6.5 11h2l1.5-3 2 6 1.5-3h3.5" />
+        <path d="M9 20.5h6" />
+      </svg>
+    );
+  }
+  // Cirugía / quirúrgico / intervencionista
+  if (has("cirug", "quirurg", "endovascular", "intervencionista")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <circle cx="6" cy="6.5" r="2.5" />
+        <circle cx="6" cy="17.5" r="2.5" />
+        <path d="M8.2 8.2 20 18M8.2 15.8 20 6" />
+      </svg>
+    );
+  }
+  // Enfermería
+  if (has("enfermer")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <path d="M12 20.3 4.6 13a4.6 4.6 0 1 1 6.5-6.5l.9.9.9-.9A4.6 4.6 0 1 1 19.4 13Z" />
+      </svg>
+    );
+  }
+  // Nutrición
+  if (has("nutric")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <path d="M7 3v8M5 3v4a2 2 0 0 0 4 0V3M7 11v10" />
+        <path d="M16.5 3c-1.6 0-2.6 2-2.6 5.5 0 2 1 3.1 2.6 3.5V21" />
+      </svg>
+    );
+  }
+  // Jurídica / convenios
+  if (has("jurid", "convenio")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <path d="M12 3v18M6 21h12" />
+        <path d="M12 5 5 7M12 5l7 2" />
+        <path d="M5 7 2.6 12.8a3 3 0 0 0 4.8 0L5 7ZM19 7l-2.4 5.8a3 3 0 0 0 4.8 0L19 7Z" />
+      </svg>
+    );
+  }
+  // Auditoría / cumplimiento
+  if (has("auditor", "cumplimiento")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <path d="M12 3 5 5.5V11c0 4.5 3 7.8 7 9 4-1.2 7-4.5 7-9V5.5L12 3Z" />
+        <path d="M9 12l2 2 4-4" />
+      </svg>
+    );
+  }
+  // Finanzas / compras / abastecimiento
+  if (has("financ", "compras", "abastec")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <rect x="2.5" y="6" width="19" height="12" rx="2" />
+        <circle cx="12" cy="12" r="2.5" />
+        <path d="M6 9.5v5M18 9.5v5" />
+      </svg>
+    );
+  }
+  // Comunicaciones / tecnología
+  if (has("comunicacion", "tecnolog")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <rect x="3.5" y="4" width="17" height="11" rx="2" />
+        <path d="M9 19h6M12 15v4" />
+      </svg>
+    );
+  }
+  // Recursos humanos / desarrollo profesional / admisiones / trabajo social
+  if (has("recursos humanos", "desarrollo profesional", "admision", "trabajo social")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <circle cx="9" cy="8" r="3" />
+        <path d="M3.8 19c0-2.8 2.3-4.6 5.2-4.6S14.2 16.2 14.2 19" />
+        <circle cx="16.5" cy="9" r="2.3" />
+        <path d="M15.5 14.4c2.3.2 4.3 1.9 4.3 4.6" />
+      </svg>
+    );
+  }
+  // Psicología
+  if (has("psicolog")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <path d="M9.5 4.5A2.5 2.5 0 0 0 7 7a2.3 2.3 0 0 0-1.5 4 2.4 2.4 0 0 0 .8 4.3A2.4 2.4 0 0 0 9.5 19Z" />
+        <path d="M14.5 4.5A2.5 2.5 0 0 1 17 7a2.3 2.3 0 0 1 1.5 4 2.4 2.4 0 0 1-.8 4.3A2.4 2.4 0 0 1 14.5 19Z" />
+      </svg>
+    );
+  }
+  // Fisioterapia / epidemiología / medicina preventiva
+  if (has("fisioterap", "epidemiolog", "preventiva")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <path d="M3 12h4l2.5-6 4 12 2.5-6H21" />
+      </svg>
+    );
+  }
+  // Estadística / documentos / planificación / calidad / gestión documental
+  if (has("estadistica", "documento", "planificacion", "calidad", "gestion documental")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <path d="M6 2.5h7l5 5V21a.5.5 0 0 1-.5.5H6A.5.5 0 0 1 5.5 21V3A.5.5 0 0 1 6 2.5Z" />
+        <path d="M13 2.5V8h5" />
+        <path d="M9 17.5v-2.5M12 17.5v-4.5M15 17.5v-1.5" />
+      </svg>
+    );
+  }
+  // Servicios médicos generales (medicina, clínica, paliativos, crítica, etc.)
+  if (has("medic", "clinica", "paliativ", "critica", "interna")) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <path d="M6 3.5H4.5v4A4.5 4.5 0 0 0 9 12a4.5 4.5 0 0 0 4.5-4.5v-4H12" />
+        <path d="M9 12v2.5a5 5 0 0 0 5 5 4 4 0 0 0 4-4V15" />
+        <circle cx="18" cy="13" r="2" />
+      </svg>
+    );
+  }
+  // Mantenimiento / conservación / esterilización / lavandería / servicios varios
+  if (
+    has(
+      "mantenimiento",
+      "conservacion",
+      "esteriliz",
+      "lavanderia",
+      "servicios varios",
+      "central",
+    )
+  ) {
+    return (
+      <svg {...DEP_ICON_PROPS} aria-hidden="true">
+        <path d="M15.5 7.5a3.5 3.5 0 0 1-4.6 4.6L5 18l1 1 5.9-5.9a3.5 3.5 0 0 0 4.6-4.6l-2 2-2-2 2-2Z" />
+      </svg>
+    );
+  }
+  // Por defecto: edificio / dependencia
+  return (
+    <svg {...DEP_ICON_PROPS} aria-hidden="true">
+      <path d="M4.5 21V6.5a1 1 0 0 1 1-1H13a1 1 0 0 1 1 1V21" />
+      <path d="M14 10.5h4.5a1 1 0 0 1 1 1V21" />
+      <path d="M3 21h18" />
+      <path d="M8 9.5h2M8 13h2M8 16.5h2" />
+      <path d="M11 3v2.5" />
+    </svg>
+  );
+}
+
+// Colores sutiles para la barrita lateral de cada grupo (cerrado = mas tenue,
+// abierto = un poco mas vivo). Se recorren por indice de grupo.
+const OVERRIDE_GROUP_ACCENTS: { closed: string; open: string }[] = [
+  { closed: "rgba(125,179,214,0.45)", open: "rgba(125,179,214,0.95)" }, // azul cielo
+  { closed: "rgba(127,184,154,0.45)", open: "rgba(127,184,154,0.95)" }, // verde salvia
+  { closed: "rgba(167,139,218,0.45)", open: "rgba(167,139,218,0.95)" }, // violeta
+  { closed: "rgba(214,179,112,0.45)", open: "rgba(214,179,112,0.95)" }, // dorado
+  { closed: "rgba(212,154,166,0.45)", open: "rgba(212,154,166,0.95)" }, // rosa
+  { closed: "rgba(120,196,188,0.45)", open: "rgba(120,196,188,0.95)" }, // teal
+  { closed: "rgba(170,178,196,0.45)", open: "rgba(170,178,196,0.95)" }, // gris azulado
+  { closed: "rgba(216,167,128,0.45)", open: "rgba(216,167,128,0.95)" }, // terracota
+];
 
 type DocValues = Record<string, Record<string, DocStatus>>;
 const PERC_SERV_FIELDS: Record<string, { key: string; label: string; placeholder: string }[]> = {
@@ -2402,6 +2625,9 @@ export default function Home() {
   const [horasDataPeriods, setHorasDataPeriods] = useState<Set<string>>(new Set());
   // Servicio que el ADMIN elige para ver/editar (el admin no tiene servicio propio).
   const [adminSelectedServiceId, setAdminSelectedServiceId] = useState<string>("");
+  // Dropdown profesional de "Elegir servicio" (admin/supervisor).
+  const [adminServicePickerOpen, setAdminServicePickerOpen] = useState(false);
+  const [adminServiceQuery, setAdminServiceQuery] = useState("");
   const [tableValues, setTableValues] = useState<TableValues>({});
   const [sepsValues, setSepsValues] = useState<SepsValues>({});
   const [isSavingSeps, setIsSavingSeps] = useState(false);
@@ -2409,10 +2635,8 @@ export default function Home() {
   // Tablas SEPS abiertas (colapsables). Por defecto solo la primera.
   const [openSepsTables, setOpenSepsTables] = useState<Set<string>>(new Set());
   // Grupos de "Habilitar tableros" abiertos (colapsables). Por defecto solo el primero.
-  const [openOverrideGroups, setOpenOverrideGroups] = useState<Set<string>>(() => {
-    const groups = buildServiceGroups();
-    return new Set(groups[0] ? [groups[0].id] : []);
-  });
+  // Todos los bloques arrancan contraidos (incluido el de Direccion).
+  const [openOverrideGroups, setOpenOverrideGroups] = useState<Set<string>>(() => new Set());
   const [horasEmployees, setHorasEmployees] = useState<HorasEmployee[]>([]);
   const [horasEmployeeToRemove, setHorasEmployeeToRemove] = useState<number | null>(null);
   const [isSavingHoras, setIsSavingHoras] = useState(false);
@@ -2429,6 +2653,8 @@ export default function Home() {
   const [showBoardModal, setShowBoardModal] = useState(false);
   // Menu lateral colapsable: en PC se contrae para dar espacio; en movil es cajon.
   const [menuOpen, setMenuOpen] = useState(true);
+  // Al bajar la pantalla, el boton de menu se vuelve translucido (menos invasivo).
+  const [menuScrolled, setMenuScrolled] = useState(false);
   // Mini estadistica por modulo (PERC/SEPS/Horas) al tocar el menu del modulo.
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [statsModule, setStatsModule] = useState<ModuleId>("perc");
@@ -2624,6 +2850,21 @@ export default function Home() {
   }, [serviceProfile?.name, user?.displayName, user?.email]);
   const isAdmin = !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
   const isSupervisor = serviceProfile?.role === "supervisor";
+  // Servicios disponibles en el dropdown "Elegir servicio" (admin = todos;
+  // supervisor = solo los modulos que supervisa).
+  const adminServiceOptions = useMemo(() => {
+    const base = SERVICE_DEFINITIONS.filter(
+      (service) =>
+        isAdmin ||
+        (getAreaById(service.id)?.modules.some((m) =>
+          serviceProfile?.supervisorModules.includes(m),
+        ) ??
+          false),
+    );
+    const q = adminServiceQuery.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((service) => service.name.toLowerCase().includes(q));
+  }, [isAdmin, serviceProfile, adminServiceQuery]);
   // Modulos que el usuario puede habilitar/deshabilitar: el admin todos; el supervisor
   // solo los suyos. Determina las columnas del panel "Habilitar tableros".
   const toggleableModules: ModuleId[] = !serviceProfile?.permissions.canToggleCapture
@@ -2804,6 +3045,14 @@ export default function Home() {
       // Ignore local storage access issues.
     }
   }, [panelTheme]);
+
+  // El boton de menu queda fijo arriba; al bajar la pantalla se vuelve translucido.
+  useEffect(() => {
+    const onScroll = () => setMenuScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -4690,6 +4939,31 @@ export default function Home() {
     }
   }
 
+  // Logica compartida al tocar un item del menu (sidebar y barra inferior movil).
+  // `requestable` se pasa desde el render porque vive dentro del bloque de sesion.
+  function runSidebarItem(itemId: string, requestable: ModuleId[] = []) {
+    if (itemId.startsWith("panel-module-")) {
+      setStatsModule(itemId.replace("panel-module-", "") as ModuleId);
+      setShowStatsModal(true);
+    } else if (itemId === "panel-users") {
+      setShowUsersModal(true);
+      void loadAdminUsers();
+    } else if (itemId === "panel-avance") {
+      setShowBoardModal(true);
+    } else if (itemId === "panel-requests") {
+      setShowRequestsModal(true);
+    } else if (itemId === "panel-request-form") {
+      setRequestModuleId(requestable[0] ?? "perc");
+      setShowRequestForm(true);
+    } else if (itemId === "panel-config") {
+      setShowConfigModal(true);
+    } else if (itemId === "panel-docs") {
+      openDocsModal();
+    } else {
+      handleSidebarNavigation(itemId);
+    }
+  }
+
   function handleTogglePanelTheme() {
     setPanelTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
   }
@@ -5033,8 +5307,10 @@ export default function Home() {
               Ningun servicio coincide con la busqueda.
             </p>
           ) : (
-            overrideGroups.map((group) => {
+            overrideGroups.map((group, groupIndex) => {
               const groupOpen = openOverrideGroups.has(group.id);
+              const groupAccent =
+                OVERRIDE_GROUP_ACCENTS[groupIndex % OVERRIDE_GROUP_ACCENTS.length];
               // Resumen de overrides de la division (para mostrarlo en la barra).
               let gOpen = 0;
               let gClosed = 0;
@@ -5071,7 +5347,11 @@ export default function Home() {
                   }
                   className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${isLightPanelTheme ? "hover:bg-slate-50" : "hover:bg-white/5"}`}
                 >
-                  <span aria-hidden className={`h-7 w-1 shrink-0 rounded-full ${groupOpen ? "bg-cyan-400" : "bg-white/15"}`} />
+                  <span
+                    aria-hidden
+                    className="h-7 w-1 shrink-0 rounded-full transition"
+                    style={{ backgroundColor: groupOpen ? groupAccent.open : groupAccent.closed }}
+                  />
                   <h3 className="flex-1 text-sm font-semibold uppercase tracking-wide">{group.title}</h3>
                   {gOpen > 0 ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
@@ -5943,7 +6223,7 @@ export default function Home() {
             },
             {
               id: "panel-admin-export",
-              label: "Excel mensual",
+              label: "Consolidados PERC",
               detail: "Descarga consolidado",
               badge: "XL",
             },
@@ -6110,14 +6390,21 @@ export default function Home() {
             />
           ) : null}
           <aside
-            className={`self-start overflow-y-auto rounded-[24px] p-4 shadow-[0_24px_80px_rgba(3,7,18,0.22)] transition-transform duration-200 fixed inset-y-0 left-0 z-50 w-[290px] max-w-[85vw] xl:z-auto xl:w-auto xl:max-w-none xl:translate-x-0 xl:transition-none xl:sticky xl:top-6 ${
-              menuOpen ? "translate-x-0" : "-translate-x-full xl:hidden"
+            className={`self-start overflow-y-auto p-4 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] xl:inset-x-auto xl:bottom-auto xl:z-auto xl:w-auto xl:max-h-none xl:rounded-[24px] xl:shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:translate-y-0 xl:transition-none xl:sticky xl:top-6 ${
+              menuOpen ? "translate-y-0" : "translate-y-full xl:hidden"
             } ${
               isLightPanelTheme
                 ? "border border-slate-200 bg-[#eef2fb] text-slate-900"
                 : "border border-white/10 bg-[#1b2537] text-slate-100"
             }`}
           >
+            {/* Asa de arrastre: solo en movil (hoja inferior). */}
+            <button
+              type="button"
+              onClick={() => setMenuOpen(false)}
+              aria-label="Cerrar menú"
+              className="mx-auto mb-3 block h-1.5 w-12 rounded-full bg-slate-400/40 xl:hidden"
+            />
             <div className={`pb-4 text-center ${isLightPanelTheme ? "border-b border-slate-200" : "border-b border-white/10"}`}>
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
                 Hospital Nacional
@@ -6148,7 +6435,7 @@ export default function Home() {
               <PulsoMark className="ml-1 h-8 w-8 shrink-0 opacity-90" />
             </div>
 
-            <nav className="mt-5 space-y-1">
+            <nav className="mt-5 grid grid-cols-3 gap-2 xl:block xl:space-y-1">
               {sidebarItems.map((item) => {
                 const isActive = activeSidebarSection === item.id;
                 // Alerta roja cuando hay solicitudes pendientes.
@@ -6159,34 +6446,14 @@ export default function Home() {
                     key={item.id}
                     type="button"
                     onClick={() => {
-                      if (item.id.startsWith("panel-module-")) {
-                        // Menu de modulo sin servicio (admin/supervisor): mini estadistica.
-                        setStatsModule(item.id.replace("panel-module-", "") as ModuleId);
-                        setShowStatsModal(true);
-                      } else if (item.id === "panel-users") {
-                        setShowUsersModal(true);
-                        void loadAdminUsers();
-                      } else if (item.id === "panel-avance") {
-                        setShowBoardModal(true);
-                      } else if (item.id === "panel-requests") {
-                        setShowRequestsModal(true);
-                      } else if (item.id === "panel-request-form") {
-                        setRequestModuleId(requestableModules[0] ?? "perc");
-                        setShowRequestForm(true);
-                      } else if (item.id === "panel-config") {
-                        setShowConfigModal(true);
-                      } else if (item.id === "panel-docs") {
-                        openDocsModal();
-                      } else {
-                        handleSidebarNavigation(item.id);
-                      }
+                      runSidebarItem(item.id, requestableModules);
                       // En movil, cerrar el cajon despues de elegir.
                       if (typeof window !== "undefined" && window.innerWidth < 1280) {
                         setMenuOpen(false);
                       }
                     }}
                     title={item.detail}
-                    className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition ${
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-2.5 text-center transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-2 xl:text-left ${
                       hasAlert
                         ? "border-rose-400/60 bg-rose-500/15 hover:bg-rose-500/25"
                         : isActive
@@ -6213,7 +6480,7 @@ export default function Home() {
                       ) : null}
                     </span>
                     <span
-                      className={`block truncate text-[13px] font-medium ${
+                      className={`block w-full truncate text-[10px] font-medium leading-tight xl:text-[13px] ${
                         hasAlert
                           ? "text-rose-200"
                           : isLightPanelTheme
@@ -6273,47 +6540,87 @@ export default function Home() {
             </div>
           </aside>
 
-          <div className="min-w-0 space-y-6">
-            {/* Boton de menu (hamburguesa) PEGAJOSO: queda fijo arriba al bajar. */}
-            <div className="sticky top-3 z-30 w-fit">
+          {/* Barra inferior: SOLO movil. Casita (abre el menu completo) y Cerrar sesion.
+              Hermana del aside para que el fixed llegue al borde inferior real. */}
+          <nav
+            className={`fixed inset-x-0 bottom-0 z-50 flex items-center justify-between gap-4 border-t px-12 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(3,7,18,0.6)] xl:hidden ${
+              isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#141c2c]"
+            }`}
+          >
+            {/* Casita: despliega el menu completo hacia arriba. */}
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Menú"
+              title="Menú"
+              className={`flex flex-col items-center gap-0.5 ${isLightPanelTheme ? "text-slate-600" : "text-slate-200"}`}
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 ring-1 ring-white/10 [&_svg]:h-4 [&_svg]:w-4">
+                {IconHome}
+              </span>
+              <span className="text-[9px] font-semibold">Menú</span>
+            </button>
+            {/* Cerrar sesion. */}
+            <button
+              type="button"
+              onClick={handleSignOut}
+              aria-label="Cerrar sesión"
+              title="Cerrar sesión"
+              className="flex flex-col items-center gap-0.5 text-rose-300"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/15 ring-1 ring-rose-400/30 [&_svg]:h-4 [&_svg]:w-4">
+                {IconLogout}
+              </span>
+              <span className="text-[9px] font-semibold">Salir</span>
+            </button>
+          </nav>
+
+          <div className="min-w-0 space-y-6 pb-28 xl:pb-0">
+            {/* Boton de menu (hamburguesa) PEGAJOSO: solo PC (en movil se usa la casita inferior). */}
+            <div className="sticky top-3 z-30 hidden items-center justify-between gap-2 xl:flex">
               <button
                 type="button"
                 onClick={() => setMenuOpen((value) => !value)}
                 aria-label={menuOpen ? "Ocultar menú" : "Mostrar menú"}
-                className={`inline-flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-semibold shadow-lg ring-1 transition ${
+                className={`inline-flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-semibold shadow-lg ring-1 backdrop-blur-md transition-all duration-300 hover:opacity-100 ${
                   isLightPanelTheme
                     ? "border-amber-300/60 bg-white text-slate-800 ring-amber-300/40 hover:bg-amber-50"
                     : "border-amber-400/40 bg-[#202c41] text-amber-100 ring-amber-400/30 hover:bg-[#243049]"
-                }`}
+                } ${menuScrolled ? "opacity-40 hover:opacity-100" : "opacity-100"}`}
               >
                 <span className="flex flex-col gap-[3.5px]">
                   <span className="block h-0.5 w-5 rounded-full bg-amber-400" />
                   <span className="block h-0.5 w-5 rounded-full bg-amber-400" />
                   <span className="block h-0.5 w-5 rounded-full bg-amber-400" />
                 </span>
-                {menuOpen ? "Ocultar menú" : "Menú"}
+                <span className="hidden xl:inline">Menú</span>
               </button>
             </div>
 
             {/* Widgets opcionales (Configuracion): saludo y reloj. */}
             {uiPrefs.showGreeting || uiPrefs.showClock ? (
               <div
-                className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl px-4 py-3 ${
+                className={`ml-auto flex w-fit flex-wrap items-center justify-end gap-x-3 gap-y-1 rounded-2xl px-3 py-2 xl:ml-0 xl:w-auto xl:justify-between xl:px-4 xl:py-3 ${
                   isLightPanelTheme
                     ? "border border-slate-200 bg-white text-slate-900"
                     : "border border-white/10 bg-[#202c41] text-slate-100"
                 }`}
               >
                 {uiPrefs.showGreeting ? (
-                  <p className="text-sm font-semibold">
+                  <p className="text-xs font-semibold sm:text-sm">
                     Hola, {welcomeName} 👋
                   </p>
                 ) : (
-                  <span />
+                  <span className="hidden xl:block" />
                 )}
                 {uiPrefs.showClock ? (
-                  <p className="text-sm font-medium text-slate-400">
-                    <time suppressHydrationWarning>{DATE_TIME_FORMATTER.format(now)}</time>
+                  <p className="text-xs font-medium text-slate-400 sm:text-sm">
+                    <time suppressHydrationWarning className="xl:hidden">
+                      {DATE_TIME_FORMATTER_SHORT.format(now)}
+                    </time>
+                    <time suppressHydrationWarning className="hidden xl:inline">
+                      {DATE_TIME_FORMATTER.format(now)}
+                    </time>
                   </p>
                 ) : null}
               </div>
@@ -6338,7 +6645,7 @@ export default function Home() {
                 </h1>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:flex">
+              <div className="hidden gap-3 sm:grid-cols-2 xl:flex">
                 <button
                   type="button"
                   onClick={handleSignOut}
@@ -6399,6 +6706,172 @@ export default function Home() {
           {adminCalendarSection}
 
           {captureToggleSection}
+
+          {isAdmin || isSupervisor ? (
+            <section className="rounded-[24px] border border-amber-400/25 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
+              <p className="text-left text-2xl font-bold uppercase tracking-[0.12em] text-amber-200/90">
+                {isAdmin ? "Administrador · Ver tabuladores" : "Supervisión · Consolidado"}
+              </p>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-start sm:gap-6">
+                <h2 className="text-2xl font-bold text-white">Elegir servicio</h2>
+                <div className="relative w-full sm:max-w-sm sm:shrink-0">
+                  {/* Trigger */}
+                  <button
+                    type="button"
+                    onClick={() => setAdminServicePickerOpen((prev) => !prev)}
+                    aria-haspopup="listbox"
+                    aria-expanded={adminServicePickerOpen}
+                    className={`flex w-full items-center gap-3 rounded-2xl border bg-[#2a3448] px-3.5 py-3 text-left transition focus:outline-none ${
+                      adminServicePickerOpen
+                        ? "border-amber-400/70 shadow-[0_0_0_3px_rgba(251,191,36,0.12)]"
+                        : "border-white/10 hover:border-white/25"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                        currentService
+                          ? "bg-gradient-to-br from-amber-400/25 to-amber-500/10 text-amber-200"
+                          : "bg-white/5 text-slate-400"
+                      }`}
+                    >
+                      {currentService ? getDepIcon(currentService.name) : (
+                        <svg {...DEP_ICON_PROPS} aria-hidden="true">
+                          <circle cx="11" cy="11" r="7" />
+                          <path d="m20 20-3.2-3.2" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        {currentService ? "Servicio seleccionado" : "Sin seleccionar"}
+                      </span>
+                      <span className={`block truncate text-sm font-semibold ${currentService ? "text-white" : "text-slate-400"}`}>
+                        {currentService ? currentService.name : "Selecciona un servicio…"}
+                      </span>
+                    </span>
+                    <svg
+                      aria-hidden
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className={`shrink-0 text-slate-400 transition-transform ${adminServicePickerOpen ? "rotate-180" : ""}`}
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
+
+                  {/* Panel */}
+                  {adminServicePickerOpen ? (
+                    <>
+                      <div
+                        className="fixed inset-0 z-30"
+                        onClick={() => setAdminServicePickerOpen(false)}
+                      />
+                      <div className="modal-pop-in absolute left-0 right-0 z-40 mt-2 overflow-hidden rounded-2xl border border-white/10 bg-[#1b2537] shadow-[0_24px_80px_rgba(3,7,18,0.55)]">
+                        <div className="border-b border-white/5 p-2">
+                          <div className="flex items-center gap-2 rounded-xl bg-[#0e1626] px-3 py-2">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500" aria-hidden>
+                              <circle cx="11" cy="11" r="7" />
+                              <path d="m20 20-3.2-3.2" />
+                            </svg>
+                            <input
+                              autoFocus
+                              value={adminServiceQuery}
+                              onChange={(event) => setAdminServiceQuery(event.target.value)}
+                              placeholder="Buscar servicio…"
+                              className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-[25.5rem] overflow-y-auto p-1.5">
+                          {/* Opcion para deseleccionar y dejar la pantalla contraida. */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void handleAdminSelectService("");
+                              setAdminServicePickerOpen(false);
+                              setAdminServiceQuery("");
+                            }}
+                            className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition ${
+                              adminSelectedServiceId === "" ? "bg-amber-400/10" : "hover:bg-white/5"
+                            }`}
+                          >
+                            <span
+                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                                adminSelectedServiceId === "" ? "bg-amber-400/20 text-amber-200" : "bg-white/5 text-slate-400"
+                              }`}
+                            >
+                              <svg {...DEP_ICON_PROPS} aria-hidden="true">
+                                <circle cx="12" cy="12" r="9" />
+                                <path d="M8 12h8" />
+                              </svg>
+                            </span>
+                            <span className={`min-w-0 flex-1 truncate text-sm ${adminSelectedServiceId === "" ? "font-semibold text-amber-100" : "text-slate-300"}`}>
+                              Sin servicio
+                            </span>
+                            {adminSelectedServiceId === "" ? (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-amber-300" aria-hidden>
+                                <path d="M20 6 9 17l-5-5" />
+                              </svg>
+                            ) : null}
+                          </button>
+                          {adminServiceOptions.length === 0 ? (
+                            <p className="px-3 py-6 text-center text-sm text-slate-400">
+                              Ningún servicio coincide.
+                            </p>
+                          ) : (
+                            adminServiceOptions.map((service) => {
+                              const selected = service.id === adminSelectedServiceId;
+                              return (
+                                <button
+                                  key={service.id}
+                                  type="button"
+                                  onClick={() => {
+                                    void handleAdminSelectService(service.id);
+                                    setAdminServicePickerOpen(false);
+                                    setAdminServiceQuery("");
+                                  }}
+                                  className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition ${
+                                    selected ? "bg-amber-400/10" : "hover:bg-white/5"
+                                  }`}
+                                >
+                                  <span
+                                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                                      selected ? "bg-amber-400/20 text-amber-200" : "bg-white/5 text-slate-300"
+                                    }`}
+                                  >
+                                    {getDepIcon(service.name)}
+                                  </span>
+                                  <span className={`min-w-0 flex-1 truncate text-sm ${selected ? "font-semibold text-amber-100" : "text-slate-200"}`}>
+                                    {service.name}
+                                  </span>
+                                  {selected ? (
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-amber-300" aria-hidden>
+                                      <path d="M20 6 9 17l-5-5" />
+                                    </svg>
+                                  ) : null}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+              <p className="mt-4 text-sm text-slate-300">
+                {isAdmin
+                  ? "Selecciona un servicio para ver y editar sus tabuladores (PERC, SEPS y Horas) y su historial por mes."
+                  : "Selecciona un servicio para ver lo que cargó en los tableros que supervisás (solo lectura)."}
+              </p>
+            </section>
+          ) : null}
 
           {isAdmin ? (
             <section
@@ -6471,42 +6944,6 @@ export default function Home() {
                   </p>
                 </div>
               </div>
-            </section>
-          ) : null}
-
-          {isAdmin || isSupervisor ? (
-            <section className="rounded-[24px] border border-amber-400/25 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-200/80">
-                {isAdmin ? "Administrador · Ver tabuladores" : "Supervisión · Consolidado"}
-              </p>
-              <h2 className="mt-1 text-2xl font-bold text-white">Elegir servicio</h2>
-              <p className="mt-1 text-sm text-slate-300">
-                {isAdmin
-                  ? "Selecciona un servicio para ver y editar sus tabuladores (PERC, SEPS y Horas) y su historial por mes."
-                  : "Selecciona un servicio para ver lo que cargó en los tableros que supervisás (solo lectura)."}
-              </p>
-              <label className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-                <span className="text-sm font-medium text-slate-200">Servicio:</span>
-                <select
-                  value={adminSelectedServiceId}
-                  onChange={(event) => void handleAdminSelectService(event.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm font-semibold text-white outline-none focus:border-amber-400 sm:max-w-md"
-                >
-                  <option value="">— Selecciona un servicio —</option>
-                  {SERVICE_DEFINITIONS.filter(
-                    (service) =>
-                      isAdmin ||
-                      (getAreaById(service.id)?.modules.some((m) =>
-                        serviceProfile.supervisorModules.includes(m),
-                      ) ??
-                        false),
-                  ).map((service) => (
-                    <option key={service.id} value={service.id}>
-                      {service.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
             </section>
           ) : null}
 
@@ -6701,16 +7138,7 @@ export default function Home() {
                 )}
               </div>
             </section>
-          ) : currentService ? null : (
-            <section className="rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
-              <h2 className="text-xl font-semibold">Selecciona un servicio</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
-                {isSupervisor
-                  ? "Elegí un servicio arriba para ver sus tableros."
-                  : "Esta cuenta puede administrar usuarios y permisos, pero no tiene un servicio operativo asignado para captura."}
-              </p>
-            </section>
-          )}
+          ) : null}
 
           {showModule("sesps") ? sepsSection : null}
 
@@ -8023,7 +8451,7 @@ export default function Home() {
                   backgroundColor: "var(--surface, #0e1626)",
                   borderColor: "var(--border, rgba(255,255,255,0.08))",
                 }}
-                className="modal-pop-in relative my-6 w-full max-w-3xl overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+                className="modal-pop-in relative my-6 w-full max-w-6xl overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
               >
                 <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
                 <div className="flex items-center justify-between gap-3 px-5 pt-5">
@@ -8063,20 +8491,20 @@ export default function Home() {
                   </span>
                 </div>
 
-                <div className="max-h-[58vh] overflow-y-auto px-5 py-4">
+                <div className="max-h-[74vh] overflow-y-auto px-5 py-4">
                   {docsLoading ? (
                     <p className="py-10 text-center text-sm text-slate-400">Cargando…</p>
                   ) : (
                     <table className="w-full border-collapse text-xs">
                       <thead>
-                        <tr className="text-slate-400">
-                          <th className="sticky top-0 z-10 bg-[#0e1626] px-2 py-2 text-left font-medium">
+                        <tr className="text-white">
+                          <th className="sticky top-0 z-10 border-b-2 border-cyan-400/40 bg-[#0e1626] px-2 py-3 text-left text-sm font-bold uppercase tracking-wide">
                             Dependencia
                           </th>
                           {DOC_COLUMNS.map((col) => (
                             <th
                               key={col.key}
-                              className="sticky top-0 z-10 w-[150px] bg-[#0e1626] px-2 py-2 text-center font-medium"
+                              className="sticky top-0 z-10 w-[150px] border-b-2 border-cyan-400/40 bg-[#0e1626] px-2 py-3 text-center text-sm font-bold uppercase tracking-wide"
                             >
                               {col.label}
                             </th>
@@ -8088,14 +8516,19 @@ export default function Home() {
                           const key = getDocKey(index);
                           return (
                             <tr key={key} className="border-t border-white/5">
-                              <td className="py-1.5 pr-3 text-[12px] text-slate-200">{dep}</td>
+                              <td className="py-2 pr-3 text-[13px] font-medium text-slate-100">
+                                <span className="flex items-center gap-2">
+                                  <span className="shrink-0 text-cyan-300/80">{getDepIcon(dep)}</span>
+                                  <span>{dep}</span>
+                                </span>
+                              </td>
                               {DOC_COLUMNS.map((col) => {
                                 const status = (docsValues[key]?.[col.key] ?? "") as DocStatus;
                                 const tone =
                                   status === "entregado"
-                                    ? "bg-emerald-500/15 text-emerald-300"
+                                    ? "text-emerald-400"
                                     : status === "pendiente"
-                                      ? "bg-amber-500/15 text-amber-300"
+                                      ? "text-amber-400"
                                       : "bg-white/5 text-slate-500";
                                 const label = DOC_STATUS_LABEL[status];
                                 return (
@@ -8104,13 +8537,13 @@ export default function Home() {
                                       <button
                                         type="button"
                                         onClick={() => handleDocsCellCycle(key, col.key)}
-                                        className={`inline-flex w-full items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold transition hover:brightness-110 ${tone}`}
+                                        className={`inline-flex w-full items-center justify-center rounded-full px-2 py-1 text-[13px] font-bold transition hover:brightness-110 ${tone}`}
                                       >
                                         {label}
                                       </button>
                                     ) : (
                                       <span
-                                        className={`inline-flex w-full items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold ${tone}`}
+                                        className={`inline-flex w-full items-center justify-center rounded-full px-2 py-1 text-[13px] font-bold ${tone}`}
                                       >
                                         {label}
                                       </span>
@@ -8149,8 +8582,8 @@ export default function Home() {
             </div>
           ) : null}
 
-          {/* Asistente virtual (robot medico) - abajo a la derecha. */}
-          <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
+          {/* Asistente virtual (robot medico) - abajo a la derecha. SOLO en PC. */}
+          <div className="fixed bottom-5 right-5 z-40 hidden flex-col items-end gap-3 xl:flex">
             {assistantOpen ? (
               <div className="modal-pop-in flex h-[66vh] max-h-[540px] w-[350px] max-w-[88vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/50">
                 <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-cyan-500/25 to-violet-500/25 px-4 py-3">
@@ -8312,8 +8745,9 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f4efe6] text-slate-950">
-      <section className="grid min-h-screen grid-cols-1 lg:grid-cols-[1.2fr_500px]">
-        <div className="relative flex min-h-[45vh] flex-col gap-8 overflow-y-auto bg-slate-950 px-6 py-8 text-white sm:px-10 lg:min-h-screen lg:px-14">
+      <section className="flex min-h-screen items-start justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-4 pb-10 pt-8 sm:pt-12">
+        {/* Panel de monitoreo OCULTO: la pantalla de inicio solo muestra el login. */}
+        <div className="hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.22),transparent_28%),radial-gradient(circle_at_80%_15%,rgba(16,185,129,0.18),transparent_25%),linear-gradient(150deg,#020617_0%,#111827_55%,#172554_100%)]" />
           <div className="relative flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -8484,8 +8918,21 @@ export default function Home() {
 
         </div>
 
-        <div className="relative flex items-start bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-5 py-10 sm:px-8 lg:py-8 lg:pt-28">
-          <div className="sticky top-4 ml-auto w-full max-w-md self-start lg:top-28">
+        <div className="relative flex w-full max-w-md items-start justify-center">
+          <div className="w-full">
+            {/* Encabezado fuera del modal: Hospital Nacional · El Salvador. */}
+            <div className="mb-4 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl">
+              <p className="text-xl font-light tracking-[0.22em] text-white sm:text-2xl">
+                HOSPITAL NACIONAL
+              </p>
+              <div
+                aria-hidden
+                className="mx-auto my-2 h-px w-16 bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent"
+              />
+              <p className="text-[11px] font-light uppercase tracking-[0.42em] text-cyan-200/80">
+                El Salvador
+              </p>
+            </div>
             {isLoadingSession ? (
               <div className="rounded-[28px] border border-white/10 bg-[#0e1626]/80 p-8 shadow-2xl shadow-black/60 backdrop-blur-xl">
                 <div className="h-3 w-28 rounded-full bg-white/10" />
@@ -8645,14 +9092,20 @@ export default function Home() {
             )}
 
             {/* Creditos del equipo desarrollador, debajo del modal de login. */}
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-center backdrop-blur-sm">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            <div className="mt-10 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl">
+              <p className="text-[10px] font-light uppercase tracking-[0.32em] text-slate-400">
                 Desarrollado por
               </p>
-              <p className="mt-1 bg-gradient-to-r from-cyan-300 to-violet-300 bg-clip-text text-base font-bold tracking-wide text-transparent">
+              <p className="bg-gradient-to-r from-cyan-300 to-violet-300 bg-clip-text text-2xl font-light tracking-[0.22em] text-transparent">
                 ESDOMED
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-500">Versión 1.6.2.6</p>
+              <div
+                aria-hidden
+                className="mx-auto my-1.5 h-px w-16 bg-gradient-to-r from-transparent via-violet-400/60 to-transparent"
+              />
+              <p className="text-[10px] font-light uppercase tracking-[0.4em] text-slate-500">
+                Versión 1.6.2.6
+              </p>
             </div>
           </div>
         </div>
