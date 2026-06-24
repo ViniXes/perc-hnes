@@ -21,6 +21,65 @@ body {
   display: none;                  /* Chrome, Safari, Edge nuevos */
 }
 
+/* ===========================================================================
+   Navegacion movil "una pantalla a la vez".
+   En pantallas < xl (1280px), dentro del contenedor [data-mview], se oculta
+   todo lo marcado con [data-view] o [data-home] y solo se muestra lo que
+   coincide con la vista activa. En PC (>= 1280) no aplica: se ve el panel completo.
+   =========================================================================== */
+@media (max-width: 1279px) {
+  [data-mview] > [data-view],
+  [data-mview] > [data-home] {
+    display: none !important;
+  }
+  [data-mview="home"] > [data-home] {
+    display: block !important;
+  }
+  [data-mview="home"] > [data-view~="home"],
+  [data-mview="panel-tabulator"] > [data-view~="panel-tabulator"],
+  [data-mview="panel-seps"] > [data-view~="panel-seps"],
+  [data-mview="panel-horas"] > [data-view~="panel-horas"],
+  [data-mview="panel-calendar"] > [data-view~="panel-calendar"],
+  [data-mview="panel-capture-toggle"] > [data-view~="panel-capture-toggle"],
+  [data-mview="panel-admin-export"] > [data-view~="panel-admin-export"] {
+    display: block !important;
+  }
+}
+
+/* ===========================================================================
+   Animacion de latido (monitor cardiaco) para el modal de actualizacion PWA.
+   La linea de pulso se "dibuja" en bucle como un electro, con un punto al frente.
+   =========================================================================== */
+.ekg-track {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+.ekg-pulse {
+  stroke-dasharray: 18 100;       /* dash visible 18 sobre pathLength=100 */
+  filter: drop-shadow(0 0 5px rgba(34, 211, 238, 0.9));
+  animation: ekg-run 1.4s linear infinite;
+}
+@keyframes ekg-run {
+  from { stroke-dashoffset: 118; }
+  to   { stroke-dashoffset: 0; }
+}
+.ekg-dot {
+  animation: ekg-dot 1.4s linear infinite;
+}
+@keyframes ekg-dot {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 1; }
+}
+/* Latido suave del icono mientras actualiza. */
+.heartbeat {
+  animation: heartbeat 1.4s ease-in-out infinite;
+}
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  15%      { transform: scale(1.12); }
+  30%      { transform: scale(1); }
+  45%      { transform: scale(1.08); }
+}
+
 /* =============================================================================
    Tema del modulo administrativo (panel-shell)
    -----------------------------------------------------------------------------

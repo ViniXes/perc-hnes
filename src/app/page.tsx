@@ -2655,6 +2655,9 @@ export default function Home() {
   const [menuOpen, setMenuOpen] = useState(true);
   // Al bajar la pantalla, el boton de menu se vuelve translucido (menos invasivo).
   const [menuScrolled, setMenuScrolled] = useState(false);
+  // Navegacion movil "una pantalla a la vez": que seccion se muestra. En PC se
+  // ignora (se ve el panel completo). "home" = pantalla de inicio con resumen.
+  const [mobileView, setMobileView] = useState<string>("home");
   // Mini estadistica por modulo (PERC/SEPS/Horas) al tocar el menu del modulo.
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [statsModule, setStatsModule] = useState<ModuleId>("perc");
@@ -2845,6 +2848,26 @@ export default function Home() {
   );
   const dashboardGroups =
     publicDashboardGroups.length > 0 ? publicDashboardGroups : fallbackDashboardGroups;
+  // Estadistica general por modulo (cuantas dependencias completaron PERC/SEPS/Horas).
+  const moduleStats = useMemo(() => {
+    const base: Record<string, { done: number; total: number }> = {
+      PERC: { done: 0, total: 0 },
+      SEPS: { done: 0, total: 0 },
+      Horas: { done: 0, total: 0 },
+    };
+    for (const group of dashboardGroups) {
+      for (const service of group.services) {
+        for (const mod of service.modules) {
+          const stat = base[mod.label];
+          if (stat) {
+            stat.total += 1;
+            if (mod.completed) stat.done += 1;
+          }
+        }
+      }
+    }
+    return base;
+  }, [dashboardGroups]);
   const welcomeName = useMemo(() => {
     return serviceProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Usuario";
   }, [serviceProfile?.name, user?.displayName, user?.email]);
@@ -6390,7 +6413,7 @@ export default function Home() {
             />
           ) : null}
           <aside
-            className={`self-start overflow-y-auto p-4 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] xl:inset-x-auto xl:bottom-auto xl:z-auto xl:w-auto xl:max-h-none xl:rounded-[24px] xl:shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:translate-y-0 xl:transition-none xl:sticky xl:top-6 ${
+            className={`self-start overflow-y-auto px-4 pt-4 pb-28 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] xl:inset-x-auto xl:bottom-auto xl:z-auto xl:w-auto xl:max-h-none xl:rounded-[24px] xl:p-4 xl:shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:translate-y-0 xl:transition-none xl:sticky xl:top-6 ${
               menuOpen ? "translate-y-0" : "translate-y-full xl:hidden"
             } ${
               isLightPanelTheme
@@ -6446,10 +6469,28 @@ export default function Home() {
                     key={item.id}
                     type="button"
                     onClick={() => {
-                      runSidebarItem(item.id, requestableModules);
-                      // En movil, cerrar el cajon despues de elegir.
-                      if (typeof window !== "undefined" && window.innerWidth < 1280) {
+                      const isMobile =
+                        typeof window !== "undefined" && window.innerWidth < 1280;
+                      // En movil, los items de navegacion abren SU pantalla (una a la vez).
+                      const view =
+                        item.id === "panel-overview"
+                          ? "home"
+                          : [
+                                "panel-tabulator",
+                                "panel-seps",
+                                "panel-horas",
+                                "panel-calendar",
+                                "panel-admin-export",
+                                "panel-capture-toggle",
+                              ].includes(item.id)
+                            ? item.id
+                            : null;
+                      if (isMobile && view) {
+                        setMobileView(view);
                         setMenuOpen(false);
+                      } else {
+                        runSidebarItem(item.id, requestableModules);
+                        if (isMobile) setMenuOpen(false);
                       }
                     }}
                     title={item.detail}
@@ -6464,12 +6505,12 @@ export default function Home() {
                     }`}
                   >
                     <span
-                      className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                      className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-violet-600 text-[10px] font-semibold uppercase tracking-[0.12em] text-white shadow-sm shadow-cyan-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:shadow-none xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px] ${
                         hasAlert
-                          ? "bg-rose-500 text-white"
+                          ? "xl:bg-none xl:bg-rose-500"
                           : isActive
-                            ? "bg-gradient-to-br from-cyan-500 to-violet-600 text-white shadow-sm shadow-cyan-900/40"
-                            : "bg-white/5 text-slate-100 ring-1 ring-white/10"
+                            ? ""
+                            : "xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:ring-1 xl:ring-white/10"
                       }`}
                     >
                       {SIDEBAR_ICON_BY_ID[item.id] ?? item.badge}
@@ -6495,15 +6536,15 @@ export default function Home() {
               })}
             </nav>
 
-            <div className={`mt-6 space-y-1 pt-4 ${isLightPanelTheme ? "border-t border-slate-200" : "border-t border-white/10"}`}>
+            <div className={`mt-4 grid grid-cols-3 gap-2 pt-4 xl:mt-6 xl:block xl:space-y-1 ${isLightPanelTheme ? "border-t border-slate-200" : "border-t border-white/10"}`}>
               <button
                 type="button"
                 onClick={handleTogglePanelTheme}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition ${
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-2 xl:text-left xl:text-[13px] ${
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-100 ring-1 ring-white/10">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-violet-600 text-white shadow-sm shadow-cyan-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
                   {isLightPanelTheme ? IconMoon : IconSun}
                 </span>
                 <span>{isLightPanelTheme ? "Modo oscuro" : "Modo claro"}</span>
@@ -6518,24 +6559,14 @@ export default function Home() {
                   setShowPasswordText(false);
                   setShowPasswordModal(true);
                 }}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium transition ${
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-2 xl:text-left xl:text-[13px] ${
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-100 ring-1 ring-white/10">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-violet-600 text-white shadow-sm shadow-cyan-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
                   {IconKey}
                 </span>
                 <span>Cambiar contrasena</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] font-medium text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-300"
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 ring-1 ring-white/10 transition group-hover:bg-rose-500/15 group-hover:text-rose-300">
-                  {IconLogout}
-                </span>
-                <span>Cerrar sesion</span>
               </button>
             </div>
           </aside>
@@ -6543,22 +6574,22 @@ export default function Home() {
           {/* Barra inferior: SOLO movil. Casita (abre el menu completo) y Cerrar sesion.
               Hermana del aside para que el fixed llegue al borde inferior real. */}
           <nav
-            className={`fixed inset-x-0 bottom-0 z-50 flex items-center justify-between gap-4 border-t px-12 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(3,7,18,0.6)] xl:hidden ${
+            className={`fixed inset-x-0 bottom-0 z-50 flex items-center justify-between gap-4 border-t px-12 pt-2.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(3,7,18,0.6)] xl:hidden ${
               isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#141c2c]"
             }`}
           >
-            {/* Casita: despliega el menu completo hacia arriba. */}
+            {/* Casita: alterna (abre/cierra) el menu completo. */}
             <button
               type="button"
-              onClick={() => setMenuOpen(true)}
+              onClick={() => setMenuOpen((value) => !value)}
               aria-label="Menú"
               title="Menú"
               className={`flex flex-col items-center gap-0.5 ${isLightPanelTheme ? "text-slate-600" : "text-slate-200"}`}
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 ring-1 ring-white/10 [&_svg]:h-4 [&_svg]:w-4">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10 [&_svg]:h-[18px] [&_svg]:w-[18px]">
                 {IconHome}
               </span>
-              <span className="text-[9px] font-semibold">Menú</span>
+              <span className="text-[10px] font-semibold">Menú</span>
             </button>
             {/* Cerrar sesion. */}
             <button
@@ -6566,16 +6597,16 @@ export default function Home() {
               onClick={handleSignOut}
               aria-label="Cerrar sesión"
               title="Cerrar sesión"
-              className="flex flex-col items-center gap-0.5 text-rose-300"
+              className={`flex flex-col items-center gap-0.5 ${isLightPanelTheme ? "text-slate-600" : "text-slate-200"}`}
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/15 ring-1 ring-rose-400/30 [&_svg]:h-4 [&_svg]:w-4">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10 [&_svg]:h-[18px] [&_svg]:w-[18px]">
                 {IconLogout}
               </span>
-              <span className="text-[9px] font-semibold">Salir</span>
+              <span className="text-[10px] font-semibold">Salir</span>
             </button>
           </nav>
 
-          <div className="min-w-0 space-y-6 pb-28 xl:pb-0">
+          <div data-mview={mobileView} className="min-w-0 space-y-6 pb-28 xl:pb-0">
             {/* Boton de menu (hamburguesa) PEGAJOSO: solo PC (en movil se usa la casita inferior). */}
             <div className="sticky top-3 z-30 hidden items-center justify-between gap-2 xl:flex">
               <button
@@ -6597,10 +6628,177 @@ export default function Home() {
               </button>
             </div>
 
+            {/* Pantalla de INICIO (resumen) — SOLO movil, ajustada a una vista. */}
+            <div data-home className="xl:hidden">
+              <div className="flex flex-col gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-cyan-300/80">
+                    Inicio
+                  </p>
+                  <div className="mt-2.5 flex items-center justify-end gap-2.5">
+                    <h1 className="text-2xl font-light tracking-wide text-white">Bienvenido a</h1>
+                    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center">
+                      <span
+                        aria-hidden
+                        className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-400 to-violet-600 opacity-50 blur"
+                      />
+                      <svg viewBox="0 0 48 48" className="relative h-10 w-10 drop-shadow" aria-hidden="true">
+                        <defs>
+                          <linearGradient id="pulsoHome" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0" stopColor="#22d3ee" />
+                            <stop offset="1" stopColor="#7c3aed" />
+                          </linearGradient>
+                        </defs>
+                        <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoHome)" />
+                        <path
+                          d="M7 25 H16 L19.5 15 L25 35 L29 25 H41"
+                          fill="none"
+                          stroke="#ffffff"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  </div>
+                  <p className="mt-2 truncate text-xs text-slate-400">
+                    {isAdmin
+                      ? "Administrador del sistema"
+                      : currentService?.name || serviceProfile.email}{" "}
+                    · {periodLabel}
+                  </p>
+                </div>
+
+                <div className="rounded-3xl border border-white/10 bg-[#202c41] p-4 shadow-[0_20px_60px_rgba(3,7,18,0.35)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    Captura del periodo
+                  </p>
+                  <div className="mt-2 flex items-center gap-4">
+                    <div className="relative h-24 w-24 shrink-0">
+                      <svg viewBox="0 0 120 120" className="h-24 w-24 -rotate-90">
+                        <defs>
+                          <linearGradient id="homeRing" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0" stopColor="#22d3ee" />
+                            <stop offset="1" stopColor="#7c3aed" />
+                          </linearGradient>
+                        </defs>
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r="52"
+                          fill="none"
+                          stroke="rgba(255,255,255,0.08)"
+                          strokeWidth="12"
+                        />
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r="52"
+                          fill="none"
+                          stroke="url(#homeRing)"
+                          strokeWidth="12"
+                          strokeLinecap="round"
+                          strokeDasharray={2 * Math.PI * 52}
+                          strokeDashoffset={(2 * Math.PI * 52 * (100 - currentMonthProgress)) / 100}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-2xl font-bold text-white">{currentMonthProgress}%</span>
+                        <span className="text-[10px] text-slate-400">completo</span>
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex items-center justify-between rounded-xl bg-emerald-500/10 px-3 py-2">
+                        <span className="text-xs font-medium text-emerald-200">Completados</span>
+                        <span className="text-lg font-bold text-emerald-300">{publicCompletedCount}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-xl bg-amber-500/10 px-3 py-2">
+                        <span className="text-xs font-medium text-amber-200">Pendientes</span>
+                        <span className="text-lg font-bold text-amber-300">
+                          {Math.max(SERVICE_COUNT - publicCompletedCount, 0)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-center text-xs text-slate-400">
+                    {publicCompletedCount} de {SERVICE_COUNT} dependencias han ingresado su información
+                  </p>
+                </div>
+
+                {/* 3 tarjetas de estadistica general por modulo (a lo ancho). */}
+                <div className="mt-[2.4vh] space-y-3">
+                  {(
+                    [
+                      { key: "PERC", label: "PERC", text: "text-cyan-300", bar: "from-cyan-400 to-cyan-500" },
+                      { key: "SEPS", label: "SEPS", text: "text-violet-300", bar: "from-violet-400 to-violet-500" },
+                      { key: "Horas", label: "Horas", text: "text-amber-300", bar: "from-amber-400 to-amber-500" },
+                    ] as const
+                  ).map((m) => {
+                    const stat = moduleStats[m.key];
+                    const pct = stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0;
+                    return (
+                      <div
+                        key={m.key}
+                        className="rounded-2xl border border-white/10 bg-[#202c41] p-4 shadow-[0_12px_40px_rgba(3,7,18,0.3)]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className={`text-sm font-bold uppercase tracking-wide ${m.text}`}>
+                            {m.label}
+                          </p>
+                          <p className="text-lg font-bold leading-none text-white">
+                            {stat.done}
+                            <span className="text-sm font-medium text-slate-500">/{stat.total}</span>
+                          </p>
+                        </div>
+                        <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className={`h-full rounded-full bg-gradient-to-r ${m.bar}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <p className="mt-1.5 text-right text-[11px] text-slate-400">
+                          {pct}% completado
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Barra de "volver a Inicio" — SOLO movil, en cualquier vista que no sea Inicio. */}
+            <div
+              data-view="panel-tabulator panel-seps panel-horas panel-calendar panel-admin-export panel-capture-toggle"
+              className="flex items-center gap-3 xl:hidden"
+            >
+              <button
+                type="button"
+                onClick={() => setMobileView("home")}
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+              >
+                <span className="text-base leading-none">‹</span> Inicio
+              </button>
+              <span className="truncate text-sm font-semibold text-white">
+                {mobileView === "panel-tabulator"
+                  ? "PERC"
+                  : mobileView === "panel-seps"
+                    ? "SEPS"
+                    : mobileView === "panel-horas"
+                      ? "Distribución de Horas"
+                      : mobileView === "panel-calendar"
+                        ? "Configuración mensual"
+                        : mobileView === "panel-admin-export"
+                          ? "Consolidados PERC"
+                          : mobileView === "panel-capture-toggle"
+                            ? "Habilitar tableros"
+                            : ""}
+              </span>
+            </div>
+
             {/* Widgets opcionales (Configuracion): saludo y reloj. */}
             {uiPrefs.showGreeting || uiPrefs.showClock ? (
               <div
-                className={`ml-auto flex w-fit flex-wrap items-center justify-end gap-x-3 gap-y-1 rounded-2xl px-3 py-2 xl:ml-0 xl:w-auto xl:justify-between xl:px-4 xl:py-3 ${
+                className={`ml-auto hidden w-fit flex-wrap items-center justify-end gap-x-3 gap-y-1 rounded-2xl px-3 py-2 xl:ml-0 xl:flex xl:w-auto xl:justify-between xl:px-4 xl:py-3 ${
                   isLightPanelTheme
                     ? "border border-slate-200 bg-white text-slate-900"
                     : "border border-white/10 bg-[#202c41] text-slate-100"
@@ -6625,10 +6823,10 @@ export default function Home() {
                 ) : null}
               </div>
             ) : null}
-            {moduleSections}
+            <div className="hidden xl:block">{moduleSections}</div>
             <section
               id="panel-overview"
-              className={`rounded-2xl px-5 py-3.5 shadow-[0_24px_80px_rgba(3,7,18,0.45)] ${
+              className={`hidden rounded-2xl px-5 py-3.5 shadow-[0_24px_80px_rgba(3,7,18,0.45)] xl:block ${
                 isLightPanelTheme
                   ? "border border-slate-200 bg-white text-slate-900"
                   : "border border-white/10 bg-[#202c41]"
@@ -6657,7 +6855,7 @@ export default function Home() {
             </div>
             </section>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="hidden flex-wrap items-center justify-between gap-3 xl:flex">
             {serviceProfile.mustChangePassword ? (
               <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
@@ -6703,12 +6901,16 @@ export default function Home() {
             </div>
           ) : null}
 
-          {adminCalendarSection}
+          {adminCalendarSection ? (
+            <div data-view="panel-calendar">{adminCalendarSection}</div>
+          ) : null}
 
-          {captureToggleSection}
+          {captureToggleSection ? (
+            <div data-view="panel-capture-toggle">{captureToggleSection}</div>
+          ) : null}
 
           {isAdmin || isSupervisor ? (
-            <section className="rounded-[24px] border border-amber-400/25 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
+            <section data-view="home panel-tabulator panel-seps panel-horas" className="rounded-[24px] border border-amber-400/25 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
               <p className="text-left text-2xl font-bold uppercase tracking-[0.12em] text-amber-200/90">
                 {isAdmin ? "Administrador · Ver tabuladores" : "Supervisión · Consolidado"}
               </p>
@@ -6876,6 +7078,7 @@ export default function Home() {
           {isAdmin ? (
             <section
               id="panel-admin-export"
+              data-view="panel-admin-export"
               className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
                 isLightPanelTheme
                   ? "border border-slate-200 bg-white text-slate-900"
@@ -6950,6 +7153,7 @@ export default function Home() {
           {currentService && showModule("perc") ? (
             <section
               id="panel-tabulator"
+              data-view="panel-tabulator"
               className="overflow-hidden rounded-[24px] border border-cyan-400/20 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
             >
               <div className="border-b border-white/10 bg-[#1b2537] px-5 py-4">
@@ -7140,9 +7344,13 @@ export default function Home() {
             </section>
           ) : null}
 
-          {showModule("sesps") ? sepsSection : null}
+          {showModule("sesps") ? (
+            <div data-view="panel-seps">{sepsSection}</div>
+          ) : null}
 
-          {showModule("distribucion") ? horasSection : null}
+          {showModule("distribucion") ? (
+            <div data-view="panel-horas">{horasSection}</div>
+          ) : null}
 
           {showPasswordModal ? (
             <div

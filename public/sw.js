@@ -3,14 +3,23 @@
    - Navegaciones (paginas): network-first, cae a cache y luego a "/".
    - Estaticos same-origin (/_next, iconos): cache-first.
    - Cualquier peticion cross-origin (Firebase/Firestore/Auth) o no-GET: passthrough. */
-const CACHE = "pulso-v1";
+const CACHE = "pulso-v2";
 const PRECACHE = ["/", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
-  self.skipWaiting();
+  // NO hacemos skipWaiting automatico: el nuevo SW queda "esperando" para que la
+  // app muestre el aviso de actualizacion. Solo activa cuando el usuario acepta
+  // (mensaje SKIP_WAITING desde la pagina).
   event.waitUntil(
     caches.open(CACHE).then((cache) => cache.addAll(PRECACHE).catch(() => {})),
   );
+});
+
+// La pagina pide activar la nueva version cuando el usuario toca "Actualizar".
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("activate", (event) => {
