@@ -21,6 +21,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   query,
   serverTimestamp,
   setDoc,
@@ -2730,6 +2731,17 @@ export default function Home() {
   const [statsModule, setStatsModule] = useState<ModuleId>("perc");
   // Bandeja de solicitudes de habilitacion de tableros.
   const [captureRequests, setCaptureRequests] = useState<CaptureRequest[]>([]);
+  // Avisos tipo "WhatsApp" (banner) cuando llega una solicitud nueva (admin/supervisor).
+  const [toastNotifs, setToastNotifs] = useState<
+    { id: string; title: string; body: string }[]
+  >([]);
+  const requestsReadyRef = useRef(false);
+  const notifyConfigRef = useRef<{
+    isAdmin: boolean;
+    isSupervisor: boolean;
+    modules: string[];
+    uid: string;
+  }>({ isAdmin: false, isSupervisor: false, modules: [], uid: "" });
   const [showRequestsModal, setShowRequestsModal] = useState(false);
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [requestModuleId, setRequestModuleId] = useState<ModuleId>("perc");
@@ -2966,6 +2978,13 @@ export default function Home() {
   }, [serviceProfile?.name, user?.displayName, user?.email]);
   const isAdmin = !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
   const isSupervisor = serviceProfile?.role === "supervisor";
+  // Config para el detector de solicitudes nuevas (avisos tipo WhatsApp).
+  notifyConfigRef.current = {
+    isAdmin,
+    isSupervisor,
+    modules: serviceProfile?.supervisorModules ?? [],
+    uid: serviceProfile?.uid ?? "",
+  };
   // Servicios disponibles en el dropdown "Elegir servicio" (admin = todos;
   // supervisor = solo los modulos que supervisa).
   const adminServiceOptions = useMemo(() => {
@@ -3488,40 +3507,74 @@ export default function Home() {
       return;
     }
 
-    let cancelled = false;
-    void (async () => {
-      try {
-        const snap = await getDocs(collection(db, "captureRequests"));
-        if (cancelled) {
+    // Cada (re)suscripcion: la primera snapshot es la carga inicial (no avisa).
+    requestsReadyRef.current = false;
+
+    const toRequest = (item: {
+      id: string;
+      data: () => Record<string, unknown>;
+    }): CaptureRequest => {
+      const data = item.data();
+      return {
+        id: item.id,
+        periodId: String(data.periodId ?? ""),
+        periodLabel: String(data.periodLabel ?? ""),
+        serviceId: String(data.serviceId ?? ""),
+        serviceName: String(data.serviceName ?? ""),
+        moduleId: (data.moduleId as ModuleId) ?? "perc",
+        requestedByName: String(data.requestedByName ?? ""),
+        requestedByUid: String(data.requestedByUid ?? ""),
+        status: (data.status as CaptureRequest["status"]) ?? "pending",
+        note: typeof data.note === "string" ? data.note : undefined,
+        resolvedByName:
+          typeof data.resolvedByName === "string" ? data.resolvedByName : undefined,
+      };
+    };
+
+    const unsubscribe = onSnapshot(
+      collection(db, "captureRequests"),
+      (snap) => {
+        const list: CaptureRequest[] = [];
+        snap.forEach((item) => list.push(toRequest(item)));
+        setCaptureRequests(list);
+
+        // Avisar SOLO de solicitudes nuevas (despues de la carga inicial).
+        if (!requestsReadyRef.current) {
+          requestsReadyRef.current = true;
           return;
         }
-        const list: CaptureRequest[] = [];
-        snap.forEach((item) => {
-          const data = item.data() as Record<string, unknown>;
-          list.push({
-            id: item.id,
-            periodId: String(data.periodId ?? ""),
-            periodLabel: String(data.periodLabel ?? ""),
-            serviceId: String(data.serviceId ?? ""),
-            serviceName: String(data.serviceName ?? ""),
-            moduleId: (data.moduleId as ModuleId) ?? "perc",
-            requestedByName: String(data.requestedByName ?? ""),
-            requestedByUid: String(data.requestedByUid ?? ""),
-            status: (data.status as CaptureRequest["status"]) ?? "pending",
-            note: typeof data.note === "string" ? data.note : undefined,
-            resolvedByName:
-              typeof data.resolvedByName === "string" ? data.resolvedByName : undefined,
-          });
-        });
-        setCaptureRequests(list);
-      } catch {
+        const cfg = notifyConfigRef.current;
+        for (const change of snap.docChanges()) {
+          if (change.type !== "added") continue;
+          const req = toRequest(change.doc);
+          if (req.status !== "pending") continue;
+          if (req.requestedByUid && req.requestedByUid === cfg.uid) continue;
+          const relevant =
+            cfg.isAdmin || (cfg.isSupervisor && cfg.modules.includes(req.moduleId));
+          if (!relevant) continue;
+          const modLabel =
+            req.moduleId === "perc"
+              ? "PERC"
+              : req.moduleId === "sesps"
+                ? "SEPS"
+                : "Distribución de Horas";
+          const notif = {
+            id: `${req.id}-${Date.now()}`,
+            title: "Nueva solicitud de habilitación",
+            body: `${req.serviceName} pidió habilitar ${modLabel} · ${req.periodLabel}`,
+          };
+          setToastNotifs((prev) => [notif, ...prev].slice(0, 3));
+          window.setTimeout(() => {
+            setToastNotifs((prev) => prev.filter((n) => n.id !== notif.id));
+          }, 6000);
+        }
+      },
+      () => {
         // Si faltan reglas de captureRequests, no debe romper la app.
-      }
-    })();
+      },
+    );
 
-    return () => {
-      cancelled = true;
-    };
+    return () => unsubscribe();
   }, [user, firestoreUnavailable, firestoreStatusReady]);
 
   // En pantallas chicas el menu arranca cerrado (cajon); en PC, abierto.
@@ -6761,6 +6814,59 @@ export default function Home() {
             </button>
           </nav>
 
+          {/* Avisos tipo WhatsApp (con logo PULSO) cuando llega una solicitud nueva. */}
+          {toastNotifs.length > 0 ? (
+            <div className="pointer-events-none fixed inset-x-0 top-0 z-[110] flex flex-col items-center gap-2 px-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+              {toastNotifs.map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => {
+                    setShowRequestsModal(true);
+                    setToastNotifs((prev) => prev.filter((x) => x.id !== n.id));
+                  }}
+                  className="notif-slide-in pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-2xl border border-white/10 bg-[#1b2537]/95 px-3.5 py-3 text-left shadow-2xl shadow-black/50 backdrop-blur-md"
+                >
+                  <span className="relative flex h-10 w-10 shrink-0 items-center justify-center">
+                    <span
+                      aria-hidden
+                      className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-400 to-violet-600 opacity-50 blur"
+                    />
+                    <svg viewBox="0 0 48 48" className="relative h-10 w-10" aria-hidden="true">
+                      <defs>
+                        <linearGradient id="pulsoNotif" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0" stopColor="#22d3ee" />
+                          <stop offset="1" stopColor="#7c3aed" />
+                        </linearGradient>
+                      </defs>
+                      <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoNotif)" />
+                      <path
+                        d="M7 25 H16 L19.5 15 L25 35 L29 25 H41"
+                        fill="none"
+                        stroke="#ffffff"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-[13px] font-bold text-white">PULSO</span>
+                      <span className="text-[10px] text-slate-400">ahora</span>
+                    </span>
+                    <span className="mt-0.5 block text-[13px] font-semibold text-cyan-200">
+                      {n.title}
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-snug text-slate-300">
+                      {n.body}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           {/* Modal: confirmar salir de la app (boton atras en Inicio). SOLO movil. */}
           {showExitModal ? (
             <div
@@ -7463,7 +7569,7 @@ export default function Home() {
                 </div>
               ) : (
               <>
-              <div className="hidden overflow-x-auto xl:block">
+              <div className="show-scrollbar hidden overflow-x-auto xl:block">
                 <table className="min-w-full border-collapse text-xs text-slate-100">
                   <thead>
                     <tr className="bg-[#1a2334] text-left">
@@ -8588,13 +8694,13 @@ export default function Home() {
                   <div
                     role="dialog"
                     aria-modal="true"
-                    className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4"
+                    className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overflow-x-hidden p-4"
                     onClick={() => setShowStatsModal(false)}
                   >
                     <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
                     <div
                       onClick={(event) => event.stopPropagation()}
-                      className="modal-pop-in relative my-8 w-full max-w-lg rounded-3xl border border-white/10 bg-[#0e1626] p-6 shadow-2xl shadow-black/50"
+                      className="modal-pop-in relative my-6 w-full min-w-0 max-w-lg rounded-3xl border border-white/10 bg-[#0e1626] p-4 shadow-2xl shadow-black/50 sm:p-6"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -8646,26 +8752,33 @@ export default function Home() {
                       </div>
 
                       {/* Lista alineada (completos primero) */}
-                      <div className="mt-4 grid gap-1.5 sm:grid-cols-2">
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
                         {[...completos, ...incompletos].map((s) => {
                           const done = s.modules.find((m) => m.label === statsLabel)?.completed;
                           return (
                             <div
                               key={s.id}
-                              className="flex items-center gap-2.5 rounded-lg bg-white/[0.03] px-3 py-2"
+                              className={`flex min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 ${
+                                done
+                                  ? "border-emerald-400/15 bg-emerald-500/[0.06]"
+                                  : "border-amber-400/15 bg-amber-500/[0.06]"
+                              }`}
                             >
                               <span
-                                className={`h-2 w-2 shrink-0 rounded-full ${
-                                  done ? "bg-emerald-400" : "bg-amber-400"
+                                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                                  done ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"
                                 }`}
-                              />
-                              <span className="flex-1 truncate text-[13px] text-slate-200" title={s.name}>
-                                <ServiceIcon serviceId={s.id} className="mr-1.5 inline h-4 w-4 shrink-0 align-[-3px] text-cyan-300/90" />
+                              >
+                                <ServiceIcon serviceId={s.id} className="h-4 w-4" />
+                              </span>
+                              <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-200" title={s.name}>
                                 {s.name}
                               </span>
                               <span
-                                className={`shrink-0 text-[11px] font-semibold ${
-                                  done ? "text-emerald-300" : "text-amber-300"
+                                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                                  done
+                                    ? "bg-emerald-500/15 text-emerald-300"
+                                    : "bg-amber-500/15 text-amber-300"
                                 }`}
                               >
                                 {done ? "Completo" : "Pendiente"}
