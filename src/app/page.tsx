@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Auth,
   type AuthError,
@@ -879,6 +879,34 @@ const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-config": IconWrench,
 };
 
+// Degradado bonito por icono (estilo launcher de app) para el menu en movil.
+// Cada modulo tiene su color propio. En PC los iconos van neutros (ver clases xl:).
+const SIDEBAR_TILE_GRADIENT: Record<string, string> = {
+  "panel-overview": "from-sky-400 to-blue-600",
+  "panel-tabulator": "from-emerald-400 to-teal-600",
+  "panel-module-perc": "from-emerald-400 to-teal-600",
+  "panel-seps": "from-violet-500 to-fuchsia-600",
+  "panel-module-sesps": "from-violet-500 to-fuchsia-600",
+  "panel-horas": "from-amber-400 to-orange-600",
+  "panel-module-distribucion": "from-amber-400 to-orange-600",
+  "panel-docs": "from-blue-400 to-indigo-600",
+  "panel-config": "from-slate-400 to-slate-600",
+  "panel-calendar": "from-rose-400 to-pink-600",
+  "panel-admin-export": "from-teal-400 to-cyan-600",
+  "panel-users": "from-indigo-400 to-purple-600",
+  "panel-capture-toggle": "from-lime-400 to-green-600",
+  "panel-requests": "from-fuchsia-400 to-pink-600",
+  "panel-request-form": "from-cyan-400 to-sky-600",
+};
+
+// Productos (centros de costo) que CADA servicio NO puede digitar en PERC, ademas
+// de su propia columna (que se bloquea automaticamente). La clave es el id del
+// servicio y el valor una lista de CODIGOS de centro de costo (ej. "268", "575").
+// Se ira completando segun lo indique el usuario.
+const PERC_BLOCKED_BY_SERVICE: Record<string, string[]> = {
+  // "banco-de-sangre": ["268"],  // ejemplo: bloquear Hemodialisis para Banco de Sangre
+};
+
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
   weekday: "long",
   day: "numeric",
@@ -1725,24 +1753,52 @@ function HistoryMonthSelect(props: {
   const activeLabel = active ? `${active.monthName} - ${active.year}` : activePeriod;
 
   return (
-    <div className="relative inline-block">
+    <div className="relative inline-block w-full sm:w-auto">
       <button
         type="button"
         disabled={loading}
         onClick={() => setOpen((value) => !value)}
-        className="flex min-w-[200px] items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm font-semibold text-white outline-none transition hover:border-violet-400 disabled:opacity-50"
+        className={`flex w-full min-w-[210px] items-center gap-2.5 rounded-2xl border bg-[#2a3448] px-3.5 py-2.5 text-left transition disabled:opacity-50 sm:w-auto ${
+          open
+            ? "border-violet-400/70 shadow-[0_0_0_3px_rgba(139,92,246,0.12)]"
+            : "border-white/10 hover:border-white/25"
+        }`}
       >
-        <span>
-          {activeLabel}
-          {activePeriod === currentPeriod ? " (actual)" : ""}
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/30 to-cyan-500/20 text-violet-100 [&_svg]:h-[18px] [&_svg]:w-[18px]">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3.5" y="4.5" width="17" height="16" rx="2" />
+            <path d="M3.5 9.5h17M8 3v3M16 3v3" />
+          </svg>
         </span>
-        <span className={`text-slate-400 transition ${open ? "rotate-180" : ""}`}>▾</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            Periodo
+          </span>
+          <span className="block truncate text-sm font-semibold text-white">
+            {activeLabel}
+            {activePeriod === currentPeriod ? " · actual" : ""}
+          </span>
+        </span>
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
       </button>
 
       {open ? (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-50 mt-2 max-h-72 w-60 overflow-auto rounded-xl border border-white/10 bg-[#1b2537] p-1 shadow-2xl shadow-black/50">
+          <div className="modal-pop-in absolute left-0 right-0 z-50 mt-2 max-h-72 w-full overflow-auto rounded-2xl border border-white/10 bg-[#1b2537] p-1.5 shadow-2xl shadow-black/50 sm:w-64">
             {options.map((option) => {
               const hasData = dataPeriods.has(option.id);
               const isActive = option.id === activePeriod;
@@ -2658,6 +2714,17 @@ export default function Home() {
   // Navegacion movil "una pantalla a la vez": que seccion se muestra. En PC se
   // ignora (se ve el panel completo). "home" = pantalla de inicio con resumen.
   const [mobileView, setMobileView] = useState<string>("home");
+  // Tabulador PERC en movil (acordeon): se muestran de 5 en 5, todas contraidas,
+  // y solo se abre la que el usuario elige.
+  const [percVisibleCount, setPercVisibleCount] = useState(5);
+  const [percOpenCard, setPercOpenCard] = useState<number | null>(null);
+  const [percGoToOpen, setPercGoToOpen] = useState(false);
+  const [percGoToQuery, setPercGoToQuery] = useState("");
+  // Modal de confirmacion al salir de la app (boton atras estando en Inicio).
+  const [showExitModal, setShowExitModal] = useState(false);
+  const exitingRef = useRef(false);
+  // Espejo del estado de UI para el handler del boton atras (evita closures viejos).
+  const backRef = useRef({ menuOpen: false, mobileView: "home", overlay: false, exitOpen: false });
   // Mini estadistica por modulo (PERC/SEPS/Horas) al tocar el menu del modulo.
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [statsModule, setStatsModule] = useState<ModuleId>("perc");
@@ -2806,6 +2873,32 @@ export default function Home() {
     () => getServiceById(effectiveServiceId),
     [effectiveServiceId],
   );
+  // Columna "de si mismo": un servicio no puede reportar produccion para su propio
+  // centro de costo (ej. Banco de Sangre -> 575). Esa celda queda bloqueada.
+  const percSelfHeader = useMemo(() => {
+    if (!currentService) return null;
+    const name = currentService.name.trim().toLowerCase();
+    return (
+      TABULATOR_HEADERS.find(
+        (h) => h.replace(/^\d+-/, "").trim().toLowerCase() === name,
+      ) ?? null
+    );
+  }, [currentService]);
+  // Conjunto de centros de costo bloqueados para el servicio actual: su propia
+  // columna + los productos configurados en PERC_BLOCKED_BY_SERVICE.
+  const percBlockedHeaders = useMemo(() => {
+    const set = new Set<string>();
+    if (percSelfHeader) set.add(percSelfHeader);
+    if (currentService) {
+      for (const code of PERC_BLOCKED_BY_SERVICE[currentService.id] ?? []) {
+        const h = TABULATOR_HEADERS.find(
+          (x) => x.startsWith(`${code}-`) || x === code,
+        );
+        if (h) set.add(h);
+      }
+    }
+    return set;
+  }, [currentService, percSelfHeader]);
   // periodId = periodo de PRODUCCION que se captura/cierra = MES ANTERIOR.
   // windowPeriodId = mes calendario actual, donde ocurre la ventana de captura y al
   // que pertenecen las fechas no habiles del calendario.
@@ -3076,6 +3169,69 @@ export default function Home() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Mantener el espejo de UI al dia para el handler del boton "atras".
+  backRef.current = {
+    menuOpen,
+    mobileView,
+    overlay:
+      showUsersModal ||
+      showConfigModal ||
+      showRequestsModal ||
+      showBoardModal ||
+      showPasswordModal ||
+      showDocsModal ||
+      showStatsModal ||
+      showRequestForm ||
+      adminServicePickerOpen,
+    exitOpen: showExitModal,
+  };
+
+  // Boton "atras" de Android (movil/PWA): cierra menu/modales, vuelve a Inicio y,
+  // estando en Inicio, pregunta si salir. Se registra una vez por sesion iniciada.
+  useEffect(() => {
+    if (typeof window === "undefined" || !user || !serviceProfile) {
+      return;
+    }
+    // Solo en movil (en PC se respeta el boton atras del navegador).
+    if (window.innerWidth >= 1280) {
+      return;
+    }
+    window.history.pushState({ pulso: true }, "");
+
+    const onPop = () => {
+      if (exitingRef.current) return;
+      const s = backRef.current;
+      // 1) Cerrar lo que este abierto (menu, modales o el propio modal de salir).
+      if (s.menuOpen || s.overlay || s.exitOpen) {
+        setMenuOpen(false);
+        setShowUsersModal(false);
+        setShowConfigModal(false);
+        setShowRequestsModal(false);
+        setShowBoardModal(false);
+        setShowPasswordModal(false);
+        setShowDocsModal(false);
+        setShowStatsModal(false);
+        setShowRequestForm(false);
+        setAdminServicePickerOpen(false);
+        setShowExitModal(false);
+        window.history.pushState({ pulso: true }, "");
+        return;
+      }
+      // 2) En una sub-pantalla: volver a Inicio.
+      if (s.mobileView !== "home") {
+        setMobileView("home");
+        window.history.pushState({ pulso: true }, "");
+        return;
+      }
+      // 3) En Inicio: preguntar si salir de la app.
+      setShowExitModal(true);
+      window.history.pushState({ pulso: true }, "");
+    };
+
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [user, serviceProfile]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -6463,6 +6619,8 @@ export default function Home() {
                 const isActive = activeSidebarSection === item.id;
                 // Alerta roja cuando hay solicitudes pendientes.
                 const hasAlert = item.id === "panel-requests" && pendingRequestCount > 0;
+                const tileGradient =
+                  SIDEBAR_TILE_GRADIENT[item.id] ?? "from-cyan-500 to-violet-600";
 
                 return (
                   <button
@@ -6505,7 +6663,7 @@ export default function Home() {
                     }`}
                   >
                     <span
-                      className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-violet-600 text-[10px] font-semibold uppercase tracking-[0.12em] text-white shadow-sm shadow-cyan-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:shadow-none xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px] ${
+                      className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${tileGradient} text-[10px] font-semibold uppercase tracking-[0.12em] text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:shadow-none xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px] ${
                         hasAlert
                           ? "xl:bg-none xl:bg-rose-500"
                           : isActive
@@ -6544,7 +6702,7 @@ export default function Home() {
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-violet-600 text-white shadow-sm shadow-cyan-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
                   {isLightPanelTheme ? IconMoon : IconSun}
                 </span>
                 <span>{isLightPanelTheme ? "Modo oscuro" : "Modo claro"}</span>
@@ -6563,18 +6721,28 @@ export default function Home() {
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-violet-600 text-white shadow-sm shadow-cyan-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-400 to-purple-600 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
                   {IconKey}
                 </span>
                 <span>Cambiar contrasena</span>
               </button>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="group flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-300 xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-2 xl:text-left xl:text-[13px]"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-md shadow-rose-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-300 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px] xl:transition xl:group-hover:bg-rose-500/15 xl:group-hover:text-rose-300">
+                  {IconLogout}
+                </span>
+                <span>Cerrar sesion</span>
+              </button>
             </div>
           </aside>
 
-          {/* Barra inferior: SOLO movil. Casita (abre el menu completo) y Cerrar sesion.
+          {/* Barra inferior: SOLO movil. Solo la casita, centrada (abre el menu).
               Hermana del aside para que el fixed llegue al borde inferior real. */}
           <nav
-            className={`fixed inset-x-0 bottom-0 z-50 flex items-center justify-between gap-4 border-t px-12 pt-2.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(3,7,18,0.6)] xl:hidden ${
+            className={`fixed inset-x-0 bottom-0 z-50 flex items-center justify-center border-t px-12 pt-2.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(3,7,18,0.6)] xl:hidden ${
               isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#141c2c]"
             }`}
           >
@@ -6591,20 +6759,80 @@ export default function Home() {
               </span>
               <span className="text-[10px] font-semibold">Menú</span>
             </button>
-            {/* Cerrar sesion. */}
-            <button
-              type="button"
-              onClick={handleSignOut}
-              aria-label="Cerrar sesión"
-              title="Cerrar sesión"
-              className={`flex flex-col items-center gap-0.5 ${isLightPanelTheme ? "text-slate-600" : "text-slate-200"}`}
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10 [&_svg]:h-[18px] [&_svg]:w-[18px]">
-                {IconLogout}
-              </span>
-              <span className="text-[10px] font-semibold">Salir</span>
-            </button>
           </nav>
+
+          {/* Modal: confirmar salir de la app (boton atras en Inicio). SOLO movil. */}
+          {showExitModal ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Salir de la aplicación"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 xl:hidden"
+            >
+              <div
+                className="modal-fade-in absolute inset-0 bg-slate-950/75 backdrop-blur-sm"
+                onClick={() => setShowExitModal(false)}
+              />
+              <div className="modal-pop-in relative w-full max-w-xs overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
+                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+                <div className="px-6 pb-6 pt-7 text-center">
+                  <span className="relative mx-auto flex h-14 w-14 items-center justify-center">
+                    <span
+                      aria-hidden
+                      className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-600 opacity-50 blur"
+                    />
+                    <svg viewBox="0 0 48 48" className="relative h-14 w-14 drop-shadow-lg" aria-hidden="true">
+                      <defs>
+                        <linearGradient id="pulsoExit" x1="0" y1="0" x2="1" y2="1">
+                          <stop offset="0" stopColor="#22d3ee" />
+                          <stop offset="1" stopColor="#7c3aed" />
+                        </linearGradient>
+                      </defs>
+                      <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoExit)" />
+                      <path
+                        d="M7 25 H16 L19.5 15 L25 35 L29 25 H41"
+                        fill="none"
+                        stroke="#ffffff"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <h3 className="mt-4 text-lg font-semibold text-white">¿Salir de la aplicación?</h3>
+                  <p className="mt-1.5 text-sm text-slate-400">
+                    Vas a cerrar PULSO. Podés volver a abrirla cuando quieras.
+                  </p>
+                  <div className="mt-6 grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowExitModal(false)}
+                      className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        exitingRef.current = true;
+                        setShowExitModal(false);
+                        // Desandar el historial para cerrar la PWA.
+                        window.history.go(-2);
+                        // Si el navegador no la cierra, reactivar el control del boton atras.
+                        window.setTimeout(() => {
+                          exitingRef.current = false;
+                          window.history.pushState({ pulso: true }, "");
+                        }, 700);
+                      }}
+                      className="rounded-2xl bg-gradient-to-r from-rose-500 to-rose-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-rose-900/30 transition hover:opacity-90"
+                    >
+                      Salir
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div data-mview={mobileView} className="min-w-0 space-y-6 pb-28 xl:pb-0">
             {/* Boton de menu (hamburguesa) PEGAJOSO: solo PC (en movil se usa la casita inferior). */}
@@ -7037,6 +7265,13 @@ export default function Home() {
                                     void handleAdminSelectService(service.id);
                                     setAdminServicePickerOpen(false);
                                     setAdminServiceQuery("");
+                                    // En movil, ir directo al tabulador PERC del servicio.
+                                    if (
+                                      typeof window !== "undefined" &&
+                                      window.innerWidth < 1280
+                                    ) {
+                                      setMobileView("panel-tabulator");
+                                    }
                                   }}
                                   className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition ${
                                     selected ? "bg-amber-400/10" : "hover:bg-white/5"
@@ -7227,7 +7462,8 @@ export default function Home() {
                   ))}
                 </div>
               ) : (
-              <div className="overflow-x-auto">
+              <>
+              <div className="hidden overflow-x-auto xl:block">
                 <table className="min-w-full border-collapse text-xs text-slate-100">
                   <thead>
                     <tr className="bg-[#1a2334] text-left">
@@ -7259,33 +7495,264 @@ export default function Home() {
                             </span>
                           ) : null}
                         </th>
-                        {TABULATOR_HEADERS.map((header) => (
+                        {TABULATOR_HEADERS.map((header) => {
+                          const isSelf = percBlockedHeaders.has(header);
+                          return (
                           <td key={`${row}-${header}`} className="border-l border-white/10 px-1 py-1">
                             <input
                               value={
-                                rowIsFixed
-                                  ? fixedValues?.[header] ?? ""
-                                  : tableValues[row]?.[header] || ""
+                                isSelf
+                                  ? ""
+                                  : rowIsFixed
+                                    ? fixedValues?.[header] ?? ""
+                                    : tableValues[row]?.[header] || ""
                               }
                               onChange={(event) =>
                                 handleCellChange(row, header, event.target.value)
                               }
-                              disabled={percEditingBlocked || rowIsFixed}
-                              readOnly={rowIsFixed}
-                              title={rowIsFixed ? "Valor fijo (automatico, no editable)" : undefined}
+                              disabled={percEditingBlocked || rowIsFixed || isSelf}
+                              readOnly={rowIsFixed || isSelf}
+                              title={
+                                isSelf
+                                  ? "El servicio no se reporta a si mismo"
+                                  : rowIsFixed
+                                    ? "Valor fijo (automatico, no editable)"
+                                    : undefined
+                              }
                               inputMode="numeric"
                               className="w-full rounded-lg border border-white/5 bg-[#2a3448] px-2 py-2 text-center text-xs text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:bg-[#313d54] disabled:cursor-not-allowed disabled:bg-[#253145] disabled:text-slate-400"
-                              placeholder="0"
+                              placeholder={isSelf ? "—" : "0"}
                               type="text"
                             />
                           </td>
-                        ))}
+                          );
+                        })}
                       </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
+
+              {/* Tabulador PERC en TARJETAS verticales — SOLO movil (una por centro de costo). */}
+              <div className="xl:hidden">
+                {/* Selector "Ir a centro de costo" — abre SOLO la tabla elegida. */}
+                <div className="border-b border-white/10 bg-[#202c41] px-4 py-3">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setPercGoToOpen((v) => !v)}
+                      className={`flex w-full items-center gap-2.5 rounded-xl border bg-[#1b2537] px-3.5 py-3 text-left transition ${
+                        percGoToOpen
+                          ? "border-cyan-400/60 shadow-[0_0_0_3px_rgba(34,211,238,0.12)]"
+                          : "border-white/10"
+                      }`}
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/25 to-violet-600/20 text-cyan-200 [&_svg]:h-[18px] [&_svg]:w-[18px]">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <circle cx="11" cy="11" r="7" />
+                          <path d="m20 20-3.2-3.2" />
+                        </svg>
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                          Ir a centro de costo
+                        </span>
+                        <span className="block truncate text-sm font-semibold text-white">
+                          {percOpenCard !== null
+                            ? TABULATOR_HEADERS[percOpenCard]
+                            : "Elegí un centro…"}
+                        </span>
+                      </span>
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={`shrink-0 text-slate-400 transition-transform ${percGoToOpen ? "rotate-180" : ""}`}
+                        aria-hidden="true"
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+                    {percGoToOpen ? (
+                      <>
+                        <div
+                          className="fixed inset-0 z-30"
+                          onClick={() => setPercGoToOpen(false)}
+                        />
+                        <div className="modal-pop-in absolute left-0 right-0 z-40 mt-2 overflow-hidden rounded-2xl border border-white/10 bg-[#1b2537] shadow-[0_24px_80px_rgba(3,7,18,0.55)]">
+                          <div className="border-b border-white/5 p-2">
+                            <div className="flex items-center gap-2 rounded-xl bg-[#0e1626] px-3 py-2">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500" aria-hidden="true">
+                                <circle cx="11" cy="11" r="7" />
+                                <path d="m20 20-3.2-3.2" />
+                              </svg>
+                              <input
+                                autoFocus
+                                value={percGoToQuery}
+                                onChange={(event) => setPercGoToQuery(event.target.value)}
+                                placeholder="Buscar centro…"
+                                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
+                              />
+                            </div>
+                          </div>
+                          <div className="max-h-72 overflow-y-auto p-1.5">
+                            {TABULATOR_HEADERS.map((header, i) => ({ header, i }))
+                              .filter(({ header }) =>
+                                header
+                                  .toLowerCase()
+                                  .includes(percGoToQuery.trim().toLowerCase()),
+                              )
+                              .map(({ header, i }) => (
+                                <button
+                                  key={header}
+                                  type="button"
+                                  onClick={() => {
+                                    setPercOpenCard(i);
+                                    setPercVisibleCount((c) => Math.max(c, i + 1));
+                                    setPercGoToOpen(false);
+                                    setPercGoToQuery("");
+                                    window.setTimeout(() => {
+                                      document
+                                        .getElementById(`pcc-${i}`)
+                                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                    }, 60);
+                                  }}
+                                  className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${
+                                    percOpenCard === i ? "bg-cyan-400/10" : "hover:bg-white/5"
+                                  }`}
+                                >
+                                  <span className="shrink-0 rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] font-bold text-cyan-200">
+                                    {header.split("-")[0]}
+                                  </span>
+                                  <span
+                                    className={`min-w-0 flex-1 truncate text-sm ${
+                                      percOpenCard === i ? "font-semibold text-cyan-100" : "text-slate-200"
+                                    }`}
+                                  >
+                                    {header.replace(/^\d+-/, "")}
+                                  </span>
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Tarjetas acordeon: todas contraidas, se muestran de 5 en 5. */}
+                <div className="space-y-2.5 p-4">
+                  {TABULATOR_HEADERS.map((header, i) => {
+                    if (i >= percVisibleCount) return null;
+                    const isSelf = percBlockedHeaders.has(header);
+                    const open = percOpenCard === i;
+                    return (
+                      <div
+                        id={`pcc-${i}`}
+                        key={header}
+                        className="scroll-mt-4 overflow-hidden rounded-2xl border border-white/10 bg-[#1b2537]"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setPercOpenCard(open ? null : i)}
+                          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span
+                              className={`block truncate text-sm font-semibold ${
+                                isSelf ? "text-rose-400" : "text-cyan-200"
+                              }`}
+                            >
+                              {header}
+                            </span>
+                            {isSelf ? (
+                              <span className="mt-0.5 block text-[10px] font-medium text-rose-400/80">
+                                {header === percSelfHeader
+                                  ? "No se reporta a sí mismo · no editable"
+                                  : "Producto no editable"}
+                              </span>
+                            ) : null}
+                          </span>
+                          <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+                            aria-hidden="true"
+                          >
+                            <path d="m6 9 6 6 6-6" />
+                          </svg>
+                        </button>
+                        {open ? (
+                          <div className="space-y-2.5 border-t border-white/10 px-4 py-3">
+                            {currentService.rows.map((row) => {
+                              const rowIsFixed = isFixedRow(row);
+                              const fixedValues = getFixedValuesForRow(row);
+                              return (
+                                <label
+                                  key={`${header}-${row}`}
+                                  className="flex items-center justify-between gap-3"
+                                >
+                                  <span className="min-w-0 flex-1 text-xs leading-tight text-slate-300">
+                                    {row}
+                                    {rowIsFixed ? (
+                                      <span className="ml-1.5 inline-block rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300">
+                                        Fijo
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                  <input
+                                    value={
+                                      isSelf
+                                        ? ""
+                                        : rowIsFixed
+                                          ? fixedValues?.[header] ?? ""
+                                          : tableValues[row]?.[header] || ""
+                                    }
+                                    onChange={(event) =>
+                                      handleCellChange(row, header, event.target.value)
+                                    }
+                                    disabled={percEditingBlocked || rowIsFixed || isSelf}
+                                    readOnly={rowIsFixed || isSelf}
+                                    title={isSelf ? "El servicio no se reporta a si mismo" : undefined}
+                                    inputMode="numeric"
+                                    type="text"
+                                    placeholder={isSelf ? "—" : "0"}
+                                    className="w-24 shrink-0 rounded-lg border border-white/10 bg-[#2a3448] px-2 py-2.5 text-center text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:bg-[#313d54] disabled:cursor-not-allowed disabled:bg-[#253145] disabled:text-slate-400"
+                                  />
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                  {percVisibleCount < TABULATOR_HEADERS.length ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPercVisibleCount((c) => Math.min(c + 5, TABULATOR_HEADERS.length))
+                      }
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-cyan-200 transition active:bg-white/10"
+                    >
+                      Ver 5 más ({TABULATOR_HEADERS.length - percVisibleCount} restantes)
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              </>
               )}
 
               {/* Acciones del tabulador PERC. En historial cambia segun el rol. */}
@@ -7308,35 +7775,55 @@ export default function Home() {
                     Vista de historial — solo lectura.
                   </p>
                 ) : (
-                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  <div className="flex flex-row flex-wrap items-center justify-end gap-2 sm:gap-3">
                     <button
                       type="button"
                       onClick={handleClearTable}
-                      className="rounded-2xl bg-slate-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500"
+                      title="Limpiar tabla"
+                      aria-label="Limpiar tabla"
+                      className="inline-flex items-center gap-2 rounded-2xl bg-slate-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500 xl:px-5"
                     >
-                      Limpiar tabla
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+                      </svg>
+                      <span className="hidden xl:inline">Limpiar tabla</span>
                     </button>
                     {!isPercHistory ? (
                       <button
                         type="button"
                         onClick={() => void loadSavedData(true)}
                         disabled={isLoadingData}
-                        className="rounded-2xl bg-violet-500/80 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80"
+                        title="Recuperar datos"
+                        aria-label="Recuperar datos"
+                        className="inline-flex items-center gap-2 rounded-2xl bg-violet-500/80 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80 xl:px-5"
                       >
-                        {isLoadingData ? "Recuperando..." : "Recuperar datos"}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                          <path d="M12 3v12M7 11l5 5 5-5M5 21h14" />
+                        </svg>
+                        <span className="hidden xl:inline">
+                          {isLoadingData ? "Recuperando..." : "Recuperar datos"}
+                        </span>
                       </button>
                     ) : null}
                     <button
                       type="button"
                       onClick={handleSave}
                       disabled={isSaving || percEditingBlocked}
-                      className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+                      title="Guardar datos"
+                      aria-label="Guardar datos"
+                      className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 xl:px-5"
                     >
-                      {isSaving
-                        ? "Guardando..."
-                        : isPercHistory
-                          ? "Guardar cambios del mes"
-                          : "Guardar datos"}
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                        <path d="M17 21v-8H7v8M7 3v5h8" />
+                      </svg>
+                      <span className="hidden xl:inline">
+                        {isSaving
+                          ? "Guardando..."
+                          : isPercHistory
+                            ? "Guardar cambios del mes"
+                            : "Guardar datos"}
+                      </span>
                     </button>
                   </div>
                 )}
