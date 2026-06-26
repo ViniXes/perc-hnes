@@ -732,6 +732,78 @@ function PulsoMark({ className = "h-7 w-7" }: { className?: string }) {
   );
 }
 
+// Modal breve "Iniciando sesion" con barrita de pulso (mismo estilo que el modal
+// de actualizacion). Se muestra ~2 segundos tras un login exitoso.
+function LoginLoadingModal({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Iniciando sesion"
+      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
+    >
+      <div className="modal-fade-in absolute inset-0 bg-slate-950/80 backdrop-blur-sm" />
+      <div className="modal-pop-in relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
+        <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+        <div className="px-6 pb-7 pt-7 text-center">
+          {/* Logo PULSO con latido */}
+          <span className="relative mx-auto flex h-16 w-16 items-center justify-center">
+            <span
+              aria-hidden
+              className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-600 opacity-50 blur-lg"
+            />
+            <svg viewBox="0 0 48 48" className="heartbeat relative h-16 w-16 drop-shadow-lg" aria-hidden="true">
+              <defs>
+                <linearGradient id="pulsoGradLogin2" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stopColor="#22d3ee" />
+                  <stop offset="1" stopColor="#7c3aed" />
+                </linearGradient>
+              </defs>
+              <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoGradLogin2)" />
+              <path
+                d="M7 25 H16 L19.5 15 L25 35 L29 25 H41"
+                fill="none"
+                stroke="#ffffff"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+
+          <h3 className="mt-5 text-lg font-semibold text-white">Iniciando sesión…</h3>
+          <p className="mt-1 text-sm text-slate-400">Preparando tu panel, un momento.</p>
+
+          {/* Monitor cardiaco: la linea de pulso se dibuja en bucle. */}
+          <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 px-4 py-4">
+            <svg viewBox="0 0 200 60" preserveAspectRatio="none" className="h-12 w-full" aria-hidden="true">
+              <path
+                className="ekg-track"
+                d="M0 30 H58 L66 30 L74 12 L84 48 L94 16 L102 30 H138 L146 30 L153 22 L161 40 L169 30 H200"
+                fill="none"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                className="ekg-pulse"
+                pathLength={100}
+                d="M0 30 H58 L66 30 L74 12 L84 48 L94 16 L102 30 H138 L146 30 L153 22 L161 40 L169 30 H200"
+                fill="none"
+                stroke="#22d3ee"
+                strokeWidth="2.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Iconos del menu lateral (SVG inline, sin dependencias). Heredan el color del
 // texto via `currentColor`, asi funcionan igual en modo claro y oscuro y en el
 // estado activo. Tamano fijo 18px para encajar en el badge de 32px.
@@ -2798,6 +2870,8 @@ export default function Home() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Modal breve "Iniciando sesion" (con barrita de pulso) tras login exitoso.
+  const [loginLoading, setLoginLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   // Mes que se esta viendo en cada tabulador. null = mes de captura actual.
@@ -4675,6 +4749,9 @@ export default function Home() {
       }
 
       setPassword("");
+      // Modal "Iniciando sesion" con barrita de pulso por ~2 segundos.
+      setLoginLoading(true);
+      window.setTimeout(() => setLoginLoading(false), 2000);
     } catch (submitError) {
       if (await handleFirestoreError(submitError)) {
         return;
@@ -10194,6 +10271,7 @@ export default function Home() {
           </div>
         </div>
         </div>
+        <LoginLoadingModal show={loginLoading} />
       </main>
     );
   }
@@ -10810,6 +10888,7 @@ export default function Home() {
           </div>
         </div>
       ) : null}
+      <LoginLoadingModal show={loginLoading} />
     </main>
   );
 }
