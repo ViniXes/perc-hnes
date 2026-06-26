@@ -147,6 +147,28 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "asesores-de-medicamentos": ["distribucion"],
   // ESDOMED: SOLO Distribucion de Horas.
   esdomed: ["distribucion"],
+  // Planificacion y Calidad: SOLO Distribucion de Horas.
+  planificacion: ["distribucion"],
+  // Epidemiologia: SOLO Distribucion de Horas.
+  epidemiologia: ["distribucion"],
+  // Unidad de Cumplimiento: SOLO Distribucion de Horas.
+  cumplimiento: ["distribucion"],
+  // Auditoria Interna: SOLO Distribucion de Horas.
+  "auditoria-interna": ["distribucion"],
+  // Unidad Financiera: SOLO Distribucion de Horas.
+  "unidad-financiera": ["distribucion"],
+  // Unidad Juridica: SOLO Distribucion de Horas.
+  "unidad-juridica": ["distribucion"],
+  // Comunicaciones: SOLO Distribucion de Horas.
+  comunicaciones: ["distribucion"],
+  // Unidad de Convenios: SOLO Distribucion de Horas.
+  "unidad-de-convenios": ["distribucion"],
+  // Jefaturas de Division Medica: SOLO Distribucion de Horas.
+  "jefaturas-division-medica": ["distribucion"],
+  // Jefatura de Division de Apoyo: SOLO Distribucion de Horas.
+  "jefatura-division-apoyo": ["distribucion"],
+  // UDP: SOLO Distribucion de Horas.
+  udp: ["distribucion"],
   // Servicios PERC/SERV (productividad). Por ahora solo PERC; SEPS y Horas se
   // agregan cuando lleguen sus plantillas:
   //   - maxima-emergencia: ["perc", "sesps", "distribucion"]

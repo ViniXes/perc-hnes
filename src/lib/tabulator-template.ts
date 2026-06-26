@@ -277,6 +277,72 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     name: "ESDOMED",
     rows: [],
   },
+  {
+    // Planificacion y Calidad: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "planificacion",
+    name: "Planificacion y Calidad",
+    rows: [],
+  },
+  {
+    // Epidemiologia: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "epidemiologia",
+    name: "Epidemiologia",
+    rows: [],
+  },
+  {
+    // Unidad de Cumplimiento: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "cumplimiento",
+    name: "Unidad de Cumplimiento",
+    rows: [],
+  },
+  {
+    // Auditoria Interna: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "auditoria-interna",
+    name: "Auditoría Interna",
+    rows: [],
+  },
+  {
+    // Unidad Financiera: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "unidad-financiera",
+    name: "Unidad Financiera",
+    rows: [],
+  },
+  {
+    // Unidad Juridica: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "unidad-juridica",
+    name: "Unidad Jurídica",
+    rows: [],
+  },
+  {
+    // Comunicaciones: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "comunicaciones",
+    name: "Comunicaciones",
+    rows: [],
+  },
+  {
+    // Unidad de Convenios: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "unidad-de-convenios",
+    name: "Unidad de Convenios",
+    rows: [],
+  },
+  {
+    // Jefaturas de Division Medica: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "jefaturas-division-medica",
+    name: "Jefaturas de División Médica",
+    rows: [],
+  },
+  {
+    // Jefatura de Division de Apoyo: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "jefatura-division-apoyo",
+    name: "Jefatura de División de Apoyo",
+    rows: [],
+  },
+  {
+    // UDP: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "udp",
+    name: "UDP",
+    rows: [],
+  },
 ];
 
 export const SERVICE_COUNT = SERVICE_DEFINITIONS.length;

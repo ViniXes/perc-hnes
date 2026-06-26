@@ -57,6 +57,7 @@ body {
     display: block !important;
   }
   [data-mview="home"] > [data-view~="home"],
+  [data-mview="panel-services"] > [data-view~="panel-services"],
   [data-mview="panel-tabulator"] > [data-view~="panel-tabulator"],
   [data-mview="panel-seps"] > [data-view~="panel-seps"],
   [data-mview="panel-horas"] > [data-view~="panel-horas"],

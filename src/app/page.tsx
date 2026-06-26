@@ -878,6 +878,8 @@ const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-request-form": IconMessage,
   "panel-docs": IconFile,
   "panel-config": IconWrench,
+  "panel-signups": IconMessage,
+  "panel-services": IconDashboard,
 };
 
 // Degradado bonito por icono (estilo launcher de app) para el menu en movil.
@@ -898,6 +900,8 @@ const SIDEBAR_TILE_GRADIENT: Record<string, string> = {
   "panel-capture-toggle": "from-lime-400 to-green-600",
   "panel-requests": "from-fuchsia-400 to-pink-600",
   "panel-request-form": "from-cyan-400 to-sky-600",
+  "panel-signups": "from-teal-400 to-emerald-600",
+  "panel-services": "from-sky-400 to-cyan-600",
 };
 
 // Productos (centros de costo) que CADA servicio NO puede digitar en PERC, ademas
@@ -1050,6 +1054,18 @@ type CaptureRequest = {
   status: "pending" | "approved" | "rejected";
   note?: string;
   resolvedByName?: string;
+};
+
+// Solicitud de REGISTRO de un jefe de servicio (creacion de usuario, aprobada por admin).
+type SignupRequest = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  serviceId: string;
+  serviceName: string;
+  status: "pending" | "approved" | "rejected";
+  createdUsername?: string;
 };
 
 function getModuleLabel(moduleId: ModuleId) {
@@ -2232,13 +2248,25 @@ function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEm
     return seedHorasEmployees(template);
   }
 
+  // Mapa nombre normalizado -> DUI de la plantilla, para rellenar DUIs faltantes en
+  // datos guardados previamente sin DUI.
+  const seedDuiByName = new Map<string, string>();
+  for (const seed of template.seedEmployees) {
+    if (typeof seed !== "string" && seed.dui) {
+      seedDuiByName.set(seed.name.trim().toLowerCase(), seed.dui.trim());
+    }
+  }
+
   const list = raw
     .map((item) => {
       const row = (item ?? {}) as Record<string, unknown>;
       const rawHours = (row.hours ?? {}) as Record<string, unknown>;
+      const name = typeof row.name === "string" ? row.name : "";
+      const savedDui = typeof row.dui === "string" ? row.dui : "";
+      const dui = savedDui.trim() || seedDuiByName.get(name.trim().toLowerCase()) || "";
       return {
-        name: typeof row.name === "string" ? row.name : "",
-        dui: typeof row.dui === "string" ? row.dui : "",
+        name,
+        dui,
         comment: typeof row.comment === "string" ? row.comment : "",
         hours: Object.fromEntries(
           template.columns.map((col) => [col, String(rawHours[col] ?? "")]),
@@ -2617,6 +2645,96 @@ async function createServiceUserAccount(
   };
 }
 
+// Contrasena generica para las cuentas de jefes creadas por aprobacion.
+const CHIEF_TEMP_PASSWORD = "123456";
+
+function stripAccents(value: string) {
+  return value.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// Usuario = inicial del nombre + primer apellido (sin acentos). Ej: Brenda Mejia -> bmejia.
+function buildChiefUsername(firstName: string, lastName: string) {
+  const first = stripAccents(firstName).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const lastWord =
+    stripAccents(lastName)
+      .toLowerCase()
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)[0] ?? "";
+  const last = lastWord.replace(/[^a-z0-9]/g, "");
+  return `${first.charAt(0) || "u"}${last || "user"}`;
+}
+
+// Crea una cuenta de JEFE de servicio (aprobada por admin): usuario por nombre,
+// contrasena 123456, perfil de servicio. NO crea serviceAssignment (es un usuario
+// adicional del servicio, no la cuenta unica del servicio).
+async function createChiefUserAccount(
+  creationAuth: Auth,
+  {
+    service,
+    contactEmail,
+    firstName,
+    lastName,
+  }: {
+    service: ServiceDefinition;
+    contactEmail: string;
+    firstName: string;
+    lastName: string;
+  },
+) {
+  const base = buildChiefUsername(firstName, lastName);
+  const displayName = buildFullName(firstName.trim(), lastName.trim(), service.name);
+
+  let username = base;
+  let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    username = attempt === 0 ? base : `${base}${attempt + 1}`;
+    const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+    try {
+      credential = await createUserWithEmailAndPassword(
+        creationAuth,
+        loginEmail,
+        CHIEF_TEMP_PASSWORD,
+      );
+      break;
+    } catch (err) {
+      if ((err as { code?: string })?.code === "auth/email-already-in-use") {
+        continue; // usuario tomado: probar con sufijo numerico
+      }
+      throw err;
+    }
+  }
+  if (!credential) {
+    throw new Error("username-unavailable");
+  }
+
+  const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+  const normalizedContact = contactEmail.trim();
+
+  await updateProfile(credential.user, { displayName });
+
+  await setDoc(doc(db, "serviceUsers", credential.user.uid), {
+    serviceId: service.id,
+    serviceName: service.name,
+    email: normalizedContact,
+    contactEmail: normalizedContact,
+    loginEmail,
+    username,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    name: displayName,
+    role: "service",
+    isActive: true,
+    mustChangePassword: true,
+    isChief: true,
+    permissions: getDefaultPermissions("service"),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+}
+
 // Resuelve el correo de ACCESO desde lo que el usuario escribe (usuario o correo).
 // Todo en memoria: ya NO consulta Firestore antes de autenticar (ese era el origen
 // de que las cuentas creadas no pudieran ingresar cuando las reglas bloquean la
@@ -2642,7 +2760,9 @@ function resolveLoginEmail(loginIdentifier: string) {
     return getServiceLoginEmail(mappedService.id);
   }
 
-  return normalizedIdentifier;
+  // Usuario por nombre (ej. jefes de servicio: bmejia). Se completa con el dominio
+  // de acceso para que el login funcione: bmejia -> bmejia@perc-hnes.app.
+  return `${normalizeKey(normalizedIdentifier)}@${SERVICE_LOGIN_DOMAIN}`;
 }
 
 export default function Home() {
@@ -2654,6 +2774,21 @@ export default function Home() {
     phone: "",
     serviceId: "",
   });
+  // Registro publico de jefes de servicio (antes de iniciar sesion).
+  const [showSignupModal, setShowSignupModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [isSubmittingSignup, setIsSubmittingSignup] = useState(false);
+  const [signupForm, setSignupForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    serviceId: "",
+    acceptPrivacy: false,
+  });
+  // Bandeja de solicitudes de REGISTRO (para los 3 admins).
+  const [signupRequests, setSignupRequests] = useState<SignupRequest[]>([]);
+  const [showSignupRequestsModal, setShowSignupRequestsModal] = useState(false);
+  const [signupBusyId, setSignupBusyId] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
@@ -2736,6 +2871,11 @@ export default function Home() {
     { id: string; title: string; body: string }[]
   >([]);
   const requestsReadyRef = useRef(false);
+  const signupReadyRef = useRef(false);
+  // Casita con aviso: verde (aprobada/nueva) o rojo (rechazada), con etiqueta temporal.
+  const [casitaAlert, setCasitaAlert] = useState(false);
+  const [casitaTone, setCasitaTone] = useState<"new" | "approved" | "rejected">("new");
+  const [casitaLabel, setCasitaLabel] = useState<string | null>(null);
   const notifyConfigRef = useRef<{
     isAdmin: boolean;
     isSupervisor: boolean;
@@ -2979,11 +3119,12 @@ export default function Home() {
   const isAdmin = !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
   const isSupervisor = serviceProfile?.role === "supervisor";
   // Config para el detector de solicitudes nuevas (avisos tipo WhatsApp).
+  // Usamos el uid de AUTENTICACION (coincide con requestedByUid de las solicitudes).
   notifyConfigRef.current = {
     isAdmin,
     isSupervisor,
     modules: serviceProfile?.supervisorModules ?? [],
-    uid: serviceProfile?.uid ?? "",
+    uid: user?.uid ?? serviceProfile?.uid ?? "",
   };
   // Servicios disponibles en el dropdown "Elegir servicio" (admin = todos;
   // supervisor = solo los modulos que supervisa).
@@ -3544,29 +3685,56 @@ export default function Home() {
           return;
         }
         const cfg = notifyConfigRef.current;
-        for (const change of snap.docChanges()) {
-          if (change.type !== "added") continue;
-          const req = toRequest(change.doc);
-          if (req.status !== "pending") continue;
-          if (req.requestedByUid && req.requestedByUid === cfg.uid) continue;
-          const relevant =
-            cfg.isAdmin || (cfg.isSupervisor && cfg.modules.includes(req.moduleId));
-          if (!relevant) continue;
-          const modLabel =
-            req.moduleId === "perc"
-              ? "PERC"
-              : req.moduleId === "sesps"
-                ? "SEPS"
-                : "Distribución de Horas";
-          const notif = {
-            id: `${req.id}-${Date.now()}`,
-            title: "Nueva solicitud de habilitación",
-            body: `${req.serviceName} pidió habilitar ${modLabel} · ${req.periodLabel}`,
-          };
+        const modLabelOf = (moduleId: ModuleId) =>
+          moduleId === "perc"
+            ? "PERC"
+            : moduleId === "sesps"
+              ? "SEPS"
+              : "Distribución de Horas";
+        const pushNotif = (key: string, title: string, body: string) => {
+          const notif = { id: `${key}-${Date.now()}`, title, body };
           setToastNotifs((prev) => [notif, ...prev].slice(0, 3));
+          setCasitaAlert(true);
           window.setTimeout(() => {
             setToastNotifs((prev) => prev.filter((n) => n.id !== notif.id));
           }, 6000);
+        };
+        for (const change of snap.docChanges()) {
+          const req = toRequest(change.doc);
+          if (change.type === "added") {
+            // Nueva solicitud entrante (para admin/supervisor).
+            if (req.status !== "pending") continue;
+            if (req.requestedByUid && req.requestedByUid === cfg.uid) continue;
+            const relevant =
+              cfg.isAdmin || (cfg.isSupervisor && cfg.modules.includes(req.moduleId));
+            if (!relevant) continue;
+            pushNotif(
+              req.id,
+              "Nueva solicitud de habilitación",
+              `${req.serviceName} pidió habilitar ${modLabelOf(req.moduleId)} · ${req.periodLabel}`,
+            );
+            setCasitaTone("new");
+          } else if (change.type === "modified") {
+            // Tu propia solicitud fue resuelta (para el servicio que la pidio).
+            if (req.requestedByUid !== cfg.uid) continue;
+            if (req.status !== "approved" && req.status !== "rejected") continue;
+            const approved = req.status === "approved";
+            pushNotif(
+              `${req.id}-${req.status}`,
+              approved ? "Solicitud aprobada" : "Solicitud rechazada",
+              `Tu pedido de ${modLabelOf(req.moduleId)} · ${req.periodLabel} fue ${
+                approved ? "aprobado" : "rechazado"
+              }.`,
+            );
+            setCasitaTone(approved ? "approved" : "rejected");
+            const label = `Solicitud ${modLabelOf(req.moduleId)} ${
+              approved ? "aprobada" : "rechazada"
+            }`;
+            setCasitaLabel(label);
+            window.setTimeout(() => {
+              setCasitaLabel((current) => (current === label ? null : current));
+            }, 10000);
+          }
         }
       },
       () => {
@@ -3576,6 +3744,61 @@ export default function Home() {
 
     return () => unsubscribe();
   }, [user, firestoreUnavailable, firestoreStatusReady]);
+
+  // Solicitudes de REGISTRO (solo admins las leen, segun reglas de Firestore).
+  useEffect(() => {
+    if (firestoreUnavailable || !user || !firestoreStatusReady || !isAdmin) {
+      setSignupRequests([]);
+      return;
+    }
+    signupReadyRef.current = false;
+    const unsubscribe = onSnapshot(
+      collection(db, "signupRequests"),
+      (snap) => {
+        const list: SignupRequest[] = [];
+        snap.forEach((item) => {
+          const d = item.data() as Record<string, unknown>;
+          list.push({
+            id: item.id,
+            firstName: String(d.firstName ?? ""),
+            lastName: String(d.lastName ?? ""),
+            email: String(d.email ?? ""),
+            serviceId: String(d.serviceId ?? ""),
+            serviceName: String(d.serviceName ?? ""),
+            status: (d.status as SignupRequest["status"]) ?? "pending",
+            createdUsername:
+              typeof d.createdUsername === "string" ? d.createdUsername : undefined,
+          });
+        });
+        setSignupRequests(list);
+
+        // Avisar de registros nuevos (despues de la carga inicial).
+        if (!signupReadyRef.current) {
+          signupReadyRef.current = true;
+          return;
+        }
+        for (const change of snap.docChanges()) {
+          if (change.type !== "added") continue;
+          const d = change.doc.data() as Record<string, unknown>;
+          if (String(d.status ?? "pending") !== "pending") continue;
+          const notif = {
+            id: `signup-${change.doc.id}-${Date.now()}`,
+            title: "Nueva solicitud de registro",
+            body: `${String(d.firstName ?? "")} ${String(d.lastName ?? "")} quiere registrarse en ${String(d.serviceName ?? "")}`,
+          };
+          setToastNotifs((prev) => [notif, ...prev].slice(0, 3));
+          setCasitaAlert(true);
+          window.setTimeout(() => {
+            setToastNotifs((prev) => prev.filter((n) => n.id !== notif.id));
+          }, 6000);
+        }
+      },
+      () => {
+        // Si faltan reglas, no romper la app.
+      },
+    );
+    return () => unsubscribe();
+  }, [user, isAdmin, firestoreUnavailable, firestoreStatusReady]);
 
   // En pantallas chicas el menu arranca cerrado (cajon); en PC, abierto.
   useEffect(() => {
@@ -4545,6 +4768,117 @@ export default function Home() {
     }
   }
 
+  // Registro PUBLICO de un jefe: guarda la solicitud (sin sesion) para que la
+  // aprueben los admins. No crea la cuenta todavia.
+  async function handleSignupSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+
+    const service = getServiceById(signupForm.serviceId);
+    if (
+      !signupForm.firstName.trim() ||
+      !signupForm.lastName.trim() ||
+      !signupForm.email.trim() ||
+      !service
+    ) {
+      setError("Completá nombres, apellidos, correo y elegí tu servicio.");
+      return;
+    }
+    if (!signupForm.acceptPrivacy) {
+      setError("Tenés que aceptar las políticas de privacidad para continuar.");
+      return;
+    }
+
+    setIsSubmittingSignup(true);
+    try {
+      const id = `signup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      await setDoc(doc(db, "signupRequests", id), {
+        firstName: signupForm.firstName.trim(),
+        lastName: signupForm.lastName.trim(),
+        email: signupForm.email.trim(),
+        serviceId: service.id,
+        serviceName: service.name,
+        status: "pending",
+        acceptedPrivacy: true,
+        createdAt: serverTimestamp(),
+      });
+      setShowSignupModal(false);
+      setSignupForm({
+        firstName: "",
+        lastName: "",
+        email: "",
+        serviceId: "",
+        acceptPrivacy: false,
+      });
+      setMessage(
+        "¡Solicitud enviada! Un administrador la revisará y te dará acceso pronto.",
+      );
+    } catch {
+      setError("No pudimos enviar tu solicitud. Revisá tu conexión e intentá de nuevo.");
+    } finally {
+      setIsSubmittingSignup(false);
+    }
+  }
+
+  // Admin aprueba un registro: crea la cuenta del jefe (usuario por nombre, pass 123456).
+  async function handleApproveSignup(req: SignupRequest) {
+    const service = getServiceById(req.serviceId);
+    if (!service) {
+      setError("El servicio de la solicitud no es válido.");
+      return;
+    }
+    setSignupBusyId(req.id);
+    setError("");
+    setMessage("");
+    const secondary = createSecondaryAuth();
+    try {
+      const { username } = await createChiefUserAccount(secondary.auth, {
+        service,
+        contactEmail: req.email,
+        firstName: req.firstName,
+        lastName: req.lastName,
+      });
+      await setDoc(
+        doc(db, "signupRequests", req.id),
+        { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
+        { merge: true },
+      );
+      setMessage(
+        `Cuenta creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}".`,
+      );
+    } catch (approveError) {
+      setError(getAuthErrorMessage(approveError));
+    } finally {
+      try {
+        await signOut(secondary.auth);
+      } catch {
+        // Ignore secondary sign-out issues.
+      }
+      try {
+        await secondary.dispose();
+      } catch {
+        // Ignore secondary disposal races.
+      }
+      setSignupBusyId("");
+    }
+  }
+
+  async function handleRejectSignup(req: SignupRequest) {
+    setSignupBusyId(req.id);
+    try {
+      await setDoc(
+        doc(db, "signupRequests", req.id),
+        { status: "rejected", updatedAt: serverTimestamp() },
+        { merge: true },
+      );
+    } catch {
+      // Ignore.
+    } finally {
+      setSignupBusyId("");
+    }
+  }
+
   async function handleSignOut() {
     setError("");
     setMessage("");
@@ -4592,6 +4926,15 @@ export default function Home() {
     const targetPeriod = percViewPeriod ?? periodId;
     const targetPeriodLabel = getPeriodLabel(targetPeriod);
     const editingHistory = percViewPeriod !== null;
+
+    // Calidad: no se puede capturar un mes ADELANTE del mes en cierre.
+    if (targetPeriod > periodId) {
+      setError(
+        "Ese mes todavía no está habilitado. Solo se captura el mes en cierre o meses anteriores.",
+      );
+      setMessage("");
+      return;
+    }
 
     if (editingHistory && !isAdmin) {
       setError("Solo el administrador puede editar meses anteriores.");
@@ -4670,6 +5013,15 @@ export default function Home() {
     const targetPeriod = sepsViewPeriod ?? sepsPeriodId;
     const targetPeriodLabel = getPeriodLabel(targetPeriod);
     const editingHistory = sepsViewPeriod !== null;
+
+    // Calidad: no se puede capturar un mes ADELANTE del mes en cierre.
+    if (targetPeriod > sepsPeriodId) {
+      setError(
+        "Ese mes todavía no está habilitado. Solo se captura el mes en cierre o meses anteriores.",
+      );
+      setMessage("");
+      return;
+    }
 
     if (editingHistory && !isAdmin) {
       setError("Solo el administrador puede editar meses anteriores.");
@@ -4852,6 +5204,15 @@ export default function Home() {
     const targetPeriodLabel = getPeriodLabel(targetPeriod);
     const editingHistory = horasViewPeriod !== null;
 
+    // Calidad: no se puede capturar un mes ADELANTE del mes en cierre.
+    if (targetPeriod > periodId) {
+      setError(
+        "Ese mes todavía no está habilitado. Solo se captura el mes en cierre o meses anteriores.",
+      );
+      setMessage("");
+      return;
+    }
+
     if (editingHistory && !isAdmin) {
       setError("Solo el administrador puede editar meses anteriores.");
       setMessage("");
@@ -4866,6 +5227,16 @@ export default function Home() {
 
     if (!editingHistory && !currentServiceCaptureOpen && !isAdmin) {
       setError("La captura de Distribucion de Horas esta cerrada en este momento.");
+      setMessage("");
+      return;
+    }
+
+    // No permitir guardar si NO hay horas cargadas (al menos un numero en las columnas).
+    const hasAnyHours = horasEmployees.some((emp) =>
+      Object.values(emp.hours).some((h) => String(h).trim() !== ""),
+    );
+    if (!hasAnyHours) {
+      setError("Cargá las horas de al menos un recurso antes de guardar (no se puede guardar vacío).");
       setMessage("");
       return;
     }
@@ -5189,6 +5560,8 @@ export default function Home() {
       setShowRequestForm(true);
     } else if (itemId === "panel-config") {
       setShowConfigModal(true);
+    } else if (itemId === "panel-signups") {
+      setShowSignupRequestsModal(true);
     } else if (itemId === "panel-docs") {
       openDocsModal();
     } else {
@@ -5613,7 +5986,7 @@ export default function Home() {
                     <path d="m6 9 6 6 6-6" />
                   </svg>
                 </button>
-                <div className={`overflow-x-auto ${groupOpen ? "" : "hidden"}`}>
+                <div className={`show-scrollbar overflow-x-auto ${groupOpen ? "" : "hidden"}`}>
                   <table className="w-full border-collapse text-left text-sm">
                     <thead>
                       <tr className={isLightPanelTheme ? "text-slate-500" : "text-slate-400"}>
@@ -5753,7 +6126,7 @@ export default function Home() {
                         {sectionOpen ? "−" : "+"}
                       </span>
                     </button>
-                    <div className={`overflow-x-auto ${sectionOpen ? "" : "hidden"}`}>
+                    <div className={`show-scrollbar overflow-x-auto ${sectionOpen ? "" : "hidden"}`}>
                       <table className="border-collapse text-xs text-slate-100">
                         <thead>
                           <tr className="bg-white/5 text-slate-300">
@@ -5908,7 +6281,7 @@ export default function Home() {
                     {tableOpen ? "−" : "+"}
                   </span>
                 </button>
-                <div className={`overflow-x-auto ${tableOpen ? "" : "hidden"}`}>
+                <div className={`show-scrollbar overflow-x-auto ${tableOpen ? "" : "hidden"}`}>
                   <table className="border-collapse text-xs text-slate-100">
                     <thead>
                       <tr className="bg-white/5 text-slate-300">
@@ -6080,7 +6453,8 @@ export default function Home() {
     };
     const moduleSidebarItems = visibleModules.map((mod) => ({
       id: moduleSectionTarget(mod.id),
-      label: mod.name,
+      // Nombre corto en el menu (los largos se cortaban): Distribucion de Horas -> Dis/horas.
+      label: mod.id === "distribucion" ? "Dis/horas" : mod.name,
       detail: "Ir al tabulador",
       badge: moduleBadges[mod.id],
     }));
@@ -6107,26 +6481,23 @@ export default function Home() {
         id="panel-horas"
         className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
       >
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-200/80">
-              Tabulador · DISTRIBUCION DE HORAS
-            </p>
-            <h2 className="mt-1 text-2xl font-bold text-white">Distribucion de Horas</h2>
-            <p className="mt-1 text-sm text-slate-300">
-              Cierre de <strong>{periodLabel}</strong> · {currentService?.name} ·{" "}
-              {horasTemplate.establishment}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold text-white sm:text-2xl">Distribución de Horas</h2>
+            <p className="mt-1 truncate text-sm text-slate-400">
+              {currentService?.name} · Cierre de {periodLabel}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              horasLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
+            }`}
+          >
             <span
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                horasLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
-              }`}
-            >
-              {horasLocked ? "BLOQUEADO" : "HABILITADO"}
-            </span>
-          </div>
+              className={`h-1.5 w-1.5 rounded-full ${horasLocked ? "bg-rose-400" : "bg-emerald-400"}`}
+            />
+            {horasLocked ? "Bloqueado" : "Habilitado"}
+          </span>
         </div>
 
         {renderHistorySelector({
@@ -6140,41 +6511,40 @@ export default function Home() {
           onSelect: (period) => void loadHorasHistory(period),
         })}
 
-        <p className="mt-3 rounded-xl border border-white/10 bg-[#1b2537] px-4 py-2 text-sm text-slate-200">
-          Horas por empleado distribuidas en los centros de costo. El <strong>comentario</strong>{" "}
-          (maternidad, vacaciones, permiso, etc.) es solo de apoyo y NO se guarda en el historial.
-          Solo se aceptan numeros en las casillas de horas.
-        </p>
-
-        <div className="mt-4 overflow-x-auto rounded-2xl border border-white/10">
+        <div className="show-scrollbar mt-4 overflow-x-auto rounded-2xl border border-white/10">
           <table className="w-full border-collapse text-xs text-slate-100">
             <thead>
               <tr className="bg-white/5 text-slate-300">
-                <th className="px-2 py-2 text-center font-medium">#</th>
-                <th className="px-2 py-2 text-left font-medium">Comentario</th>
+                <th className="sticky left-0 z-20 min-w-[12rem] border-r border-white/10 bg-[#1a2334] px-2 py-2 text-left font-medium">
+                  Nombre del empleado
+                </th>
                 <th className="px-2 py-2 text-left font-medium">DUI</th>
-                <th className="w-full px-2 py-2 text-left font-medium">Nombre del empleado</th>
+                <th className="hidden px-2 py-2 text-left font-medium xl:table-cell">Comentario</th>
                 {horasTemplate.columns.map((col) => (
                   <th key={col} className="px-2 py-2 text-center font-medium">
                     {col}
                   </th>
                 ))}
-                <th className="bg-[#243049] px-2 py-2 text-center font-semibold">Total</th>
+                <th className="px-2 py-2 text-center font-medium text-slate-300">Total</th>
                 <th className="px-2 py-2" />
               </tr>
             </thead>
             <tbody>
               {horasEmployees.map((emp, index) => (
                 <tr key={index} className="border-t border-white/5">
-                  <td className="px-2 py-1 text-center text-slate-400">{index + 1}</td>
-                  <td className="px-1.5 py-1">
-                    <input
-                      value={emp.comment}
-                      onChange={(event) => handleHorasComment(index, event.target.value)}
-                      disabled={horasEditingBlocked}
-                      placeholder="(opcional)"
-                      className="w-32 rounded border border-amber-400/20 bg-[#1b2537] px-2 py-1 text-amber-100 outline-none focus:border-amber-400 disabled:opacity-50"
-                    />
+                  <td className="sticky left-0 z-10 min-w-[12rem] border-r border-white/10 bg-[#202c41] px-2 py-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="hidden w-5 shrink-0 text-right text-[10px] text-slate-500 xl:block">
+                        {index + 1}
+                      </span>
+                      <input
+                        value={emp.name}
+                        onChange={(event) => handleHorasName(index, event.target.value)}
+                        disabled={horasEditingBlocked}
+                        placeholder="Nombre"
+                        className="w-full min-w-[9rem] rounded border border-white/10 bg-[#1b2537] px-2 py-1 text-xs outline-none focus:border-cyan-400 disabled:opacity-50"
+                      />
+                    </div>
                   </td>
                   <td className="px-1.5 py-1">
                     <input
@@ -6182,16 +6552,16 @@ export default function Home() {
                       onChange={(event) => handleHorasDui(index, event.target.value)}
                       disabled={horasEditingBlocked}
                       placeholder="DUI"
-                      className="w-28 rounded border border-white/10 bg-[#1b2537] px-2 py-1 outline-none focus:border-cyan-400 disabled:opacity-50"
+                      className="w-[6.75rem] rounded border border-white/10 bg-[#1b2537] px-2 py-1 text-xs outline-none focus:border-cyan-400 disabled:opacity-50 xl:w-28"
                     />
                   </td>
-                  <td className="px-1.5 py-1">
+                  <td className="hidden px-1.5 py-1 xl:table-cell">
                     <input
-                      value={emp.name}
-                      onChange={(event) => handleHorasName(index, event.target.value)}
+                      value={emp.comment}
+                      onChange={(event) => handleHorasComment(index, event.target.value)}
                       disabled={horasEditingBlocked}
-                      placeholder="Nombre"
-                      className="w-full min-w-[14rem] rounded border border-white/10 bg-[#1b2537] px-2 py-1 outline-none focus:border-cyan-400 disabled:opacity-50"
+                      placeholder="(opcional)"
+                      className="w-32 rounded border border-amber-400/20 bg-[#1b2537] px-2 py-1 text-amber-100 outline-none focus:border-amber-400 disabled:opacity-50"
                     />
                   </td>
                   {horasTemplate.columns.map((col) => {
@@ -6234,7 +6604,7 @@ export default function Home() {
                       </td>
                     );
                   })}
-                  <td className="bg-[#243049] px-2 py-1 text-center font-semibold text-cyan-100">
+                  <td className="px-2 py-1 text-center font-medium text-cyan-300">
                     {horasRowTotal(emp)}
                   </td>
                   <td className="px-1.5 py-1 text-center">
@@ -6243,9 +6613,12 @@ export default function Home() {
                       onClick={() => handleRemoveHorasEmployee(index)}
                       disabled={horasEditingBlocked}
                       title="Quitar empleado"
-                      className="rounded-lg bg-rose-500/15 px-2 py-1 text-rose-200 transition hover:bg-rose-500/25 disabled:opacity-40"
+                      aria-label="Quitar empleado"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-40"
                     >
-                      ✕
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+                      </svg>
                     </button>
                   </td>
                 </tr>
@@ -6254,16 +6627,21 @@ export default function Home() {
           </table>
         </div>
 
-        <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="mt-4 flex flex-row flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {!horasHistReadOnly ? (
               <button
                 type="button"
                 onClick={handleAddHorasEmployee}
                 disabled={horasEditingBlocked}
-                className="rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                title="Agregar empleado"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
               >
-                + Agregar empleado
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                <span className="hidden sm:inline">Agregar empleado</span>
+                <span className="sm:hidden">Empleado</span>
               </button>
             ) : null}
             {isHorasHistory ? (
@@ -6282,31 +6660,51 @@ export default function Home() {
           {horasHistReadOnly ? (
             <p className="text-sm font-medium text-amber-200">Vista de historial — solo lectura.</p>
           ) : (
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <div className="flex flex-row flex-wrap items-center justify-end gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={handleClearHoras}
-                className="rounded-2xl bg-slate-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500"
+                title="Limpiar tabla"
+                aria-label="Limpiar tabla"
+                className="inline-flex items-center gap-2 rounded-2xl bg-slate-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500 xl:px-5"
               >
-                Limpiar tabla
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+                </svg>
+                <span className="hidden xl:inline">Limpiar tabla</span>
               </button>
               {!isHorasHistory ? (
                 <button
                   type="button"
                   onClick={() => void loadSavedHoras()}
                   disabled={isLoadingHoras}
-                  className="rounded-2xl bg-violet-500/80 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80"
+                  title="Recuperar datos"
+                  aria-label="Recuperar datos"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-violet-500/80 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80 xl:px-5"
                 >
-                  {isLoadingHoras ? "Recuperando..." : "Recuperar datos"}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                    <path d="M12 3v12M7 11l5 5 5-5M5 21h14" />
+                  </svg>
+                  <span className="hidden xl:inline">
+                    {isLoadingHoras ? "Recuperando..." : "Recuperar datos"}
+                  </span>
                 </button>
               ) : null}
               <button
                 type="button"
                 onClick={() => void handleSaveHoras()}
                 disabled={isSavingHoras || horasEditingBlocked}
-                className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+                title="Guardar Horas"
+                aria-label="Guardar Horas"
+                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 xl:px-5"
               >
-                {isSavingHoras ? "Guardando..." : isHorasHistory ? "Guardar cambios del mes" : "Guardar Horas"}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <path d="M17 21v-8H7v8M7 3v5h8" />
+                </svg>
+                <span className="hidden xl:inline">
+                  {isSavingHoras ? "Guardando..." : isHorasHistory ? "Guardar cambios del mes" : "Guardar Horas"}
+                </span>
               </button>
             </div>
           )}
@@ -6432,6 +6830,17 @@ export default function Home() {
         detail: isAdmin ? "Resumen general" : "Estado del periodo",
         badge: "IN",
       },
+      // Elegir servicio (admin/supervisor): vista propia "Servicios" en movil.
+      ...(isAdmin || isSupervisor
+        ? [
+            {
+              id: "panel-services",
+              label: "Servicios",
+              detail: "Elegir servicio para ver sus tabuladores",
+              badge: "SV",
+            },
+          ]
+        : []),
       ...moduleSidebarItems,
       {
         id: "panel-docs",
@@ -6449,7 +6858,7 @@ export default function Home() {
         ? [
             {
               id: "panel-calendar",
-              label: "Configuracion mensual",
+              label: "Config/Mensual",
               detail: "Dias habiles",
               badge: "CM",
             },
@@ -6464,6 +6873,15 @@ export default function Home() {
               label: "Usuarios",
               detail: "Cuentas y permisos",
               badge: "US",
+            },
+            {
+              id: "panel-signups",
+              label: "Registros",
+              detail: "Solicitudes de nuevos jefes",
+              badge:
+                signupRequests.filter((r) => r.status === "pending").length > 0
+                  ? String(signupRequests.filter((r) => r.status === "pending").length)
+                  : "RG",
             },
           ]
         : []),
@@ -6687,6 +7105,7 @@ export default function Home() {
                         item.id === "panel-overview"
                           ? "home"
                           : [
+                                "panel-services",
                                 "panel-tabulator",
                                 "panel-seps",
                                 "panel-horas",
@@ -6799,19 +7218,61 @@ export default function Home() {
               isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#141c2c]"
             }`}
           >
-            {/* Casita: alterna (abre/cierra) el menu completo. */}
+            {/* Casita: alterna el menu. Verde (aprobada/nueva) o rojo (rechazada) + punto. */}
             <button
               type="button"
-              onClick={() => setMenuOpen((value) => !value)}
+              onClick={() => {
+                setCasitaAlert(false);
+                setCasitaLabel(null);
+                setCasitaTone("new");
+                setMenuOpen((value) => !value);
+              }}
               aria-label="Menú"
               title="Menú"
-              className={`flex flex-col items-center gap-0.5 ${isLightPanelTheme ? "text-slate-600" : "text-slate-200"}`}
+              className={`flex flex-col items-center gap-0.5 ${
+                casitaAlert
+                  ? casitaTone === "rejected"
+                    ? "text-rose-300"
+                    : "text-emerald-300"
+                  : isLightPanelTheme
+                    ? "text-slate-600"
+                    : "text-slate-200"
+              }`}
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10 [&_svg]:h-[18px] [&_svg]:w-[18px]">
+              <span
+                className={`relative flex h-9 w-9 items-center justify-center rounded-xl ring-1 [&_svg]:h-[18px] [&_svg]:w-[18px] ${
+                  casitaAlert
+                    ? casitaTone === "rejected"
+                      ? "bg-rose-500/25 text-rose-200 ring-rose-400/50"
+                      : "bg-emerald-500/25 text-emerald-200 ring-emerald-400/50"
+                    : "bg-white/5 ring-white/10"
+                }`}
+              >
                 {IconHome}
+                {casitaAlert ? (
+                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-violet-300 ring-2 ring-[#141c2c]" />
+                ) : null}
               </span>
               <span className="text-[10px] font-semibold">Menú</span>
             </button>
+
+            {/* Etiqueta temporal al lado: "Solicitud PERC aprobada/rechazada". */}
+            {casitaLabel ? (
+              <span
+                className={`notif-slide-in ml-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${
+                  casitaTone === "rejected"
+                    ? "bg-rose-500/15 text-rose-300"
+                    : "bg-emerald-500/15 text-emerald-300"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    casitaTone === "rejected" ? "bg-rose-400" : "bg-emerald-400"
+                  }`}
+                />
+                {casitaLabel}
+              </span>
+            ) : null}
           </nav>
 
           {/* Avisos tipo WhatsApp (con logo PULSO) cuando llega una solicitud nueva. */}
@@ -7102,7 +7563,7 @@ export default function Home() {
 
             {/* Barra de "volver a Inicio" — SOLO movil, en cualquier vista que no sea Inicio. */}
             <div
-              data-view="panel-tabulator panel-seps panel-horas panel-calendar panel-admin-export panel-capture-toggle"
+              data-view="panel-services panel-tabulator panel-seps panel-horas panel-calendar panel-admin-export panel-capture-toggle"
               className="flex items-center gap-3 xl:hidden"
             >
               <button
@@ -7113,7 +7574,9 @@ export default function Home() {
                 <span className="text-base leading-none">‹</span> Inicio
               </button>
               <span className="truncate text-sm font-semibold text-white">
-                {mobileView === "panel-tabulator"
+                {mobileView === "panel-services"
+                  ? "Servicios"
+                  : mobileView === "panel-tabulator"
                   ? "PERC"
                   : mobileView === "panel-seps"
                     ? "SEPS"
@@ -7244,12 +7707,26 @@ export default function Home() {
           ) : null}
 
           {isAdmin || isSupervisor ? (
-            <section data-view="home panel-tabulator panel-seps panel-horas" className="rounded-[24px] border border-amber-400/25 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]">
-              <p className="text-left text-2xl font-bold uppercase tracking-[0.12em] text-amber-200/90">
-                {isAdmin ? "Administrador · Ver tabuladores" : "Supervisión · Consolidado"}
-              </p>
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-start sm:gap-6">
-                <h2 className="text-2xl font-bold text-white">Elegir servicio</h2>
+            <section data-view="panel-services" className="relative z-20 rounded-[24px] border border-amber-400/45 bg-gradient-to-br from-[#232f46] to-[#1a2334] p-5 shadow-[0_0_0_1px_rgba(251,191,36,0.15),0_24px_80px_rgba(3,7,18,0.45)] ring-1 ring-amber-400/10">
+              {/* Encabezado elegante */}
+              <div className="mb-5 flex items-center gap-3.5 border-b border-white/[0.08] pb-4">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/30 to-amber-500/5 text-amber-200 ring-1 ring-amber-400/20">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                    <path d="M3 9.5h18M9 9.5V20" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200/70">
+                    {isAdmin ? "Panel de administración" : "Panel de supervisión"}
+                  </p>
+                  <h2 className="mt-0.5 truncate text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                    {isAdmin ? "Ver tabuladores por servicio" : "Consolidado por servicio"}
+                  </h2>
+                </div>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-start sm:gap-6">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Elegir servicio</h2>
                 <div className="relative w-full sm:max-w-sm sm:shrink-0">
                   {/* Trigger */}
                   <button
@@ -7371,12 +7848,22 @@ export default function Home() {
                                     void handleAdminSelectService(service.id);
                                     setAdminServicePickerOpen(false);
                                     setAdminServiceQuery("");
-                                    // En movil, ir directo al tabulador PERC del servicio.
+                                    // En movil, ir al tabulador que el servicio reporta:
+                                    // PERC si lo tiene; si no, Horas; si no, Inicio.
                                     if (
                                       typeof window !== "undefined" &&
                                       window.innerWidth < 1280
                                     ) {
-                                      setMobileView("panel-tabulator");
+                                      const hasPerc =
+                                        service.rows.length > 0 ||
+                                        !!getPercServFields(service.id);
+                                      setMobileView(
+                                        hasPerc
+                                          ? "panel-tabulator"
+                                          : getHorasTemplate(service.id)
+                                            ? "panel-horas"
+                                            : "home",
+                                      );
                                     }
                                   }}
                                   className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition ${
@@ -7437,25 +7924,44 @@ export default function Home() {
                     incluso si aun faltan dependencias por completar su captura.
                   </p>
                 </div>
-                <div className={`text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                  <p>Completados: {publicCompletedCount}</p>
-                  <p>Pendientes: {Math.max(SERVICE_COUNT - publicCompletedCount, 0)}</p>
-                </div>
               </div>
 
               <div className="mt-5 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
                 <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Estado actual</p>
-                  <p className="mt-3 text-4xl font-semibold text-white">{currentMonthProgress}%</p>
-                  <p className="mt-2 text-sm text-slate-300">
-                    {publicCompletedCount} de {SERVICE_COUNT} dependencias han completado el mes actual.
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">
+                    Avance por módulo
                   </p>
-                  <div className="mt-4 h-3 rounded-full bg-white/10">
-                    <div
-                      className="h-3 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-300"
-                      style={{ width: `${currentMonthProgress}%` }}
-                    />
+                  <div className="mt-4 space-y-5">
+                    {(
+                      [
+                        { key: "PERC", label: "PERC", color: "text-cyan-300", bar: "from-cyan-400 to-cyan-500" },
+                        { key: "SEPS", label: "SEPS (monitoreo)", color: "text-violet-300", bar: "from-violet-400 to-violet-500" },
+                        { key: "Horas", label: "Distribución de Horas", color: "text-amber-300", bar: "from-amber-400 to-amber-500" },
+                      ] as const
+                    ).map((m) => {
+                      const stat = moduleStats[m.key];
+                      const pct = stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0;
+                      return (
+                        <div key={m.key}>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className={`font-semibold ${m.color}`}>{m.label}</span>
+                            <span className="font-bold text-white">
+                              {stat.done} de {stat.total}
+                            </span>
+                          </div>
+                          <div className="mt-2 h-4 overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className={`h-full rounded-full bg-gradient-to-r ${m.bar}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
+                  <p className="mt-3 text-[11px] text-slate-400">
+                    SEPS es solo monitoreo (no descarga Excel). Se descargan PERC y, más adelante, Horas.
+                  </p>
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
@@ -7491,7 +7997,9 @@ export default function Home() {
             </section>
           ) : null}
 
-          {currentService && showModule("perc") ? (
+          {currentService &&
+          showModule("perc") &&
+          (currentService.rows.length > 0 || getPercServFields(currentService.id)) ? (
             <section
               id="panel-tabulator"
               data-view="panel-tabulator"
@@ -7943,6 +8451,86 @@ export default function Home() {
 
           {showModule("distribucion") ? (
             <div data-view="panel-horas">{horasSection}</div>
+          ) : null}
+
+          {/* Bandeja de aprobacion de REGISTROS (solo admins). */}
+          {isAdmin && showSignupRequestsModal ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-4"
+              onClick={() => setShowSignupRequestsModal(false)}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                className="modal-pop-in relative my-6 w-full max-w-lg overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/50"
+              >
+                <div className="h-1 w-full bg-gradient-to-r from-teal-400 to-emerald-500" />
+                <div className="px-5 pb-6 pt-5 sm:px-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-emerald-300/90">
+                        Solicitudes de registro
+                      </p>
+                      <h3 className="mt-1 text-xl font-bold text-white">Nuevos jefes de servicio</h3>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Aprobá para crear la cuenta (usuario por nombre, contraseña {CHIEF_TEMP_PASSWORD}).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowSignupRequestsModal(false)}
+                      aria-label="Cerrar"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="mt-4 max-h-[60vh] space-y-2.5 overflow-y-auto pr-1">
+                    {signupRequests.filter((r) => r.status === "pending").length === 0 ? (
+                      <p className="rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-slate-400">
+                        No hay solicitudes pendientes.
+                      </p>
+                    ) : (
+                      signupRequests
+                        .filter((r) => r.status === "pending")
+                        .map((r) => (
+                          <div
+                            key={r.id}
+                            className="rounded-2xl border border-white/10 bg-[#1b2537] p-3.5"
+                          >
+                            <p className="text-sm font-semibold text-white">
+                              {r.firstName} {r.lastName}
+                            </p>
+                            <p className="mt-0.5 text-xs text-cyan-200">{r.serviceName}</p>
+                            <p className="mt-0.5 truncate text-[11px] text-slate-400">{r.email}</p>
+                            <div className="mt-3 flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void handleApproveSignup(r)}
+                                disabled={signupBusyId === r.id}
+                                className="flex-1 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {signupBusyId === r.id ? "Creando…" : "Aceptar"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleRejectSignup(r)}
+                                disabled={signupBusyId === r.id}
+                                className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Rechazar
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : null}
 
           {showPasswordModal ? (
@@ -8879,21 +9467,22 @@ export default function Home() {
               <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
               <div
                 onClick={(event) => event.stopPropagation()}
-                className="modal-pop-in relative my-8 w-full max-w-3xl rounded-[24px] border border-white/10 bg-[#0e1626] p-5 shadow-2xl shadow-black/50"
+                className="modal-pop-in relative my-6 w-full min-w-0 max-w-2xl rounded-[24px] border border-white/10 bg-[#0e1626] p-4 shadow-2xl shadow-black/50 sm:p-5"
               >
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300/90">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-300/90">
                       Bandeja
                     </p>
-                    <h2 className="mt-1 text-xl font-semibold text-white">
+                    <h2 className="mt-1 text-lg font-bold text-white sm:text-xl">
                       Solicitudes de habilitación
-                      {pendingRequestCount > 0 ? (
-                        <span className="ml-3 rounded-full bg-amber-500/20 px-3 py-1 text-sm font-semibold text-amber-200">
-                          {pendingRequestCount} pendientes
-                        </span>
-                      ) : null}
                     </h2>
+                    {pendingRequestCount > 0 ? (
+                      <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-200">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                        {pendingRequestCount} pendiente{pendingRequestCount === 1 ? "" : "s"}
+                      </span>
+                    ) : null}
                   </div>
                   <button
                     type="button"
@@ -8922,47 +9511,53 @@ export default function Home() {
                         return (
                           <div
                             key={req.id}
-                            className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                            className="rounded-2xl border border-white/10 bg-white/[0.04] p-3.5"
                           >
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-white">
-                                {req.serviceName} ·{" "}
-                                <span className="text-cyan-200">{getModuleLabel(req.moduleId)}</span>
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="min-w-0 flex-1 truncate text-sm font-bold text-white">
+                                {req.serviceName}
                               </p>
-                              <p className="mt-0.5 text-xs text-slate-300">
-                                {getShortPeriodLabel(req.periodId)} · solicitó {req.requestedByName} ·{" "}
-                                <span className="text-rose-300">Marcas: {lateMarks}</span>
-                              </p>
+                              <span className="shrink-0 rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-200">
+                                {getModuleLabel(req.moduleId)}
+                              </span>
                             </div>
-                            <div className="flex shrink-0 items-center gap-2">
+                            <p className="mt-1 text-xs text-slate-400">
+                              {getShortPeriodLabel(req.periodId)} · solicitó{" "}
+                              <span className="text-slate-200">{req.requestedByName}</span>
+                              {lateMarks > 1 ? (
+                                <span className="text-rose-300/90"> · {lateMarks} marcas</span>
+                              ) : null}
+                            </p>
+
+                            <div className="mt-3">
                               {req.status === "pending" ? (
                                 canResolve ? (
-                                  <>
+                                  <div className="flex gap-2">
                                     <button
                                       type="button"
                                       disabled={requestBusyId === req.id}
                                       onClick={() => void resolveCaptureRequest(req, "approved")}
-                                      className="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:opacity-50"
+                                      className="flex-1 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
                                     >
-                                      Aprobar
+                                      {requestBusyId === req.id ? "..." : "Aprobar"}
                                     </button>
                                     <button
                                       type="button"
                                       disabled={requestBusyId === req.id}
                                       onClick={() => void resolveCaptureRequest(req, "rejected")}
-                                      className="rounded-xl bg-rose-500/80 px-4 py-2 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:opacity-50"
+                                      className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
                                     >
                                       Rechazar
                                     </button>
-                                  </>
+                                  </div>
                                 ) : (
-                                  <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-200">
+                                  <span className="inline-block rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-200">
                                     Pendiente
                                   </span>
                                 )
                               ) : (
                                 <span
-                                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                  className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${
                                     req.status === "approved"
                                       ? "bg-emerald-500/15 text-emerald-200"
                                       : "bg-rose-500/15 text-rose-200"
@@ -9039,6 +9634,19 @@ export default function Home() {
                       {isSendingRequest ? "Enviando..." : "Enviar solicitud"}
                     </button>
                   </div>
+
+                  {/* Mensaje temporal de resultado (aprobada/rechazada) bajo Cancelar. */}
+                  {casitaLabel ? (
+                    <p
+                      className={`notif-slide-in mt-3 rounded-xl px-3 py-2 text-center text-xs font-bold ${
+                        casitaTone === "rejected"
+                          ? "bg-rose-500/15 text-rose-200"
+                          : "bg-emerald-500/15 text-emerald-200"
+                      }`}
+                    >
+                      {casitaLabel}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -9895,6 +10503,24 @@ export default function Home() {
                     {isSubmitting ? "Procesando..." : "Entrar al sistema"}
                   </button>
                 </form>
+
+                {/* Registro publico para jefes de servicio. */}
+                <div className="mt-5 border-t border-white/10 pt-4 text-center">
+                  <p className="text-xs text-slate-400">
+                    ¿Sos jefe de servicio y todavía no tenés cuenta?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError("");
+                      setMessage("");
+                      setShowSignupModal(true);
+                    }}
+                    className="mt-1.5 text-sm font-bold text-cyan-300 transition hover:text-cyan-200"
+                  >
+                    Regístrate aquí
+                  </button>
+                </div>
                 </div>
               </section>
             )}
@@ -9918,6 +10544,233 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Modal de REGISTRO publico (jefes de servicio). */}
+      {showSignupModal ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto p-4"
+        >
+          <div
+            className="modal-fade-in fixed inset-0 bg-slate-950/75 backdrop-blur-sm"
+            onClick={() => setShowSignupModal(false)}
+          />
+          <div className="modal-pop-in relative my-6 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
+            <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+            <div className="px-5 pb-6 pt-5 sm:px-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-cyan-300/80">
+                    Registro
+                  </p>
+                  <h3 className="mt-1 text-xl font-bold text-white">Crear cuenta de jefe</h3>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Tu solicitud será revisada por un administrador antes de darte acceso.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSignupModal(false)}
+                  aria-label="Cerrar"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form className="mt-5 space-y-3.5" onSubmit={handleSignupSubmit}>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-300">Nombres</span>
+                  <input
+                    value={signupForm.firstName}
+                    onChange={(e) => setSignupForm((f) => ({ ...f, firstName: e.target.value }))}
+                    required
+                    placeholder=""
+                    className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-300">Apellidos</span>
+                  <input
+                    value={signupForm.lastName}
+                    onChange={(e) => setSignupForm((f) => ({ ...f, lastName: e.target.value }))}
+                    required
+                    placeholder=""
+                    className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-300">Correo</span>
+                  <input
+                    type="email"
+                    value={signupForm.email}
+                    onChange={(e) => setSignupForm((f) => ({ ...f, email: e.target.value }))}
+                    required
+                    placeholder="correo@ejemplo.com"
+                    className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-300">Servicio</span>
+                  <select
+                    value={signupForm.serviceId}
+                    onChange={(e) => setSignupForm((f) => ({ ...f, serviceId: e.target.value }))}
+                    required
+                    className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
+                  >
+                    <option value="">Elegí tu servicio…</option>
+                    {SERVICE_DEFINITIONS.map((s) => (
+                      <option key={s.id} value={s.id} className="bg-[#1b2537] text-white">
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="flex items-start gap-2.5 pt-1">
+                  <input
+                    type="checkbox"
+                    checked={signupForm.acceptPrivacy}
+                    onChange={(e) =>
+                      setSignupForm((f) => ({ ...f, acceptPrivacy: e.target.checked }))
+                    }
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-500"
+                  />
+                  <span className="text-xs leading-snug text-slate-300">
+                    Acepto las{" "}
+                    <button
+                      type="button"
+                      onClick={() => setShowPrivacyModal(true)}
+                      className="font-semibold text-cyan-300 underline"
+                    >
+                      políticas de privacidad
+                    </button>
+                  </span>
+                </label>
+
+                {error ? (
+                  <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                    {error}
+                  </p>
+                ) : null}
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingSignup}
+                  className="w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSubmittingSignup ? "Enviando…" : "Enviar solicitud"}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modal de POLITICA DE PRIVACIDAD. */}
+      {showPrivacyModal ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto p-4"
+        >
+          <div
+            className="modal-fade-in fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
+            onClick={() => setShowPrivacyModal(false)}
+          />
+          <div className="modal-pop-in relative my-6 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
+            <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+            <div className="px-5 pb-6 pt-5 sm:px-6">
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-lg font-bold text-white">Política de Privacidad — PULSO</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowPrivacyModal(false)}
+                  aria-label="Cerrar"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="mt-4 max-h-[58vh] space-y-3 overflow-y-auto pr-1 text-xs leading-relaxed text-slate-300">
+                <p>
+                  <strong className="text-white">1. Desarrollo y versión.</strong> PULSO fue
+                  desarrollado por el servicio de <strong className="text-cyan-200">ESDOMED</strong>{" "}
+                  (Estadística y Documentos Médicos) del Hospital Nacional, El Salvador. Versión
+                  1.6.2.6.
+                </p>
+                <p>
+                  <strong className="text-white">2. Qué es PULSO.</strong> Plataforma interna del
+                  Hospital Nacional (El Salvador) para la captura y gestión de la producción de los
+                  servicios. Su uso es exclusivo del personal autorizado.
+                </p>
+                <p>
+                  <strong className="text-white">3. Datos que recolectamos.</strong> Al registrarse:
+                  sus nombres, apellidos, correo y el servicio al que pertenece. Durante el uso, los
+                  datos de producción que usted carga y el registro de sus accesos.
+                </p>
+                <p>
+                  <strong className="text-white">4. Para qué los usamos.</strong> Únicamente para
+                  identificarlo, crear su usuario y gestionar la captura mensual de su servicio. No
+                  se usan con fines comerciales ni publicitarios.
+                </p>
+                <p>
+                  <strong className="text-white">5. Quién los ve.</strong> Solamente los
+                  administradores autorizados y usted. No se comparten con terceros ajenos al
+                  hospital.
+                </p>
+                <p>
+                  <strong className="text-white">6. Dónde se guardan.</strong> De forma segura en los
+                  servicios de Google Firebase, con acceso restringido por usuario y contraseña.
+                </p>
+                <p>
+                  <strong className="text-white">7. Sus derechos.</strong> Usted puede solicitar a la
+                  administración la corrección o eliminación de sus datos personales.
+                </p>
+                <p>
+                  <strong className="text-white">8. Aprobación de la cuenta.</strong> El registro no
+                  es automático: su solicitud queda pendiente hasta que un administrador la apruebe.
+                </p>
+                <p>
+                  <strong className="text-white">9. Responsabilidad del usuario.</strong> Usted es el
+                  único responsable de la información que ingresa al portal y a la aplicación. Se
+                  compromete a que los datos de producción y demás registros que cargue sean
+                  veraces, completos y correspondan a su servicio. El uso de su usuario y contraseña
+                  es personal e intransferible; cualquier dato ingresado con sus credenciales se
+                  considera realizado por usted. La administración no se hace responsable por errores
+                  u omisiones en la información cargada por cada usuario.
+                </p>
+                <p>
+                  <strong className="text-white">10. Buen uso.</strong> El portal es exclusivo para
+                  la gestión de la producción de los servicios del hospital. Queda prohibido usarlo
+                  para fines distintos o ingresar información falsa.
+                </p>
+                <p>
+                  <strong className="text-white">11. Seguridad de su cuenta.</strong> Mantenga su
+                  contraseña en secreto y cámbiela en su primer ingreso. Si sospecha que alguien
+                  conoce sus credenciales, avise de inmediato a la administración.
+                </p>
+                <p>
+                  <strong className="text-white">12. Cambios en esta política.</strong> Esta política
+                  puede actualizarse para reflejar mejoras del sistema. El uso continuado de PULSO
+                  implica la aceptación de la versión vigente.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSignupForm((f) => ({ ...f, acceptPrivacy: true }));
+                  setShowPrivacyModal(false);
+                }}
+                className="mt-4 w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                Entendido y acepto
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
