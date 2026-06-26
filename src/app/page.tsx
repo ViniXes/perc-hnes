@@ -3581,16 +3581,10 @@ export default function Home() {
     };
   }, [horasTemplate, periodId, firestoreUnavailable, user]);
 
-  // Al cargar la plantilla SEPS, deja abierta solo la primera tabla/seccion.
+  // Al cargar la plantilla SEPS, todas las tablas/secciones arrancan COLAPSADAS
+  // (apiladas, ninguna desplegada). El usuario abre la que necesite.
   useEffect(() => {
-    if (sepsTemplate?.kind === "matrix") {
-      const first = sepsTemplate.sections?.[0]?.title;
-      setOpenSepsTables(new Set(first ? [first] : []));
-    } else if (sepsTemplate && (sepsTemplate.tables?.length ?? 0) > 0) {
-      setOpenSepsTables(new Set([sepsTemplate.tables![0].id]));
-    } else {
-      setOpenSepsTables(new Set());
-    }
+    setOpenSepsTables(new Set());
   }, [sepsTemplate]);
 
   // Meses con datos guardados por modulo (para colorear el selector de historial).
@@ -7591,6 +7585,51 @@ export default function Home() {
                             : ""}
               </span>
             </div>
+
+            {/* Selector de tabuladores del servicio — SOLO movil. Muestra solo los
+                que el servicio reporta (PERC / SEPS / Horas) para poder cambiar. */}
+            {currentService &&
+            (mobileView === "panel-tabulator" ||
+              mobileView === "panel-seps" ||
+              mobileView === "panel-horas")
+              ? (() => {
+                  const hasPerc =
+                    showModule("perc") &&
+                    (currentService.rows.length > 0 ||
+                      !!getPercServFields(currentService.id));
+                  const hasSeps = showModule("sesps") && !!sepsTemplate;
+                  const hasHoras =
+                    showModule("distribucion") &&
+                    !!getHorasTemplate(currentService.id);
+                  const tabs = [
+                    hasPerc ? { id: "panel-tabulator", label: "PERC" } : null,
+                    hasSeps ? { id: "panel-seps", label: "SEPS" } : null,
+                    hasHoras ? { id: "panel-horas", label: "Horas" } : null,
+                  ].filter(Boolean) as { id: string; label: string }[];
+                  if (tabs.length < 2) return null;
+                  return (
+                    <div className="flex gap-1.5 rounded-2xl border border-white/10 bg-[#1b2537] p-1.5 xl:hidden">
+                      {tabs.map((t) => {
+                        const active = mobileView === t.id;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setMobileView(t.id)}
+                            className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                              active
+                                ? "bg-cyan-500 text-slate-950"
+                                : "text-slate-300 hover:bg-white/5"
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
+              : null}
 
             {/* Widgets opcionales (Configuracion): saludo y reloj. */}
             {uiPrefs.showGreeting || uiPrefs.showClock ? (
