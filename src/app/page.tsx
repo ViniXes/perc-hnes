@@ -772,7 +772,13 @@ function LoginLoadingModal({ show }: { show: boolean }) {
             </svg>
           </span>
 
-          <h3 className="mt-5 text-lg font-semibold text-white">Iniciando sesión…</h3>
+          <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.25em] text-cyan-300/80">
+            PULSO
+          </p>
+          <p className="mt-1 text-[13px] font-medium leading-snug text-slate-300">
+            Plataforma Única de Logística y Servicios Operativos
+          </p>
+          <h3 className="mt-3 text-lg font-semibold text-white">Iniciando sesión…</h3>
           <p className="mt-1 text-sm text-slate-400">Preparando tu panel, un momento.</p>
 
           {/* Monitor cardiaco: la linea de pulso se dibuja en bucle. */}
@@ -10278,7 +10284,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f4efe6] text-slate-950">
-      <section className="flex min-h-screen items-start justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-4 pb-10 pt-8 sm:pt-12">
+      <section className="flex min-h-screen items-start justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-4 pb-10 pt-8 sm:pt-12 xl:items-center xl:py-4">
         {/* Panel de monitoreo OCULTO: la pantalla de inicio solo muestra el login. */}
         <div className="hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.22),transparent_28%),radial-gradient(circle_at_80%_15%,rgba(16,185,129,0.18),transparent_25%),linear-gradient(150deg,#020617_0%,#111827_55%,#172554_100%)]" />
@@ -10454,7 +10460,7 @@ export default function Home() {
         <div className="relative flex w-full max-w-md items-start justify-center">
           <div className="w-full">
             {/* Encabezado fuera del modal: Hospital Nacional · El Salvador. */}
-            <div className="mb-4 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl">
+            <div className="mb-4 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl xl:mb-3 xl:py-3">
               <p className="text-xl font-light tracking-[0.22em] text-white sm:text-2xl">
                 HOSPITAL NACIONAL
               </p>
@@ -10493,12 +10499,12 @@ export default function Home() {
                 </button>
               </section>
             ) : (
-              <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#0e1626]/80 p-6 shadow-2xl shadow-black/60 backdrop-blur-xl sm:p-9">
+              <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#0e1626]/80 p-6 shadow-2xl shadow-black/60 backdrop-blur-xl sm:p-9 xl:p-7">
                 {/* Resplandores de fondo */}
                 <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-cyan-500/20 blur-3xl" />
                 <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-20 h-56 w-56 rounded-full bg-violet-600/20 blur-3xl" />
                 <div className="relative">
-                <div className="mb-7 flex flex-col items-center text-center">
+                <div className="mb-7 flex flex-col items-center text-center xl:mb-4">
                   {/* Logo PULSO con resplandor */}
                   <span className="relative flex h-16 w-16 items-center justify-center">
                     <span aria-hidden className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-600 opacity-60 blur-lg" />
@@ -10523,10 +10529,13 @@ export default function Home() {
                   <h2 className="mt-4 text-3xl font-bold tracking-tight text-white">
                     Bienvenido a PULSO
                   </h2>
+                  <p className="mt-1.5 text-[13px] font-medium leading-snug text-slate-300">
+                    Plataforma Única de Logística y Servicios Operativos
+                  </p>
                   <p className="mt-1.5 text-sm text-slate-400">Iniciá sesión para continuar</p>
                 </div>
 
-                <form className="space-y-5" onSubmit={handleSubmit}>
+                <form className="space-y-5 xl:space-y-4" onSubmit={handleSubmit}>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-300">Correo o usuario</span>
                     <div className="relative mt-2">
@@ -10643,7 +10652,7 @@ export default function Home() {
             )}
 
             {/* Creditos del equipo desarrollador, debajo del modal de login. */}
-            <div className="mt-10 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl">
+            <div className="mt-10 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl xl:mt-4 xl:py-3">
               <p className="text-[10px] font-light uppercase tracking-[0.32em] text-slate-400">
                 Desarrollado por
               </p>
