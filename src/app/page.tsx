@@ -885,6 +885,37 @@ const IconMoon = (
   </svg>
 );
 
+// Headset tipo call center (Centro de Soporte).
+const IconHeadset = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M4 13v-1a8 8 0 0 1 16 0v1" />
+    <path d="M4 14.5a2 2 0 0 1 2-2h1v5H6a2 2 0 0 1-2-2v-1Z" />
+    <path d="M20 14.5a2 2 0 0 0-2-2h-1v5h1a2 2 0 0 0 2-2v-1Z" />
+    <path d="M20 17v1.5a2.5 2.5 0 0 1-2.5 2.5H13" />
+  </svg>
+);
+
+// Iconos de categoria del Centro de Soporte.
+const IconSupportBug = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <rect x="8" y="8" width="8" height="10" rx="4" />
+    <path d="M12 5v3M9 9 7 7M15 9l2-2M5 12H3M21 12h-2M6 17l-2 1.5M18 17l2 1.5M8.5 13H4M20 13h-4.5" />
+  </svg>
+);
+const IconSupportQuestion = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.5v.4" />
+    <path d="M12 17h.01" />
+  </svg>
+);
+const IconSupportIdea = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M9 18h6M10 21h4" />
+    <path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1.1 1.2 1.3 2.2h4.6c.2-1 .7-1.7 1.3-2.2A6 6 0 0 0 12 3Z" />
+  </svg>
+);
+
 const IconSun = (
   <svg {...ICON_PROPS} aria-hidden="true">
     <circle cx="12" cy="12" r="4" />
@@ -1132,6 +1163,25 @@ type CaptureRequest = {
   status: "pending" | "approved" | "rejected";
   note?: string;
   resolvedByName?: string;
+};
+
+// Ticket del Centro de Soporte: reporte de error/duda/sugerencia que llega a la
+// bandeja de supervisores y admin.
+type SupportTicket = {
+  id: string;
+  category: "error" | "duda" | "sugerencia";
+  urgency: "baja" | "media" | "alta";
+  message: string;
+  reporterName: string;
+  reporterUid: string;
+  reporterRole: string;
+  serviceId: string;
+  serviceName: string;
+  screen: string;
+  appVersion: string;
+  status: "pendiente" | "en_revision" | "resuelto";
+  resolvedByName?: string;
+  createdAtMs?: number;
 };
 
 // Solicitud de REGISTRO de un jefe de servicio (creacion de usuario, aprobada por admin).
@@ -2952,6 +3002,15 @@ export default function Home() {
   >([]);
   const requestsReadyRef = useRef(false);
   const signupReadyRef = useRef(false);
+  const supportReadyRef = useRef(false);
+  // Centro de Soporte: tickets, modal de reporte y bandeja.
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [supportCategory, setSupportCategory] = useState<SupportTicket["category"]>("error");
+  const [supportUrgency, setSupportUrgency] = useState<SupportTicket["urgency"]>("media");
+  const [supportMessage, setSupportMessage] = useState("");
+  const [isSendingSupport, setIsSendingSupport] = useState(false);
+  const [supportBusyId, setSupportBusyId] = useState("");
   // Casita con aviso: verde (aprobada/nueva) o rojo (rechazada), con etiqueta temporal.
   const [casitaAlert, setCasitaAlert] = useState(false);
   const [casitaTone, setCasitaTone] = useState<"new" | "approved" | "rejected">("new");
@@ -3423,6 +3482,7 @@ export default function Home() {
       showDocsModal ||
       showStatsModal ||
       showRequestForm ||
+      showSupportModal ||
       adminServicePickerOpen,
     exitOpen: showExitModal,
   };
@@ -3453,6 +3513,7 @@ export default function Home() {
         setShowDocsModal(false);
         setShowStatsModal(false);
         setShowRequestForm(false);
+        setShowSupportModal(false);
         setAdminServicePickerOpen(false);
         setShowExitModal(false);
         window.history.pushState({ pulso: true }, "");
@@ -3818,6 +3879,82 @@ export default function Home() {
 
     return () => unsubscribe();
   }, [user, firestoreUnavailable, firestoreStatusReady]);
+
+  // Centro de Soporte: tickets en tiempo real. Solo supervisores y admin leen la
+  // bandeja (los servicios solo crean tickets, no los leen).
+  useEffect(() => {
+    if (firestoreUnavailable || !user || !firestoreStatusReady || (!isAdmin && !isSupervisor)) {
+      setSupportTickets([]);
+      return;
+    }
+    supportReadyRef.current = false;
+
+    const toTicket = (item: {
+      id: string;
+      data: () => Record<string, unknown>;
+    }): SupportTicket => {
+      const d = item.data();
+      const createdAt = d.createdAt as { toMillis?: () => number } | undefined;
+      return {
+        id: item.id,
+        category: (d.category as SupportTicket["category"]) ?? "error",
+        urgency: (d.urgency as SupportTicket["urgency"]) ?? "media",
+        message: String(d.message ?? ""),
+        reporterName: String(d.reporterName ?? ""),
+        reporterUid: String(d.reporterUid ?? ""),
+        reporterRole: String(d.reporterRole ?? ""),
+        serviceId: String(d.serviceId ?? ""),
+        serviceName: String(d.serviceName ?? ""),
+        screen: String(d.screen ?? ""),
+        appVersion: String(d.appVersion ?? ""),
+        status: (d.status as SupportTicket["status"]) ?? "pendiente",
+        resolvedByName:
+          typeof d.resolvedByName === "string" ? d.resolvedByName : undefined,
+        createdAtMs:
+          typeof createdAt?.toMillis === "function" ? createdAt.toMillis() : undefined,
+      };
+    };
+
+    const unsubscribe = onSnapshot(
+      collection(db, "supportTickets"),
+      (snap) => {
+        const list: SupportTicket[] = [];
+        snap.forEach((item) => list.push(toTicket(item)));
+        list.sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
+        setSupportTickets(list);
+
+        if (!supportReadyRef.current) {
+          supportReadyRef.current = true;
+          return;
+        }
+        const cfg = notifyConfigRef.current;
+        for (const change of snap.docChanges()) {
+          if (change.type !== "added") continue;
+          const t = toTicket(change.doc);
+          if (t.status !== "pendiente") continue;
+          if (t.reporterUid && t.reporterUid === cfg.uid) continue;
+          // Supervisores y admin reciben todos los tickets.
+          if (!cfg.isAdmin && !cfg.isSupervisor) continue;
+          const notif = {
+            id: `support-${t.id}-${Date.now()}`,
+            title: "Nuevo ticket de soporte",
+            body: `${t.reporterName || t.serviceName || "Usuario"} reportó: ${t.message.slice(0, 60)}`,
+          };
+          setToastNotifs((prev) => [notif, ...prev].slice(0, 3));
+          setCasitaAlert(true);
+          setCasitaTone("new");
+          window.setTimeout(() => {
+            setToastNotifs((prev) => prev.filter((n) => n.id !== notif.id));
+          }, 6000);
+        }
+      },
+      () => {
+        // Si faltan reglas de supportTickets, no debe romper la app.
+      },
+    );
+
+    return () => unsubscribe();
+  }, [user, firestoreUnavailable, firestoreStatusReady, isAdmin, isSupervisor]);
 
   // Solicitudes de REGISTRO (solo admins las leen, segun reglas de Firestore).
   useEffect(() => {
@@ -4669,6 +4806,86 @@ export default function Home() {
       setError("No pudimos actualizar la solicitud.");
     } finally {
       setRequestBusyId("");
+    }
+  }
+
+  // Envia un ticket al Centro de Soporte (cualquier usuario logueado).
+  async function sendSupportTicket(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (firestoreUnavailable) {
+      setError(FIRESTORE_SETUP_MESSAGE);
+      return;
+    }
+    const text = supportMessage.trim();
+    if (text.length < 5) {
+      setError("Describí el problema (al menos 5 caracteres).");
+      return;
+    }
+    setIsSendingSupport(true);
+    setError("");
+    setMessage("");
+    try {
+      const role = isAdmin ? "admin" : isSupervisor ? "supervisor" : "servicio";
+      const ref = doc(collection(db, "supportTickets"));
+      await setDoc(ref, {
+        category: supportCategory,
+        urgency: supportUrgency,
+        message: text,
+        reporterName: serviceProfile?.name || welcomeName || (user?.email ?? ""),
+        reporterUid: user?.uid ?? "",
+        reporterRole: role,
+        serviceId: currentService?.id ?? "",
+        serviceName: currentService?.name ?? (serviceProfile?.email ?? ""),
+        screen: activeSidebarSection || mobileView || "—",
+        appVersion: "1.6.2.6",
+        status: "pendiente",
+        createdAt: serverTimestamp(),
+      });
+      setSupportMessage("");
+      setSupportCategory("error");
+      setSupportUrgency("media");
+      setShowSupportModal(false);
+      setMessage("¡Listo! Tu reporte se envió a soporte. Te responderemos pronto.");
+    } catch (supportError) {
+      if (await handleFirestoreError(supportError)) {
+        return;
+      }
+      setError("No pudimos enviar tu reporte. Intentá de nuevo.");
+    } finally {
+      setIsSendingSupport(false);
+    }
+  }
+
+  // Cambia el estado de un ticket de soporte (solo admin/supervisores).
+  async function resolveSupportTicket(ticket: SupportTicket, status: SupportTicket["status"]) {
+    if (!serviceProfile || firestoreUnavailable) {
+      return;
+    }
+    if (!isAdmin && !isSupervisor) {
+      return;
+    }
+    setSupportBusyId(ticket.id);
+    setError("");
+    try {
+      await setDoc(
+        doc(db, "supportTickets", ticket.id),
+        { status, resolvedByName: serviceProfile.name, resolvedAt: serverTimestamp() },
+        { merge: true },
+      );
+      setSupportTickets((current) =>
+        current.map((item) =>
+          item.id === ticket.id
+            ? { ...item, status, resolvedByName: serviceProfile.name }
+            : item,
+        ),
+      );
+    } catch (resolveError) {
+      if (await handleFirestoreError(resolveError)) {
+        return;
+      }
+      setError("No pudimos actualizar el ticket.");
+    } finally {
+      setSupportBusyId("");
     }
   }
 
@@ -6889,6 +7106,8 @@ export default function Home() {
         ? captureRequests.filter((req) => serviceProfile.supervisorModules.includes(req.moduleId))
         : [];
     const pendingRequestCount = visibleRequests.filter((req) => req.status === "pending").length;
+    // Soporte: supervisores y admin ven todos los tickets; pendientes para el badge.
+    const pendingSupportCount = supportTickets.filter((t) => t.status === "pendiente").length;
     // El servicio logueado puede solicitar habilitacion si tiene un tablero propio.
     const canRequestEnable = !!currentService && !isAdmin && !isSupervisor;
     // Modulos que el servicio puede solicitar (los que le aplican).
@@ -7117,7 +7336,7 @@ export default function Home() {
             />
           ) : null}
           <aside
-            className={`self-start overflow-y-auto px-4 pt-4 pb-28 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] xl:inset-x-auto xl:bottom-auto xl:z-auto xl:w-auto xl:max-h-none xl:rounded-[24px] xl:p-4 xl:shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:translate-y-0 xl:transition-none xl:sticky xl:top-6 ${
+            className={`self-start overflow-y-auto px-4 pt-4 pb-28 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] xl:inset-x-auto xl:bottom-auto xl:z-auto xl:w-auto xl:max-h-[calc(100vh-3rem)] xl:rounded-[24px] xl:p-4 xl:pb-4 xl:shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:translate-y-0 xl:transition-none xl:sticky xl:top-6 ${
               menuOpen ? "translate-y-0" : "translate-y-full xl:hidden"
             } ${
               isLightPanelTheme
@@ -7132,7 +7351,7 @@ export default function Home() {
               aria-label="Cerrar menú"
               className="mx-auto mb-3 block h-1.5 w-12 rounded-full bg-slate-400/40 xl:hidden"
             />
-            <div className={`pb-4 text-center ${isLightPanelTheme ? "border-b border-slate-200" : "border-b border-white/10"}`}>
+            <div className={`pb-4 text-center xl:pb-3 ${isLightPanelTheme ? "border-b border-slate-200" : "border-b border-white/10"}`}>
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
                 Hospital Nacional
               </p>
@@ -7142,7 +7361,7 @@ export default function Home() {
             </div>
 
             <div
-              className={`mt-4 flex items-center gap-3 rounded-2xl px-3 py-2.5 shadow-sm ${
+              className={`mt-4 flex items-center gap-3 rounded-2xl px-3 py-2.5 shadow-sm xl:mt-3 xl:py-2 ${
                 isLightPanelTheme ? "bg-white" : "bg-[#202c41]"
               }`}
             >
@@ -7162,7 +7381,7 @@ export default function Home() {
               <PulsoMark className="ml-1 h-8 w-8 shrink-0 opacity-90" />
             </div>
 
-            <nav className="mt-5 grid grid-cols-3 gap-2 xl:block xl:space-y-1">
+            <nav className="mt-5 grid grid-cols-3 gap-2 xl:mt-3 xl:block xl:space-y-0.5">
               {sidebarItems.map((item) => {
                 const isActive = activeSidebarSection === item.id;
                 // Alerta roja cuando hay solicitudes pendientes.
@@ -7201,7 +7420,7 @@ export default function Home() {
                       }
                     }}
                     title={item.detail}
-                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-2.5 text-center transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-2 xl:text-left ${
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-2.5 text-center transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-1.5 xl:text-left ${
                       hasAlert
                         ? "border-rose-400/60 bg-rose-500/15 hover:bg-rose-500/25"
                         : isActive
@@ -7212,7 +7431,7 @@ export default function Home() {
                     }`}
                   >
                     <span
-                      className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${tileGradient} text-[10px] font-semibold uppercase tracking-[0.12em] text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:shadow-none xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px] ${
+                      className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${tileGradient} text-[10px] font-semibold uppercase tracking-[0.12em] text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:shadow-none xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px] ${
                         hasAlert
                           ? "xl:bg-none xl:bg-rose-500"
                           : isActive
@@ -7243,15 +7462,15 @@ export default function Home() {
               })}
             </nav>
 
-            <div className={`mt-4 grid grid-cols-3 gap-2 pt-4 xl:mt-6 xl:block xl:space-y-1 ${isLightPanelTheme ? "border-t border-slate-200" : "border-t border-white/10"}`}>
+            <div className={`mt-4 grid grid-cols-3 gap-2 pt-4 xl:mt-3 xl:pt-3 xl:block xl:space-y-0.5 ${isLightPanelTheme ? "border-t border-slate-200" : "border-t border-white/10"}`}>
               <button
                 type="button"
                 onClick={handleTogglePanelTheme}
-                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-2 xl:text-left xl:text-[13px] ${
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-1.5 xl:text-left xl:text-[13px] ${
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
                   {isLightPanelTheme ? IconMoon : IconSun}
                 </span>
                 <span>{isLightPanelTheme ? "Modo oscuro" : "Modo claro"}</span>
@@ -7266,21 +7485,42 @@ export default function Home() {
                   setShowPasswordText(false);
                   setShowPasswordModal(true);
                 }}
-                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-2 xl:text-left xl:text-[13px] ${
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-1.5 xl:text-left xl:text-[13px] ${
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-400 to-purple-600 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-400 to-purple-600 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
                   {IconKey}
                 </span>
                 <span>Cambiar contrasena</span>
               </button>
               <button
                 type="button"
-                onClick={handleSignOut}
-                className="group flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-300 xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-2 xl:text-left xl:text-[13px]"
+                onClick={() => {
+                  setError("");
+                  setMessage("");
+                  setShowSupportModal(true);
+                }}
+                className={`relative flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-1.5 xl:text-left xl:text-[13px] ${
+                  isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
+                }`}
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-md shadow-rose-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-8 xl:w-8 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-300 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px] xl:transition xl:group-hover:bg-rose-500/15 xl:group-hover:text-rose-300">
+                <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-cyan-600 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
+                  {IconHeadset}
+                  {(isAdmin || isSupervisor) && pendingSupportCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white ring-2 ring-[#0e1626]">
+                      {pendingSupportCount}
+                    </span>
+                  ) : null}
+                </span>
+                <span>Soporte</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="group flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-300 xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-1.5 xl:text-left xl:text-[13px]"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-md shadow-rose-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-300 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px] xl:transition xl:group-hover:bg-rose-500/15 xl:group-hover:text-rose-300">
                   {IconLogout}
                 </span>
                 <span>Cerrar sesion</span>
@@ -7829,26 +8069,34 @@ export default function Home() {
           ) : null}
 
           {isAdmin || isSupervisor ? (
-            <section data-view="panel-services" className="relative z-20 rounded-[24px] border border-amber-400/45 bg-gradient-to-br from-[#232f46] to-[#1a2334] p-5 shadow-[0_0_0_1px_rgba(251,191,36,0.15),0_24px_80px_rgba(3,7,18,0.45)] ring-1 ring-amber-400/10">
+            <section data-view="panel-services" className={`relative z-20 rounded-[24px] border border-amber-400/45 p-5 ring-1 ring-amber-400/10 ${
+              isLightPanelTheme
+                ? "bg-white text-slate-900 shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_18px_50px_rgba(15,23,42,0.10)]"
+                : "bg-gradient-to-br from-[#232f46] to-[#1a2334] text-slate-100 shadow-[0_0_0_1px_rgba(251,191,36,0.15),0_24px_80px_rgba(3,7,18,0.45)]"
+            }`}>
               {/* Encabezado elegante */}
-              <div className="mb-5 flex items-center gap-3.5 border-b border-white/[0.08] pb-4">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/30 to-amber-500/5 text-amber-200 ring-1 ring-amber-400/20">
+              <div className={`mb-5 flex items-center gap-3.5 border-b pb-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/[0.08]"}`}>
+                <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 ${
+                  isLightPanelTheme
+                    ? "bg-amber-400/15 text-amber-600 ring-amber-400/30"
+                    : "bg-gradient-to-br from-amber-400/30 to-amber-500/5 text-amber-200 ring-amber-400/20"
+                }`}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                     <rect x="3" y="4" width="18" height="16" rx="2" />
                     <path d="M3 9.5h18M9 9.5V20" />
                   </svg>
                 </span>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200/70">
+                  <p className={`hidden text-[11px] font-semibold uppercase tracking-[0.22em] sm:block ${isLightPanelTheme ? "text-amber-600/80" : "text-amber-200/70"}`}>
                     {isAdmin ? "Panel de administración" : "Panel de supervisión"}
                   </p>
-                  <h2 className="mt-0.5 truncate text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                  <h2 className={`mt-0.5 truncate text-lg font-semibold tracking-tight sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
                     {isAdmin ? "Ver tabuladores por servicio" : "Consolidado por servicio"}
                   </h2>
                 </div>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-start sm:gap-6">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Elegir servicio</h2>
+                <h2 className={`hidden text-sm font-semibold uppercase tracking-wide sm:block ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>Elegir servicio</h2>
                 <div className="relative w-full sm:max-w-sm sm:shrink-0">
                   {/* Trigger */}
                   <button
@@ -7856,10 +8104,14 @@ export default function Home() {
                     onClick={() => setAdminServicePickerOpen((prev) => !prev)}
                     aria-haspopup="listbox"
                     aria-expanded={adminServicePickerOpen}
-                    className={`flex w-full items-center gap-3 rounded-2xl border bg-[#2a3448] px-3.5 py-3 text-left transition focus:outline-none ${
+                    className={`flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition focus:outline-none ${
+                      isLightPanelTheme ? "bg-slate-50" : "bg-[#2a3448]"
+                    } ${
                       adminServicePickerOpen
                         ? "border-amber-400/70 shadow-[0_0_0_3px_rgba(251,191,36,0.12)]"
-                        : "border-white/10 hover:border-white/25"
+                        : isLightPanelTheme
+                          ? "border-slate-200 hover:border-slate-300"
+                          : "border-white/10 hover:border-white/25"
                     }`}
                   >
                     <span
@@ -7880,7 +8132,7 @@ export default function Home() {
                       <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                         {currentService ? "Servicio seleccionado" : "Sin seleccionar"}
                       </span>
-                      <span className={`block truncate text-sm font-semibold ${currentService ? "text-white" : "text-slate-400"}`}>
+                      <span className={`block truncate text-sm font-semibold ${currentService ? (isLightPanelTheme ? "text-slate-900" : "text-white") : "text-slate-400"}`}>
                         {currentService ? currentService.name : "Selecciona un servicio…"}
                       </span>
                     </span>
@@ -8017,7 +8269,7 @@ export default function Home() {
                   ) : null}
                 </div>
               </div>
-              <p className="mt-4 text-sm text-slate-300">
+              <p className={`mt-4 hidden text-sm sm:block ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
                 {isAdmin
                   ? "Selecciona un servicio para ver y editar sus tabuladores (PERC, SEPS y Horas) y su historial por mes."
                   : "Selecciona un servicio para ver lo que cargó en los tableros que supervisás (solo lectura)."}
@@ -9694,6 +9946,287 @@ export default function Home() {
                       })}
                   </div>
                 )}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Centro de Soporte: formulario (todos) + bandeja de tickets (admin/supervisores). */}
+          {showSupportModal ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto p-4 sm:items-center"
+              onClick={() => setShowSupportModal(false)}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/75 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                className="modal-pop-in relative my-4 flex max-h-[92vh] w-full min-w-0 max-w-2xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#0d1422] shadow-2xl shadow-black/60"
+              >
+                {/* Talón del ticket (encabezado) */}
+                <div className="relative shrink-0 bg-[#111a2b] px-6 pb-4 pt-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3.5">
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-cyan-600 text-white shadow-lg shadow-cyan-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px]">
+                        {IconHeadset}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-sky-300/80">
+                          Ticket de soporte
+                        </p>
+                        <h2 className="mt-0.5 text-lg font-bold tracking-tight text-white sm:text-xl">
+                          Centro de Soporte
+                        </h2>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowSupportModal(false)}
+                      aria-label="Cerrar"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {/* Folio + código de barras */}
+                  <div className="mt-4 flex items-end justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-slate-500">Folio</p>
+                      <p className="font-mono text-sm font-bold tracking-[0.18em] text-slate-200">#NUEVO</p>
+                    </div>
+                    <div className="flex h-7 items-end gap-[2px]" aria-hidden>
+                      {[3,1,2,1,1,3,1,2,3,1,1,2,1,3,1,2,2,1,3,1,1,2,3,1,2,1,1,3].map((w, i) => (
+                        <span key={i} className="block h-full bg-white/25" style={{ width: `${w}px` }} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Perforación */}
+                <div className="relative h-5 shrink-0 bg-[#111a2b]">
+                  <span aria-hidden className="absolute -left-2.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-slate-950" />
+                  <span aria-hidden className="absolute -right-2.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-slate-950" />
+                  <div className="absolute inset-x-5 top-1/2 -translate-y-1/2 border-t-2 border-dashed border-white/15" />
+                </div>
+
+                {/* Cuerpo desplazable */}
+                <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                  <form onSubmit={sendSupportTicket} className="space-y-5">
+                    <div>
+                      <p className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                        Tipo de asunto
+                      </p>
+                      <div className="grid grid-cols-3 gap-2.5">
+                        {([
+                          ["error", "Error", "Algo no funciona", IconSupportBug],
+                          ["duda", "Duda", "Tengo una pregunta", IconSupportQuestion],
+                          ["sugerencia", "Sugerencia", "Una idea de mejora", IconSupportIdea],
+                        ] as const).map(([val, label, desc, icon]) => {
+                          const active = supportCategory === val;
+                          return (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => setSupportCategory(val)}
+                              className={`group flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-center transition ${
+                                active
+                                  ? "border-sky-400/60 bg-sky-500/10 ring-1 ring-sky-400/30"
+                                  : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+                              }`}
+                            >
+                              <span className={`flex h-9 w-9 items-center justify-center rounded-xl transition [&_svg]:h-[18px] [&_svg]:w-[18px] ${
+                                active ? "bg-sky-500/20 text-sky-200" : "bg-white/5 text-slate-300"
+                              }`}>
+                                {icon}
+                              </span>
+                              <span className={`text-xs font-semibold ${active ? "text-white" : "text-slate-200"}`}>
+                                {label}
+                              </span>
+                              <span className="hidden text-[10px] leading-tight text-slate-500 sm:block">
+                                {desc}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                        Nivel de urgencia
+                      </p>
+                      <div className="flex gap-1.5 rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
+                        {([
+                          ["baja", "Baja", "bg-emerald-400", "bg-emerald-500/15 text-emerald-100 ring-1 ring-emerald-400/40"],
+                          ["media", "Media", "bg-amber-400", "bg-amber-500/15 text-amber-100 ring-1 ring-amber-400/40"],
+                          ["alta", "Alta", "bg-rose-400", "bg-rose-500/15 text-rose-100 ring-1 ring-rose-400/40"],
+                        ] as const).map(([val, label, dot, activeCls]) => {
+                          const active = supportUrgency === val;
+                          return (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => setSupportUrgency(val)}
+                              className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                                active ? activeCls : "text-slate-400 hover:bg-white/5"
+                              }`}
+                            >
+                              <span className={`h-2 w-2 rounded-full ${dot}`} />
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="mb-2.5 font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                        Descripción
+                      </p>
+                      <textarea
+                        value={supportMessage}
+                        onChange={(event) => setSupportMessage(event.target.value)}
+                        rows={4}
+                        placeholder="Contanos qué pasó, en qué pantalla y qué esperabas que sucediera…"
+                        className="w-full resize-none rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/70 focus:bg-white/[0.05] focus:ring-4 focus:ring-sky-500/10"
+                      />
+                    </div>
+
+                    {/* Metadatos que se adjuntan solos */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] text-slate-500">Se adjunta:</span>
+                      {[welcomeName, currentService?.name ?? "Sin servicio", "v1.6.2.6"].map((chip, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[10px] font-medium text-slate-300">
+                          {chip}
+                        </span>
+                      ))}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSendingSupport}
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:opacity-90 disabled:opacity-50"
+                    >
+                      {isSendingSupport ? "Emitiendo…" : "Emitir ticket"}
+                    </button>
+                  </form>
+
+                  {isAdmin || isSupervisor ? (
+                    <div className="mt-7 border-t border-white/[0.06] pt-5">
+                      <div className="mb-3.5 flex items-center justify-between gap-2">
+                        <h3 className="flex items-center gap-2 text-sm font-bold text-white">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-slate-300 [&_svg]:h-[15px] [&_svg]:w-[15px]">
+                            {IconMessage}
+                          </span>
+                          Bandeja de tickets
+                        </h3>
+                        {pendingSupportCount > 0 ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-200">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+                            {pendingSupportCount} pendiente{pendingSupportCount === 1 ? "" : "s"}
+                          </span>
+                        ) : null}
+                      </div>
+                      {supportTickets.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-8 text-center">
+                          <p className="text-sm font-medium text-slate-300">Sin tickets por ahora</p>
+                          <p className="mt-1 text-xs text-slate-500">Los reportes nuevos aparecerán acá.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {supportTickets.map((t) => {
+                            const urg =
+                              t.urgency === "alta"
+                                ? { stub: "bg-rose-500/15", dot: "bg-rose-400", chip: "bg-rose-500/15 text-rose-200" }
+                                : t.urgency === "media"
+                                  ? { stub: "bg-amber-500/15", dot: "bg-amber-400", chip: "bg-amber-500/15 text-amber-200" }
+                                  : { stub: "bg-emerald-500/15", dot: "bg-emerald-400", chip: "bg-emerald-500/15 text-emerald-200" };
+                            const catLabel =
+                              t.category === "error"
+                                ? "Error"
+                                : t.category === "duda"
+                                  ? "Duda"
+                                  : "Sugerencia";
+                            const folio = t.id.slice(0, 4).toUpperCase();
+                            const stamp =
+                              t.status === "resuelto"
+                                ? { label: "Resuelto", cls: "border-emerald-400/50 text-emerald-300/80" }
+                                : t.status === "en_revision"
+                                  ? { label: "En revisión", cls: "border-sky-400/50 text-sky-300/80" }
+                                  : { label: "Pendiente", cls: "border-amber-400/50 text-amber-300/80" };
+                            return (
+                              <div
+                                key={t.id}
+                                className="relative flex overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] transition hover:bg-white/[0.05]"
+                              >
+                                {/* Talón izquierdo con folio (perforado) */}
+                                <div className={`relative flex w-12 shrink-0 flex-col items-center justify-center gap-1 ${urg.stub}`}>
+                                  <span className="font-mono text-[8px] uppercase tracking-[0.2em] text-white/60">SOP</span>
+                                  <span className="font-mono text-[11px] font-bold tracking-wider text-white">{folio}</span>
+                                  <span aria-hidden className="absolute inset-y-1.5 right-0 border-r-2 border-dashed border-white/20" />
+                                </div>
+
+                                {/* Cuerpo del ticket */}
+                                <div className="min-w-0 flex-1 p-3.5">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p className="truncate text-sm font-bold text-white">
+                                        {t.reporterName || t.serviceName || "Usuario"}
+                                      </p>
+                                      <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-400">
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 font-semibold uppercase tracking-wide text-slate-300">
+                                          <span className={`h-1.5 w-1.5 rounded-full ${urg.dot}`} />
+                                          {catLabel}
+                                        </span>
+                                        {t.serviceName ? <span>· {t.serviceName}</span> : null}
+                                        {t.screen ? <span>· {t.screen}</span> : null}
+                                      </p>
+                                    </div>
+                                    {/* Sello de estado */}
+                                    <span className={`shrink-0 rotate-[-6deg] rounded-md border-2 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.12em] ${stamp.cls}`}>
+                                      {stamp.label}
+                                    </span>
+                                  </div>
+                                  <p className="mt-2.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-200">
+                                    {t.message}
+                                  </p>
+                                  {t.status === "resuelto" ? (
+                                    t.resolvedByName ? (
+                                      <p className="mt-3 font-mono text-[10px] uppercase tracking-wide text-emerald-300/70">
+                                        ✓ Cerrado por {t.resolvedByName}
+                                      </p>
+                                    ) : null
+                                  ) : (
+                                    <div className="mt-3.5 flex items-center justify-end gap-2">
+                                      {t.status === "pendiente" ? (
+                                        <button
+                                          type="button"
+                                          disabled={supportBusyId === t.id}
+                                          onClick={() => void resolveSupportTicket(t, "en_revision")}
+                                          className="rounded-xl border border-sky-400/40 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-200 transition hover:bg-sky-500/20 disabled:opacity-50"
+                                        >
+                                          Tomar
+                                        </button>
+                                      ) : null}
+                                      <button
+                                        type="button"
+                                        disabled={supportBusyId === t.id}
+                                        onClick={() => void resolveSupportTicket(t, "resuelto")}
+                                        className="rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
+                                      >
+                                        {supportBusyId === t.id ? "..." : "Resolver"}
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           ) : null}
