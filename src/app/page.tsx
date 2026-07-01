@@ -57,6 +57,14 @@ import {
   type SepsTemplate,
 } from "@/lib/seps-templates";
 import { getHorasTemplate, type HorasTemplate } from "@/lib/horas-templates";
+import {
+  matchAction,
+  getAvailableActions,
+  getActionLabel,
+  KNOWN_ACTION_IDS,
+  type AssistantActionId,
+  type AssistantContext,
+} from "@/lib/assistant-actions";
 
 type UserRole = "service" | "admin" | "supervisor";
 type TableValues = Record<string, Record<string, string>>;
@@ -423,7 +431,7 @@ function normalizeAssistant(text: string): string {
 }
 
 // Busca la mejor respuesta segun palabras clave de la pregunta del usuario.
-function answerAssistant(query: string): string {
+function answerAssistant(query: string): { text: string; found: boolean } {
   const q = normalizeAssistant(query);
   const qWords = q.split(/[^a-zñ0-9]+/).filter((w) => w.length > 2);
   let best: (typeof ASSISTANT_FAQS)[number] | null = null;
@@ -446,9 +454,12 @@ function answerAssistant(query: string): string {
     }
   }
   if (best && bestScore >= 2) {
-    return best.a;
+    return { text: best.a, found: true };
   }
-  return "No encontré una respuesta exacta. Probá con otras palabras o tocá un tema de abajo (Captura, Plazos, Cuenta, Vista, Sistema). Si es algo puntual de tus datos, lo mejor es avisar al administrador.";
+  return {
+    text: "No encontré una respuesta exacta. Probá con otras palabras o tocá un tema de abajo (Captura, Plazos, Cuenta, Vista, Sistema). Si es algo puntual de tus datos, lo mejor es avisar al administrador.",
+    found: false,
+  };
 }
 
 function getFontStack(id: string) {
@@ -3075,21 +3086,128 @@ export default function Home() {
   const [firestoreStatusReady, setFirestoreStatusReady] = useState(false);
   // Asistente virtual (robot) con preguntas frecuentes (chat interactivo).
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [assistantMsgs, setAssistantMsgs] = useState<{ from: "bot" | "user"; text: string }[]>([]);
+  const [assistantMsgs, setAssistantMsgs] = useState<
+    { from: "bot" | "user"; text: string; action?: { id: AssistantActionId; label: string } }[]
+  >([]);
   const [assistantInput, setAssistantInput] = useState("");
   const [botTyping, setBotTyping] = useState(false);
   const [assistantCat, setAssistantCat] = useState<AssistantCategory>("Captura");
-  function pushAssistant(question: string) {
+  // Ejecuta la accion que el asistente propone (navegar, abrir modal, guardar...).
+  function runAssistantAction(id: AssistantActionId) {
+    switch (id) {
+      case "go_inicio":
+        handleSidebarNavigation("panel-overview");
+        break;
+      case "go_perc":
+        handleSidebarNavigation("panel-tabulator");
+        break;
+      case "go_seps":
+        handleSidebarNavigation("panel-seps");
+        break;
+      case "go_horas":
+        handleSidebarNavigation("panel-horas");
+        break;
+      case "go_docs":
+        runSidebarItem("panel-docs");
+        break;
+      case "go_config":
+        runSidebarItem("panel-config");
+        break;
+      case "change_password":
+        setError("");
+        setMessage("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setShowPasswordText(false);
+        setShowPasswordModal(true);
+        break;
+      case "toggle_theme":
+        handleTogglePanelTheme();
+        break;
+      case "sign_out":
+        void handleSignOut();
+        break;
+      case "open_support":
+        setError("");
+        setMessage("");
+        setShowSupportModal(true);
+        break;
+      case "request_enable":
+        runSidebarItem("panel-request-form");
+        break;
+      case "save_perc":
+        void handleSave();
+        break;
+      case "save_seps":
+        void handleSaveSeps();
+        break;
+      case "save_horas":
+        void handleSaveHoras();
+        break;
+    }
+  }
+
+  // Asistente hibrido: 1) intent offline por palabras clave -> 2) preguntas
+  // frecuentes -> 3) respaldo con IA (Gemini) si hay clave configurada.
+  async function pushAssistant(question: string, ctx: AssistantContext) {
     const q = question.trim();
     if (!q) return;
     setAssistantMsgs((current) => [...current, { from: "user", text: q }]);
     setAssistantInput("");
     setBotTyping(true);
-    const answer = answerAssistant(q);
-    window.setTimeout(() => {
-      setAssistantMsgs((current) => [...current, { from: "bot", text: answer }]);
+
+    // 1) Accion por palabras clave (offline, instantaneo).
+    const local = matchAction(q, ctx);
+    if (local) {
+      window.setTimeout(() => {
+        setAssistantMsgs((current) => [
+          ...current,
+          { from: "bot", text: local.reply, action: { id: local.id, label: local.label } },
+        ]);
+        setBotTyping(false);
+      }, 450);
+      return;
+    }
+
+    // 2) Base de preguntas frecuentes (offline).
+    const faq = answerAssistant(q);
+    if (faq.found) {
+      window.setTimeout(() => {
+        setAssistantMsgs((current) => [...current, { from: "bot", text: faq.text }]);
+        setBotTyping(false);
+      }, 450);
+      return;
+    }
+
+    // 3) Respaldo con IA. Si no hay clave, la API responde con un mensaje guia.
+    try {
+      const res = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: q,
+          context: ctx,
+          availableActions: getAvailableActions(ctx),
+        }),
+      });
+      const data = await res.json();
+      const reply =
+        typeof data?.reply === "string" && data.reply.trim() ? data.reply.trim() : faq.text;
+      const actionId: AssistantActionId | null =
+        typeof data?.actionId === "string" && KNOWN_ACTION_IDS.includes(data.actionId)
+          ? (data.actionId as AssistantActionId)
+          : null;
+      setAssistantMsgs((current) => [
+        ...current,
+        actionId
+          ? { from: "bot", text: reply, action: { id: actionId, label: getActionLabel(actionId) } }
+          : { from: "bot", text: reply },
+      ]);
+    } catch {
+      setAssistantMsgs((current) => [...current, { from: "bot", text: faq.text }]);
+    } finally {
       setBotTyping(false);
-    }, 750);
+    }
   }
   function openAssistant() {
     setAssistantOpen((open) => {
@@ -3109,7 +3227,7 @@ export default function Home() {
             },
             {
               from: "bot",
-              text: "Elegí un tema abajo o escribime tu pregunta con tus propias palabras.",
+              text: "Escribime qué necesitás (ej: «llevame a PERC», «cambiar mi contraseña», «abrir soporte») y te lo dejo listo con un botón. También podés tocar un tema abajo.",
             },
           ];
         });
@@ -7119,6 +7237,18 @@ export default function Home() {
         ])
       : [];
 
+    // Contexto para el asistente virtual: rol y que modulos tiene disponibles.
+    // Solo rol/modulos, sin datos sensibles.
+    const assistantCtx: AssistantContext = {
+      isAdmin,
+      isSupervisor,
+      hasService: !!currentService,
+      hasPerc: !!currentService && showModule("perc"),
+      hasSeps: !!sepsTemplate && showModule("sesps"),
+      hasHoras: !!currentService && !!horasTemplate && showModule("distribucion"),
+      canRequestEnable,
+    };
+
     const sidebarItems = [
       {
         id: "panel-overview",
@@ -7336,7 +7466,7 @@ export default function Home() {
             />
           ) : null}
           <aside
-            className={`self-start overflow-y-auto px-4 pt-4 pb-28 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] xl:inset-x-auto xl:bottom-auto xl:z-auto xl:w-auto xl:max-h-[calc(100vh-3rem)] xl:rounded-[24px] xl:p-4 xl:pb-4 xl:shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:translate-y-0 xl:transition-none xl:sticky xl:top-6 ${
+            className={`self-start overflow-y-auto px-4 pt-4 pb-28 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] xl:inset-x-auto xl:bottom-auto xl:z-auto xl:w-auto xl:max-h-[calc(100vh-3rem)] xl:rounded-[24px] xl:p-4 xl:pb-4 xl:shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:-translate-y-1/2 xl:transition-none xl:sticky xl:top-1/2 ${
               menuOpen ? "translate-y-0" : "translate-y-full xl:hidden"
             } ${
               isLightPanelTheme
@@ -10697,18 +10827,35 @@ export default function Home() {
 
                 {/* Mensajes */}
                 <div className="flex-1 space-y-2 overflow-y-auto p-3">
-                  {assistantMsgs.map((msg, index) => (
-                    <p
-                      key={index}
-                      className={`w-fit max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-6 ${
-                        msg.from === "user"
-                          ? "ml-auto rounded-tr-sm bg-cyan-500/20 font-medium text-cyan-100"
-                          : "rounded-tl-sm bg-white/5 text-slate-200"
-                      }`}
-                    >
-                      {msg.text}
-                    </p>
-                  ))}
+                  {assistantMsgs.map((msg, index) => {
+                    const action = msg.from === "bot" ? msg.action : undefined;
+                    return (
+                      <div
+                        key={index}
+                        className={`flex flex-col ${msg.from === "user" ? "items-end" : "items-start"}`}
+                      >
+                        <p
+                          className={`w-fit max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-6 ${
+                            msg.from === "user"
+                              ? "rounded-tr-sm bg-cyan-500/20 font-medium text-cyan-100"
+                              : "rounded-tl-sm bg-white/5 text-slate-200"
+                          }`}
+                        >
+                          {msg.text}
+                        </p>
+                        {action ? (
+                          <button
+                            type="button"
+                            onClick={() => runAssistantAction(action.id)}
+                            className="mt-1.5 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
+                          >
+                            {action.label}
+                            <span aria-hidden>→</span>
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                   {botTyping ? (
                     <div className="flex w-fit items-center gap-1 rounded-2xl rounded-tl-sm bg-white/5 px-3 py-2.5">
                       <span className="bot-dot h-1.5 w-1.5 rounded-full bg-slate-300" />
@@ -10741,7 +10888,7 @@ export default function Home() {
                       <button
                         key={index}
                         type="button"
-                        onClick={() => pushAssistant(faq.q)}
+                        onClick={() => void pushAssistant(faq.q, assistantCtx)}
                         className="shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-300 transition hover:border-cyan-400/40 hover:bg-cyan-500/10"
                       >
                         {faq.q}
@@ -10754,7 +10901,7 @@ export default function Home() {
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
-                    pushAssistant(assistantInput);
+                    void pushAssistant(assistantInput, assistantCtx);
                   }}
                   className="flex items-center gap-2 border-t border-white/10 p-2.5"
                 >
