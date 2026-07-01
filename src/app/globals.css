@@ -155,7 +155,7 @@ body {
 }
 
 .panel-shell.theme-light {
-  --bg: #eef2f7;            /* gris frio claro (combina con el acento cian) */
+  --bg: #f1f4f9;            /* gris perla claro, afin al acento cian */
   --surface: #ffffff;
   --surface-2: #f6f8fb;
   --surface-3: #eef2f7;
@@ -169,6 +169,12 @@ body {
   --accent-btn: #0891b2;    /* cian para botones */
   --accent-ink: #ffffff;    /* texto blanco sobre el boton */
   --shadow-card: 0 18px 45px rgba(15, 23, 42, 0.08);
+  /* Resplandores muy sutiles (como el modo oscuro, pero en claro) para dar
+     profundidad y armonizar con el acento cian/violeta. */
+  background-image:
+    radial-gradient(circle at 12% 0%, rgba(8, 145, 178, 0.06), transparent 36%),
+    radial-gradient(circle at 100% 100%, rgba(124, 58, 237, 0.05), transparent 42%);
+  background-attachment: fixed;
 }
 
 /* ----- Superficies (se voltean con el tema) -------------------------------- */
@@ -222,6 +228,38 @@ body {
 /* En claro, los blancos puros (titulos sobre tarjetas que ahora son claras)
    deben oscurecerse para no quedar invisibles. En oscuro se quedan blancos. */
 .panel-shell.theme-light .text-white { color: var(--text); }
+
+/* ...pero el texto/iconos SOBRE botones de color pleno o con degradado deben
+   quedar BLANCOS en claro (si no, el override de arriba los oscurece y quedan
+   ilegibles). Va despues para ganar por orden de cascada. */
+.panel-shell.theme-light .bg-emerald-500,
+.panel-shell.theme-light .bg-sky-600,
+.panel-shell.theme-light .bg-slate-600,
+.panel-shell.theme-light .bg-rose-500,
+.panel-shell.theme-light .bg-rose-600,
+.panel-shell.theme-light .from-cyan-500,
+.panel-shell.theme-light .from-cyan-400 { color: #ffffff; }
+
+/* En claro (escritorio), los mosaicos/iconos del menu lateral usan variantes xl:
+   con colores oscuros que el remapeo base (clases sin prefijo) no alcanza. Aca los
+   corregimos dentro del mismo breakpoint para que los iconos se vean. */
+@media (min-width: 1280px) {
+  .panel-shell.theme-light .xl\:text-slate-100,
+  .panel-shell.theme-light .xl\:text-slate-300 { color: var(--text-muted); }
+  .panel-shell.theme-light .xl\:bg-white\/5 { background-color: var(--chip); }
+  .panel-shell.theme-light .xl\:ring-white\/10 { --tw-ring-color: var(--border); }
+}
+
+/* ----- Modo claro: botones solidos mas suaves y coherentes ----------------
+   Solo afecta botones de color pleno; NO toca las badges de estado (/15),
+   los puntos de color (/400 estaticos) ni los degradados de marca. */
+.panel-shell.theme-light .bg-cyan-500 { background-color: #0891b2; }        /* cian -> teal del acento */
+.panel-shell.theme-light .hover\:bg-cyan-400:hover { background-color: #0e7490; }
+.panel-shell.theme-light .bg-emerald-500 { background-color: #059669; }     /* verde mas profundo */
+.panel-shell.theme-light .hover\:bg-emerald-400:hover { background-color: #047857; }
+.panel-shell.theme-light .bg-violet-500\/80,
+.panel-shell.theme-light .bg-violet-500 { background-color: #7c3aed; }       /* violeta mas sobrio */
+.panel-shell.theme-light .hover\:bg-violet-400:hover { background-color: #6d28d9; }
 
 /* ----- Acentos: cian y violeta -> dorado (cohesion grafito+dorado) --------- */
 .panel-shell .text-cyan-200\/80,

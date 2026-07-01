@@ -23,7 +23,7 @@ const GEMINI_MODEL = "gemini-2.0-flash";
 let cooldownUntil = 0;
 
 const LIMIT_REPLY =
-  "El asistente inteligente alcanzó su límite de uso gratuito por ahora. Seguí usando las órdenes y opciones de abajo; la consulta libre se reactiva sola cuando se restablece el límite gratuito.";
+  "El asistente inteligente alcanzó su límite de uso gratuito por ahora. Siga usando las órdenes y opciones de abajo; la consulta libre se reactiva sola cuando se restablece el límite gratuito.";
 
 export async function POST(req: NextRequest) {
   let body: ReqBody = {};
@@ -37,14 +37,14 @@ export async function POST(req: NextRequest) {
   const available = Array.isArray(body.availableActions) ? body.availableActions : [];
 
   if (!message) {
-    return NextResponse.json({ reply: "Escribime tu consulta y te ayudo.", actionId: null });
+    return NextResponse.json({ reply: "Escríbame su consulta y le ayudo.", actionId: null });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json({
       reply:
-        "No encontré una respuesta exacta y el asistente inteligente todavía no está configurado. Probá con las opciones de abajo o avisá al administrador.",
+        "No estoy seguro de eso puntualmente. Puedo ayudarle a ir a PERC, SEPS o Dis/horas, cambiar su contraseña, cambiar el modo claro/oscuro, abrir soporte, solicitar habilitación o guardar su captura. Escríbame qué necesita con otras palabras o toque un tema de abajo.",
       actionId: null,
     });
   }
@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
   const systemPrompt = [
     "Sos el asistente virtual de PULSO, la plataforma del Hospital Nacional El Salvador para capturar la producción mensual de cada servicio (tabuladores PERC, SEPS y Distribución de Horas).",
     "Respondés SIEMPRE en español, con un tono cordial, claro y breve (máximo 3 frases).",
+    "Tratá al usuario SIEMPRE de «usted» (nunca de «vos» ni «tú»); por ejemplo «puede», «escriba», «su captura».",
     "Ayudás a los usuarios a usar el sistema y, cuando piden hacer algo concreto, podés proponer una acción de esta lista (usá el id EXACTO):",
     actionList,
     "Reglas:",
@@ -132,7 +133,7 @@ export async function POST(req: NextRequest) {
     const reply =
       typeof parsed.reply === "string" && parsed.reply.trim()
         ? parsed.reply.trim()
-        : "Perdón, no entendí bien. ¿Podés reformularlo con otras palabras?";
+        : "Perdón, no entendí bien. ¿Puede reformularlo con otras palabras?";
 
     let actionId: AssistantActionId | null = null;
     if (typeof parsed.actionId === "string" && KNOWN_ACTION_IDS.includes(parsed.actionId as AssistantActionId)) {
@@ -145,7 +146,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply, actionId });
   } catch {
     return NextResponse.json({
-      reply: "No pude conectar con el asistente inteligente en este momento. Probá con las opciones de abajo.",
+      reply: "No pude conectar con el asistente inteligente en este momento. Pruebe con las opciones de abajo.",
       actionId: null,
     });
   }

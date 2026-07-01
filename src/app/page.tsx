@@ -59,6 +59,7 @@ import {
 import { getHorasTemplate, type HorasTemplate } from "@/lib/horas-templates";
 import {
   matchAction,
+  matchSmalltalk,
   getAvailableActions,
   getActionLabel,
   KNOWN_ACTION_IDS,
@@ -198,6 +199,7 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
     firstName: "Dr. Roberto",
     lastName: "Cenento Zambrano",
     modules: ["perc", "sesps", "distribucion"],
+    admin: true,
   },
   {
     username: "jcmiranda",
@@ -266,31 +268,31 @@ const ASSISTANT_FAQS: { q: string; a: string; cat: AssistantCategory; kw?: strin
   {
     cat: "Captura",
     q: "¿Cómo ingreso mis datos?",
-    a: "Abrí tu tabulador (PERC, SEPS u Horas) desde el menú, completá las casillas y tocá «Guardar» al pie de la tabla. Cada módulo guarda por separado.",
+    a: "Abra su tabulador (PERC, SEPS u Horas) desde el menú, complete las casillas y toque «Guardar» al pie de la tabla. Cada módulo guarda por separado.",
     kw: ["ingresar", "cargar", "llenar", "capturar", "registrar", "datos", "guardar"],
   },
   {
     cat: "Captura",
     q: "¿Cómo guardo lo que cargué?",
-    a: "Al pie de cada tabla hay un botón «Guardar». Mientras la captura esté abierta podés guardar y volver a editar las veces que necesités; cada guardado reemplaza el anterior del mes.",
+    a: "Al pie de cada tabla hay un botón «Guardar». Mientras la captura esté abierta puede guardar y volver a editar las veces que necesite; cada guardado reemplaza el anterior del mes.",
     kw: ["guardar", "grabar", "salvar", "boton"],
   },
   {
     cat: "Captura",
     q: "En Horas, ¿cómo relleno rápido?",
-    a: "Escribí un valor en una casilla y arrastrá el cuadradito de su esquina inferior hacia abajo: copia ese valor en toda la columna, como en Excel (solo hacia abajo).",
+    a: "Escriba un valor en una casilla y arrastre el cuadradito de su esquina inferior hacia abajo: copia ese valor en toda la columna, como en Excel (solo hacia abajo).",
     kw: ["rellenar", "arrastrar", "copiar", "rapido", "excel", "columna"],
   },
   {
     cat: "Captura",
     q: "¿Cómo agrego o quito empleados en Horas?",
-    a: "En la tabla de Horas usá «+ Agregar empleado» para sumar una fila. Para quitar, tocá la ✕ de la fila; te pedirá confirmación antes de borrarla.",
+    a: "En la tabla de Horas use «+ Agregar empleado» para sumar una fila. Para quitar, toque la ✕ de la fila; le pedirá confirmación antes de borrarla.",
     kw: ["empleado", "agregar", "quitar", "eliminar", "borrar", "persona", "fila"],
   },
   {
     cat: "Captura",
     q: "¿Para qué sirve la columna DUI en Horas?",
-    a: "El DUI (documento de identidad) va antes del nombre del empleado y se guarda junto a su registro. Es un campo de texto: escribilo con guion, por ejemplo 01234567-8.",
+    a: "El DUI (documento de identidad) va antes del nombre del empleado y se guarda junto a su registro. Es un campo de texto: escríbalo con guion, por ejemplo 01234567-8.",
     kw: ["dui", "documento", "identidad", "cedula", "numero"],
   },
   {
@@ -302,7 +304,7 @@ const ASSISTANT_FAQS: { q: string; a: string; cat: AssistantCategory; kw?: strin
   {
     cat: "Captura",
     q: "En Laboratorio, ¿qué es el cuadre?",
-    a: "En el SEPS de Laboratorio el total de RESULTADOS debe ser igual al total de PROCEDENCIA. Si no coinciden, la fila se marca en rojo con «Debe sumar lo mismo». Corregí los valores hasta que cuadren.",
+    a: "En el SEPS de Laboratorio el total de RESULTADOS debe ser igual al total de PROCEDENCIA. Si no coinciden, la fila se marca en rojo con «Debe sumar lo mismo». Corrija los valores hasta que cuadren.",
     kw: ["laboratorio", "cuadre", "resultados", "procedencia", "rojo", "suma", "total", "examen"],
   },
   {
@@ -321,13 +323,13 @@ const ASSISTANT_FAQS: { q: string; a: string; cat: AssistantCategory; kw?: strin
   {
     cat: "Plazos",
     q: "No puedo cargar, está bloqueado",
-    a: "Si ya pasó el plazo, usá «Solicitar habilitar» en el menú para pedirle a un supervisor o al administrador que te reabra el tablero.",
+    a: "Si ya pasó el plazo, use «Solicitar habilitar» en el menú para pedirle a un supervisor o al administrador que le reabra el tablero.",
     kw: ["bloqueado", "cerrado", "no puedo", "deshabilitado", "habilitar", "solicitar", "reabrir"],
   },
   {
     cat: "Plazos",
     q: "¿Cómo solicito que me habiliten?",
-    a: "Menú → «Solicitar habilitar»: elegí el módulo y el mes, y enviás la solicitud. Un supervisor o el admin la aprueba y te reabre la captura.",
+    a: "Menú → «Solicitar habilitar»: elija el módulo y el mes, y envíe la solicitud. Un supervisor o el admin la aprueba y le reabre la captura.",
     kw: ["solicitar", "solicitud", "habilitar", "permiso", "pedir", "reabrir"],
   },
   {
@@ -340,19 +342,19 @@ const ASSISTANT_FAQS: { q: string; a: string; cat: AssistantCategory; kw?: strin
   {
     cat: "Cuenta",
     q: "¿Cómo cambio mi contraseña?",
-    a: "Menú → «Cambiar contraseña». Escribí la nueva clave y confirmá; podés mostrarla u ocultarla tocando el ojito.",
+    a: "Menú → «Cambiar contraseña». Escriba la nueva clave y confirme; puede mostrarla u ocultarla tocando el ojito.",
     kw: ["contraseña", "clave", "cambiar", "password", "ojito"],
   },
   {
     cat: "Cuenta",
     q: "Olvidé mi contraseña",
-    a: "Pedile al administrador un «Reset de clave» desde Usuarios y permisos: te asignan una clave temporal que cambiás al entrar.",
+    a: "Pídale al administrador un «Reset de clave» desde Usuarios y permisos: le asignan una clave temporal que cambia al entrar.",
     kw: ["olvide", "recuperar", "reset", "perdi", "contraseña", "clave"],
   },
   {
     cat: "Cuenta",
     q: "¿Cómo cierro sesión?",
-    a: "En el menú lateral, abajo, tocá «Cerrar sesión».",
+    a: "En el menú lateral, abajo, toque «Cerrar sesión».",
     kw: ["cerrar", "salir", "sesion", "logout", "desconectar"],
   },
   {
@@ -365,7 +367,7 @@ const ASSISTANT_FAQS: { q: string; a: string; cat: AssistantCategory; kw?: strin
   {
     cat: "Vista",
     q: "¿Cómo veo meses anteriores?",
-    a: "En cada tabulador usá el selector de «Mes». Los meses con datos aparecen en verde y los vacíos en gris. Es solo lectura (salvo que seas admin).",
+    a: "En cada tabulador use el selector de «Mes». Los meses con datos aparecen en verde y los vacíos en gris. Es solo lectura (salvo que sea admin).",
     kw: ["mes", "anterior", "historial", "pasado", "ver", "selector"],
   },
   {
@@ -383,7 +385,7 @@ const ASSISTANT_FAQS: { q: string; a: string; cat: AssistantCategory; kw?: strin
   {
     cat: "Vista",
     q: "¿Cómo personalizo la vista?",
-    a: "Menú → «Configuración»: podés cambiar tipografía, tamaño de letra, tema (claro/oscuro), color de acento y fondo de pantalla.",
+    a: "Menú → «Configuración»: puede cambiar tipografía, tamaño de letra, tema (claro/oscuro), color de acento y fondo de pantalla.",
     kw: ["personalizar", "configuracion", "tema", "tipografia", "fondo", "color", "letra", "claro", "oscuro"],
   },
   // ---- Sistema ----
@@ -402,13 +404,13 @@ const ASSISTANT_FAQS: { q: string; a: string; cat: AssistantCategory; kw?: strin
   {
     cat: "Sistema",
     q: "¿Por qué no veo los tres módulos?",
-    a: "Cada servicio tiene habilitados solo los módulos que le corresponden. Por ejemplo, ESDOMED y Asesores de Medicamentos solo reportan Distribución de Horas. Si creés que falta uno, avisá al administrador.",
+    a: "Cada servicio tiene habilitados solo los módulos que le corresponden. Por ejemplo, ESDOMED y Asesores de Medicamentos solo reportan Distribución de Horas. Si cree que falta uno, avise al administrador.",
     kw: ["modulo", "falta", "no veo", "no aparece", "esdomed", "solo horas"],
   },
   {
     cat: "Sistema",
     q: "¿Cómo descargo el Excel mensual?",
-    a: "Si sos administrador: Menú → «Consolidados PERC» → «Descargar Excel». Sale con los datos disponibles al momento de la descarga.",
+    a: "Si es administrador: Menú → «Consolidados PERC» → «Descargar Excel». Sale con los datos disponibles al momento de la descarga.",
     kw: ["excel", "descargar", "reporte", "consolidado", "mensual", "exportar"],
   },
   {
@@ -457,9 +459,38 @@ function answerAssistant(query: string): { text: string; found: boolean } {
     return { text: best.a, found: true };
   }
   return {
-    text: "No encontré una respuesta exacta. Probá con otras palabras o tocá un tema de abajo (Captura, Plazos, Cuenta, Vista, Sistema). Si es algo puntual de tus datos, lo mejor es avisar al administrador.",
+    text: "No estoy seguro de eso puntualmente, pero puedo ayudarle a moverse y a hacer cosas en PULSO: ir a PERC, SEPS o Dis/horas, cambiar su contraseña, cambiar el modo claro/oscuro, abrir soporte, solicitar habilitación de un tablero o guardar su captura. Escríbame qué necesita con otras palabras (ej: «ir a horas», «quiero guardar») o toque un tema de abajo. Si es algo puntual de sus datos, lo mejor es avisar al administrador.",
     found: false,
   };
+}
+
+// Divisor de seccion (solo escritorio): marca el inicio de cada tabulador en la
+// pagina principal con un color propio, para que al hacer scroll se perciba el
+// cambio de PERC -> SEPS -> Horas y no se sienta un solo tabulador continuo.
+function renderSectionDivider(
+  label: string,
+  subtitle: string,
+  tone: "cyan" | "violet" | "amber",
+  light: boolean,
+): ReactNode {
+  // Fondo neutro para los tres; solo el TEXTO lleva color por modulo.
+  const textTone = light
+    ? { cyan: "text-cyan-700", violet: "text-blue-700", amber: "text-amber-700" }
+    : { cyan: "text-cyan-300", violet: "text-blue-300", amber: "text-amber-300" };
+  const pill = light ? "bg-white ring-slate-200 shadow-sm" : "bg-white/5 ring-white/10";
+  const lineClass = light ? "via-slate-300" : "via-slate-400/50";
+  return (
+    <div className="hidden items-center gap-3 pt-8 xl:flex" aria-hidden="true">
+      <span className={`h-px flex-1 bg-gradient-to-r from-transparent ${lineClass} to-transparent`} />
+      <span className={`flex w-56 flex-col items-center rounded-2xl px-6 py-2 text-center ring-1 ${pill}`}>
+        <span className={`text-sm font-bold uppercase tracking-[0.24em] ${textTone[tone]}`}>{label}</span>
+        <span className={`text-[11px] font-medium normal-case tracking-normal ${light ? "text-slate-500" : "text-slate-400"}`}>
+          {subtitle}
+        </span>
+      </span>
+      <span className={`h-px flex-1 bg-gradient-to-l from-transparent ${lineClass} to-transparent`} />
+    </div>
+  );
 }
 
 function getFontStack(id: string) {
@@ -756,13 +787,13 @@ function LoginLoadingModal({ show }: { show: boolean }) {
     >
       <div className="modal-fade-in absolute inset-0 bg-slate-950/80 backdrop-blur-sm" />
       <div className="modal-pop-in relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
-        <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+        <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-blue-500" />
         <div className="px-6 pb-7 pt-7 text-center">
           {/* Logo PULSO con latido */}
           <span className="relative mx-auto flex h-16 w-16 items-center justify-center">
             <span
               aria-hidden
-              className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-600 opacity-50 blur-lg"
+              className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 opacity-50 blur-lg"
             />
             <svg viewBox="0 0 48 48" className="heartbeat relative h-16 w-16 drop-shadow-lg" aria-hidden="true">
               <defs>
@@ -1008,8 +1039,8 @@ const SIDEBAR_TILE_GRADIENT: Record<string, string> = {
   "panel-overview": "from-sky-400 to-blue-600",
   "panel-tabulator": "from-emerald-400 to-teal-600",
   "panel-module-perc": "from-emerald-400 to-teal-600",
-  "panel-seps": "from-violet-500 to-fuchsia-600",
-  "panel-module-sesps": "from-violet-500 to-fuchsia-600",
+  "panel-seps": "from-blue-500 to-blue-600",
+  "panel-module-sesps": "from-blue-500 to-blue-600",
   "panel-horas": "from-amber-400 to-orange-600",
   "panel-module-distribucion": "from-amber-400 to-orange-600",
   "panel-docs": "from-blue-400 to-indigo-600",
@@ -1018,7 +1049,7 @@ const SIDEBAR_TILE_GRADIENT: Record<string, string> = {
   "panel-admin-export": "from-teal-400 to-cyan-600",
   "panel-users": "from-indigo-400 to-purple-600",
   "panel-capture-toggle": "from-lime-400 to-green-600",
-  "panel-requests": "from-fuchsia-400 to-pink-600",
+  "panel-requests": "from-blue-400 to-pink-600",
   "panel-request-form": "from-cyan-400 to-sky-600",
   "panel-signups": "from-teal-400 to-emerald-600",
   "panel-services": "from-sky-400 to-cyan-600",
@@ -1041,11 +1072,14 @@ const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
   minute: "2-digit",
 });
 
-// Version compacta de fecha/hora para movil (ej. "23/06/26, 14:30").
-const DATE_TIME_FORMATTER_SHORT = new Intl.DateTimeFormat("es-HN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "2-digit",
+// Fecha y hora por separado para la tarjeta del encabezado.
+const HEADER_DATE_FORMATTER = new Intl.DateTimeFormat("es-HN", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+const HEADER_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
   hour: "2-digit",
   minute: "2-digit",
 });
@@ -1916,11 +1950,11 @@ function HistoryMonthSelect(props: {
         onClick={() => setOpen((value) => !value)}
         className={`flex w-full min-w-[210px] items-center gap-2.5 rounded-2xl border bg-[#2a3448] px-3.5 py-2.5 text-left transition disabled:opacity-50 sm:w-auto ${
           open
-            ? "border-violet-400/70 shadow-[0_0_0_3px_rgba(139,92,246,0.12)]"
+            ? "border-blue-400/70 shadow-[0_0_0_3px_rgba(139,92,246,0.12)]"
             : "border-white/10 hover:border-white/25"
         }`}
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/30 to-cyan-500/20 text-violet-100 [&_svg]:h-[18px] [&_svg]:w-[18px]">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/30 to-cyan-500/20 text-blue-100 [&_svg]:h-[18px] [&_svg]:w-[18px]">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <rect x="3.5" y="4.5" width="17" height="16" rx="2" />
             <path d="M3.5 9.5h17M8 3v3M16 3v3" />
@@ -1967,7 +2001,7 @@ function HistoryMonthSelect(props: {
                     setOpen(false);
                   }}
                   className={`flex w-full items-center justify-between gap-4 rounded-lg px-3 py-2 text-sm transition ${
-                    isActive ? "bg-violet-500/20" : "hover:bg-white/5"
+                    isActive ? "bg-blue-500/20" : "hover:bg-white/5"
                   }`}
                 >
                   <span className="flex items-center gap-2">
@@ -2976,6 +3010,8 @@ export default function Home() {
   const [isLoadingHoras, setIsLoadingHoras] = useState(false);
   // "Completo" del modulo Horas: solo true cuando el usuario GUARDO (no por el seed).
   const [horasSaved, setHorasSaved] = useState(false);
+  // El tabulador de Horas arranca colapsado para una pagina principal mas limpia.
+  const [horasCollapsed, setHorasCollapsed] = useState(true);
   const [now, setNow] = useState(() => new Date());
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -3147,8 +3183,49 @@ export default function Home() {
     }
   }
 
-  // Asistente hibrido: 1) intent offline por palabras clave -> 2) preguntas
-  // frecuentes -> 3) respaldo con IA (Gemini) si hay clave configurada.
+  // Si el usuario pide GUARDAR pero el tabulador esta vacio: en vez de guardar en
+  // blanco, avisa que no hay datos y ofrece abrir ese tabulador para cargarlos.
+  function assistantSaveGuard(
+    id: AssistantActionId,
+    ctx: AssistantContext,
+  ): { text: string; navId: AssistantActionId } | null {
+    if (id === "save_perc" && !ctx.hasPercData) {
+      return {
+        text: "Todavía no hay nada cargado en PERC este mes, así que no hay qué guardar. Primero escriba los números en la tabla y después lo guardamos. Le abro PERC.",
+        navId: "go_perc",
+      };
+    }
+    if (id === "save_seps" && !ctx.hasSepsData) {
+      return {
+        text: "Todavía no hay nada cargado en SEPS este mes. Primero complete la estadística y después lo guardamos. Le abro el tablero.",
+        navId: "go_seps",
+      };
+    }
+    if (id === "save_horas" && !ctx.hasHorasData) {
+      return {
+        text: "Todavía no hay horas cargadas este mes. Los nombres del personal ya vienen puestos, pero las horas las escribe usted. Le abro el tablero para cargarlas.",
+        navId: "go_horas",
+      };
+    }
+    return null;
+  }
+
+  // Construye el mensaje del bot para una accion, aplicando el guard de guardado.
+  function buildActionMessage(
+    id: AssistantActionId,
+    label: string,
+    reply: string,
+    ctx: AssistantContext,
+  ): { from: "bot"; text: string; action?: { id: AssistantActionId; label: string } } {
+    const guard = assistantSaveGuard(id, ctx);
+    if (guard) {
+      return { from: "bot", text: guard.text, action: { id: guard.navId, label: getActionLabel(guard.navId) } };
+    }
+    return { from: "bot", text: reply, action: { id, label } };
+  }
+
+  // Asistente hibrido: 1) accion por palabras clave -> 2) charla basica -> 3)
+  // preguntas frecuentes -> 4) respaldo con IA (Gemini) si hay clave configurada.
   async function pushAssistant(question: string, ctx: AssistantContext) {
     const q = question.trim();
     if (!q) return;
@@ -3159,17 +3236,25 @@ export default function Home() {
     // 1) Accion por palabras clave (offline, instantaneo).
     const local = matchAction(q, ctx);
     if (local) {
+      const msg = buildActionMessage(local.id, local.label, local.reply, ctx);
       window.setTimeout(() => {
-        setAssistantMsgs((current) => [
-          ...current,
-          { from: "bot", text: local.reply, action: { id: local.id, label: local.label } },
-        ]);
+        setAssistantMsgs((current) => [...current, msg]);
         setBotTyping(false);
       }, 450);
       return;
     }
 
-    // 2) Base de preguntas frecuentes (offline).
+    // 2) Charla basica (saludos, gracias, despedidas): offline e instantaneo.
+    const small = matchSmalltalk(q);
+    if (small) {
+      window.setTimeout(() => {
+        setAssistantMsgs((current) => [...current, { from: "bot", text: small }]);
+        setBotTyping(false);
+      }, 450);
+      return;
+    }
+
+    // 3) Base de preguntas frecuentes (offline).
     const faq = answerAssistant(q);
     if (faq.found) {
       window.setTimeout(() => {
@@ -3179,7 +3264,7 @@ export default function Home() {
       return;
     }
 
-    // 3) Respaldo con IA. Si no hay clave, la API responde con un mensaje guia.
+    // 4) Respaldo con IA. Si no hay clave, la API responde con un mensaje guia.
     try {
       const res = await fetch("/api/assistant", {
         method: "POST",
@@ -3200,7 +3285,7 @@ export default function Home() {
       setAssistantMsgs((current) => [
         ...current,
         actionId
-          ? { from: "bot", text: reply, action: { id: actionId, label: getActionLabel(actionId) } }
+          ? buildActionMessage(actionId, getActionLabel(actionId), reply, ctx)
           : { from: "bot", text: reply },
       ]);
     } catch {
@@ -3210,30 +3295,13 @@ export default function Home() {
     }
   }
   function openAssistant() {
-    setAssistantOpen((open) => {
-      const next = !open;
-      if (next) {
-        setAssistantMsgs((current) => {
-          if (current.length > 0) return current;
-          const quien = isAdmin
-            ? "Veo que entraste como administrador."
-            : currentService?.name
-              ? `Estás en ${currentService.name}.`
-              : "";
-          return [
-            {
-              from: "bot",
-              text: `¡Hola! Soy el asistente de PULSO. ${quien} Puedo ayudarte con la captura, los plazos de cierre, tu cuenta, la vista y cómo funciona el sistema.`.trim(),
-            },
-            {
-              from: "bot",
-              text: "Escribime qué necesitás (ej: «llevame a PERC», «cambiar mi contraseña», «abrir soporte») y te lo dejo listo con un botón. También podés tocar un tema abajo.",
-            },
-          ];
-        });
-      }
-      return next;
-    });
+    setAssistantOpen((open) => !open);
+  }
+  // Empezar una conversacion nueva: borra el historial y deja el chat vacio.
+  function startNewAssistantChat() {
+    setAssistantInput("");
+    setBotTyping(false);
+    setAssistantMsgs([]);
   }
   // Preferencias de personalizacion (menu Configuracion).
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -5947,6 +6015,8 @@ export default function Home() {
 
   function handleSidebarNavigation(sectionId: string) {
     setActiveSidebarSection(sectionId);
+    // Al ir a Horas se expande el tabulador (solo arranca colapsado en el login).
+    if (sectionId === "panel-horas") setHorasCollapsed(false);
     const section = window.document.getElementById(sectionId);
 
     if (section) {
@@ -6465,20 +6535,20 @@ export default function Home() {
     const sepsSection = sepsTemplate ? (
       <section
         id="panel-seps"
-        className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 text-slate-100 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+        className={`rounded-[24px] border border-cyan-400/20 p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${isLightPanelTheme ? "bg-white text-slate-800" : "bg-[#202c41] text-slate-100"}`}
       >
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-200/80">
               Tabulador · SEPS
             </p>
-            <h2 className="mt-1 text-2xl font-bold text-white">SEPS</h2>
-            <p className="mt-1 text-sm text-slate-300">
+            <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>SEPS</h2>
+            <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
               {currentService?.name || sepsTemplate.serviceId} · {sepsPeriodLabel} ·{" "}
               {sepsTemplate.establishment}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col items-start gap-2 lg:items-end">
             <span
               className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
                 sepsLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
@@ -6486,21 +6556,20 @@ export default function Home() {
             >
               {sepsLocked ? "BLOQUEADO" : "HABILITADO"}
             </span>
+            {renderHistorySelector({
+              options: sepsHistoryOptions,
+              currentPeriod: sepsPeriodId,
+              activePeriod: activeSepsPeriod,
+              isHistory: isSepsHistory,
+              readOnly: sepsHistReadOnly,
+              dataPeriods: sepsDataPeriods,
+              loading: isLoadingSeps,
+              onSelect: (period) => void loadSepsHistory(period),
+            })}
           </div>
         </div>
 
-        {renderHistorySelector({
-          options: sepsHistoryOptions,
-          currentPeriod: sepsPeriodId,
-          activePeriod: activeSepsPeriod,
-          isHistory: isSepsHistory,
-          readOnly: sepsHistReadOnly,
-          dataPeriods: sepsDataPeriods,
-          loading: isLoadingSeps,
-          onSelect: (period) => void loadSepsHistory(period),
-        })}
-
-        <p className="mt-3 rounded-xl border border-white/10 bg-[#1b2537] px-4 py-2 text-sm text-slate-200">
+        <p className={`mt-3 rounded-xl border px-4 py-2 text-sm ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-200"}`}>
           {sepsPhaseLabel}. Los totales y la fila de suma se calculan solos.
         </p>
 
@@ -6509,7 +6578,7 @@ export default function Home() {
             ? (sepsTemplate.sections ?? []).map((section) => {
                 const sectionOpen = openSepsTables.has(section.title);
                 return (
-                  <div key={section.title} className="overflow-hidden rounded-2xl border border-white/10">
+                  <div key={section.title} className={`overflow-hidden rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
                     <button
                       type="button"
                       onClick={() =>
@@ -6523,26 +6592,26 @@ export default function Home() {
                           return next;
                         })
                       }
-                      className="flex w-full items-center justify-between gap-3 bg-white/5 px-4 py-3 text-left transition hover:bg-white/10"
+                      className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition ${isLightPanelTheme ? "bg-slate-100 hover:bg-slate-200" : "bg-white/5 hover:bg-white/10"}`}
                     >
-                      <span className="text-sm font-semibold uppercase tracking-wide text-slate-100">
+                      <span className={`text-sm font-semibold uppercase tracking-wide ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                         {section.title}{" "}
-                        <span className="text-xs font-normal text-slate-400">
+                        <span className={`text-xs font-normal ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
                           ({section.exams.length})
                         </span>
                       </span>
                       <span
                         aria-hidden
-                        className="flex h-6 w-6 items-center justify-center rounded-md border border-white/15 bg-white/5 text-base font-bold leading-none text-cyan-200"
+                        className={`flex h-6 w-6 items-center justify-center rounded-md border text-base font-bold leading-none text-cyan-200 ${isLightPanelTheme ? "border-slate-200 bg-slate-100" : "border-white/15 bg-white/5"}`}
                       >
                         {sectionOpen ? "−" : "+"}
                       </span>
                     </button>
                     <div className={`show-scrollbar overflow-x-auto ${sectionOpen ? "" : "hidden"}`}>
-                      <table className="border-collapse text-xs text-slate-100">
+                      <table className={`border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                         <thead>
-                          <tr className="bg-white/5 text-slate-300">
-                            <th className="sticky left-0 z-10 min-w-[260px] bg-[#243049] px-3 py-2 text-left font-medium">
+                          <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
+                            <th className={`sticky left-0 z-10 min-w-[260px] px-3 py-2 text-left font-medium ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>
                               Examen
                             </th>
                             {SEPS_LAB_RESULT_COLS.map((col) => (
@@ -6550,7 +6619,7 @@ export default function Home() {
                                 {col.label}
                               </th>
                             ))}
-                            <th className="bg-[#243049] px-2 py-2 text-center font-semibold text-cyan-100">
+                            <th className={`px-2 py-2 text-center font-semibold text-cyan-100 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>
                               Total
                             </th>
                             {SEPS_LAB_PROC_COLS.map((col) => (
@@ -6558,10 +6627,10 @@ export default function Home() {
                                 {col.label}
                               </th>
                             ))}
-                            <th className="bg-[#243049] px-2 py-2 text-center font-semibold text-cyan-100">
+                            <th className={`px-2 py-2 text-center font-semibold text-cyan-100 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>
                               TOTAL
                             </th>
-                            <th className="bg-[#243049] px-3 py-2 text-center font-semibold text-cyan-100">
+                            <th className={`px-3 py-2 text-center font-semibold text-cyan-100 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>
                               Cuadre
                             </th>
                           </tr>
@@ -6580,12 +6649,12 @@ export default function Home() {
                             const hasData = resultTotal > 0 || procTotal > 0;
                             const mismatch = hasData && resultTotal !== procTotal;
                             const totalCellClass = mismatch
-                              ? "bg-[#241016] px-2 py-1.5 text-center font-semibold text-rose-300"
-                              : "bg-[#243049] px-2 py-1.5 text-center font-semibold text-cyan-100";
+                              ? `px-2 py-1.5 text-center font-semibold text-rose-300 ${isLightPanelTheme ? "bg-rose-50" : "bg-[#241016]"}`
+                              : `px-2 py-1.5 text-center font-semibold text-cyan-100 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`;
                             return (
-                              <tr key={exam.key} className="border-t border-white/5">
+                              <tr key={exam.key} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
                                 <th
-                                  className="sticky left-0 z-10 max-w-[260px] truncate border-r border-white/10 bg-[#3a465d] px-3 py-1.5 text-left text-[11px] font-medium text-slate-100"
+                                  className={`sticky left-0 z-10 max-w-[260px] truncate border-r px-3 py-1.5 text-left text-[11px] font-medium ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-800" : "border-white/10 bg-[#3a465d] text-slate-100"}`}
                                   title={`${exam.code} — ${exam.name}`}
                                 >
                                   <span className="text-cyan-200">{exam.code}</span> {exam.name}
@@ -6599,7 +6668,7 @@ export default function Home() {
                                       }
                                       disabled={sepsEditingBlocked}
                                       inputMode="numeric"
-                                      className="w-12 rounded border border-white/10 bg-[#1b2537] px-1 py-1 text-center outline-none focus:border-cyan-400 disabled:opacity-50"
+                                      className={`w-12 rounded border px-1 py-1 text-center outline-none focus:border-cyan-400 disabled:opacity-50 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
                                     />
                                   </td>
                                 ))}
@@ -6613,7 +6682,7 @@ export default function Home() {
                                       }
                                       disabled={sepsEditingBlocked}
                                       inputMode="numeric"
-                                      className="w-12 rounded border border-white/10 bg-[#1b2537] px-1 py-1 text-center outline-none focus:border-cyan-400 disabled:opacity-50"
+                                      className={`w-12 rounded border px-1 py-1 text-center outline-none focus:border-cyan-400 disabled:opacity-50 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
                                     />
                                   </td>
                                 ))}
@@ -6662,7 +6731,7 @@ export default function Home() {
             const tableOpen = openSepsTables.has(table.id);
 
             return (
-              <div key={table.id} className="overflow-hidden rounded-2xl border border-white/10">
+              <div key={table.id} className={`overflow-hidden rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
                 <button
                   type="button"
                   onClick={() =>
@@ -6676,34 +6745,34 @@ export default function Home() {
                       return next;
                     })
                   }
-                  className="flex w-full items-center justify-between gap-3 bg-white/5 px-4 py-3 text-left transition hover:bg-white/10"
+                  className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition ${isLightPanelTheme ? "bg-slate-100 hover:bg-slate-200" : "bg-white/5 hover:bg-white/10"}`}
                 >
                   <span>
-                    <span className="block text-sm font-semibold uppercase tracking-wide text-slate-100">
+                    <span className={`block text-sm font-semibold uppercase tracking-wide ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                       {table.title}
                     </span>
                     {table.subtitle ? (
-                      <span className="mt-1 block text-xs text-slate-300">{table.subtitle}</span>
+                      <span className={`mt-1 block text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>{table.subtitle}</span>
                     ) : null}
                   </span>
                   <span
                     aria-hidden
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-lg font-bold leading-none text-cyan-200"
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-lg font-bold leading-none text-cyan-200 ${isLightPanelTheme ? "border-slate-200 bg-slate-100" : "border-white/15 bg-white/5"}`}
                   >
                     {tableOpen ? "−" : "+"}
                   </span>
                 </button>
                 <div className={`show-scrollbar overflow-x-auto ${tableOpen ? "" : "hidden"}`}>
-                  <table className="border-collapse text-xs text-slate-100">
+                  <table className={`border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                     <thead>
-                      <tr className="bg-white/5 text-slate-300">
+                      <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
                         {hasGroups ? (
-                          <th className="sticky left-0 z-10 bg-[#243049] px-3 py-2 text-left font-medium">
+                          <th className={`sticky left-0 z-10 px-3 py-2 text-left font-medium ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>
                             Grupo
                           </th>
                         ) : null}
                         <th
-                          className={`${hasGroups ? "" : "sticky left-0 z-10 bg-[#243049]"} px-3 py-2 text-left font-medium`}
+                          className={`${hasGroups ? "" : `sticky left-0 z-10 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`} px-3 py-2 text-left font-medium`}
                         >
                           {table.detailLabel || "Detalle"}
                         </th>
@@ -6712,22 +6781,22 @@ export default function Home() {
                             {day}
                           </th>
                         ))}
-                        <th className="bg-[#243049] px-3 py-2 text-center font-semibold">Total</th>
+                        <th className={`px-3 py-2 text-center font-semibold ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       {table.rows.map((row, index) => (
-                        <tr key={row.key} className="border-t border-white/5">
+                        <tr key={row.key} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
                           {hasGroups && groupSpan[index] !== 0 ? (
                             <td
                               rowSpan={groupSpan[index] || 1}
-                              className="sticky left-0 z-10 bg-[#1b2537] px-3 py-1.5 align-middle font-medium"
+                              className={`sticky left-0 z-10 px-3 py-1.5 align-middle font-medium ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"}`}
                             >
                               {row.group}
                             </td>
                           ) : null}
                           <td
-                            className={`${hasGroups ? "" : "sticky left-0 z-10 bg-[#1b2537]"} whitespace-nowrap px-3 py-1.5 ${
+                            className={`${hasGroups ? "" : `sticky left-0 z-10 ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"}`} whitespace-nowrap px-3 py-1.5 ${
                               row.readOnly ? "font-semibold text-cyan-200" : ""
                             }`}
                             style={row.indent ? { paddingLeft: `${12 + row.indent * 14}px` } : undefined}
@@ -6748,12 +6817,12 @@ export default function Home() {
                                   }
                                   disabled={sepsEditingBlocked}
                                   inputMode="numeric"
-                                  className="w-9 rounded border border-white/10 bg-[#1b2537] px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 disabled:opacity-50"
+                                  className={`w-9 rounded border px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 disabled:opacity-50 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
                                 />
                               )}
                             </td>
                           ))}
-                          <td className="bg-[#243049] px-3 py-1.5 text-center font-semibold text-cyan-100">
+                          <td className={`px-3 py-1.5 text-center font-semibold text-cyan-100 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>
                             {sepsRowTotal(row)}
                           </td>
                         </tr>
@@ -6767,7 +6836,7 @@ export default function Home() {
         </div>
 
         {/* Acciones del tabulador SEPS. En historial cambia segun el rol. */}
-        <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className={`mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
           <div>
             {isSepsHistory ? (
               <button
@@ -6788,8 +6857,13 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleClearSeps}
-                className="rounded-2xl bg-slate-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500"
+                title="Limpiar tabla"
+                aria-label="Limpiar tabla"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-500"
               >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+                </svg>
                 Limpiar tabla
               </button>
               {!isSepsHistory ? (
@@ -6797,8 +6871,11 @@ export default function Home() {
                   type="button"
                   onClick={() => void loadSavedSeps()}
                   disabled={isLoadingSeps}
-                  className="rounded-2xl bg-violet-500/80 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-sky-900/70"
                 >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                    <path d="M12 3v12M7 11l5 5 5-5M5 21h14" />
+                  </svg>
                   {isLoadingSeps ? "Recuperando..." : "Recuperar datos"}
                 </button>
               ) : null}
@@ -6806,8 +6883,12 @@ export default function Home() {
                 type="button"
                 onClick={() => void handleSaveSeps()}
                 disabled={isSavingSeps || sepsEditingBlocked}
-                className="rounded-2xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
               >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <path d="M17 21v-8H7v8M7 3v5h8" />
+                </svg>
                 {isSavingSeps ? "Guardando..." : isSepsHistory ? "Guardar cambios del mes" : "Guardar SEPS"}
               </button>
             </div>
@@ -6891,27 +6972,46 @@ export default function Home() {
       <>
       <section
         id="panel-horas"
-        className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+        className={`rounded-[24px] border border-cyan-400/20 p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${isLightPanelTheme ? "bg-white" : "bg-[#202c41]"}`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-xl font-bold text-white sm:text-2xl">Distribución de Horas</h2>
-            <p className="mt-1 truncate text-sm text-slate-400">
+            <h2 className={`text-xl font-bold sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>Distribución de Horas</h2>
+            <p className={`mt-1 truncate text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
               {currentService?.name} · Cierre de {periodLabel}
             </p>
           </div>
-          <span
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-              horasLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
-            }`}
-          >
+          <div className="flex shrink-0 items-center gap-2">
             <span
-              className={`h-1.5 w-1.5 rounded-full ${horasLocked ? "bg-rose-400" : "bg-emerald-400"}`}
-            />
-            {horasLocked ? "Bloqueado" : "Habilitado"}
-          </span>
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                horasLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${horasLocked ? "bg-rose-400" : "bg-emerald-400"}`}
+              />
+              {horasLocked ? "Bloqueado" : "Habilitado"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setHorasCollapsed((v) => !v)}
+              aria-expanded={!horasCollapsed}
+              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                isLightPanelTheme
+                  ? "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+              }`}
+            >
+              {horasCollapsed ? "Mostrar" : "Ocultar"}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform ${horasCollapsed ? "" : "rotate-180"}`} aria-hidden="true">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+          </div>
         </div>
 
+        {!horasCollapsed ? (
+        <>
         {renderHistorySelector({
           options: horasHistoryOptions,
           currentPeriod: periodId,
@@ -6923,11 +7023,11 @@ export default function Home() {
           onSelect: (period) => void loadHorasHistory(period),
         })}
 
-        <div className="show-scrollbar mt-4 overflow-x-auto rounded-2xl border border-white/10">
-          <table className="w-full border-collapse text-xs text-slate-100">
+        <div className={`show-scrollbar mt-4 overflow-x-auto rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+          <table className={`w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
             <thead>
-              <tr className="bg-white/5 text-slate-300">
-                <th className="sticky left-0 z-20 min-w-[12rem] border-r border-white/10 bg-[#1a2334] px-2 py-2 text-left font-medium">
+              <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
+                <th className={`sticky left-0 z-20 min-w-[12rem] border-r px-2 py-2 text-left font-medium ${isLightPanelTheme ? "border-slate-200 bg-slate-100" : "border-white/10 bg-[#1a2334]"}`}>
                   Nombre del empleado
                 </th>
                 <th className="px-2 py-2 text-left font-medium">DUI</th>
@@ -6937,14 +7037,14 @@ export default function Home() {
                     {col}
                   </th>
                 ))}
-                <th className="px-2 py-2 text-center font-medium text-slate-300">Total</th>
+                <th className={`px-2 py-2 text-center font-medium ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>Total</th>
                 <th className="px-2 py-2" />
               </tr>
             </thead>
             <tbody>
               {horasEmployees.map((emp, index) => (
-                <tr key={index} className="border-t border-white/5">
-                  <td className="sticky left-0 z-10 min-w-[12rem] border-r border-white/10 bg-[#202c41] px-2 py-1">
+                <tr key={index} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                  <td className={`sticky left-0 z-10 min-w-[12rem] border-r px-2 py-1 ${isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#202c41]"}`}>
                     <div className="flex items-center gap-1.5">
                       <span className="hidden w-5 shrink-0 text-right text-[10px] text-slate-500 xl:block">
                         {index + 1}
@@ -6954,7 +7054,7 @@ export default function Home() {
                         onChange={(event) => handleHorasName(index, event.target.value)}
                         disabled={horasEditingBlocked}
                         placeholder="Nombre"
-                        className="w-full min-w-[9rem] rounded border border-white/10 bg-[#1b2537] px-2 py-1 text-xs outline-none focus:border-cyan-400 disabled:opacity-50"
+                        className={`w-full min-w-[9rem] rounded border px-2 py-1 text-xs outline-none focus:border-cyan-400 disabled:opacity-50 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
                       />
                     </div>
                   </td>
@@ -6964,7 +7064,7 @@ export default function Home() {
                       onChange={(event) => handleHorasDui(index, event.target.value)}
                       disabled={horasEditingBlocked}
                       placeholder="DUI"
-                      className="w-[6.75rem] rounded border border-white/10 bg-[#1b2537] px-2 py-1 text-xs outline-none focus:border-cyan-400 disabled:opacity-50 xl:w-28"
+                      className={`w-[6.75rem] rounded border px-2 py-1 text-xs outline-none focus:border-cyan-400 disabled:opacity-50 xl:w-28 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
                     />
                   </td>
                   <td className="hidden px-1.5 py-1 xl:table-cell">
@@ -6973,7 +7073,7 @@ export default function Home() {
                       onChange={(event) => handleHorasComment(index, event.target.value)}
                       disabled={horasEditingBlocked}
                       placeholder="(opcional)"
-                      className="w-32 rounded border border-amber-400/20 bg-[#1b2537] px-2 py-1 text-amber-100 outline-none focus:border-amber-400 disabled:opacity-50"
+                      className={`w-32 rounded border border-amber-400/20 px-2 py-1 text-amber-100 outline-none focus:border-amber-400 disabled:opacity-50 ${isLightPanelTheme ? "bg-white" : "bg-[#1b2537]"}`}
                     />
                   </td>
                   {horasTemplate.columns.map((col) => {
@@ -6994,8 +7094,8 @@ export default function Home() {
                           }}
                           disabled={horasEditingBlocked}
                           inputMode="numeric"
-                          className={`w-16 rounded border bg-[#1b2537] px-1 py-1.5 text-center outline-none focus:border-cyan-400 disabled:opacity-50 ${
-                            inFillRange ? "border-cyan-400 ring-1 ring-cyan-400 bg-cyan-500/10" : "border-white/10"
+                          className={`w-16 rounded border px-1 py-1.5 text-center outline-none focus:border-cyan-400 disabled:opacity-50 ${isLightPanelTheme ? "bg-white text-slate-900" : "bg-[#1b2537] text-white"} ${
+                            inFillRange ? "border-cyan-400 ring-1 ring-cyan-400 bg-cyan-500/10" : isLightPanelTheme ? "border-slate-300" : "border-white/10"
                           }`}
                         />
                         {!horasEditingBlocked ? (
@@ -7039,7 +7139,7 @@ export default function Home() {
           </table>
         </div>
 
-        <div className="mt-4 flex flex-row flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4">
+        <div className={`mt-4 flex flex-row flex-wrap items-center justify-between gap-2 border-t pt-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {!horasHistReadOnly ? (
               <button
@@ -7078,9 +7178,9 @@ export default function Home() {
                 onClick={handleClearHoras}
                 title="Limpiar tabla"
                 aria-label="Limpiar tabla"
-                className="inline-flex items-center gap-2 rounded-2xl bg-slate-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500 xl:px-5"
+                className="inline-flex items-center gap-2 rounded-2xl bg-slate-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-slate-500 xl:px-4"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
                   <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
                 </svg>
                 <span className="hidden xl:inline">Limpiar tabla</span>
@@ -7092,9 +7192,9 @@ export default function Home() {
                   disabled={isLoadingHoras}
                   title="Recuperar datos"
                   aria-label="Recuperar datos"
-                  className="inline-flex items-center gap-2 rounded-2xl bg-violet-500/80 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80 xl:px-5"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-sky-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-sky-900/70 xl:px-4"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
                     <path d="M12 3v12M7 11l5 5 5-5M5 21h14" />
                   </svg>
                   <span className="hidden xl:inline">
@@ -7108,9 +7208,9 @@ export default function Home() {
                 disabled={isSavingHoras || horasEditingBlocked}
                 title="Guardar Horas"
                 aria-label="Guardar Horas"
-                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 xl:px-5"
+                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 xl:px-4"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                   <path d="M17 21v-8H7v8M7 3v5h8" />
                 </svg>
@@ -7121,6 +7221,12 @@ export default function Home() {
             </div>
           )}
         </div>
+        </>
+        ) : (
+          <p className={`mt-3 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+            Tabla oculta para una vista más limpia. Toque «Mostrar» para ver y capturar las horas.
+          </p>
+        )}
       </section>
 
       {horasEmployeeToRemove !== null ? (
@@ -7204,13 +7310,13 @@ export default function Home() {
     ) : currentService ? (
       <section
         id="panel-horas"
-        className="rounded-[24px] border border-cyan-400/20 bg-[#202c41] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+        className={`rounded-[24px] border border-cyan-400/20 p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${isLightPanelTheme ? "bg-white" : "bg-[#202c41]"}`}
       >
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-200/80">
           Tabulador · DISTRIBUCION DE HORAS
         </p>
-        <h2 className="mt-1 text-2xl font-bold text-white">Distribucion de Horas</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+        <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>Distribucion de Horas</h2>
+        <p className={`mt-2 max-w-2xl text-sm leading-6 ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
           El tabulador de Distribucion de Horas de <strong>{currentService.name}</strong> aun no
           esta cargado. Esta seccion se habilitara aqui en cuanto se cargue su plantilla.
         </p>
@@ -7247,6 +7353,11 @@ export default function Home() {
       hasSeps: !!sepsTemplate && showModule("sesps"),
       hasHoras: !!currentService && !!horasTemplate && showModule("distribucion"),
       canRequestEnable,
+      hasPercData: hasAnyCapturedValue(tableValues),
+      hasSepsData: !!sepsTemplate && hasAnySepsValue(sepsValues),
+      hasHorasData: horasEmployees.some((emp) =>
+        Object.values(emp.hours).some((v) => Number(v) > 0),
+      ),
     };
 
     const sidebarItems = [
@@ -7517,7 +7628,7 @@ export default function Home() {
                 // Alerta roja cuando hay solicitudes pendientes.
                 const hasAlert = item.id === "panel-requests" && pendingRequestCount > 0;
                 const tileGradient =
-                  SIDEBAR_TILE_GRADIENT[item.id] ?? "from-cyan-500 to-violet-600";
+                  SIDEBAR_TILE_GRADIENT[item.id] ?? "from-cyan-500 to-blue-600";
 
                 return (
                   <button
@@ -7619,7 +7730,7 @@ export default function Home() {
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-400 to-purple-600 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-400 to-purple-600 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
                   {IconKey}
                 </span>
                 <span>Cambiar contrasena</span>
@@ -7697,7 +7808,7 @@ export default function Home() {
               >
                 {IconHome}
                 {casitaAlert ? (
-                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-violet-300 ring-2 ring-[#141c2c]" />
+                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-blue-300 ring-2 ring-[#141c2c]" />
                 ) : null}
               </span>
               <span className="text-[10px] font-semibold">Menú</span>
@@ -7738,7 +7849,7 @@ export default function Home() {
                   <span className="relative flex h-10 w-10 shrink-0 items-center justify-center">
                     <span
                       aria-hidden
-                      className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-400 to-violet-600 opacity-50 blur"
+                      className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 opacity-50 blur"
                     />
                     <svg viewBox="0 0 48 48" className="relative h-10 w-10" aria-hidden="true">
                       <defs>
@@ -7788,12 +7899,12 @@ export default function Home() {
                 onClick={() => setShowExitModal(false)}
               />
               <div className="modal-pop-in relative w-full max-w-xs overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
-                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-blue-500" />
                 <div className="px-6 pb-6 pt-7 text-center">
                   <span className="relative mx-auto flex h-14 w-14 items-center justify-center">
                     <span
                       aria-hidden
-                      className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-600 opacity-50 blur"
+                      className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 opacity-50 blur"
                     />
                     <svg viewBox="0 0 48 48" className="relative h-14 w-14 drop-shadow-lg" aria-hidden="true">
                       <defs>
@@ -7882,7 +7993,7 @@ export default function Home() {
                     <span className="relative flex h-10 w-10 shrink-0 items-center justify-center">
                       <span
                         aria-hidden
-                        className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-400 to-violet-600 opacity-50 blur"
+                        className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 opacity-50 blur"
                       />
                       <svg viewBox="0 0 48 48" className="relative h-10 w-10 drop-shadow" aria-hidden="true">
                         <defs>
@@ -7972,7 +8083,7 @@ export default function Home() {
                   {(
                     [
                       { key: "PERC", label: "PERC", text: "text-cyan-300", bar: "from-cyan-400 to-cyan-500" },
-                      { key: "SEPS", label: "SEPS", text: "text-violet-300", bar: "from-violet-400 to-violet-500" },
+                      { key: "SEPS", label: "SEPS", text: "text-blue-300", bar: "from-blue-400 to-blue-500" },
                       { key: "Horas", label: "Horas", text: "text-amber-300", bar: "from-amber-400 to-amber-500" },
                     ] as const
                   ).map((m) => {
@@ -8084,35 +8195,6 @@ export default function Home() {
                 })()
               : null}
 
-            {/* Widgets opcionales (Configuracion): saludo y reloj. */}
-            {uiPrefs.showGreeting || uiPrefs.showClock ? (
-              <div
-                className={`ml-auto hidden w-fit flex-wrap items-center justify-end gap-x-3 gap-y-1 rounded-2xl px-3 py-2 xl:ml-0 xl:flex xl:w-auto xl:justify-between xl:px-4 xl:py-3 ${
-                  isLightPanelTheme
-                    ? "border border-slate-200 bg-white text-slate-900"
-                    : "border border-white/10 bg-[#202c41] text-slate-100"
-                }`}
-              >
-                {uiPrefs.showGreeting ? (
-                  <p className="text-xs font-semibold sm:text-sm">
-                    Hola, {welcomeName} 👋
-                  </p>
-                ) : (
-                  <span className="hidden xl:block" />
-                )}
-                {uiPrefs.showClock ? (
-                  <p className="text-xs font-medium text-slate-400 sm:text-sm">
-                    <time suppressHydrationWarning className="xl:hidden">
-                      {DATE_TIME_FORMATTER_SHORT.format(now)}
-                    </time>
-                    <time suppressHydrationWarning className="hidden xl:inline">
-                      {DATE_TIME_FORMATTER.format(now)}
-                    </time>
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            <div className="hidden xl:block">{moduleSections}</div>
             <section
               id="panel-overview"
               className={`hidden rounded-2xl px-5 py-3.5 shadow-[0_24px_80px_rgba(3,7,18,0.45)] xl:block ${
@@ -8122,41 +8204,66 @@ export default function Home() {
               }`}
             >
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="min-w-0">
-                <h1 className="truncate text-base font-semibold sm:text-lg">
-                  {currentService
-                    ? `${currentService.name} · ${periodLabel}`
-                    : isSupervisor
-                      ? "Panel de Supervisión"
-                      : "Módulo de Administración"}
-                </h1>
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="h-10 w-1.5 shrink-0 rounded-full bg-gradient-to-b from-cyan-400 to-blue-500" />
+                <div className="min-w-0">
+                  <h1 className={`truncate text-lg font-bold tracking-tight sm:text-xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                    {currentService
+                      ? currentService.name
+                      : isSupervisor
+                        ? "Panel de Supervisión"
+                        : "Módulo de Administración"}
+                  </h1>
+                  {currentService ? (
+                    <p className="mt-0.5 truncate text-xs font-medium text-slate-400">
+                      Período de {periodLabel}
+                    </p>
+                  ) : null}
+                </div>
               </div>
 
-              <div className="hidden gap-3 sm:grid-cols-2 xl:flex">
+              <div className="flex items-center gap-3">
+                {/* Fecha y hora en vivo, en una tarjeta con icono. */}
+                <div
+                  className={`flex items-center gap-2.5 rounded-2xl px-3.5 py-2 ${
+                    isLightPanelTheme ? "bg-slate-100" : "bg-[#1b2537]"
+                  }`}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="18" rx="2" />
+                      <path d="M16 2v4M8 2v4M3 10h18" />
+                    </svg>
+                  </span>
+                  <div className="leading-tight">
+                    <p className={`text-sm font-semibold first-letter:uppercase ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                      <time suppressHydrationWarning>{HEADER_DATE_FORMATTER.format(now)}</time>
+                    </p>
+                    <p className="text-xs font-medium text-cyan-300">
+                      <time suppressHydrationWarning>{HEADER_TIME_FORMATTER.format(now)}</time>
+                    </p>
+                  </div>
+                </div>
+
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="rounded-2xl bg-violet-500/80 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-400"
+                  className={`group inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition ${
+                    isLightPanelTheme
+                      ? "border-slate-200 bg-white text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
+                      : "border-white/10 bg-white/5 text-slate-300 hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-200"
+                  }`}
                 >
-                  Cerrar sesion
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                  </svg>
+                  Cerrar sesión
                 </button>
               </div>
             </div>
             </section>
 
-          <div className="hidden flex-wrap items-center justify-between gap-3 xl:flex">
-            {serviceProfile.mustChangePassword ? (
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                Clave temporal — cambiala desde &quot;Cambiar contraseña&quot;.
-              </span>
-            ) : (
-              <span />
-            )}
-            <span className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-              <time suppressHydrationWarning>{DATE_TIME_FORMATTER.format(now)}</time>
-            </span>
-          </div>
+            <div className="hidden xl:block">{moduleSections}</div>
 
           {/* Toasts sutiles (esquina) para exito/error. Se desvanecen solos. */}
           {error || message ? (
@@ -8439,7 +8546,7 @@ export default function Home() {
                     {(
                       [
                         { key: "PERC", label: "PERC", color: "text-cyan-300", bar: "from-cyan-400 to-cyan-500" },
-                        { key: "SEPS", label: "SEPS (monitoreo)", color: "text-violet-300", bar: "from-violet-400 to-violet-500" },
+                        { key: "SEPS", label: "SEPS (monitoreo)", color: "text-blue-300", bar: "from-blue-400 to-blue-500" },
                         { key: "Horas", label: "Distribución de Horas", color: "text-amber-300", bar: "from-amber-400 to-amber-500" },
                       ] as const
                     ).map((m) => {
@@ -8504,36 +8611,44 @@ export default function Home() {
           {currentService &&
           showModule("perc") &&
           (currentService.rows.length > 0 || getPercServFields(currentService.id)) ? (
+            <>
+            {renderSectionDivider("PERC", "Productividad por centros de costo", "cyan", isLightPanelTheme)}
             <section
               id="panel-tabulator"
               data-view="panel-tabulator"
-              className="overflow-hidden rounded-[24px] border border-cyan-400/20 bg-[#202c41] shadow-[0_24px_80px_rgba(3,7,18,0.35)]"
+              className={`overflow-hidden rounded-[24px] border border-cyan-400/20 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${isLightPanelTheme ? "bg-white" : "bg-[#202c41]"}`}
             >
-              <div className="border-b border-white/10 bg-[#1b2537] px-5 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-violet-200/80">
-                  Tabulador · {getPercServFields(currentService.id) ? "PERC/SERV" : "PERC"}
-                </p>
-                <h2 className="mt-1 text-2xl font-bold text-white">
-                  {getPercServFields(currentService.id) ? "PERC/SERV" : "PERC"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-300">
-                  {getPercServFields(currentService.id)
-                    ? "Productividad por servicio"
-                    : "Captura mensual por centro de costos"}{" "}
-                  — {currentService.name} · {getPeriodLabel(activePercPeriod)}
-                </p>
+              <div className={`border-b px-5 py-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-200/80">
+                      Tabulador · {getPercServFields(currentService.id) ? "PERC/SERV" : "PERC"}
+                    </p>
+                    <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                      {getPercServFields(currentService.id) ? "PERC/SERV" : "PERC"}
+                    </h2>
+                    <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                      {getPercServFields(currentService.id)
+                        ? "Productividad por servicio"
+                        : "Captura mensual por centro de costos"}{" "}
+                      — {currentService.name} · {getPeriodLabel(activePercPeriod)}
+                    </p>
+                  </div>
 
-                {/* Selector de mes (historial). Mes actual = captura; meses previos = consulta. */}
-                {renderHistorySelector({
-                  options: percHistoryOptions,
-                  currentPeriod: periodId,
-                  activePeriod: activePercPeriod,
-                  isHistory: isPercHistory,
-                  readOnly: percReadOnly,
-                  dataPeriods: percDataPeriods,
-                  loading: isLoadingData,
-                  onSelect: (period) => void loadPercHistory(period),
-                })}
+                  {/* Selector de mes (historial). Mes actual = captura; meses previos = consulta. */}
+                  <div className="shrink-0">
+                    {renderHistorySelector({
+                      options: percHistoryOptions,
+                      currentPeriod: periodId,
+                      activePeriod: activePercPeriod,
+                      isHistory: isPercHistory,
+                      readOnly: percReadOnly,
+                      dataPeriods: percDataPeriods,
+                      loading: isLoadingData,
+                      onSelect: (period) => void loadPercHistory(period),
+                    })}
+                  </div>
+                </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span
@@ -8550,7 +8665,7 @@ export default function Home() {
                     />
                     {isFormLocked ? "Bloqueado" : "Habilitado"}
                   </span>
-                  <span className="text-xs text-slate-400">
+                  <span className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
                     {!serviceProfile.permissions.canEdit
                       ? "El administrador desactivo temporalmente tu permiso de captura."
                       : isDateLocked
@@ -8565,7 +8680,7 @@ export default function Home() {
                 <div className="grid gap-4 px-5 py-5 sm:grid-cols-2">
                   {getPercServFields(currentService.id)!.map((field) => (
                     <label key={field.key} className="block">
-                      <span className="text-sm font-medium text-slate-200">{field.label}</span>
+                      <span className={`text-sm font-medium ${isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>{field.label}</span>
                       <input
                         value={tableValues[PERC_SERV_ROW]?.[field.key] ?? ""}
                         onChange={(event) =>
@@ -8574,7 +8689,7 @@ export default function Home() {
                         disabled={percEditingBlocked}
                         inputMode="numeric"
                         placeholder={field.placeholder}
-                        className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition focus:border-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+                        className={`mt-2 w-full rounded-2xl border px-3 py-3 text-sm outline-none transition focus:border-blue-400 disabled:cursor-not-allowed disabled:opacity-50 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#2a3448] text-white"}`}
                       />
                     </label>
                   ))}
@@ -8582,16 +8697,16 @@ export default function Home() {
               ) : (
               <>
               <div className="show-scrollbar hidden overflow-x-auto xl:block">
-                <table className="min-w-full border-collapse text-xs text-slate-100">
+                <table className={`min-w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                   <thead>
-                    <tr className="bg-[#1a2334] text-left">
-                      <th className="sticky left-0 z-20 min-w-[210px] border-b border-white/10 bg-[#1a2334] px-3 py-3 font-semibold uppercase tracking-wide">
+                    <tr className={`text-left ${isLightPanelTheme ? "bg-slate-100" : "bg-[#1a2334]"}`}>
+                      <th className={`sticky left-0 z-20 min-w-[210px] border-b px-3 py-3 font-semibold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 bg-slate-100" : "border-white/10 bg-[#1a2334]"}`}>
                         Centro de costos
                       </th>
                       {TABULATOR_HEADERS.map((header) => (
                         <th
                           key={header}
-                          className="min-w-[118px] border-b border-l border-white/10 px-2 py-2 align-top text-[11px] font-semibold leading-4"
+                          className={`min-w-[118px] border-b border-l px-2 py-2 align-top text-[11px] font-semibold leading-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}
                         >
                           {header}
                         </th>
@@ -8604,8 +8719,8 @@ export default function Home() {
                       const fixedValues = getFixedValuesForRow(row);
 
                       return (
-                      <tr key={row} className="odd:bg-white/[0.02] even:bg-white/[0.05]">
-                        <th className="sticky left-0 z-10 border-r border-white/10 bg-[#3a465d] px-3 py-3 text-left text-[11px] font-semibold leading-4 text-slate-100">
+                      <tr key={row} className={`${isLightPanelTheme ? "odd:bg-white even:bg-slate-50" : "odd:bg-white/[0.02] even:bg-white/[0.05]"}`}>
+                        <th className={`sticky left-0 z-10 border-r px-3 py-3 text-left text-[11px] font-semibold leading-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-100 text-slate-800" : "border-white/10 bg-[#3a465d] text-slate-100"}`}>
                           {row}
                           {rowIsFixed ? (
                             <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300">
@@ -8616,7 +8731,7 @@ export default function Home() {
                         {TABULATOR_HEADERS.map((header) => {
                           const isSelf = percBlockedHeaders.has(header);
                           return (
-                          <td key={`${row}-${header}`} className="border-l border-white/10 px-1 py-1">
+                          <td key={`${row}-${header}`} className={`border-l px-1 py-1 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
                             <input
                               value={
                                 isSelf
@@ -8638,7 +8753,7 @@ export default function Home() {
                                     : undefined
                               }
                               inputMode="numeric"
-                              className="w-full rounded-lg border border-white/5 bg-[#2a3448] px-2 py-2 text-center text-xs text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:bg-[#313d54] disabled:cursor-not-allowed disabled:bg-[#253145] disabled:text-slate-400"
+                              className={`w-full rounded-lg border px-2 py-2 text-center text-xs outline-none transition placeholder:text-slate-500 focus:border-blue-400 disabled:cursor-not-allowed ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900 focus:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-500" : "border-white/5 bg-[#2a3448] text-slate-100 focus:bg-[#313d54] disabled:bg-[#253145] disabled:text-slate-400"}`}
                               placeholder={isSelf ? "—" : "0"}
                               type="text"
                             />
@@ -8655,28 +8770,28 @@ export default function Home() {
               {/* Tabulador PERC en TARJETAS verticales — SOLO movil (una por centro de costo). */}
               <div className="xl:hidden">
                 {/* Selector "Ir a centro de costo" — abre SOLO la tabla elegida. */}
-                <div className="border-b border-white/10 bg-[#202c41] px-4 py-3">
+                <div className={`border-b px-4 py-3 ${isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#202c41]"}`}>
                   <div className="relative">
                     <button
                       type="button"
                       onClick={() => setPercGoToOpen((v) => !v)}
-                      className={`flex w-full items-center gap-2.5 rounded-xl border bg-[#1b2537] px-3.5 py-3 text-left transition ${
+                      className={`flex w-full items-center gap-2.5 rounded-xl border px-3.5 py-3 text-left transition ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"} ${
                         percGoToOpen
                           ? "border-cyan-400/60 shadow-[0_0_0_3px_rgba(34,211,238,0.12)]"
-                          : "border-white/10"
+                          : isLightPanelTheme ? "border-slate-200" : "border-white/10"
                       }`}
                     >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/25 to-violet-600/20 text-cyan-200 [&_svg]:h-[18px] [&_svg]:w-[18px]">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/25 to-blue-600/20 text-cyan-200 [&_svg]:h-[18px] [&_svg]:w-[18px]">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <circle cx="11" cy="11" r="7" />
                           <path d="m20 20-3.2-3.2" />
                         </svg>
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        <span className={`block text-[11px] font-semibold uppercase tracking-wide ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
                           Ir a centro de costo
                         </span>
-                        <span className="block truncate text-sm font-semibold text-white">
+                        <span className={`block truncate text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
                           {percOpenCard !== null
                             ? TABULATOR_HEADERS[percOpenCard]
                             : "Elegí un centro…"}
@@ -8691,7 +8806,7 @@ export default function Home() {
                         strokeWidth="2"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        className={`shrink-0 text-slate-400 transition-transform ${percGoToOpen ? "rotate-180" : ""}`}
+                        className={`shrink-0 transition-transform ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"} ${percGoToOpen ? "rotate-180" : ""}`}
                         aria-hidden="true"
                       >
                         <path d="m6 9 6 6 6-6" />
@@ -8703,9 +8818,9 @@ export default function Home() {
                           className="fixed inset-0 z-30"
                           onClick={() => setPercGoToOpen(false)}
                         />
-                        <div className="modal-pop-in absolute left-0 right-0 z-40 mt-2 overflow-hidden rounded-2xl border border-white/10 bg-[#1b2537] shadow-[0_24px_80px_rgba(3,7,18,0.55)]">
-                          <div className="border-b border-white/5 p-2">
-                            <div className="flex items-center gap-2 rounded-xl bg-[#0e1626] px-3 py-2">
+                        <div className={`modal-pop-in absolute left-0 right-0 z-40 mt-2 overflow-hidden rounded-2xl border shadow-[0_24px_80px_rgba(3,7,18,0.55)] ${isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#1b2537]"}`}>
+                          <div className={`border-b p-2 ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                            <div className={`flex items-center gap-2 rounded-xl px-3 py-2 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#0e1626]"}`}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500" aria-hidden="true">
                                 <circle cx="11" cy="11" r="7" />
                                 <path d="m20 20-3.2-3.2" />
@@ -8715,7 +8830,7 @@ export default function Home() {
                                 value={percGoToQuery}
                                 onChange={(event) => setPercGoToQuery(event.target.value)}
                                 placeholder="Buscar centro…"
-                                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
+                                className={`w-full bg-transparent text-sm outline-none placeholder:text-slate-500 ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}
                               />
                             </div>
                           </div>
@@ -8742,15 +8857,15 @@ export default function Home() {
                                     }, 60);
                                   }}
                                   className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${
-                                    percOpenCard === i ? "bg-cyan-400/10" : "hover:bg-white/5"
+                                    percOpenCard === i ? "bg-cyan-400/10" : isLightPanelTheme ? "hover:bg-slate-100" : "hover:bg-white/5"
                                   }`}
                                 >
-                                  <span className="shrink-0 rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] font-bold text-cyan-200">
+                                  <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-cyan-200 ${isLightPanelTheme ? "bg-slate-100" : "bg-white/5"}`}>
                                     {header.split("-")[0]}
                                   </span>
                                   <span
                                     className={`min-w-0 flex-1 truncate text-sm ${
-                                      percOpenCard === i ? "font-semibold text-cyan-100" : "text-slate-200"
+                                      percOpenCard === i ? "font-semibold text-cyan-100" : isLightPanelTheme ? "text-slate-700" : "text-slate-200"
                                     }`}
                                   >
                                     {header.replace(/^\d+-/, "")}
@@ -8774,7 +8889,7 @@ export default function Home() {
                       <div
                         id={`pcc-${i}`}
                         key={header}
-                        className="scroll-mt-4 overflow-hidden rounded-2xl border border-white/10 bg-[#1b2537]"
+                        className={`scroll-mt-4 overflow-hidden rounded-2xl border ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}
                       >
                         <button
                           type="button"
@@ -8806,14 +8921,14 @@ export default function Home() {
                             strokeWidth="2"
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+                            className={`shrink-0 transition-transform ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"} ${open ? "rotate-180" : ""}`}
                             aria-hidden="true"
                           >
                             <path d="m6 9 6 6 6-6" />
                           </svg>
                         </button>
                         {open ? (
-                          <div className="space-y-2.5 border-t border-white/10 px-4 py-3">
+                          <div className={`space-y-2.5 border-t px-4 py-3 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
                             {currentService.rows.map((row) => {
                               const rowIsFixed = isFixedRow(row);
                               const fixedValues = getFixedValuesForRow(row);
@@ -8822,7 +8937,7 @@ export default function Home() {
                                   key={`${header}-${row}`}
                                   className="flex items-center justify-between gap-3"
                                 >
-                                  <span className="min-w-0 flex-1 text-xs leading-tight text-slate-300">
+                                  <span className={`min-w-0 flex-1 text-xs leading-tight ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
                                     {row}
                                     {rowIsFixed ? (
                                       <span className="ml-1.5 inline-block rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300">
@@ -8847,7 +8962,7 @@ export default function Home() {
                                     inputMode="numeric"
                                     type="text"
                                     placeholder={isSelf ? "—" : "0"}
-                                    className="w-24 shrink-0 rounded-lg border border-white/10 bg-[#2a3448] px-2 py-2.5 text-center text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:bg-[#313d54] disabled:cursor-not-allowed disabled:bg-[#253145] disabled:text-slate-400"
+                                    className={`w-24 shrink-0 rounded-lg border px-2 py-2.5 text-center text-sm outline-none transition placeholder:text-slate-500 focus:border-blue-400 disabled:cursor-not-allowed ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900 focus:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-500" : "border-white/10 bg-[#2a3448] text-slate-100 focus:bg-[#313d54] disabled:bg-[#253145] disabled:text-slate-400"}`}
                                   />
                                 </label>
                               );
@@ -8863,7 +8978,7 @@ export default function Home() {
                       onClick={() =>
                         setPercVisibleCount((c) => Math.min(c + 5, TABULATOR_HEADERS.length))
                       }
-                      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-cyan-200 transition active:bg-white/10"
+                      className={`flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold text-cyan-200 transition ${isLightPanelTheme ? "border-slate-200 bg-slate-100 active:bg-slate-200" : "border-white/10 bg-white/5 active:bg-white/10"}`}
                     >
                       Ver 5 más ({TABULATOR_HEADERS.length - percVisibleCount} restantes)
                     </button>
@@ -8874,7 +8989,7 @@ export default function Home() {
               )}
 
               {/* Acciones del tabulador PERC. En historial cambia segun el rol. */}
-              <div className="flex flex-col gap-3 border-t border-white/10 bg-[#1b2537] px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <div className={`flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
                 <div>
                   {isPercHistory ? (
                     <button
@@ -8899,9 +9014,9 @@ export default function Home() {
                       onClick={handleClearTable}
                       title="Limpiar tabla"
                       aria-label="Limpiar tabla"
-                      className="inline-flex items-center gap-2 rounded-2xl bg-slate-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-500 xl:px-5"
+                      className="inline-flex items-center gap-2 rounded-2xl bg-slate-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-slate-500 xl:px-4"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
                         <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
                       </svg>
                       <span className="hidden xl:inline">Limpiar tabla</span>
@@ -8913,9 +9028,9 @@ export default function Home() {
                         disabled={isLoadingData}
                         title="Recuperar datos"
                         aria-label="Recuperar datos"
-                        className="inline-flex items-center gap-2 rounded-2xl bg-violet-500/80 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-violet-800/80 xl:px-5"
+                        className="inline-flex items-center gap-2 rounded-2xl bg-sky-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-sky-900/70 xl:px-4"
                       >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
                           <path d="M12 3v12M7 11l5 5 5-5M5 21h14" />
                         </svg>
                         <span className="hidden xl:inline">
@@ -8929,9 +9044,9 @@ export default function Home() {
                       disabled={isSaving || percEditingBlocked}
                       title="Guardar datos"
                       aria-label="Guardar datos"
-                      className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 xl:px-5"
+                      className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 xl:px-4"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 xl:h-4 xl:w-4" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
                         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                         <path d="M17 21v-8H7v8M7 3v5h8" />
                       </svg>
@@ -8947,14 +9062,21 @@ export default function Home() {
                 )}
               </div>
             </section>
+            </>
           ) : null}
 
           {showModule("sesps") ? (
+            <>
+            {renderSectionDivider("SEPS", "Captura estadística", "violet", isLightPanelTheme)}
             <div data-view="panel-seps">{sepsSection}</div>
+            </>
           ) : null}
 
           {showModule("distribucion") ? (
+            <>
+            {renderSectionDivider("Dis/horas", "Reparto de horas del personal", "amber", isLightPanelTheme)}
             <div data-view="panel-horas">{horasSection}</div>
+            </>
           ) : null}
 
           {/* Bandeja de aprobacion de REGISTROS (solo admins). */}
@@ -9052,12 +9174,12 @@ export default function Home() {
                 style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))" }}
                 className="modal-pop-in relative w-full max-w-lg overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
               >
-                <div className="h-1.5 w-full bg-gradient-to-r from-violet-500 via-violet-400 to-cyan-400" />
+                <div className="h-1.5 w-full bg-gradient-to-r from-blue-500 via-blue-400 to-cyan-400" />
 
                 <div className="px-7 pb-7 pt-6">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300/90">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300/90">
                         Seguridad
                       </p>
                       <h3 id="change-password-title" className="mt-1 text-xl font-semibold text-white">
@@ -9088,7 +9210,7 @@ export default function Home() {
                           <input
                             value={newPassword}
                             onChange={(event) => setNewPassword(event.target.value)}
-                            className="w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 pr-12 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-violet-500"
+                            className="w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 pr-12 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-blue-500"
                             minLength={6}
                             placeholder="Minimo 6 caracteres"
                             type={showPasswordText ? "text" : "password"}
@@ -9122,7 +9244,7 @@ export default function Home() {
                         <input
                           value={confirmPassword}
                           onChange={(event) => setConfirmPassword(event.target.value)}
-                          className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-violet-500"
+                          className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-blue-500"
                           minLength={6}
                           placeholder="Repite la nueva clave"
                           type={showPasswordText ? "text" : "password"}
@@ -9140,7 +9262,7 @@ export default function Home() {
                         <button
                           type="submit"
                           disabled={isChangingPassword}
-                          className="rounded-2xl bg-gradient-to-r from-violet-500 to-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-900/40 transition hover:from-violet-400 hover:to-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-900/40 transition hover:from-blue-400 hover:to-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isChangingPassword ? "Actualizando..." : "Cambiar clave"}
                         </button>
@@ -9497,7 +9619,7 @@ export default function Home() {
                           <span
                             className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
                               draft.role === "admin"
-                                ? "bg-violet-500/20 text-violet-200"
+                                ? "bg-blue-500/20 text-blue-200"
                                 : "bg-white/10 text-slate-300"
                             }`}
                           >
@@ -9577,7 +9699,7 @@ export default function Home() {
                             disabled={draft.role !== "admin"}
                             onClick={() => updateAdminDraft(selectedUser.uid, { canManageUsers: !draft.canManageUsers })}
                             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${
-                              draft.canManageUsers ? "bg-violet-500/20 text-violet-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                              draft.canManageUsers ? "bg-blue-500/20 text-blue-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
                             }`}
                           >
                             {draft.canManageUsers ? "✓ " : ""}Gestiona usuarios
@@ -9606,7 +9728,7 @@ export default function Home() {
                             type="button"
                             onClick={() => void handleAdminSendReset(selectedUser.uid, selectedUser)}
                             disabled={busy}
-                            className="rounded-xl border border-violet-400/40 bg-violet-500/15 px-4 py-2.5 text-sm font-semibold text-violet-200 transition hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="rounded-xl border border-blue-400/40 bg-blue-500/15 px-4 py-2.5 text-sm font-semibold text-blue-200 transition hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Reset clave
                           </button>
@@ -9638,7 +9760,7 @@ export default function Home() {
               >
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300/90">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300/90">
                       Tablero de avance
                     </p>
                     <h2 className="mt-1 text-xl font-semibold text-white">
@@ -10451,11 +10573,11 @@ export default function Home() {
                 style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))" }}
                 className="modal-pop-in relative my-8 w-full max-w-lg overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
               >
-                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-blue-500" />
                 <div className="max-h-[85vh] overflow-y-auto px-5 pb-5 pt-5">
                   <div className="mb-4 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 text-white">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
                           <circle cx="12" cy="12" r="3" />
                           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
@@ -10654,10 +10776,10 @@ export default function Home() {
                 }}
                 className="modal-pop-in relative my-6 w-full max-w-6xl overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
               >
-                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-blue-500" />
                 <div className="flex items-center justify-between gap-3 px-5 pt-5">
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 text-white">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
                       {IconFile}
                     </span>
                     <div>
@@ -10787,9 +10909,9 @@ export default function Home() {
           <div className="fixed bottom-5 right-5 z-40 hidden flex-col items-end gap-3 xl:flex">
             {assistantOpen ? (
               <div className="modal-pop-in flex h-[66vh] max-h-[540px] w-[350px] max-w-[88vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/50">
-                <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-cyan-500/25 to-violet-500/25 px-4 py-3">
+                <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-cyan-500/25 to-blue-500/25 px-4 py-3">
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 ring-1 ring-white/30">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 ring-1 ring-white/30">
                       <svg viewBox="0 0 40 40" className="h-6 w-6" aria-hidden="true">
                         <line x1="20" y1="4" x2="20" y2="9" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
                         <circle cx="20" cy="3.4" r="2.1" fill="#ffffff" />
@@ -10815,14 +10937,28 @@ export default function Home() {
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setAssistantOpen(false)}
-                    aria-label="Cerrar asistente"
-                    className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
-                  >
-                    ✕
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={startNewAssistantChat}
+                      aria-label="Nueva conversación"
+                      title="Nueva conversación"
+                      className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAssistantOpen(false)}
+                      aria-label="Cerrar asistente"
+                      className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
 
                 {/* Mensajes */}
@@ -10847,7 +10983,7 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => runAssistantAction(action.id)}
-                            className="mt-1.5 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
+                            className="mt-1.5 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
                           >
                             {action.label}
                             <span aria-hidden>→</span>
@@ -10875,7 +11011,7 @@ export default function Home() {
                         onClick={() => setAssistantCat(cat)}
                         className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition ${
                           assistantCat === cat
-                            ? "bg-gradient-to-br from-cyan-500 to-violet-600 text-white shadow-sm shadow-cyan-900/40"
+                            ? "bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm shadow-cyan-900/40"
                             : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
                         }`}
                       >
@@ -10908,13 +11044,13 @@ export default function Home() {
                   <input
                     value={assistantInput}
                     onChange={(event) => setAssistantInput(event.target.value)}
-                    placeholder="Escribí tu pregunta…"
+                    placeholder="Escriba su pregunta…"
                     className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400"
                   />
                   <button
                     type="submit"
                     disabled={!assistantInput.trim()}
-                    className="shrink-0 rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+                    className="shrink-0 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
                   >
                     Enviar
                   </button>
@@ -10926,7 +11062,7 @@ export default function Home() {
               type="button"
               onClick={openAssistant}
               aria-label="Asistente virtual"
-              className={`flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 shadow-lg shadow-cyan-900/40 ring-2 ring-white/20 transition hover:scale-105 ${
+              className={`flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-900/40 ring-2 ring-white/20 transition hover:scale-105 ${
                 assistantOpen ? "" : "bot-float"
               }`}
             >
@@ -10990,7 +11126,7 @@ export default function Home() {
               </svg>
               <div>
                 <p className="text-2xl font-bold tracking-wide text-white">PULSO</p>
-                <p className="text-[10px] font-medium uppercase leading-tight tracking-[0.16em] text-violet-200/80">
+                <p className="text-[10px] font-medium uppercase leading-tight tracking-[0.16em] text-blue-200/80">
                   Plataforma Única de Logística
                   <br />y Servicios Operativos
                 </p>
@@ -11173,7 +11309,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="mt-8 w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:opacity-90"
+                  className="mt-8 w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:opacity-90"
                 >
                   Cerrar sesion
                 </button>
@@ -11182,12 +11318,12 @@ export default function Home() {
               <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#0e1626]/80 p-6 shadow-2xl shadow-black/60 backdrop-blur-xl sm:p-9 xl:p-7">
                 {/* Resplandores de fondo */}
                 <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-cyan-500/20 blur-3xl" />
-                <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-20 h-56 w-56 rounded-full bg-violet-600/20 blur-3xl" />
+                <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-20 h-56 w-56 rounded-full bg-blue-600/20 blur-3xl" />
                 <div className="relative">
                 <div className="mb-7 flex flex-col items-center text-center xl:mb-4">
                   {/* Logo PULSO con resplandor */}
                   <span className="relative flex h-16 w-16 items-center justify-center">
-                    <span aria-hidden className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-600 opacity-60 blur-lg" />
+                    <span aria-hidden className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 opacity-60 blur-lg" />
                     <svg viewBox="0 0 48 48" className="relative h-16 w-16 drop-shadow-lg" aria-hidden="true">
                       <defs>
                         <linearGradient id="pulsoGradLogin" x1="0" y1="0" x2="1" y2="1">
@@ -11303,7 +11439,7 @@ export default function Home() {
 
                   <button
                     disabled={isSubmitting}
-                    className="w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     type="submit"
                   >
                     {isSubmitting ? "Procesando..." : "Entrar al sistema"}
@@ -11336,12 +11472,12 @@ export default function Home() {
               <p className="text-[10px] font-light uppercase tracking-[0.32em] text-slate-400">
                 Desarrollado por
               </p>
-              <p className="bg-gradient-to-r from-cyan-300 to-violet-300 bg-clip-text text-2xl font-light tracking-[0.22em] text-transparent">
+              <p className="bg-gradient-to-r from-cyan-300 to-blue-300 bg-clip-text text-2xl font-light tracking-[0.22em] text-transparent">
                 ESDOMED
               </p>
               <div
                 aria-hidden
-                className="mx-auto my-1.5 h-px w-16 bg-gradient-to-r from-transparent via-violet-400/60 to-transparent"
+                className="mx-auto my-1.5 h-px w-16 bg-gradient-to-r from-transparent via-blue-400/60 to-transparent"
               />
               <p className="text-[10px] font-light uppercase tracking-[0.4em] text-slate-500">
                 Versión 1.6.2.6
@@ -11363,7 +11499,7 @@ export default function Home() {
             onClick={() => setShowSignupModal(false)}
           />
           <div className="modal-pop-in relative my-6 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
-            <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+            <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-blue-500" />
             <div className="px-5 pb-6 pt-5 sm:px-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -11444,13 +11580,13 @@ export default function Home() {
                     className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-500"
                   />
                   <span className="text-xs leading-snug text-slate-300">
-                    Acepto las{" "}
+                    Acepto la{" "}
                     <button
                       type="button"
                       onClick={() => setShowPrivacyModal(true)}
                       className="font-semibold text-cyan-300 underline"
                     >
-                      políticas de privacidad
+                      Política de Privacidad y Términos de Uso
                     </button>
                   </span>
                 </label>
@@ -11464,7 +11600,7 @@ export default function Home() {
                 <button
                   type="submit"
                   disabled={isSubmittingSignup}
-                  className="w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSubmittingSignup ? "Enviando…" : "Enviar solicitud"}
                 </button>
@@ -11486,10 +11622,10 @@ export default function Home() {
             onClick={() => setShowPrivacyModal(false)}
           />
           <div className="modal-pop-in relative my-6 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
-            <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-violet-500" />
+            <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-blue-500" />
             <div className="px-5 pb-6 pt-5 sm:px-6">
               <div className="flex items-start justify-between gap-3">
-                <h3 className="text-lg font-bold text-white">Política de Privacidad — PULSO</h3>
+                <h3 className="text-lg font-bold text-white">Política de Privacidad y Términos de Uso — PULSO</h3>
                 <button
                   type="button"
                   onClick={() => setShowPrivacyModal(false)}
@@ -11507,60 +11643,123 @@ export default function Home() {
                   1.6.2.6.
                 </p>
                 <p>
-                  <strong className="text-white">2. Qué es PULSO.</strong> Plataforma interna del
-                  Hospital Nacional (El Salvador) para la captura y gestión de la producción de los
-                  servicios. Su uso es exclusivo del personal autorizado.
+                  <strong className="text-white">2. Qué es PULSO.</strong> Plataforma institucional
+                  interna del Hospital Nacional (El Salvador) para la captura, consolidación y
+                  gestión de la producción mensual de los servicios (PERC, SEPS y Distribución de
+                  Horas). Su uso es exclusivo del personal autorizado.
                 </p>
                 <p>
-                  <strong className="text-white">3. Datos que recolectamos.</strong> Al registrarse:
+                  <strong className="text-white">3. Marco legal aplicable.</strong> El tratamiento de
+                  la información en PULSO se enmarca en la normativa salvadoreña vigente, en
+                  particular: la <strong className="text-cyan-200">Ley para la Protección de Datos
+                  Personales</strong> (Decreto Legislativo N.° 144, del 12 de noviembre de 2024,
+                  publicada en el Diario Oficial el 15 de noviembre de 2024); el{" "}
+                  <strong className="text-cyan-200">Código de Salud</strong>; la Ley de Deberes y
+                  Derechos de los Pacientes y Prestadores de Servicios de Salud; los{" "}
+                  <strong className="text-cyan-200">Lineamientos técnicos para el cumplimiento del
+                  secreto profesional en el Sistema Nacional Integrado de Salud</strong> (MINSAL,
+                  Acuerdo Ejecutivo N.° 2745 de 2022); y la Ley de Acceso a la Información Pública.
+                </p>
+                <p>
+                  <strong className="text-white">4. Datos que recolectamos.</strong> Al registrarse:
                   sus nombres, apellidos, correo y el servicio al que pertenece. Durante el uso, los
-                  datos de producción que usted carga y el registro de sus accesos.
+                  datos de producción que usted carga y el registro de sus accesos (fecha, hora y
+                  usuario) con fines de seguridad y trazabilidad.
                 </p>
                 <p>
-                  <strong className="text-white">4. Para qué los usamos.</strong> Únicamente para
-                  identificarlo, crear su usuario y gestionar la captura mensual de su servicio. No
-                  se usan con fines comerciales ni publicitarios.
+                  <strong className="text-white">5. Base legal del tratamiento.</strong> El
+                  tratamiento se sustenta en su <strong className="text-white">consentimiento
+                  informado</strong> —otorgado al aceptar esta política— y en el cumplimiento de las
+                  obligaciones legales e institucionales del hospital como entidad pública de salud.
                 </p>
                 <p>
-                  <strong className="text-white">5. Quién los ve.</strong> Solamente los
-                  administradores autorizados y usted. No se comparten con terceros ajenos al
-                  hospital.
+                  <strong className="text-white">6. Finalidad.</strong> Los datos se usan únicamente
+                  para identificarlo, crear su usuario y gestionar la captura mensual de su servicio.
+                  No se usan con fines comerciales ni publicitarios, ni se someten a decisiones
+                  automatizadas que le afecten.
                 </p>
                 <p>
-                  <strong className="text-white">6. Dónde se guardan.</strong> De forma segura en los
-                  servicios de Google Firebase, con acceso restringido por usuario y contraseña.
+                  <strong className="text-white">7. Confidencialidad y secreto profesional.</strong>{" "}
+                  La información gestionada en PULSO tiene carácter institucional y confidencial.
+                  Todo usuario queda obligado a resguardar el secreto profesional conforme a los
+                  Lineamientos del MINSAL y al Código de Salud, absteniéndose de divulgar, reproducir
+                  o extraer datos fuera de los fines autorizados, tanto durante como después de su
+                  vínculo con la institución.
                 </p>
                 <p>
-                  <strong className="text-white">7. Sus derechos.</strong> Usted puede solicitar a la
-                  administración la corrección o eliminación de sus datos personales.
+                  <strong className="text-white">8. Quién los ve.</strong> Solamente los
+                  administradores y supervisores autorizados y usted. No se comparten con terceros
+                  ajenos al hospital, salvo requerimiento de autoridad competente conforme a la ley.
                 </p>
                 <p>
-                  <strong className="text-white">8. Aprobación de la cuenta.</strong> El registro no
+                  <strong className="text-white">9. Dónde se guardan y seguridad.</strong> De forma
+                  segura en los servicios de Google Firebase, con acceso restringido por usuario y
+                  contraseña y comunicaciones cifradas. Se aplican medidas técnicas y organizativas
+                  razonables para proteger la información.
+                </p>
+                <p>
+                  <strong className="text-white">10. Conservación.</strong> Sus datos se conservan
+                  mientras su cuenta esté activa y por el plazo que exijan las obligaciones legales,
+                  contables y de archivo de la institución. Concluido ese plazo, se eliminan o
+                  anonimizan.
+                </p>
+                <p>
+                  <strong className="text-white">11. Sus derechos (ARCO-POL).</strong> Conforme a la
+                  Ley para la Protección de Datos Personales, usted puede ejercer sus derechos de{" "}
+                  <strong className="text-white">acceso, rectificación, cancelación, oposición,
+                  portabilidad, olvido (supresión en entornos digitales) y limitación</strong> del
+                  tratamiento. Puede solicitarlos a la administración, que atenderá su petición
+                  dentro de los plazos que fija la ley.
+                </p>
+                <p>
+                  <strong className="text-white">12. Incidentes de seguridad.</strong> Ante una
+                  vulneración que afecte sus datos personales, la institución adoptará las medidas
+                  correctivas y realizará las notificaciones que correspondan conforme a la ley.
+                </p>
+                <p>
+                  <strong className="text-white">13. Aprobación de la cuenta.</strong> El registro no
                   es automático: su solicitud queda pendiente hasta que un administrador la apruebe.
                 </p>
                 <p>
-                  <strong className="text-white">9. Responsabilidad del usuario.</strong> Usted es el
-                  único responsable de la información que ingresa al portal y a la aplicación. Se
-                  compromete a que los datos de producción y demás registros que cargue sean
-                  veraces, completos y correspondan a su servicio. El uso de su usuario y contraseña
-                  es personal e intransferible; cualquier dato ingresado con sus credenciales se
-                  considera realizado por usted. La administración no se hace responsable por errores
-                  u omisiones en la información cargada por cada usuario.
+                  <strong className="text-white">14. Responsabilidad del usuario.</strong> Usted es
+                  el único responsable de la información que ingresa. Se compromete a que los datos
+                  de producción y demás registros que cargue sean veraces, completos y correspondan a
+                  su servicio. El uso de su usuario y contraseña es personal e intransferible;
+                  cualquier dato ingresado con sus credenciales se considera realizado por usted. La
+                  administración no se hace responsable por errores u omisiones en la información
+                  cargada por cada usuario.
                 </p>
                 <p>
-                  <strong className="text-white">10. Buen uso.</strong> El portal es exclusivo para
-                  la gestión de la producción de los servicios del hospital. Queda prohibido usarlo
-                  para fines distintos o ingresar información falsa.
+                  <strong className="text-white">15. Uso permitido y usos prohibidos.</strong> PULSO
+                  es exclusivo para la gestión de la producción de los servicios del hospital. Queda{" "}
+                  <strong className="text-white">prohibido</strong>: ingresar información falsa o
+                  alterada; usar el sistema para fines distintos a los autorizados; compartir,
+                  ceder o revelar sus credenciales; intentar acceder a datos de otros usuarios o
+                  servicios sin autorización; y extraer, copiar o divulgar información confidencial
+                  de la institución.
                 </p>
                 <p>
-                  <strong className="text-white">11. Seguridad de su cuenta.</strong> Mantenga su
+                  <strong className="text-white">16. Consecuencias del mal uso.</strong> El
+                  incumplimiento de esta política o el uso indebido del sistema puede dar lugar a la
+                  suspensión o cancelación de la cuenta y a las responsabilidades administrativas,
+                  disciplinarias, civiles o penales que establezca la legislación salvadoreña
+                  aplicable.
+                </p>
+                <p>
+                  <strong className="text-white">17. Seguridad de su cuenta.</strong> Mantenga su
                   contraseña en secreto y cámbiela en su primer ingreso. Si sospecha que alguien
                   conoce sus credenciales, avise de inmediato a la administración.
                 </p>
                 <p>
-                  <strong className="text-white">12. Cambios en esta política.</strong> Esta política
-                  puede actualizarse para reflejar mejoras del sistema. El uso continuado de PULSO
-                  implica la aceptación de la versión vigente.
+                  <strong className="text-white">18. Contacto y ejercicio de derechos.</strong> Para
+                  ejercer sus derechos, corregir o eliminar sus datos, o realizar consultas sobre
+                  esta política, comuníquese con la administración del sistema a través del servicio
+                  de ESDOMED del Hospital Nacional, El Salvador.
+                </p>
+                <p>
+                  <strong className="text-white">19. Cambios en esta política.</strong> Esta política
+                  puede actualizarse para reflejar mejoras del sistema o cambios normativos. El uso
+                  continuado de PULSO implica la aceptación de la versión vigente.
                 </p>
               </div>
               <button
@@ -11569,7 +11768,7 @@ export default function Home() {
                   setSignupForm((f) => ({ ...f, acceptPrivacy: true }));
                   setShowPrivacyModal(false);
                 }}
-                className="mt-4 w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                className="mt-4 w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
               >
                 Entendido y acepto
               </button>
