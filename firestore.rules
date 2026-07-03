@@ -7,81 +7,53 @@ rules_version = '2';
 // (Asegurate de aplicarlas a la base de datos correcta si usas una con nombre;
 //  este proyecto usa la base "(default)" salvo que definas
 //  NEXT_PUBLIC_FIREBASE_FIRESTORE_DATABASE_ID.)
-//
-// Con el login por "correo deterministico", el inicio de sesion ya NO necesita
-// leer Firestore antes de autenticar, por lo que estas reglas pueden quedar
-// cerradas: todo requiere sesion iniciada.
 // =============================================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function isSignedIn() {
       return request.auth != null;
     }
-
-    // El admin principal se identifica por su correo de acceso fijo.
     function isAdmin() {
       return isSignedIn()
-        && request.auth.token.email == 'hcardoza.admin@perc-hnes.app';
+        && (request.auth.token.email == 'hcardoza.admin@perc-hnes.app'
+            || request.auth.token.email == 'ffuentes@perc-hnes.app'
+            || request.auth.token.email == 'amontes@perc-hnes.app');
     }
-
-    // Perfil del usuario logueado (rol, modulos de supervisor, etc.).
     function userProfile() {
       return get(/databases/$(database)/documents/serviceUsers/$(request.auth.uid)).data;
     }
-
-    // Supervisores: cuentas con rol "supervisor" en su perfil de serviceUsers.
     function isSupervisor() {
       return isSignedIn() && userProfile().role == 'supervisor';
     }
-
-    // Perfiles: el admin ve/edita todos; cada usuario solo el suyo (uid == doc id).
     match /serviceUsers/{uid} {
       allow read, write: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
     }
-
-    // Asignaciones servicio -> usuario: solo admin.
     match /serviceAssignments/{serviceId} {
       allow read, write: if isAdmin();
     }
-
-    // Tabuladores (id = "<periodo>__<servicio>"). Lectura para cualquier sesion
-    // (lo usa el tablero de avance). Escritura: admin o el dueno del registro.
     match /serviceTabulators/{docId} {
       allow read: if isSignedIn();
       allow create, update: if isAdmin()
         || (isSignedIn() && request.resource.data.userId == request.auth.uid);
       allow delete: if isAdmin();
     }
-
-    // Tabuladores SEPS (id = "<periodo>__<servicio>"). Mismo modelo que los de Horas:
-    // lectura con sesion; escritura admin o el dueno del registro.
     match /sepsTabulators/{docId} {
       allow read: if isSignedIn();
       allow create, update: if isAdmin()
         || (isSignedIn() && request.resource.data.userId == request.auth.uid);
       allow delete: if isAdmin();
     }
-
-    // Tabuladores de Distribucion de Horas (id = "<periodo>__<servicio>").
     match /horasTabulators/{docId} {
       allow read: if isSignedIn();
       allow create, update: if isAdmin()
         || (isSignedIn() && request.resource.data.userId == request.auth.uid);
       allow delete: if isAdmin();
     }
-
-    // Calendario de captura por periodo: lectura con sesion, escritura admin.
     match /captureCalendar/{periodId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
-
-    // Override de tableros (reabrir/cerrar captura) id = "<periodo>__<servicio>__<modulo>".
-    // Lectura para cualquier sesion (el servicio necesita saber si lo reabrieron).
-    // Escritura: admin, o un supervisor cuyo perfil incluya ese modulo (Juan Carlos
-    // solo SEPS; Flor y Roberto los tres).
     match /captureOverrides/{docId} {
       allow read: if isSignedIn();
       allow create, update: if isAdmin()
@@ -91,7 +63,58 @@ service cloud.firestore {
         || (isSupervisor()
             && userProfile().supervisorModules.hasAny([resource.data.moduleId]));
     }
-
-    // Todo lo demas queda denegado por defecto.
+    match /captureRequests/{docId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.requestedByUid == request.auth.uid;
+      allow update: if isAdmin()
+        || (isSupervisor()
+            && userProfile().supervisorModules.hasAny([resource.data.moduleId]))
+        || (isSignedIn() && resource.data.requestedByUid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+    match /documentControl/{year} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    // Censo Diario de Pacientes (id = "<periodo>", p.ej. "2026-06").
+    // Lo VEN admin y supervisores (NINGUN servicio). Lo EDITAN los admins y
+    // Alfonso Montes (amontes@perc-hnes.app). Sin cierre ni restricciones.
+    match /censoDiario/{periodId} {
+      allow read: if isSignedIn()
+        && (isAdmin()
+            || userProfile().role == 'admin'
+            || userProfile().role == 'supervisor');
+      allow write: if isSignedIn()
+        && (isAdmin()
+            || userProfile().role == 'admin'
+            || request.auth.token.email == 'amontes@perc-hnes.app');
+    }
+    // Solicitudes de registro de jefes de servicio: cualquiera puede CREAR su
+    // solicitud (sin sesion, con validacion de campos y estado "pending"); solo
+    // los admins pueden leerlas, aprobarlas o rechazarlas.
+    match /signupRequests/{id} {
+      allow read: if isAdmin();
+      allow create: if request.resource.data.status == 'pending'
+        && request.resource.data.firstName is string
+        && request.resource.data.lastName is string
+        && request.resource.data.email is string
+        && request.resource.data.serviceId is string
+        && request.resource.data.serviceName is string;
+      allow update, delete: if isAdmin();
+    }
+    // Centro de Soporte: cualquier usuario con sesion CREA su ticket (estado
+    // "pendiente", con su propio uid y descripcion). Solo admin y supervisores
+    // leen la bandeja y cambian el estado. Borrado solo admin.
+    match /supportTickets/{ticketId} {
+      allow read: if isAdmin() || isSupervisor();
+      allow create: if isSignedIn()
+        && request.resource.data.status == 'pendiente'
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0;
+      allow update: if isAdmin() || isSupervisor();
+      allow delete: if isAdmin();
+    }
   }
 }

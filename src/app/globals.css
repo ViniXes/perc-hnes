@@ -63,6 +63,7 @@ body {
   [data-mview="panel-horas"] > [data-view~="panel-horas"],
   [data-mview="panel-calendar"] > [data-view~="panel-calendar"],
   [data-mview="panel-capture-toggle"] > [data-view~="panel-capture-toggle"],
+  [data-mview="panel-censo"] > [data-view~="panel-censo"],
   [data-mview="panel-admin-export"] > [data-view~="panel-admin-export"] {
     display: block !important;
   }

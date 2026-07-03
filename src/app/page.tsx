@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, CSSProperties, Fragment, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Auth,
   type AuthError,
@@ -209,6 +209,25 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
     modules: ["sesps"],
   },
 ];
+// --- Censo Diario de Pacientes (submenu bajo PERC; SOLO supervision) -----------
+// Lo EDITA solo Alfonso Montes (usuario "amontes"); lo VEN admin y supervisores;
+// ningun servicio lo ve. Se guarda por MES en Firestore (coleccion "censoDiario").
+// No tiene cierre ni restriccion de dias habiles: siempre editable por el editor.
+const CENSO_EDITOR_USERNAME = "amontes";
+type CensoRow = { key: string; label: string };
+const CENSO_BASE_ROWS: CensoRow[] = [
+  { key: "uci", label: "UCI" },
+  { key: "ucin", label: "UCIN" },
+  { key: "cirugia", label: "CIRUGÍA" },
+  { key: "medicina-interna", label: "MEDICINA INTERNA" },
+  { key: "paliativos", label: "PALIATIVOS" },
+  { key: "terapia-endovascular", label: "TERAPIA INTERVENCIONISTA ENDOVASCULAR" },
+  { key: "bienestar-magisterial", label: "BIENESTAR MAGISTERIAL" },
+  { key: "uci-ucin-bienestar", label: "UCI/UCIN BIENESTAR" },
+];
+// rowKey -> (dia como string -> valor como string)
+type CensoValues = Record<string, Record<string, string>>;
+
 const FIRESTORE_SETUP_MESSAGE = `Firestore no esta creado o configurado en este proyecto de Firebase. Verifica la base de datos '${firestoreDatabaseId}' para habilitar login, tablero y guardado.`;
 const FIRESTORE_DISABLED_STORAGE_KEY = "perc-hnes.firestore-disabled";
 const PANEL_THEME_STORAGE_KEY = "perc-hnes.panel-theme";
@@ -470,13 +489,13 @@ function answerAssistant(query: string): { text: string; found: boolean } {
 function renderSectionDivider(
   label: string,
   subtitle: string,
-  tone: "cyan" | "violet" | "amber",
+  tone: "cyan" | "violet" | "amber" | "teal",
   light: boolean,
 ): ReactNode {
   // Fondo neutro para los tres; solo el TEXTO lleva color por modulo.
   const textTone = light
-    ? { cyan: "text-cyan-700", violet: "text-blue-700", amber: "text-amber-700" }
-    : { cyan: "text-cyan-300", violet: "text-blue-300", amber: "text-amber-300" };
+    ? { cyan: "text-cyan-700", violet: "text-blue-700", amber: "text-amber-700", teal: "text-teal-700" }
+    : { cyan: "text-cyan-300", violet: "text-blue-300", amber: "text-amber-300", teal: "text-teal-300" };
   const pill = light ? "bg-white ring-slate-200 shadow-sm" : "bg-white/5 ring-white/10";
   const lineClass = light ? "via-slate-300" : "via-slate-400/50";
   return (
@@ -1631,27 +1650,29 @@ function getPercServFields(serviceId: string | null | undefined) {
 const PERC_SERV_CONSOLIDADO: {
   centro: string;
   serviceId?: string;
-  units: { label: string; key?: string }[];
+  // `key` -> toma el valor del PERC/SERV capturado por ese servicio.
+  // `censoRow` -> toma el TOTAL mensual de esa fila del Censo Diario de Pacientes.
+  units: { label: string; key?: string; censoRow?: string }[];
 }[] = [
   {
     centro: "66__01101 - Hospitalizacion medicina interna",
-    units: [{ label: "1__Egreso" }, { label: "2__Dco" }, { label: "6__N. Camas" }],
+    units: [{ label: "1__Egreso" }, { label: "2__Dco", censoRow: "medicina-interna" }, { label: "6__N. Camas" }],
   },
   {
     centro: "95__01206 - Hospitalizacion cirugia general",
-    units: [{ label: "1__Egreso" }, { label: "2__Dco" }, { label: "6__N. Camas" }],
+    units: [{ label: "1__Egreso" }, { label: "2__Dco", censoRow: "cirugia" }, { label: "6__N. Camas" }],
   },
   {
     centro: "745__02014 - Hospitalizacion servicios por convenios",
-    units: [{ label: "1__Egreso" }, { label: "2__Dco" }, { label: "6__N. Camas" }],
+    units: [{ label: "1__Egreso" }, { label: "2__Dco", censoRow: "bienestar-magisterial" }, { label: "6__N. Camas" }],
   },
   {
     centro: "166__05001 - Unidad de cuidados intensivos",
-    units: [{ label: "1__Transferencia" }, { label: "2__Dco" }, { label: "6__N. Camas" }],
+    units: [{ label: "1__Transferencia" }, { label: "2__Dco", censoRow: "uci" }, { label: "6__N. Camas" }],
   },
   {
     centro: "179__05101 - Unidad de cuidados intermedios",
-    units: [{ label: "1__Transferencia" }, { label: "2__Dco" }, { label: "6__N. Camas" }],
+    units: [{ label: "1__Transferencia" }, { label: "2__Dco", censoRow: "ucin" }, { label: "6__N. Camas" }],
   },
   {
     centro: "201__10001 - Emergencias",
@@ -1680,7 +1701,7 @@ const PERC_SERV_CONSOLIDADO: {
   },
   {
     centro: "767__5014 - Unidad de cuidados especiales",
-    units: [{ label: "1__Dco" }, { label: "2__Transferencia" }, { label: "6__N. Camas" }],
+    units: [{ label: "1__Dco", censoRow: "paliativos" }, { label: "2__Transferencia" }, { label: "6__N. Camas" }],
   },
   {
     centro: "766__70016 - Servicio de apoyo a riiss",
@@ -2183,12 +2204,59 @@ function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: stri
 // Descarga el consolidado "Produccion de Servicio" (plantilla COMPLETA) en un .xls
 // aparte: Centro de Produccion | Unidades de Produccion | Cantidad. Las 3 areas con
 // captura traen su numero del mes; el resto queda en blanco hasta cargar sus datos.
-function downloadServiceProductionReport(overview: AdminOverviewEntry[], periodId: string) {
+// Calcula el consolidado COMPLETO "Produccion de Servicio": por cada centro, cada
+// unidad con su Cantidad ya resuelta (captura del servicio, total del Censo, o 0).
+// Se usa igual para la previsualizacion en modal y para el Excel descargado.
+type ConsolidadoUnit = {
+  label: string;
+  qty: string;
+  source: "servicio" | "censo" | "none";
+  // Solo para source "censo": si el mes del Censo esta completo (verde) o no (amarillo).
+  complete?: boolean;
+};
+type ConsolidadoRow = { centro: string; units: ConsolidadoUnit[] };
+
+function computeConsolidado(
+  overview: AdminOverviewEntry[],
+  censoInfo: Record<string, CensoRowInfo>,
+): ConsolidadoRow[] {
   const valuesByService = new Map<string, Record<string, Record<string, unknown>>>();
   for (const entry of overview) {
     valuesByService.set(entry.service.id, entry.values);
   }
+  return PERC_SERV_CONSOLIDADO.map((svc) => {
+    const servValues = svc.serviceId
+      ? valuesByService.get(svc.serviceId)?.[PERC_SERV_ROW] || {}
+      : {};
+    return {
+      centro: svc.centro,
+      units: svc.units.map((unit) => {
+        // La Cantidad siempre lleva un valor: si no hay dato, va 0 (nunca vacia).
+        let qty = "0";
+        let source: ConsolidadoUnit["source"] = "none";
+        let complete: boolean | undefined;
+        if (unit.key) {
+          const parsed = Number.parseFloat(String(servValues[unit.key] ?? ""));
+          qty = Number.isFinite(parsed) ? formatConsolidatedNumber(parsed) : "0";
+          source = "servicio";
+        } else if (unit.censoRow) {
+          // Dias-cama-ocupados (Dco): total mensual de la fila del Censo Diario.
+          const ci = censoInfo[unit.censoRow];
+          qty = ci ? formatConsolidatedNumber(ci.total) : "0";
+          source = "censo";
+          complete = ci?.complete ?? false;
+        }
+        return { label: unit.label, qty, source, complete };
+      }),
+    };
+  });
+}
 
+function downloadServiceProductionReport(
+  overview: AdminOverviewEntry[],
+  periodId: string,
+  censoInfo: Record<string, CensoRowInfo> = {},
+) {
   const headerCells = ["Centro de Producción", "Unidades de Producción", "Cantidad"]
     .map(
       (header) =>
@@ -2196,26 +2264,26 @@ function downloadServiceProductionReport(overview: AdminOverviewEntry[], periodI
     )
     .join("");
 
-  const bodyRows = PERC_SERV_CONSOLIDADO.map((svc) => {
-    const servValues = svc.serviceId
-      ? valuesByService.get(svc.serviceId)?.[PERC_SERV_ROW] || {}
-      : {};
-    return svc.units
-      .map((unit, index) => {
-        // La Cantidad siempre lleva un valor: si no se capturo nada, va 0 (nunca vacia).
-        let qty = "0";
-        if (unit.key) {
-          const parsed = Number.parseFloat(String(servValues[unit.key] ?? ""));
-          qty = Number.isFinite(parsed) ? formatConsolidatedNumber(parsed) : "0";
-        }
-        const centroCell =
-          index === 0
-            ? `<td rowspan="${svc.units.length}" style="border:1px solid #cbd5e1;padding:6px;font-weight:700;vertical-align:middle;">${escapeHtml(svc.centro)}</td>`
-            : "";
-        return `<tr>${centroCell}<td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(unit.label)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(qty)}</td></tr>`;
-      })
-      .join("");
-  }).join("");
+  const bodyRows = computeConsolidado(overview, censoInfo)
+    .map((svc) =>
+      svc.units
+        .map((unit, index) => {
+          const centroCell =
+            index === 0
+              ? `<td rowspan="${svc.units.length}" style="border:1px solid #cbd5e1;padding:6px;font-weight:700;vertical-align:middle;">${escapeHtml(svc.centro)}</td>`
+              : "";
+          // Celdas del Censo: verde = mes completo, amarillo = aun incompleto.
+          const qtyStyle =
+            unit.source === "censo"
+              ? unit.complete
+                ? "background:#dcfce7;color:#166534;font-weight:700;"
+                : "background:#fef9c3;color:#854d0e;font-weight:700;"
+              : "";
+          return `<tr>${centroCell}<td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(unit.label)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:center;${qtyStyle}">${escapeHtml(unit.qty)}</td></tr>`;
+        })
+        .join(""),
+    )
+    .join("");
 
   const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Produccion de Servicio ${periodId}</title></head><body><table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
   const blob = new Blob([documentHtml], {
@@ -2519,6 +2587,41 @@ async function fetchHorasForPeriod(
 
   const data = snapshot.data() as { employees?: unknown };
   return { employees: normalizeHorasEmployees(template, data.employees), saved: true };
+}
+
+// Info del Censo Diario de un mes por fila: total (suma de dias) y si el mes esta
+// COMPLETO (todos los dias del mes con un dato). Alimenta los campos "Dco" del
+// consolidado y decide el color: amarillo = incompleto, verde = completo.
+type CensoRowInfo = { total: number; complete: boolean };
+async function fetchCensoInfoForPeriod(periodId: string): Promise<Record<string, CensoRowInfo>> {
+  const info: Record<string, CensoRowInfo> = {};
+  try {
+    const snap = await getDoc(doc(db, "censoDiario", periodId));
+    // Dias reales del mes (28/29/30/31) para decidir si esta completo.
+    const days = getDayColumns(periodId);
+    if (snap.exists()) {
+      const data = snap.data() as { values?: Record<string, Record<string, unknown>> };
+      const values = data.values || {};
+      for (const [rowKey, byDay] of Object.entries(values)) {
+        let sum = 0;
+        let filled = 0;
+        for (const day of days) {
+          const cell = String(byDay?.[String(day)] ?? "").trim();
+          if (cell !== "") {
+            filled += 1;
+            const n = Number.parseInt(cell, 10);
+            if (Number.isFinite(n)) {
+              sum += n;
+            }
+          }
+        }
+        info[rowKey] = { total: sum, complete: days.length > 0 && filled === days.length };
+      }
+    }
+  } catch {
+    // Silencioso: si falla la lectura, el consolidado usa 0 en esos campos.
+  }
+  return info;
 }
 
 async function fetchAdminOverviewForPeriod(periodId: string): Promise<AdminOverviewEntry[]> {
@@ -3138,6 +3241,13 @@ export default function Home() {
   const [isCreatingManagedUser, setIsCreatingManagedUser] = useState(false);
   const [isExportingMonthlyReport, setIsExportingMonthlyReport] = useState(false);
   const [isExportingServiceProduction, setIsExportingServiceProduction] = useState(false);
+  // Previsualizacion (modal) del consolidado COMPLETO Produccion de Servicio antes
+  // de descargar el Excel (incluye los datos del Censo ya integrados). El mes es
+  // seleccionable y ESTRICTO: el consolidado muestra el censo de ESE mismo mes.
+  const [showCensoConsolidadoPreview, setShowCensoConsolidadoPreview] = useState(false);
+  const [consolidadoPreview, setConsolidadoPreview] = useState<ConsolidadoRow[] | null>(null);
+  const [consolidadoPeriod, setConsolidadoPeriod] = useState("");
+  const [isLoadingConsolidado, setIsLoadingConsolidado] = useState(false);
   const [adminBusyUserId, setAdminBusyUserId] = useState("");
   // Usuario seleccionado en la vista maestro-detalle de "Usuarios y permisos".
   const [adminSelectedUserUid, setAdminSelectedUserUid] = useState<string | null>(null);
@@ -3370,6 +3480,25 @@ export default function Home() {
   const [docsLoading, setDocsLoading] = useState(false);
   const [docsSaving, setDocsSaving] = useState(false);
   const [docsLoaded, setDocsLoaded] = useState(false);
+  // Censo Diario de Pacientes (por mes). Editable solo por AMONTES.
+  // Arranca en el mismo mes que el PERC/consolidado (el que se esta cerrando), para
+  // que lo que se llena en el censo alimente el consolidado sin desajuste de mes.
+  // AMONTES puede cambiar de mes libremente con el selector.
+  const [censoPeriod, setCensoPeriod] = useState(() => getClosingPeriodId(new Date()));
+  const [censoValues, setCensoValues] = useState<CensoValues>({});
+  const [censoExtraRows, setCensoExtraRows] = useState<CensoRow[]>([]);
+  const [isLoadingCenso, setIsLoadingCenso] = useState(false);
+  const [isSavingCenso, setIsSavingCenso] = useState(false);
+  const [censoLoadedPeriod, setCensoLoadedPeriod] = useState<string | null>(null);
+  // Historial de deshacer/rehacer del censo (para correcciones de digitacion).
+  const [censoUndoStack, setCensoUndoStack] = useState<
+    { values: CensoValues; extraRows: CensoRow[] }[]
+  >([]);
+  const [censoRedoStack, setCensoRedoStack] = useState<
+    { values: CensoValues; extraRows: CensoRow[] }[]
+  >([]);
+  // Submenus desplegables del menu lateral (p.ej. PERC -> Censo diario).
+  const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [uiPrefs, setUiPrefs] = useState<UiPrefs>(() => {
     if (typeof window === "undefined") {
       return DEFAULT_UI_PREFS;
@@ -3502,6 +3631,13 @@ export default function Home() {
   }, [serviceProfile?.name, user?.displayName, user?.email]);
   const isAdmin = !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
   const isSupervisor = serviceProfile?.role === "supervisor";
+  // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
+  // y los administradores (por temas de calidad y control).
+  const canViewCenso = isAdmin || isSupervisor;
+  const canEditCenso =
+    isAdmin || normalizeKey(serviceProfile?.username || "") === CENSO_EDITOR_USERNAME;
+  // Filas efectivas del censo (las 8 base + las que AMONTES haya agregado).
+  const censoRows: CensoRow[] = [...CENSO_BASE_ROWS, ...censoExtraRows];
   // Config para el detector de solicitudes nuevas (avisos tipo WhatsApp).
   // Usamos el uid de AUTENTICACION (coincide con requestedByUid de las solicitudes).
   notifyConfigRef.current = {
@@ -4014,6 +4150,15 @@ export default function Home() {
   useEffect(() => {
     setHorasVisibleCount(HORAS_PAGE_SIZE);
   }, [horasTemplate, periodId]);
+
+  // Censo Diario: carga el mes seleccionado (solo para quienes pueden verlo).
+  useEffect(() => {
+    if (!canViewCenso || firestoreUnavailable || !user) {
+      return;
+    }
+    void loadCenso(censoPeriod);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [censoPeriod, canViewCenso, firestoreUnavailable, user]);
 
   // Al cargar la plantilla SEPS, todas las tablas/secciones arrancan COLAPSADAS
   // (apiladas, ninguna desplegada). El usuario abre la que necesite.
@@ -4721,24 +4866,64 @@ export default function Home() {
     }
   }
 
+  // Carga (o recarga) la previsualizacion del consolidado para un mes exacto: lee
+  // la produccion de los servicios y el Censo de ESE mismo mes.
+  async function loadConsolidadoPreview(period: string) {
+    if (!isAdmin || firestoreUnavailable || !period) {
+      return;
+    }
+    setConsolidadoPeriod(period);
+    setIsLoadingConsolidado(true);
+    setError("");
+    try {
+      const [overview, censoInfo] = await Promise.all([
+        fetchAdminOverviewForPeriod(period),
+        fetchCensoInfoForPeriod(period),
+      ]);
+      setConsolidadoPreview(computeConsolidado(overview, censoInfo));
+    } catch (previewError) {
+      if (await handleFirestoreError(previewError)) {
+        return;
+      }
+      setError("No pudimos preparar la previsualización del consolidado.");
+    } finally {
+      setIsLoadingConsolidado(false);
+    }
+  }
+
+  // Paso 1: abre el modal para el mes del censo actual (por defecto), para revisar
+  // que los datos esten llenos antes de descargar. El mes se puede cambiar dentro.
   async function handleExportServiceProduction() {
     if (!isAdmin || firestoreUnavailable) {
       return;
     }
+    setShowCensoConsolidadoPreview(true);
+    await loadConsolidadoPreview(censoPeriod || periodId);
+  }
 
+  // Paso 2: descarga real del consolidado (con los datos del Censo integrados) del
+  // MISMO mes que se esta previsualizando.
+  async function confirmDownloadServiceProduction() {
+    if (!isAdmin || firestoreUnavailable || !consolidadoPeriod) {
+      return;
+    }
     setIsExportingServiceProduction(true);
     setError("");
     setMessage("");
-
     try {
-      const overview = await fetchAdminOverviewForPeriod(periodId);
-      downloadServiceProductionReport(overview, periodId);
-      setMessage(`Producción de Servicio generada para el periodo ${periodLabel}.`);
+      const [overview, censoInfo] = await Promise.all([
+        fetchAdminOverviewForPeriod(consolidadoPeriod),
+        fetchCensoInfoForPeriod(consolidadoPeriod),
+      ]);
+      downloadServiceProductionReport(overview, consolidadoPeriod, censoInfo);
+      setShowCensoConsolidadoPreview(false);
+      setMessage(
+        `Producción de Servicio generada para ${getPeriodLabel(consolidadoPeriod)}.`,
+      );
     } catch (exportError) {
       if (await handleFirestoreError(exportError)) {
         return;
       }
-
       setError(getAuthErrorMessage(exportError));
     } finally {
       setIsExportingServiceProduction(false);
@@ -4823,6 +5008,199 @@ export default function Home() {
       setError(getAuthErrorMessage(docError));
     } finally {
       setDocsSaving(false);
+    }
+  }
+
+  // ---- Censo Diario de Pacientes (guardado por mes) -------------------------
+  async function loadCenso(period: string) {
+    if (firestoreUnavailable || !user) {
+      return;
+    }
+    setIsLoadingCenso(true);
+    try {
+      const snap = await getDoc(doc(db, "censoDiario", period));
+      if (snap.exists()) {
+        const data = snap.data() as { values?: CensoValues; extraRows?: CensoRow[] };
+        setCensoValues(
+          data.values && typeof data.values === "object" ? data.values : {},
+        );
+        setCensoExtraRows(Array.isArray(data.extraRows) ? data.extraRows : []);
+      } else {
+        setCensoValues({});
+        setCensoExtraRows([]);
+      }
+      setCensoLoadedPeriod(period);
+      // Nuevo mes cargado: reinicia el historial de deshacer/rehacer.
+      setCensoUndoStack([]);
+      setCensoRedoStack([]);
+    } catch (censoError) {
+      if (await handleFirestoreError(censoError)) {
+        return;
+      }
+      setError("No pudimos cargar el censo diario.");
+    } finally {
+      setIsLoadingCenso(false);
+    }
+  }
+
+  // Guarda una foto del estado actual del censo en el historial de "deshacer".
+  // Se llama ANTES de cada cambio; limpia la pila de "rehacer".
+  function snapshotCenso() {
+    setCensoUndoStack((stack) => {
+      const next = [...stack, { values: censoValues, extraRows: censoExtraRows }];
+      return next.length > 100 ? next.slice(next.length - 100) : next;
+    });
+    setCensoRedoStack([]);
+  }
+
+  function handleCensoUndo() {
+    if (!canEditCenso || censoUndoStack.length === 0) {
+      return;
+    }
+    const prev = censoUndoStack[censoUndoStack.length - 1];
+    setCensoRedoStack((r) => [...r, { values: censoValues, extraRows: censoExtraRows }]);
+    setCensoUndoStack((u) => u.slice(0, -1));
+    setCensoValues(prev.values);
+    setCensoExtraRows(prev.extraRows);
+  }
+
+  function handleCensoRedo() {
+    if (!canEditCenso || censoRedoStack.length === 0) {
+      return;
+    }
+    const next = censoRedoStack[censoRedoStack.length - 1];
+    setCensoUndoStack((u) => [...u, { values: censoValues, extraRows: censoExtraRows }]);
+    setCensoRedoStack((r) => r.slice(0, -1));
+    setCensoValues(next.values);
+    setCensoExtraRows(next.extraRows);
+  }
+
+  function handleClearCenso() {
+    if (!canEditCenso) {
+      return;
+    }
+    snapshotCenso();
+    setCensoValues({});
+    setMessage("Tabla del censo borrada. Podés deshacer si fue por error.");
+  }
+
+  function updateCensoCell(rowKey: string, day: number, value: string) {
+    if (!canEditCenso) {
+      return;
+    }
+    snapshotCenso();
+    setCensoValues((current) => ({
+      ...current,
+      [rowKey]: { ...(current[rowKey] || {}), [String(day)]: value },
+    }));
+  }
+
+  function handleAddCensoRow() {
+    if (!canEditCenso) {
+      return;
+    }
+    snapshotCenso();
+    const key = `extra-${censoExtraRows.length + 1}-${Math.floor(Date.now())}`;
+    setCensoExtraRows((current) => [...current, { key, label: "NUEVO SERVICIO" }]);
+  }
+
+  function handleRenameCensoRow(key: string, label: string) {
+    if (!canEditCenso) {
+      return;
+    }
+    snapshotCenso();
+    setCensoExtraRows((current) =>
+      current.map((row) => (row.key === key ? { ...row, label } : row)),
+    );
+  }
+
+  function handleRemoveCensoRow(key: string) {
+    if (!canEditCenso) {
+      return;
+    }
+    snapshotCenso();
+    setCensoExtraRows((current) => current.filter((row) => row.key !== key));
+    setCensoValues((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
+  // Pega desde Excel: parte de (startRowIndex, startDay) y llena hacia la derecha
+  // (dias) y hacia abajo (filas), igual que Excel.
+  function handleCensoPaste(
+    event: ClipboardEvent | { clipboardData: DataTransfer; preventDefault: () => void },
+    startRowIndex: number,
+    startDay: number,
+  ) {
+    if (!canEditCenso) {
+      return;
+    }
+    const text = event.clipboardData?.getData("text") ?? "";
+    if (!text.includes("\t") && !text.includes("\n")) {
+      return; // pega normal (una sola celda)
+    }
+    event.preventDefault();
+    snapshotCenso();
+    const lines = text.replace(/\r/g, "").split("\n");
+    while (lines.length > 1 && lines[lines.length - 1] === "") {
+      lines.pop();
+    }
+    const grid = lines.map((line) => line.split("\t"));
+    const days = getDayColumns(censoPeriod);
+    const startDayIdx = days.indexOf(startDay);
+    if (startDayIdx < 0) {
+      return;
+    }
+    setCensoValues((current) => {
+      const next: CensoValues = { ...current };
+      grid.forEach((cells, r) => {
+        const rowObj = censoRows[startRowIndex + r];
+        if (!rowObj) {
+          return;
+        }
+        const rowVals = { ...(next[rowObj.key] || {}) };
+        cells.forEach((cell, c) => {
+          const day = days[startDayIdx + c];
+          if (day === undefined) {
+            return;
+          }
+          rowVals[String(day)] = cell.trim();
+        });
+        next[rowObj.key] = rowVals;
+      });
+      return next;
+    });
+  }
+
+  async function handleSaveCenso() {
+    if (!canEditCenso || firestoreUnavailable) {
+      return;
+    }
+    setIsSavingCenso(true);
+    setError("");
+    setMessage("");
+    try {
+      await setDoc(
+        doc(db, "censoDiario", censoPeriod),
+        {
+          periodId: censoPeriod,
+          values: censoValues,
+          extraRows: censoExtraRows,
+          updatedAt: serverTimestamp(),
+          updatedBy: user?.email || "",
+        },
+        { merge: true },
+      );
+      setMessage(`Censo diario guardado correctamente (${getPeriodLabel(censoPeriod)}).`);
+    } catch (censoError) {
+      if (await handleFirestoreError(censoError)) {
+        return;
+      }
+      setError("No pudimos guardar el censo diario. Intente de nuevo.");
+    } finally {
+      setIsSavingCenso(false);
     }
   }
 
@@ -7191,6 +7569,18 @@ export default function Home() {
       label: mod.id === "distribucion" ? "Dis/horas" : mod.name,
       detail: "Ir al tabulador",
       badge: moduleBadges[mod.id],
+      // Submenu bajo PERC: "Censo diario de pacientes" (solo admin/supervisores).
+      children:
+        mod.id === "perc" && canViewCenso
+          ? [
+              {
+                id: "panel-censo",
+                label: "Censo diario de pacientes",
+                detail: "Solo supervisión",
+                badge: "CD",
+              },
+            ]
+          : undefined,
     }));
 
     // Seccion "Distribucion de Horas": aun sin plantilla propia. Da un destino con
@@ -7704,6 +8094,280 @@ export default function Home() {
       ),
     };
 
+    // ---- Censo Diario de Pacientes (seccion) --------------------------------
+    const censoDays = getDayColumns(censoPeriod);
+    // Letra del dia de la semana por columna (D L M M J V S), segun el mes elegido.
+    const [censoYearNum, censoMonthNum] = censoPeriod
+      .split("-")
+      .map((part) => Number.parseInt(part, 10));
+    const CENSO_WEEKDAY_LETTERS = ["D", "L", "M", "M", "J", "V", "S"];
+    const censoWeekdayLetter = (day: number) => {
+      if (!censoYearNum || !censoMonthNum) return "";
+      return CENSO_WEEKDAY_LETTERS[new Date(censoYearNum, censoMonthNum - 1, day).getDay()] ?? "";
+    };
+    const censoIsWeekend = (day: number) => {
+      if (!censoYearNum || !censoMonthNum) return false;
+      const wd = new Date(censoYearNum, censoMonthNum - 1, day).getDay();
+      return wd === 0 || wd === 6;
+    };
+    const censoNum = (rowKey: string, day: number) => {
+      const n = Number.parseInt(censoValues[rowKey]?.[String(day)] ?? "", 10);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const censoRowTotal = (rowKey: string) =>
+      censoDays.reduce((acc, day) => acc + censoNum(rowKey, day), 0);
+    const censoDayTotal = (day: number) =>
+      censoRows.reduce((acc, row) => acc + censoNum(row.key, day), 0);
+    const censoGrandTotal = censoRows.reduce(
+      (acc, row) => acc + censoRowTotal(row.key),
+      0,
+    );
+    const censoCellClass = `w-12 rounded border px-1 py-1 text-center text-xs outline-none focus:border-rose-400 disabled:cursor-default disabled:opacity-90 ${
+      isLightPanelTheme ? "border-slate-200 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"
+    }`;
+
+    const censoSection = (
+      <section
+        id="panel-censo"
+        className={`rounded-[24px] border p-3 shadow-[0_24px_80px_rgba(3,7,18,0.35)] sm:p-5 ${
+          isLightPanelTheme ? "border-teal-200 bg-white" : "border-teal-400/20 bg-[#202c41]"
+        }`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-cyan-600 text-white shadow-md shadow-black/30">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 3v18h18" />
+                <rect x="7" y="9" width="3" height="9" />
+                <rect x="12" y="5" width="3" height="13" />
+                <rect x="17" y="12" width="3" height="6" />
+              </svg>
+            </span>
+            <div className="min-w-0">
+              <h2 className={`text-xl font-bold sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                Censo Diario de Pacientes
+              </h2>
+              <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                Solo supervisión · {getPeriodLabel(censoPeriod)}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+              <span className="font-semibold uppercase tracking-wide">Mes</span>
+              <input
+                type="month"
+                value={censoPeriod}
+                onChange={(event) => setCensoPeriod(event.target.value || censoPeriod)}
+                className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`}
+              />
+            </label>
+            {canEditCenso ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Edición
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-500/15 px-2.5 py-1 text-[11px] font-semibold text-slate-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" /> Solo lectura
+              </span>
+            )}
+          </div>
+        </div>
+
+        {canEditCenso ? (
+          <p className={`mt-3 rounded-xl border px-3 py-2 text-[11px] ${isLightPanelTheme ? "border-cyan-200 bg-cyan-50/70 text-slate-600" : "border-cyan-400/20 bg-cyan-400/5 text-slate-300"}`}>
+            Podés <strong>pegar desde Excel</strong>: seleccioná el rango de números en Excel, hacé clic en la celda inicial de la tabla y pegá (Ctrl+V). También podés escribir manualmente. Guardá el día o la semana; podés seguir llenando el mismo mes cuando quieras. Este censo no tiene cierre.
+          </p>
+        ) : null}
+
+        {canEditCenso ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCensoUndo}
+              disabled={censoUndoStack.length === 0}
+              title="Deshacer"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${
+                isLightPanelTheme ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-white/5 text-slate-300 hover:bg-white/10"
+              }`}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 14 4 9l5-5" />
+                <path d="M4 9h11a5 5 0 0 1 0 10h-1" />
+              </svg>
+              Deshacer
+            </button>
+            <button
+              type="button"
+              onClick={handleCensoRedo}
+              disabled={censoRedoStack.length === 0}
+              title="Rehacer"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${
+                isLightPanelTheme ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-white/5 text-slate-300 hover:bg-white/10"
+              }`}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m15 14 5-5-5-5" />
+                <path d="M20 9H9a5 5 0 0 0 0 10h1" />
+              </svg>
+              Rehacer
+            </button>
+            <button
+              type="button"
+              onClick={handleClearCenso}
+              title="Borrar toda la tabla (se puede deshacer)"
+              aria-label="Borrar toda la tabla"
+              className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10 text-rose-300 transition hover:bg-rose-500/20"
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+              </svg>
+            </button>
+          </div>
+        ) : null}
+
+        {isLoadingCenso && censoLoadedPeriod !== censoPeriod ? (
+          <p className="mt-4 text-sm text-slate-400">Cargando censo…</p>
+        ) : (
+          <div className={`show-scrollbar mt-4 overflow-x-auto rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+            <table className={`w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+              <thead>
+                <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
+                  <th className={`sticky left-0 z-20 min-w-[8.5rem] border-r px-2 py-2 sm:min-w-[13rem] sm:px-3 text-left font-semibold ${isLightPanelTheme ? "border-slate-200 bg-slate-100" : "border-white/10 bg-[#1a2334]"}`}>
+                    <span className="block">Servicio</span>
+                    <span className={`block text-[10px] font-medium uppercase tracking-wide ${isLightPanelTheme ? "text-slate-400" : "text-slate-500"}`}>
+                      {getPeriodLabel(censoPeriod)}
+                    </span>
+                  </th>
+                  {censoDays.map((day) => {
+                    const weekend = censoIsWeekend(day);
+                    return (
+                      <th
+                        key={day}
+                        className={`w-12 px-1 py-1.5 text-center font-medium ${
+                          weekend
+                            ? isLightPanelTheme
+                              ? "bg-slate-200/70 text-slate-500"
+                              : "bg-white/10 text-slate-400"
+                            : ""
+                        }`}
+                      >
+                        <span className="block text-xs font-semibold">{day}</span>
+                        <span className={`block text-[9px] font-bold uppercase ${weekend ? "text-teal-500" : isLightPanelTheme ? "text-slate-400" : "text-slate-500"}`}>
+                          {censoWeekdayLetter(day)}
+                        </span>
+                      </th>
+                    );
+                  })}
+                  <th className={`px-3 py-2 text-center font-bold ${isLightPanelTheme ? "bg-slate-200 text-slate-700" : "bg-[#243049] text-white"}`}>
+                    TOTAL
+                  </th>
+                  {canEditCenso ? <th className="px-1 py-2" /> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {censoRows.map((row, rowIndex) => {
+                  const isExtra = rowIndex >= CENSO_BASE_ROWS.length;
+                  return (
+                    <tr key={row.key} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                      <td className={`sticky left-0 z-10 min-w-[8.5rem] border-r px-2 py-1.5 font-medium sm:min-w-[13rem] sm:px-3 ${isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#202c41]"}`}>
+                        {isExtra && canEditCenso ? (
+                          <input
+                            value={row.label}
+                            onChange={(event) => handleRenameCensoRow(row.key, event.target.value)}
+                            className={`w-full rounded border px-2 py-1 text-xs font-semibold uppercase outline-none focus:border-teal-400 ${isLightPanelTheme ? "border-slate-200 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
+                          />
+                        ) : (
+                          <span className={`text-[11px] font-semibold uppercase tracking-wide ${isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>
+                            {row.label}
+                          </span>
+                        )}
+                      </td>
+                      {censoDays.map((day) => (
+                        <td key={day} className="px-0.5 py-1 text-center">
+                          <input
+                            value={censoValues[row.key]?.[String(day)] ?? ""}
+                            onChange={(event) => updateCensoCell(row.key, day, event.target.value)}
+                            onPaste={(event) => handleCensoPaste(event, rowIndex, day)}
+                            disabled={!canEditCenso}
+                            inputMode="numeric"
+                            className={censoCellClass}
+                          />
+                        </td>
+                      ))}
+                      <td className={`px-3 py-1.5 text-center font-bold ${isLightPanelTheme ? "bg-slate-50 text-teal-600" : "bg-[#1b2537] text-teal-300"}`}>
+                        {censoRowTotal(row.key)}
+                      </td>
+                      {canEditCenso ? (
+                        <td className="px-1 py-1 text-center">
+                          {isExtra ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCensoRow(row.key)}
+                              title="Quitar servicio"
+                              aria-label="Quitar servicio"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-500 transition hover:bg-rose-500/10 hover:text-rose-300"
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+                              </svg>
+                            </button>
+                          ) : null}
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className={`border-t-2 ${isLightPanelTheme ? "border-slate-300 bg-slate-100 text-slate-800" : "border-white/20 bg-[#243049] text-white"}`}>
+                  <td className={`sticky left-0 z-10 min-w-[8.5rem] border-r px-2 py-2 font-bold uppercase tracking-wide sm:min-w-[13rem] sm:px-3 ${isLightPanelTheme ? "border-slate-300 bg-slate-100" : "border-white/10 bg-[#243049]"}`}>
+                    Total
+                  </td>
+                  {censoDays.map((day) => (
+                    <td key={day} className="px-1 py-2 text-center font-semibold text-cyan-300">
+                      {censoDayTotal(day)}
+                    </td>
+                  ))}
+                  <td className={`px-3 py-2 text-center text-sm font-extrabold ${isLightPanelTheme ? "bg-slate-200 text-teal-700" : "bg-[#1a2334] text-teal-300"}`}>
+                    {censoGrandTotal}
+                  </td>
+                  {canEditCenso ? <td /> : null}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+
+        {canEditCenso ? (
+          <div className={`mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+            <button
+              type="button"
+              onClick={handleAddCensoRow}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-teal-400/40 bg-teal-500/10 px-3 py-2 text-sm font-semibold text-teal-200 transition hover:bg-teal-500/20"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Agregar servicio
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSaveCenso()}
+              disabled={isSavingCenso}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <path d="M17 21v-8H7v8M7 3v5h8" />
+              </svg>
+              {isSavingCenso ? "Guardando…" : "Guardar censo"}
+            </button>
+          </div>
+        ) : null}
+      </section>
+    );
+
     const sidebarItems = [
       {
         id: "panel-overview",
@@ -7973,12 +8637,20 @@ export default function Home() {
                 const hasAlert = item.id === "panel-requests" && pendingRequestCount > 0;
                 const tileGradient =
                   SIDEBAR_TILE_GRADIENT[item.id] ?? "from-cyan-500 to-blue-600";
+                const itemChildren = (item as { children?: { id: string; label: string; detail: string; badge: string }[] }).children;
+                const hasChildren = Array.isArray(itemChildren) && itemChildren.length > 0;
+                const isExpanded = expandedMenu === item.id;
 
                 return (
+                  <Fragment key={item.id}>
                   <button
-                    key={item.id}
                     type="button"
                     onClick={() => {
+                      // Los items con submenu (p.ej. PERC) solo despliegan/pliegan.
+                      if (hasChildren) {
+                        setExpandedMenu((cur) => (cur === item.id ? null : item.id));
+                        return;
+                      }
                       const isMobile =
                         typeof window !== "undefined" && window.innerWidth < 1280;
                       // En movil, los items de navegacion abren SU pantalla (una a la vez).
@@ -8032,7 +8704,7 @@ export default function Home() {
                       ) : null}
                     </span>
                     <span
-                      className={`block w-full truncate text-[10px] font-medium leading-tight xl:text-[13px] ${
+                      className={`block w-full truncate text-[10px] font-medium leading-tight xl:flex-1 xl:text-[13px] ${
                         hasAlert
                           ? "text-rose-200"
                           : isLightPanelTheme
@@ -8042,7 +8714,65 @@ export default function Home() {
                     >
                       {item.label}
                     </span>
+                    {hasChildren ? (
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="14"
+                        height="14"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                        className={`hidden shrink-0 text-slate-400 transition-transform xl:block ${isExpanded ? "rotate-180" : ""}`}
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    ) : null}
                   </button>
+                  {hasChildren && isExpanded
+                    ? itemChildren!.map((child) => {
+                        const childActive = activeSidebarSection === child.id;
+                        return (
+                          <button
+                            key={child.id}
+                            type="button"
+                            title={child.detail}
+                            onClick={() => {
+                              const isMobile =
+                                typeof window !== "undefined" && window.innerWidth < 1280;
+                              if (isMobile) {
+                                setMobileView(child.id);
+                                setMenuOpen(false);
+                              } else {
+                                runSidebarItem(child.id, requestableModules);
+                              }
+                            }}
+                            className={`col-span-3 flex items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition xl:ml-3 xl:w-[calc(100%-0.75rem)] ${
+                              childActive
+                                ? "border-[#cad5ee] bg-[#e8eefb] text-slate-900 shadow-sm"
+                                : isLightPanelTheme
+                                  ? "border-slate-200 bg-white/70 text-slate-700 hover:bg-white"
+                                  : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                            }`}
+                          >
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-teal-500/15 text-teal-300">
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M3 3v18h18" />
+                                <rect x="7" y="9" width="3" height="9" />
+                                <rect x="12" y="5" width="3" height="13" />
+                                <rect x="17" y="12" width="3" height="6" />
+                              </svg>
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-tight xl:text-[12.5px]">
+                              {child.label}
+                            </span>
+                          </button>
+                        );
+                      })
+                    : null}
+                  </Fragment>
                 );
               })}
             </nav>
@@ -8465,7 +9195,7 @@ export default function Home() {
 
             {/* Barra de "volver a Inicio" — SOLO movil, en cualquier vista que no sea Inicio. */}
             <div
-              data-view="panel-services panel-tabulator panel-seps panel-horas panel-calendar panel-admin-export panel-capture-toggle"
+              data-view="panel-services panel-tabulator panel-seps panel-horas panel-censo panel-calendar panel-admin-export panel-capture-toggle"
               className="flex items-center gap-3 xl:hidden"
             >
               <button
@@ -8484,6 +9214,8 @@ export default function Home() {
                     ? "SEPS"
                     : mobileView === "panel-horas"
                       ? "Distribución de Horas"
+                      : mobileView === "panel-censo"
+                      ? "Censo diario de pacientes"
                       : mobileView === "panel-calendar"
                         ? "Configuración mensual"
                         : mobileView === "panel-admin-export"
@@ -9503,6 +10235,17 @@ export default function Home() {
             </>
           ) : null}
 
+          {/* Censo Diario de Pacientes: solo admin/supervisores (ningun servicio) y
+              SOLO cuando se elige en el submenu (desktop: seccion activa; movil:
+              vista activa). Si no, no aparece. */}
+          {canViewCenso &&
+          (activeSidebarSection === "panel-censo" || mobileView === "panel-censo") ? (
+            <>
+            {renderSectionDivider("Censo diario", "Censo diario de pacientes (solo supervisión)", "teal", isLightPanelTheme)}
+            <div data-view="panel-censo">{censoSection}</div>
+            </>
+          ) : null}
+
           {/* Bandeja de aprobacion de REGISTROS (solo admins). */}
           {isAdmin && showSignupRequestsModal ? (
             <div
@@ -10432,6 +11175,144 @@ export default function Home() {
                 );
               })()
             : null}
+
+          {/* Previsualizacion del consolidado COMPLETO Produccion de Servicio. */}
+          {showCensoConsolidadoPreview && consolidadoPreview ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden p-3 sm:p-4"
+              onClick={() => setShowCensoConsolidadoPreview(false)}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                className="modal-pop-in relative flex max-h-[90dvh] w-full min-w-0 max-w-3xl flex-col rounded-3xl border border-white/10 bg-[#0e1626] p-4 shadow-2xl shadow-black/50 sm:p-6"
+              >
+                <div className="flex shrink-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-300/90">
+                      Producción de Servicio
+                    </p>
+                    <h3 className="mt-1 text-lg font-semibold text-white">
+                      Previsualización del consolidado completo
+                    </h3>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#1b2537] px-2.5 py-1.5 text-xs text-slate-300">
+                      <span className="font-semibold uppercase tracking-wide">Mes</span>
+                      <input
+                        type="month"
+                        value={consolidadoPeriod}
+                        onChange={(event) => {
+                          if (event.target.value) {
+                            void loadConsolidadoPreview(event.target.value);
+                          }
+                        }}
+                        className="bg-transparent text-xs text-white outline-none [color-scheme:dark]"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowCensoConsolidadoPreview(false)}
+                      aria-label="Cerrar"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                <p className="mt-3 shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] text-slate-400">
+                  Consolidado de <strong className="text-slate-200">{getPeriodLabel(consolidadoPeriod)}</strong>. Los datos que vienen del <strong className="text-slate-200">Censo Diario</strong> de ese mismo mes se pintan en <span className="font-semibold text-amber-300">amarillo</span> mientras el mes está incompleto y en <span className="font-semibold text-emerald-300">verde</span> cuando ya se llenaron todos los días. El total se actualiza automáticamente.
+                </p>
+
+                <div className="relative mt-4 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-white/10">
+                  {isLoadingConsolidado ? (
+                    <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0e1626]/70 text-sm text-slate-300">
+                      Cargando {getPeriodLabel(consolidadoPeriod)}…
+                    </div>
+                  ) : null}
+                  <table className="w-full border-collapse text-xs text-slate-200">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="bg-[#1a2334] text-left text-slate-300">
+                        <th className="border-b border-white/10 px-3 py-2 font-semibold">Centro de Producción</th>
+                        <th className="border-b border-white/10 px-3 py-2 font-semibold">Unidades de Producción</th>
+                        <th className="border-b border-white/10 px-3 py-2 text-center font-semibold">Cantidad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {consolidadoPreview.map((svc, si) => (
+                        <Fragment key={si}>
+                          {svc.units.map((unit, ui) => (
+                            <tr key={`${si}-${ui}`} className="border-t border-white/5 align-middle">
+                              {ui === 0 ? (
+                                <td
+                                  rowSpan={svc.units.length}
+                                  className="border-r border-white/5 px-3 py-2 align-middle font-semibold text-white"
+                                >
+                                  {svc.centro}
+                                </td>
+                              ) : null}
+                              <td className="px-3 py-2 text-slate-300">{unit.label}</td>
+                              <td className="px-3 py-2 text-center">
+                                <span
+                                  className={`inline-flex min-w-[2.75rem] items-center justify-center gap-1 rounded-full px-2 py-0.5 font-bold ${
+                                    unit.source === "censo"
+                                      ? unit.complete
+                                        ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40"
+                                        : "bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40"
+                                      : unit.qty !== "0"
+                                        ? "bg-white/10 text-slate-100"
+                                        : "text-slate-500"
+                                  }`}
+                                  title={
+                                    unit.source === "censo"
+                                      ? unit.complete
+                                        ? "Censo del mes completo"
+                                        : "Censo del mes aún incompleto"
+                                      : undefined
+                                  }
+                                >
+                                  {unit.source === "censo" ? (
+                                    <span className={`h-1.5 w-1.5 rounded-full ${unit.complete ? "bg-emerald-400" : "bg-amber-400"}`} />
+                                  ) : null}
+                                  {unit.qty}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-white/10 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowCensoConsolidadoPreview(false)}
+                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+                  >
+                    Cerrar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void confirmDownloadServiceProduction()}
+                    disabled={isExportingServiceProduction}
+                    className="inline-flex items-center gap-2 rounded-xl bg-teal-500 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-teal-400 disabled:opacity-50"
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 3v12" />
+                      <path d="m7 12 5 5 5-5" />
+                      <path d="M5 21h14" />
+                    </svg>
+                    {isExportingServiceProduction ? "Generando…" : "Descargar Excel"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {captureOpenTarget ? (
             <div
