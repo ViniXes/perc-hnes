@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Auth,
   type AuthError,
@@ -426,7 +426,7 @@ function normalizeAssistant(text: string): string {
   return text
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/\bclave\b/g, "contraseña")
     .replace(/\bborrar\b/g, "quitar")
     .replace(/\beliminar\b/g, "quitar");
@@ -511,13 +511,35 @@ const SERVICE_GROUP_LABELS: Record<string, string> = {
   administrativa: "Subdireccion Administrativa",
 };
 
+// Terminos extra de busqueda por servicio (p.ej. siglas), en minusculas. Permiten
+// encontrar un servicio por su acronimo aunque el nombre visible sea el completo.
+const SERVICE_SEARCH_ALIASES: Record<string, string[]> = {
+  udp: ["udp"],
+  ucp: ["ucp"],
+  "gestion-documental": ["ugd", "ugda"],
+};
+
 const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
-  almacen: "direccion",
+  // --- DIRECCION (unidades staff + almacen medicamentos/farmacia/asesores) ---
+  direccion: "direccion",
+  esdomed: "direccion",
   "almacen-medicamentos": "direccion",
   "asesores-de-medicamentos": "direccion",
-  "docencia-e-investigacion": "direccion",
   "servicio-farmaceutico": "direccion",
-  esdomed: "direccion",
+  "docencia-e-investigacion": "direccion",
+  planificacion: "direccion",
+  epidemiologia: "direccion",
+  cumplimiento: "direccion",
+  "auditoria-interna": "direccion",
+  "unidad-financiera": "direccion",
+  "unidad-juridica": "direccion",
+  comunicaciones: "direccion",
+  "unidad-de-convenios": "direccion",
+  "jefaturas-division-medica": "direccion",
+  "jefatura-division-apoyo": "direccion",
+  udp: "direccion",
+  ucp: "direccion",
+  "gestion-documental": "direccion",
   "trabajo-social": "apoyo",
   "laboratorio-clinico": "apoyo",
   "banco-de-sangre": "apoyo",
@@ -525,6 +547,7 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   radiologia: "apoyo",
   "terapia-fisica": "apoyo",
   "rehablitacion-psicosocial": "apoyo",
+  "biologia-molecular": "apoyo",
   "estudios-gastroclinicos": "medica",
   "unidad-de-hemodinamia": "medica",
   hemodialisis: "medica",
@@ -535,16 +558,29 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "centro-quirurgico": "medica",
   "clinica-de-empleados": "apoyo",
   "central-de-esterilizacion": "enfermeria",
+  enfermeria: "enfermeria",
+  "cuidados-paliativos": "medica",
+  "medicina-preventiva": "medica",
+  "medicina-interna": "medica",
+  anestesiologia: "medica",
+  "medicina-critica": "medica",
+  // --- SUBDIRECCION ADMINISTRATIVA ---
+  almacen: "administrativa",
   aseo: "administrativa",
   lavanderia: "administrativa",
   "transporte-general": "administrativa",
   mantenimiento: "administrativa",
   "saneamiento-ambiental": "administrativa",
+  rrhh: "administrativa",
+  "servicios-varios": "administrativa",
+  tecnologia: "administrativa",
 };
 
 const SERVICE_USERNAME_BY_ID: Record<string, string> = {
+  direccion: "dep.direccion",
   vacunacion: "dep.vacunacion",
   "laboratorio-clinico": "dep.laboratorio",
+  "biologia-molecular": "dep.biologiamolecular",
   radiologia: "dep.radiologia",
   "estudios-gastroclinicos": "dep.gastro",
   "terapia-fisica": "dep.fisioterapia",
@@ -557,6 +593,7 @@ const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   "rehablitacion-psicosocial": "dep.psicosocial",
   "alimentacion-y-dieta": "dep.alimentacion",
   "central-de-esterilizacion": "dep.esterilizacion",
+  enfermeria: "dep.enfermeria",
   "saneamiento-ambiental": "dep.saneamiento",
   aseo: "dep.aseo",
   almacen: "dep.abastecimiento",
@@ -565,11 +602,21 @@ const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   lavanderia: "dep.lavanderia",
   "transporte-general": "dep.transporte",
   mantenimiento: "dep.mantenimiento",
+  rrhh: "dep.rrhh",
+  "servicios-varios": "dep.serviciosvarios",
+  tecnologia: "dep.tecnologia",
+  ucp: "dep.ucp",
+  "gestion-documental": "dep.gestiondocumental",
   "trabajo-social": "dep.trabajosocial",
   "docencia-e-investigacion": "dep.docencia",
   "maxima-emergencia": "dep.emergencia",
   "centro-quirurgico": "dep.centroquirurgico",
   "clinica-de-empleados": "dep.clinicaempleados",
+  "cuidados-paliativos": "dep.paliativos",
+  "medicina-preventiva": "dep.medpreventiva",
+  "medicina-interna": "dep.medinterna",
+  anestesiologia: "dep.anestesiologia",
+  "medicina-critica": "dep.medcritica",
 };
 
 
@@ -2396,6 +2443,9 @@ function hasAnySepsValue(values: SepsValues | undefined) {
 // ---- Distribucion de Horas (empleados x centros de costo) ------------------
 // Filas dinamicas (el usuario agrega/quita empleados). hours: { columna -> horas }.
 // El comentario es transitorio (ayuda durante la captura); NO va al consolidado.
+// Cuantas filas de Horas se renderizan por "pagina" (ver paginacion del tabulador).
+const HORAS_PAGE_SIZE = 60;
+
 type HorasEmployee = { name: string; dui: string; comment: string; hours: Record<string, string> };
 
 function buildEmptyHorasEmployee(template: HorasTemplate, name = "", dui = ""): HorasEmployee {
@@ -2822,7 +2872,7 @@ async function createServiceUserAccount(
 const CHIEF_TEMP_PASSWORD = "123456";
 
 function stripAccents(value: string) {
-  return value.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 // Usuario = inicial del nombre + primer apellido (sin acentos). Ej: Brenda Mejia -> bmejia.
@@ -2995,6 +3045,9 @@ export default function Home() {
   // Dropdown profesional de "Elegir servicio" (admin/supervisor).
   const [adminServicePickerOpen, setAdminServicePickerOpen] = useState(false);
   const [adminServiceQuery, setAdminServiceQuery] = useState("");
+  // Division seleccionada dentro del dropdown "Elegir servicio" (navegacion en 2
+  // niveles: primero las divisiones, luego sus servicios). null = mostrar divisiones.
+  const [adminPickerGroup, setAdminPickerGroup] = useState<string | null>(null);
   const [tableValues, setTableValues] = useState<TableValues>({});
   const [sepsValues, setSepsValues] = useState<SepsValues>({});
   const [isSavingSeps, setIsSavingSeps] = useState(false);
@@ -3008,6 +3061,12 @@ export default function Home() {
   const [horasEmployeeToRemove, setHorasEmployeeToRemove] = useState<number | null>(null);
   const [isSavingHoras, setIsSavingHoras] = useState(false);
   const [isLoadingHoras, setIsLoadingHoras] = useState(false);
+  // Importacion/exportacion de Horas por Excel (servicios grandes, p.ej. Enfermeria).
+  const horasFileInputRef = useRef<HTMLInputElement>(null);
+  const [isImportingHoras, setIsImportingHoras] = useState(false);
+  // Paginacion de la tabla de Horas: se renderiza una ventana de filas a la vez para
+  // que servicios enormes (p.ej. Enfermeria, 700+ empleados) no congelen la pagina.
+  const [horasVisibleCount, setHorasVisibleCount] = useState(HORAS_PAGE_SIZE);
   // "Completo" del modulo Horas: solo true cuando el usuario GUARDO (no por el seed).
   const [horasSaved, setHorasSaved] = useState(false);
   // El tabulador de Horas arranca colapsado para una pagina principal mas limpia.
@@ -3464,8 +3523,51 @@ export default function Home() {
     );
     const q = adminServiceQuery.trim().toLowerCase();
     if (!q) return base;
-    return base.filter((service) => service.name.toLowerCase().includes(q));
+    return base.filter((service) => {
+      if (service.name.toLowerCase().includes(q)) return true;
+      const aliases = SERVICE_SEARCH_ALIASES[service.id];
+      return aliases ? aliases.some((alias) => alias.includes(q)) : false;
+    });
   }, [isAdmin, serviceProfile, adminServiceQuery]);
+  // Servicios visibles agrupados por division, para la navegacion en 2 niveles del
+  // dropdown "Elegir servicio". Solo se incluyen las divisiones que tienen servicios.
+  const adminServiceGroups = useMemo(() => {
+    const base = SERVICE_DEFINITIONS.filter(
+      (service) =>
+        isAdmin ||
+        (getAreaById(service.id)?.modules.some((m) =>
+          serviceProfile?.supervisorModules.includes(m),
+        ) ??
+          false),
+    );
+    const byGroup = new Map<string, ServiceDefinition[]>();
+    for (const service of base) {
+      const gid = SERVICE_GROUP_BY_ID[service.id] || "apoyo";
+      const arr = byGroup.get(gid) || [];
+      arr.push(service);
+      byGroup.set(gid, arr);
+    }
+    // Orden preferido dentro de Direccion: ESDOMED primero, luego Planificacion y
+    // Calidad; el resto conserva su orden natural.
+    const DIRECCION_PRIORITY: Record<string, number> = {
+      esdomed: 0,
+      planificacion: 1,
+    };
+    return Object.entries(SERVICE_GROUP_LABELS)
+      .map(([id, title]) => {
+        let services = byGroup.get(id) || [];
+        if (id === "direccion") {
+          services = services
+            .slice()
+            .sort(
+              (a, b) =>
+                (DIRECCION_PRIORITY[a.id] ?? 99) - (DIRECCION_PRIORITY[b.id] ?? 99),
+            );
+        }
+        return { id, title, services };
+      })
+      .filter((group) => group.services.length > 0);
+  }, [isAdmin, serviceProfile]);
   // Modulos que el usuario puede habilitar/deshabilitar: el admin todos; el supervisor
   // solo los suyos. Determina las columnas del panel "Habilitar tableros".
   const toggleableModules: ModuleId[] = !serviceProfile?.permissions.canToggleCapture
@@ -3907,6 +4009,11 @@ export default function Home() {
       cancelled = true;
     };
   }, [horasTemplate, periodId, firestoreUnavailable, user]);
+
+  // Al cambiar de servicio o periodo, reinicia la ventana de filas visibles de Horas.
+  useEffect(() => {
+    setHorasVisibleCount(HORAS_PAGE_SIZE);
+  }, [horasTemplate, periodId]);
 
   // Al cargar la plantilla SEPS, todas las tablas/secciones arrancan COLAPSADAS
   // (apiladas, ninguna desplegada). El usuario abre la que necesite.
@@ -5654,7 +5761,12 @@ export default function Home() {
     if (!horasTemplate) {
       return;
     }
-    setHorasEmployees((current) => [...current, buildEmptyHorasEmployee(horasTemplate)]);
+    setHorasEmployees((current) => {
+      const next = [...current, buildEmptyHorasEmployee(horasTemplate)];
+      // Asegura que la nueva fila quede visible aunque la tabla este paginada.
+      setHorasVisibleCount((c) => Math.max(c, next.length));
+      return next;
+    });
   }
 
   function handleRemoveHorasEmployee(index: number) {
@@ -5673,6 +5785,110 @@ export default function Home() {
     const index = horasEmployeeToRemove;
     setHorasEmployees((current) => current.filter((_, i) => i !== index));
     setHorasEmployeeToRemove(null);
+  }
+
+  // Descarga una plantilla .xlsx del servicio actual con los nombres/DUI ya puestos
+  // y una columna por cada centro de costo, para llenar las horas y volver a subirla.
+  async function handleDownloadHorasTemplate() {
+    if (!horasTemplate) {
+      return;
+    }
+    try {
+      const XLSX = await import("xlsx");
+      const header = ["NOMBRE DEL EMPLEADO", "DUI", ...horasTemplate.columns];
+      const rows = horasEmployees.map((emp) => [
+        emp.name,
+        emp.dui,
+        ...horasTemplate.columns.map((col) => emp.hours[col] ?? ""),
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+      ws["!cols"] = [
+        { wch: 40 },
+        { wch: 14 },
+        ...horasTemplate.columns.map(() => ({ wch: 16 })),
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Horas");
+      const period = horasViewPeriod ?? periodId;
+      XLSX.writeFile(wb, `Horas_${horasTemplate.serviceId}_${period}.xlsx`);
+    } catch (err) {
+      console.error(err);
+      setError("No pudimos generar la plantilla Excel.");
+    }
+  }
+
+  // Lee un .xlsx llenado con la plantilla y REEMPLAZA la tabla de Horas del servicio
+  // con lo que venga en el archivo (empareja columnas por encabezado).
+  async function handleUploadHorasFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Permite volver a elegir el mismo archivo mas tarde.
+    event.target.value = "";
+    if (!file || !horasTemplate) {
+      return;
+    }
+    setIsImportingHoras(true);
+    setError("");
+    setMessage("");
+    try {
+      const XLSX = await import("xlsx");
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      if (!ws) {
+        throw new Error("La hoja esta vacia");
+      }
+      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as unknown[][];
+      if (aoa.length < 2) {
+        throw new Error("Sin filas de datos");
+      }
+      const norm = (s: unknown) =>
+        String(s ?? "")
+          .normalize("NFKD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .trim()
+          .toUpperCase()
+          .replace(/\s+/g, " ");
+      const headerRow = (aoa[0] as unknown[]).map(norm);
+      const nameIdx = headerRow.findIndex((h) => h.includes("NOMBRE"));
+      const duiIdx = headerRow.findIndex((h) => h === "DUI");
+      const colIdx = horasTemplate.columns.map((col) => headerRow.indexOf(norm(col)));
+
+      const imported: HorasEmployee[] = [];
+      for (let r = 1; r < aoa.length; r++) {
+        const row = aoa[r] as unknown[];
+        if (!row || row.length === 0) {
+          continue;
+        }
+        const name = nameIdx >= 0 ? String(row[nameIdx] ?? "").trim() : "";
+        const dui = duiIdx >= 0 ? String(row[duiIdx] ?? "").trim() : "";
+        const hours: Record<string, string> = {};
+        horasTemplate.columns.forEach((col, i) => {
+          const idx = colIdx[i];
+          const value = idx >= 0 ? row[idx] : "";
+          hours[col] = String(value ?? "").trim();
+        });
+        const hasData =
+          name !== "" || dui !== "" || Object.values(hours).some((h) => h !== "");
+        if (!hasData) {
+          continue;
+        }
+        imported.push({ name, dui, comment: "", hours });
+      }
+      if (imported.length === 0) {
+        throw new Error("No se encontraron empleados en el archivo");
+      }
+      setHorasEmployees(imported);
+      setMessage(
+        `Se importaron ${imported.length} empleados desde el Excel. Revise los datos y presione Guardar para confirmar.`,
+      );
+    } catch (err) {
+      console.error(err);
+      setError(
+        "No pudimos leer el Excel. Use la plantilla descargada, sin cambiar los encabezados.",
+      );
+    } finally {
+      setIsImportingHoras(false);
+    }
   }
 
   async function handleSaveHoras() {
@@ -5738,7 +5954,7 @@ export default function Home() {
           periodLabel: targetPeriodLabel,
           module: "distribucion",
           serviceId: horasTemplate.serviceId,
-          serviceName: currentService?.name || horasTemplate.serviceId,
+          serviceName: horasTemplate.displayName ?? currentService?.name ?? horasTemplate.serviceId,
           columns: horasTemplate.columns,
           employees: cleaned,
           userId: user.uid,
@@ -6262,8 +6478,12 @@ export default function Home() {
 
     let overrideOpenCount = 0;
     let overrideClosedCount = 0;
+    let overrideTotalCells = 0;
     for (const service of SERVICE_DEFINITIONS) {
+      const svcModuleIds = getAreaById(service.id)?.modules ?? [];
       for (const moduleId of toggleableModules) {
+        if (!svcModuleIds.includes(moduleId)) continue;
+        overrideTotalCells += 1;
         const cellState =
           captureOverrides[getCaptureOverrideId(overridePanelPeriodId, service.id, moduleId)];
         if (cellState === "open") {
@@ -6273,7 +6493,6 @@ export default function Home() {
         }
       }
     }
-    const overrideTotalCells = SERVICE_DEFINITIONS.length * toggleableModules.length;
     const overrideAutoCount = overrideTotalCells - overrideOpenCount - overrideClosedCount;
 
     const overrideStateChip = (service: ServiceDefinition, moduleId: ModuleId) => {
@@ -6281,15 +6500,15 @@ export default function Home() {
       const state = captureOverrides[overrideId];
       const isBusy = overrideBusyKey === overrideId;
 
-      // Un solo chip que cicla: Auto -> Abrir (pide mes) -> Cerrado -> Auto.
+      // Un solo chip que cicla directo (sin modal): Auto -> Abrir -> Cerrado -> Auto.
+      // "Abrir" habilita el mes ya seleccionado arriba, en un solo toque.
       const handleCycle = () => {
         if (state === "open") {
           void handleToggleCapture(service.id, moduleId, "closed");
         } else if (state === "closed") {
           void handleToggleCapture(service.id, moduleId, null);
         } else {
-          setCaptureOpenPeriod(overridePanelPeriodId);
-          setCaptureOpenTarget({ serviceId: service.id, serviceName: service.name, moduleId });
+          void handleToggleCapture(service.id, moduleId, "open");
         }
       };
 
@@ -6398,16 +6617,6 @@ export default function Home() {
               const groupOpen = openOverrideGroups.has(group.id);
               const groupAccent =
                 OVERRIDE_GROUP_ACCENTS[groupIndex % OVERRIDE_GROUP_ACCENTS.length];
-              // Resumen de overrides de la division (para mostrarlo en la barra).
-              let gOpen = 0;
-              let gClosed = 0;
-              for (const s of group.services) {
-                for (const m of toggleableModules) {
-                  const st = captureOverrides[getCaptureOverrideId(overridePanelPeriodId, s.id, m)];
-                  if (st === "open") gOpen += 1;
-                  else if (st === "closed") gClosed += 1;
-                }
-              }
               return (
               <div
                 key={group.id}
@@ -6439,19 +6648,35 @@ export default function Home() {
                     className="h-7 w-1 shrink-0 rounded-full transition"
                     style={{ backgroundColor: groupOpen ? groupAccent.open : groupAccent.closed }}
                   />
-                  <h3 className="flex-1 text-sm font-semibold uppercase tracking-wide">{group.title}</h3>
-                  {gOpen > 0 ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      {gOpen}
-                    </span>
-                  ) : null}
-                  {gClosed > 0 ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[11px] font-semibold text-rose-300">
-                      <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
-                      {gClosed}
-                    </span>
-                  ) : null}
+                  <h3 className="shrink-0 text-sm font-semibold uppercase tracking-wide">{group.title}</h3>
+                  {group.id === "direccion" ? (
+                    <div className="hidden min-w-0 flex-1 items-center px-4 lg:flex">
+                      <svg viewBox="0 0 200 24" preserveAspectRatio="none" className="h-6 w-full" aria-hidden="true">
+                        <path
+                          className="ekg-track"
+                          d="M0 12 H15 L18 9 L21 12 L24 3 L28 21 L31 12 H62 L65 9 L68 12 L71 3 L75 21 L78 12 H109 L112 9 L115 12 L118 3 L122 21 L125 12 H156 L159 9 L162 12 L165 3 L169 21 L172 12 H200"
+                          fill="none"
+                          strokeWidth="0.75"
+                          vectorEffect="non-scaling-stroke"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          className="ekg-pulse-soft"
+                          pathLength={100}
+                          d="M0 12 H15 L18 9 L21 12 L24 3 L28 21 L31 12 H62 L65 9 L68 12 L71 3 L75 21 L78 12 H109 L112 9 L115 12 L118 3 L122 21 L125 12 H156 L159 9 L162 12 L165 3 L169 21 L172 12 H200"
+                          fill="none"
+                          stroke="#67e8f9"
+                          strokeWidth="1.25"
+                          vectorEffect="non-scaling-stroke"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
+                  ) : (
+                    <span className="hidden flex-1 lg:block" />
+                  )}
                   <span className={`hidden text-xs sm:inline ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
                     {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
                   </span>
@@ -6468,34 +6693,50 @@ export default function Home() {
                     <path d="m6 9 6 6 6-6" />
                   </svg>
                 </button>
-                <div className={`show-scrollbar overflow-x-auto ${groupOpen ? "" : "hidden"}`}>
-                  <table className="w-full border-collapse text-left text-sm">
-                    <thead>
-                      <tr className={isLightPanelTheme ? "text-slate-500" : "text-slate-400"}>
-                        <th className="px-4 py-2 text-xs font-medium">Servicio</th>
-                        {toggleableModules.map((moduleId) => (
-                          <th key={moduleId} className="w-36 px-3 py-2 text-center text-xs font-medium">
-                            {MODULE_BY_ID[moduleId].shortName}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {group.services.map((service) => (
-                        <tr
-                          key={service.id}
-                          className={`border-t ${isLightPanelTheme ? "border-slate-100 hover:bg-slate-50/60" : "border-white/5 hover:bg-white/5"}`}
-                        >
-                          <td className="px-4 py-2 font-medium">{service.name}</td>
-                          {toggleableModules.map((moduleId) => (
-                            <td key={moduleId} className="px-3 py-2 text-center">
+                <div className={groupOpen ? "p-2.5" : "hidden"}>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    {group.services.map((service) => {
+                      const svcModuleIds = getAreaById(service.id)?.modules ?? [];
+                      const svcModules = toggleableModules.filter((m) => svcModuleIds.includes(m));
+                      return (
+                      <div
+                        key={service.id}
+                        className={`group rounded-2xl border p-3 text-center transition ${
+                          isLightPanelTheme
+                            ? "border-slate-200 bg-white shadow-sm hover:border-cyan-300 hover:shadow-md"
+                            : "border-white/10 bg-gradient-to-b from-[#212d45] to-[#1a2334] hover:border-cyan-400/30"
+                        }`}
+                      >
+                        <span className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm ring-1 ring-white/15 transition group-hover:scale-105">
+                          <ServiceIcon serviceId={service.id} className="h-[18px] w-[18px]" />
+                        </span>
+                        <p className="truncate text-[11px] font-semibold leading-tight" title={service.name}>
+                          {service.name}
+                        </p>
+                        <div className={`my-2.5 h-px ${isLightPanelTheme ? "bg-slate-100" : "bg-white/10"}`} />
+                        <div className="flex flex-col gap-1">
+                          {svcModules.map((moduleId) => (
+                            <div
+                              key={moduleId}
+                              className={`flex items-center justify-between gap-1.5 rounded-lg px-2 py-1 ${
+                                isLightPanelTheme ? "bg-slate-50" : "bg-white/5"
+                              }`}
+                            >
+                              <span
+                                className={`text-[9px] font-semibold uppercase tracking-wide ${
+                                  isLightPanelTheme ? "text-slate-500" : "text-slate-400"
+                                }`}
+                              >
+                                {MODULE_BY_ID[moduleId].shortName}
+                              </span>
                               {overrideStateChip(service, moduleId)}
-                            </td>
+                            </div>
                           ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                        </div>
+                      </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
               );
@@ -6978,7 +7219,7 @@ export default function Home() {
           <div className="min-w-0">
             <h2 className={`text-xl font-bold sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>Distribución de Horas</h2>
             <p className={`mt-1 truncate text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-              {currentService?.name} · Cierre de {periodLabel}
+              {horasTemplate?.displayName ?? currentService?.name} · Cierre de {periodLabel}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -7012,6 +7253,60 @@ export default function Home() {
 
         {!horasCollapsed ? (
         <>
+        {horasTemplate?.serviceId === "enfermeria" ? (
+          <div
+            className={`mt-4 flex flex-wrap items-center gap-2 rounded-2xl border p-3 ${
+              isLightPanelTheme ? "border-cyan-200 bg-cyan-50/70" : "border-cyan-400/20 bg-cyan-400/5"
+            }`}
+          >
+            <span className={`text-xs font-semibold ${isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>
+              Carga masiva por Excel
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleDownloadHorasTemplate()}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                isLightPanelTheme
+                  ? "bg-cyan-100 text-cyan-700 hover:bg-cyan-200"
+                  : "bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25"
+              }`}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 3v12" />
+                <path d="m7 12 5 5 5-5" />
+                <path d="M5 21h14" />
+              </svg>
+              Descargar plantilla
+            </button>
+            <button
+              type="button"
+              onClick={() => horasFileInputRef.current?.click()}
+              disabled={horasEditingBlocked || isImportingHoras}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${
+                isLightPanelTheme
+                  ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                  : "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+              }`}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 21V9" />
+                <path d="m7 12 5-5 5 5" />
+                <path d="M5 3h14" />
+              </svg>
+              {isImportingHoras ? "Procesando…" : "Subir Excel lleno"}
+            </button>
+            <input
+              ref={horasFileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(event) => void handleUploadHorasFile(event)}
+              className="hidden"
+            />
+            <span className={`w-full text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+              Descargue la plantilla (trae los nombres), llene las horas por columna y vuelva a subirla. Al subir se reemplaza la tabla; luego presione Guardar.
+            </span>
+          </div>
+        ) : null}
         {renderHistorySelector({
           options: horasHistoryOptions,
           currentPeriod: periodId,
@@ -7042,7 +7337,7 @@ export default function Home() {
               </tr>
             </thead>
             <tbody>
-              {horasEmployees.map((emp, index) => (
+              {horasEmployees.slice(0, horasVisibleCount).map((emp, index) => (
                 <tr key={index} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
                   <td className={`sticky left-0 z-10 min-w-[12rem] border-r px-2 py-1 ${isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#202c41]"}`}>
                     <div className="flex items-center gap-1.5">
@@ -7138,6 +7433,55 @@ export default function Home() {
             </tbody>
           </table>
         </div>
+
+        {horasEmployees.length > HORAS_PAGE_SIZE ? (
+          <div className={`mt-3 flex flex-wrap items-center justify-center gap-2 text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
+            <span>
+              Mostrando {Math.min(horasVisibleCount, horasEmployees.length)} de {horasEmployees.length} empleados
+            </span>
+            {horasVisibleCount < horasEmployees.length ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setHorasVisibleCount((c) => c + HORAS_PAGE_SIZE)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold transition ${
+                    isLightPanelTheme
+                      ? "bg-cyan-100 text-cyan-700 hover:bg-cyan-200"
+                      : "bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25"
+                  }`}
+                >
+                  Mostrar {Math.min(HORAS_PAGE_SIZE, horasEmployees.length - horasVisibleCount)} más
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHorasVisibleCount(horasEmployees.length)}
+                  className={`rounded-full px-3 py-1.5 font-semibold transition ${
+                    isLightPanelTheme ? "text-slate-500 hover:bg-slate-100" : "text-slate-400 hover:bg-white/5"
+                  }`}
+                  title="Puede tardar unos segundos con listas muy grandes"
+                >
+                  Mostrar todos
+                </button>
+              </>
+            ) : null}
+            {horasVisibleCount > HORAS_PAGE_SIZE ? (
+              <button
+                type="button"
+                onClick={() => setHorasVisibleCount(HORAS_PAGE_SIZE)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold transition ${
+                  isLightPanelTheme
+                    ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    : "bg-white/5 text-slate-300 hover:bg-white/10"
+                }`}
+              >
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m18 15-6-6-6 6" />
+                </svg>
+                Mostrar menos
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className={`mt-4 flex flex-row flex-wrap items-center justify-between gap-2 border-t pt-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -8394,7 +8738,10 @@ export default function Home() {
                     <>
                       <div
                         className="fixed inset-0 z-30"
-                        onClick={() => setAdminServicePickerOpen(false)}
+                        onClick={() => {
+                          setAdminServicePickerOpen(false);
+                          setAdminPickerGroup(null);
+                        }}
                       />
                       <div className="modal-pop-in absolute left-0 right-0 z-40 mt-2 overflow-hidden rounded-2xl border border-white/10 bg-[#1b2537] shadow-[0_24px_80px_rgba(3,7,18,0.55)]">
                         <div className="border-b border-white/5 p-2">
@@ -8420,6 +8767,7 @@ export default function Home() {
                               void handleAdminSelectService("");
                               setAdminServicePickerOpen(false);
                               setAdminServiceQuery("");
+                              setAdminPickerGroup(null);
                             }}
                             className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition ${
                               adminSelectedServiceId === "" ? "bg-amber-400/10" : "hover:bg-white/5"
@@ -8444,12 +8792,9 @@ export default function Home() {
                               </svg>
                             ) : null}
                           </button>
-                          {adminServiceOptions.length === 0 ? (
-                            <p className="px-3 py-6 text-center text-sm text-slate-400">
-                              Ningún servicio coincide.
-                            </p>
-                          ) : (
-                            adminServiceOptions.map((service) => {
+                          {(() => {
+                            const q = adminServiceQuery.trim();
+                            const renderServiceBtn = (service: ServiceDefinition) => {
                               const selected = service.id === adminSelectedServiceId;
                               return (
                                 <button
@@ -8459,6 +8804,7 @@ export default function Home() {
                                     void handleAdminSelectService(service.id);
                                     setAdminServicePickerOpen(false);
                                     setAdminServiceQuery("");
+                                    setAdminPickerGroup(null);
                                     // En movil, ir al tabulador que el servicio reporta:
                                     // PERC si lo tiene; si no, Horas; si no, Inicio.
                                     if (
@@ -8498,8 +8844,86 @@ export default function Home() {
                                   ) : null}
                                 </button>
                               );
-                            })
-                          )}
+                            };
+
+                            // 1) Modo busqueda: lista plana con TODOS los servicios que
+                            // coinciden (se ignora la agrupacion por division).
+                            if (q) {
+                              return adminServiceOptions.length === 0 ? (
+                                <p className="px-3 py-6 text-center text-sm text-slate-400">
+                                  Ningún servicio coincide.
+                                </p>
+                              ) : (
+                                adminServiceOptions.map(renderServiceBtn)
+                              );
+                            }
+
+                            // 2) Detalle de una division: boton "volver" + sus servicios.
+                            if (adminPickerGroup) {
+                              const group = adminServiceGroups.find(
+                                (g) => g.id === adminPickerGroup,
+                              );
+                              if (!group) return null;
+                              return (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setAdminPickerGroup(null)}
+                                    className="mb-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5"
+                                  >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-400" aria-hidden>
+                                      <path d="m15 18-6-6 6-6" />
+                                    </svg>
+                                    <span className="font-semibold">{group.title}</span>
+                                    <span className="ml-auto text-xs text-slate-500">
+                                      {group.services.length}
+                                    </span>
+                                  </button>
+                                  {group.services.map(renderServiceBtn)}
+                                </>
+                              );
+                            }
+
+                            // 3) Primer nivel: las divisiones (Direccion, Medica, Apoyo,
+                            // Subdireccion Administrativa, y Enfermeria si tiene servicios).
+                            return adminServiceGroups.map((group) => {
+                              const active = group.services.some(
+                                (s) => s.id === adminSelectedServiceId,
+                              );
+                              return (
+                                <button
+                                  key={group.id}
+                                  type="button"
+                                  onClick={() => setAdminPickerGroup(group.id)}
+                                  className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition ${
+                                    active ? "bg-amber-400/10" : "hover:bg-white/5"
+                                  }`}
+                                >
+                                  <span
+                                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                                      active ? "bg-amber-400/20 text-amber-200" : "bg-white/5 text-slate-300"
+                                    }`}
+                                  >
+                                    <svg {...DEP_ICON_PROPS} aria-hidden="true">
+                                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                                      <path d="M3 10h18" />
+                                    </svg>
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className={`block truncate text-sm ${active ? "font-semibold text-amber-100" : "font-medium text-slate-200"}`}>
+                                      {group.title}
+                                    </span>
+                                    <span className="block text-[11px] text-slate-500">
+                                      {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
+                                    </span>
+                                  </span>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-400" aria-hidden>
+                                    <path d="m9 18 6-6-6-6" />
+                                  </svg>
+                                </button>
+                              );
+                            });
+                          })()}
                         </div>
                       </div>
                     </>
@@ -9065,14 +9489,14 @@ export default function Home() {
             </>
           ) : null}
 
-          {showModule("sesps") ? (
+          {showModule("sesps") && sepsSection ? (
             <>
             {renderSectionDivider("SEPS", "Captura estadística", "violet", isLightPanelTheme)}
             <div data-view="panel-seps">{sepsSection}</div>
             </>
           ) : null}
 
-          {showModule("distribucion") ? (
+          {showModule("distribucion") && horasSection ? (
             <>
             {renderSectionDivider("Dis/horas", "Reparto de horas del personal", "amber", isLightPanelTheme)}
             <div data-view="panel-horas">{horasSection}</div>
@@ -9908,15 +10332,15 @@ export default function Home() {
                   <div
                     role="dialog"
                     aria-modal="true"
-                    className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overflow-x-hidden p-4"
+                    className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden p-3 sm:p-4"
                     onClick={() => setShowStatsModal(false)}
                   >
                     <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
                     <div
                       onClick={(event) => event.stopPropagation()}
-                      className="modal-pop-in relative my-6 w-full min-w-0 max-w-lg rounded-3xl border border-white/10 bg-[#0e1626] p-4 shadow-2xl shadow-black/50 sm:p-6"
+                      className="modal-pop-in relative flex max-h-[90dvh] w-full min-w-0 max-w-lg flex-col rounded-3xl border border-white/10 bg-[#0e1626] p-4 shadow-2xl shadow-black/50 sm:p-6"
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex shrink-0 items-start justify-between gap-3">
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300/90">
                             Avance · {statsLabel}
@@ -9936,7 +10360,7 @@ export default function Home() {
                       </div>
 
                       {/* Resumen */}
-                      <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <div className="mt-5 shrink-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                         <div className="flex items-end justify-between">
                           <div>
                             <p className="text-3xl font-bold leading-none text-white">
@@ -9965,41 +10389,43 @@ export default function Home() {
                         </div>
                       </div>
 
-                      {/* Lista alineada (completos primero) */}
-                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                        {[...completos, ...incompletos].map((s) => {
-                          const done = s.modules.find((m) => m.label === statsLabel)?.completed;
-                          return (
-                            <div
-                              key={s.id}
-                              className={`flex min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 ${
-                                done
-                                  ? "border-emerald-400/15 bg-emerald-500/[0.06]"
-                                  : "border-amber-400/15 bg-amber-500/[0.06]"
-                              }`}
-                            >
-                              <span
-                                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                                  done ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"
-                                }`}
-                              >
-                                <ServiceIcon serviceId={s.id} className="h-4 w-4" />
-                              </span>
-                              <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-200" title={s.name}>
-                                {s.name}
-                              </span>
-                              <span
-                                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                      {/* Lista alineada (completos primero). Scroll interno para que el
+                          modal siempre quepa en una pantalla; nombres completos (2 lineas)
+                          y el estado como punto de color para no cortar el texto. */}
+                      <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[...completos, ...incompletos].map((s) => {
+                            const done = s.modules.find((m) => m.label === statsLabel)?.completed;
+                            return (
+                              <div
+                                key={s.id}
+                                title={`${s.name} — ${done ? "Completo" : "Pendiente"}`}
+                                className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2 ${
                                   done
-                                    ? "bg-emerald-500/15 text-emerald-300"
-                                    : "bg-amber-500/15 text-amber-300"
+                                    ? "border-emerald-400/15 bg-emerald-500/[0.06]"
+                                    : "border-amber-400/15 bg-amber-500/[0.06]"
                                 }`}
                               >
-                                {done ? "Completo" : "Pendiente"}
-                              </span>
-                            </div>
-                          );
-                        })}
+                                <span
+                                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${
+                                    done ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"
+                                  }`}
+                                >
+                                  <ServiceIcon serviceId={s.id} className="h-3.5 w-3.5" />
+                                </span>
+                                <span className="line-clamp-2 min-w-0 flex-1 text-[11.5px] font-medium leading-tight text-slate-200">
+                                  {s.name}
+                                </span>
+                                <span
+                                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                                    done ? "bg-emerald-400" : "bg-amber-400"
+                                  }`}
+                                  aria-label={done ? "Completo" : "Pendiente"}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>

@@ -110,7 +110,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   },
   {
     id: "unidad-de-hemodinamia",
-    name: "Unidad de Intervencionismo Endovascular",
+    name: "Hemodinamia",
     rows: [
       "579_1-Unidad de hemodinamia | Procedimiento",
       "579_2-Unidad de hemodinamia | Estudio",
@@ -340,7 +340,85 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   {
     // UDP: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
     id: "udp",
-    name: "UDP",
+    name: "Unidad de Desarrollo Profesional",
+    rows: [],
+  },
+  {
+    // Cuidados Paliativos: por ahora SOLO Distribucion de Horas (SEPS pendiente).
+    id: "cuidados-paliativos",
+    name: "Cuidados Paliativos",
+    rows: [],
+  },
+  {
+    // Medicina Preventiva: por ahora SOLO Distribucion de Horas.
+    id: "medicina-preventiva",
+    name: "Medicina Preventiva",
+    rows: [],
+  },
+  {
+    // Medicina Interna: por ahora SOLO Distribucion de Horas.
+    id: "medicina-interna",
+    name: "Medicina Interna",
+    rows: [],
+  },
+  {
+    // Anestesiologia: por ahora SOLO Distribucion de Horas.
+    id: "anestesiologia",
+    name: "Anestesiologia",
+    rows: [],
+  },
+  {
+    // Medicina Critica: por ahora SOLO Distribucion de Horas.
+    id: "medicina-critica",
+    name: "Medicina Critica",
+    rows: [],
+  },
+  {
+    // Biologia Molecular: por ahora SOLO Distribucion de Horas.
+    id: "biologia-molecular",
+    name: "Biologia Molecular",
+    rows: [],
+  },
+  {
+    // Recursos Humanos: por ahora SOLO Distribucion de Horas.
+    id: "rrhh",
+    name: "Recursos Humanos",
+    rows: [],
+  },
+  {
+    // Servicios Varios (Saneamiento + Transporte juntos): SOLO Distribucion de Horas.
+    id: "servicios-varios",
+    name: "Servicios Varios",
+    rows: [],
+  },
+  {
+    // Departamento de Tecnologia: por ahora SOLO Distribucion de Horas.
+    id: "tecnologia",
+    name: "Departamento de Tecnologia",
+    rows: [],
+  },
+  {
+    // UCP: por ahora SOLO Distribucion de Horas.
+    id: "ucp",
+    name: "Unidad de Compras Publicas",
+    rows: [],
+  },
+  {
+    // Unidad de Gestion Documental: por ahora SOLO Distribucion de Horas.
+    id: "gestion-documental",
+    name: "Unidad de Gestion Documental",
+    rows: [],
+  },
+  {
+    // Enfermeria: toda la plantilla de enfermeria. SOLO Distribucion de Horas.
+    id: "enfermeria",
+    name: "Enfermeria",
+    rows: [],
+  },
+  {
+    // Direccion: por ahora SOLO Distribucion de Horas.
+    id: "direccion",
+    name: "Direccion",
     rows: [],
   },
 ];

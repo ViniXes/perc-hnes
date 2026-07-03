@@ -91,6 +91,17 @@ body {
   0%, 100% { opacity: 0; }
   50%      { opacity: 1; }
 }
+/* Pulso EKG suave para encabezados: un PUNTITO de luz (tipo estrella) que viaja
+   lento por la linea, en vez de un segmento azul. Mas sutil que el del login. */
+.ekg-pulse-soft {
+  stroke-dasharray: 1 100;
+  filter: drop-shadow(0 0 2.5px rgba(34, 211, 238, 0.55));
+  animation: ekg-run-soft 4.2s linear infinite;
+}
+@keyframes ekg-run-soft {
+  from { stroke-dashoffset: 101; }
+  to   { stroke-dashoffset: 0; }
+}
 /* Aviso tipo "WhatsApp" (banner) que baja desde arriba. */
 @keyframes notif-slide-in {
   from { opacity: 0; transform: translateY(-18px) scale(0.97); }

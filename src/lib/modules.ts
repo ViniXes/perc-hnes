@@ -129,6 +129,9 @@ const DISTRIBUCION_AREAS: AreaDefinition[] = SERVICE_DEFINITIONS.map((service) =
 // entradas nuevas en NEW_AREAS (abajo).
 
 const AREA_OVERRIDES: Record<string, ModuleId[]> = {
+  // Transporte General: SOLO PERC. Su Distribucion de Horas se reporta dentro del
+  // servicio "Servicios Varios" (Saneamiento + Transporte), no aqui.
+  "transporte-general": ["perc"],
   // Trabajo Social: PERC, SEPS y Distribucion de Horas.
   "trabajo-social": ["perc", "sesps", "distribucion"],
   // Laboratorio Clinico: PERC, SEPS (matricial por examen) y Horas.
@@ -141,8 +144,14 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "banco-de-sangre": ["perc", "sesps", "distribucion"],
   // Farmacia: PERC (ya existe), SEPS y Horas.
   "servicio-farmaceutico": ["perc", "sesps", "distribucion"],
-  // Radiologia (agrupa Resonancia, Tomografia, Estudio de radiologia y Ultrasonografia): PERC.
-  radiologia: ["perc"],
+  // Fisioterapia: PERC, SEPS y Horas.
+  "terapia-fisica": ["perc", "sesps", "distribucion"],
+  // Terapia Respiratoria: PERC, SEPS y Horas.
+  "terapia-respiratoria": ["perc", "sesps", "distribucion"],
+  // CEYE (Central de Esterilizacion): PERC, SEPS y Horas.
+  "central-de-esterilizacion": ["perc", "sesps", "distribucion"],
+  // Radiologia (agrupa Resonancia, Tomografia, Estudio de radiologia y Ultrasonografia): PERC, SEPS y Horas.
+  radiologia: ["perc", "sesps", "distribucion"],
   // Asesores de Medicamentos: SOLO Distribucion de Horas.
   "asesores-de-medicamentos": ["distribucion"],
   // ESDOMED: SOLO Distribucion de Horas.
@@ -169,14 +178,40 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "jefatura-division-apoyo": ["distribucion"],
   // UDP: SOLO Distribucion de Horas.
   udp: ["distribucion"],
+  // Cuidados Paliativos: por ahora SOLO Distribucion de Horas (SEPS pendiente).
+  "cuidados-paliativos": ["distribucion"],
+  // Medicina Preventiva: por ahora SOLO Distribucion de Horas.
+  "medicina-preventiva": ["distribucion"],
+  // Medicina Interna: por ahora SOLO Distribucion de Horas.
+  "medicina-interna": ["distribucion"],
+  // Anestesiologia: por ahora SOLO Distribucion de Horas.
+  anestesiologia: ["distribucion"],
+  // Medicina Critica: por ahora SOLO Distribucion de Horas.
+  "medicina-critica": ["distribucion"],
+  // Biologia Molecular: por ahora SOLO Distribucion de Horas.
+  "biologia-molecular": ["distribucion"],
+  // Recursos Humanos: por ahora SOLO Distribucion de Horas.
+  rrhh: ["distribucion"],
+  // Servicios Varios: por ahora SOLO Distribucion de Horas.
+  "servicios-varios": ["distribucion"],
+  // Departamento de Tecnologia: por ahora SOLO Distribucion de Horas.
+  tecnologia: ["distribucion"],
+  // UCP: por ahora SOLO Distribucion de Horas.
+  ucp: ["distribucion"],
+  // Unidad de Gestion Documental: por ahora SOLO Distribucion de Horas.
+  "gestion-documental": ["distribucion"],
+  // Enfermeria: por ahora SOLO Distribucion de Horas.
+  enfermeria: ["distribucion"],
+  // Direccion: por ahora SOLO Distribucion de Horas.
+  direccion: ["distribucion"],
   // Servicios PERC/SERV (productividad). Por ahora solo PERC; SEPS y Horas se
   // agregan cuando lleguen sus plantillas:
   //   - maxima-emergencia: ["perc", "sesps", "distribucion"]
   //   - centro-quirurgico: ["perc", "sesps", "distribucion"]
   //   - clinica-de-empleados: ["perc", "distribucion"]
-  "maxima-emergencia": ["perc"],
-  "centro-quirurgico": ["perc"],
-  "clinica-de-empleados": ["perc"],
+  "maxima-emergencia": ["perc", "distribucion"],
+  "centro-quirurgico": ["perc", "distribucion"],
+  "clinica-de-empleados": ["perc", "distribucion"],
   // PENDIENTE: completar el resto con el listado de PERC y SESPS.
 };
 
