@@ -2598,7 +2598,7 @@ async function fetchCensoInfoForPeriod(periodId: string): Promise<Record<string,
   try {
     const snap = await getDoc(doc(db, "censoDiario", periodId));
     // Dias reales del mes (28/29/30/31) para decidir si esta completo.
-    const days = getDayColumns(periodId);
+    const days = getDayColumns(periodId).map(Number);
     if (snap.exists()) {
       const data = snap.data() as { values?: Record<string, Record<string, unknown>> };
       const values = data.values || {};
@@ -5148,7 +5148,7 @@ export default function Home() {
       lines.pop();
     }
     const grid = lines.map((line) => line.split("\t"));
-    const days = getDayColumns(censoPeriod);
+    const days = getDayColumns(censoPeriod).map(Number);
     const startDayIdx = days.indexOf(startDay);
     if (startDayIdx < 0) {
       return;
@@ -8095,7 +8095,8 @@ export default function Home() {
     };
 
     // ---- Censo Diario de Pacientes (seccion) --------------------------------
-    const censoDays = getDayColumns(censoPeriod);
+    // getDayColumns devuelve string[]; lo pasamos a number[] para el censo.
+    const censoDays = getDayColumns(censoPeriod).map(Number);
     // Letra del dia de la semana por columna (D L M M J V S), segun el mes elegido.
     const [censoYearNum, censoMonthNum] = censoPeriod
       .split("-")
