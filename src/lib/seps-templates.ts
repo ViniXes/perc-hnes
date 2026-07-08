@@ -102,6 +102,8 @@ const TRABAJO_SOCIAL: SepsTemplate = {
         {
           key: "casos_atendidos",
           label: "1- Casos atendidos (a+b)",
+          readOnly: true,
+          sumOf: ["casos_nuevos", "casos_reabiertos"],
         },
         { key: "casos_nuevos", label: "a) Casos nuevos", indent: 1 },
         { key: "casos_reabiertos", label: "b) Casos reabiertos", indent: 1 },
