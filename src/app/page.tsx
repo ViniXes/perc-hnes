@@ -13789,6 +13789,9 @@ export default function Home() {
                   <strong className="text-cyan-200">Lineamientos técnicos para el cumplimiento del
                   secreto profesional en el Sistema Nacional Integrado de Salud</strong> (MINSAL,
                   Acuerdo Ejecutivo N.° 2745 de 2022); y la Ley de Acceso a la Información Pública.
+                  Asimismo, PULSO se rige por la <strong className="text-cyan-200">Ley de Ética
+                  Gubernamental</strong> y por la <strong className="text-cyan-200">Política y el
+                  Sistema de Gestión Antisoborno del Ministerio de Salud (MINSAL)</strong>.
                 </p>
                 <p>
                   <strong className="text-white">4. Datos que recolectamos.</strong> Al registrarse:
@@ -13876,18 +13879,41 @@ export default function Home() {
                   aplicable.
                 </p>
                 <p>
-                  <strong className="text-white">17. Seguridad de su cuenta.</strong> Mantenga su
+                  <strong className="text-white">17. Compromiso antisoborno y anticorrupción
+                  (MINSAL).</strong> El Hospital Nacional adhiere a la Ley de Ética Gubernamental y
+                  a la Política y Sistema de Gestión Antisoborno del Ministerio de Salud (MINSAL).
+                  En el uso de PULSO queda estrictamente{" "}
+                  <strong className="text-white">prohibido</strong>: ofrecer, prometer, solicitar,
+                  dar o aceptar —directa o indirectamente— dinero, dádivas, regalos, comisiones,
+                  favores o cualquier ventaja indebida a cambio de registrar, alterar, ocultar,
+                  agilizar u omitir información de producción; manipular o falsear los datos para
+                  obtener beneficios propios o de terceros o para encubrir irregularidades; y
+                  utilizar el sistema o su información para actos de corrupción, tráfico de
+                  influencias o conflicto de interés.
+                </p>
+                <p>
+                  <strong className="text-white">18. Deber de denuncia y no represalia.</strong>{" "}
+                  Todo usuario que tenga conocimiento o sospecha razonable de un acto de soborno o
+                  corrupción relacionado con PULSO debe informarlo por los canales institucionales
+                  del MINSAL y del hospital (incluida la Unidad de Ética o la que haga sus veces).
+                  La institución garantiza la confidencialidad del denunciante de buena fe y
+                  prohíbe toda represalia en su contra. El incumplimiento de estas normas
+                  antisoborno puede derivar en responsabilidades administrativas, disciplinarias,
+                  civiles y penales conforme a la legislación salvadoreña.
+                </p>
+                <p>
+                  <strong className="text-white">19. Seguridad de su cuenta.</strong> Mantenga su
                   contraseña en secreto y cámbiela en su primer ingreso. Si sospecha que alguien
                   conoce sus credenciales, avise de inmediato a la administración.
                 </p>
                 <p>
-                  <strong className="text-white">18. Contacto y ejercicio de derechos.</strong> Para
+                  <strong className="text-white">20. Contacto y ejercicio de derechos.</strong> Para
                   ejercer sus derechos, corregir o eliminar sus datos, o realizar consultas sobre
                   esta política, comuníquese con la administración del sistema a través del servicio
                   de ESDOMED del Hospital Nacional, El Salvador.
                 </p>
                 <p>
-                  <strong className="text-white">19. Cambios en esta política.</strong> Esta política
+                  <strong className="text-white">21. Cambios en esta política.</strong> Esta política
                   puede actualizarse para reflejar mejoras del sistema o cambios normativos. El uso
                   continuado de PULSO implica la aceptación de la versión vigente.
                 </p>
