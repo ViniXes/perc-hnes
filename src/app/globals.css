@@ -64,8 +64,22 @@ body {
   [data-mview="panel-calendar"] > [data-view~="panel-calendar"],
   [data-mview="panel-capture-toggle"] > [data-view~="panel-capture-toggle"],
   [data-mview="panel-censo"] > [data-view~="panel-censo"],
+  [data-mview="panel-insumos"] > [data-view~="panel-insumos"],
   [data-mview="panel-admin-export"] > [data-view~="panel-admin-export"] {
     display: block !important;
+  }
+}
+
+/* ===========================================================================
+   Escala de escritorio: en pantallas grandes (>= 1280px) se reduce todo al 90%,
+   para que a zoom 100% del navegador se vea como el usuario prefiere (equivalente
+   a ver la pagina al 90%). En movil/tablet NO aplica (queda a tamano normal).
+   Se usa `zoom` (soportado por Chrome/Edge/Safari) para no romper el layout ni
+   los elementos fijos, a diferencia de transform: scale.
+   =========================================================================== */
+@media (min-width: 1280px) {
+  body {
+    zoom: 0.92;
   }
 }
 

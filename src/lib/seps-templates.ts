@@ -22,13 +22,26 @@ export type SepsRow = {
   label: string;
   /** Sangria visual (0 = sin sangria; 1 = a/b; etc.). */
   indent?: number;
-  /** Etiqueta de grupo (p.ej. "0 a 7 años") que agrupa filas consecutivas. */
+  /** Etiqueta de grupo (p.ej. "0 a 7 años") que agrupa filas consecutivas.
+   * Compat: equivale a groups:[group]. Preferir `groups` para varios niveles. */
   group?: string;
+  /** Niveles de grupo ANIDADOS (externo -> interno), como en el Excel oficial:
+   * p.ej. ["General","Grupo ll","Glóbulo rojo empacados"]. Cada nivel se dibuja en
+   * su propia columna con celdas combinadas (rowspan) igual que Excel. */
+  groups?: string[];
   /** Fila calculada (solo lectura): no se captura. */
   readOnly?: boolean;
   /** Si readOnly: por cada dia, suma los valores de estas filas (keys). */
   sumOf?: string[];
+  /** Oculta el valor de la columna "Total" de esta fila (p.ej. "Tamizada"). */
+  hideTotal?: boolean;
 };
+
+/** Niveles de grupo normalizados de una fila (usa `groups`, o `group` como 1 nivel). */
+export function getRowGroups(row: SepsRow): string[] {
+  if (row.groups && row.groups.length > 0) return row.groups;
+  return row.group ? [row.group] : [];
+}
 
 export type SepsTable = {
   id: string;

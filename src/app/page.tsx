@@ -57,6 +57,7 @@ import {
   type SepsTemplate,
 } from "@/lib/seps-templates";
 import { getHorasTemplate, type HorasTemplate } from "@/lib/horas-templates";
+import { INSUMOS_ALMACEN_TEMPLATE, type InsumoRow } from "@/lib/insumos-almacen";
 import {
   matchAction,
   matchSmalltalk,
@@ -489,13 +490,13 @@ function answerAssistant(query: string): { text: string; found: boolean } {
 function renderSectionDivider(
   label: string,
   subtitle: string,
-  tone: "cyan" | "violet" | "amber" | "teal",
+  tone: "cyan" | "violet" | "amber" | "teal" | "indigo",
   light: boolean,
 ): ReactNode {
   // Fondo neutro para los tres; solo el TEXTO lleva color por modulo.
   const textTone = light
-    ? { cyan: "text-cyan-700", violet: "text-blue-700", amber: "text-amber-700", teal: "text-teal-700" }
-    : { cyan: "text-cyan-300", violet: "text-blue-300", amber: "text-amber-300", teal: "text-teal-300" };
+    ? { cyan: "text-cyan-700", violet: "text-blue-700", amber: "text-amber-700", teal: "text-teal-700", indigo: "text-indigo-700" }
+    : { cyan: "text-cyan-300", violet: "text-blue-300", amber: "text-amber-300", teal: "text-teal-300", indigo: "text-indigo-300" };
   const pill = light ? "bg-white ring-slate-200 shadow-sm" : "bg-white/5 ring-white/10";
   const lineClass = light ? "via-slate-300" : "via-slate-400/50";
   return (
@@ -1098,6 +1099,62 @@ const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-signups": IconMessage,
   "panel-services": IconDashboard,
 };
+
+// Color del recuadro del icono de cada submenu bajo PERC (distinto por item, para
+// que no se vean iguales — se aprecia sobre todo en movil).
+const SUBMENU_ICON_TINT: Record<string, string> = {
+  perc: "bg-emerald-500/15 text-emerald-300",
+  monitor: "bg-cyan-500/15 text-cyan-300",
+  censo: "bg-teal-500/15 text-teal-300",
+  insumos: "bg-indigo-500/15 text-indigo-300",
+};
+
+// Icono propio de cada submenu bajo PERC (Abrir PERC / Monitoreo / Censo / Insumos).
+function renderSubmenuIcon(icon: string | undefined): ReactNode {
+  const common = {
+    viewBox: "0 0 24 24",
+    width: 14,
+    height: 14,
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  if (icon === "perc") {
+    return (
+      <svg {...common}>
+        <line x1="12" y1="1" x2="12" y2="23" />
+        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+      </svg>
+    );
+  }
+  if (icon === "monitor") {
+    return (
+      <svg {...common}>
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+      </svg>
+    );
+  }
+  if (icon === "insumos") {
+    return (
+      <svg {...common}>
+        <path d="M21 8V5a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 5v3" />
+        <path d="M3 8v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8M3 8h18M12 3v18" />
+      </svg>
+    );
+  }
+  // Censo (por defecto): grafico de barras.
+  return (
+    <svg {...common}>
+      <path d="M3 3v18h18" />
+      <rect x="7" y="9" width="3" height="9" />
+      <rect x="12" y="5" width="3" height="13" />
+      <rect x="17" y="12" width="3" height="6" />
+    </svg>
+  );
+}
 
 // Degradado bonito por icono (estilo launcher de app) para el menu en movil.
 // Cada modulo tiene su color propio. En PC los iconos van neutros (ver clases xl:).
@@ -2101,6 +2158,30 @@ function HistoryMonthSelect(props: {
 function sanitizeNumericValue(value: string) {
   return value.replace(/[^0-9]/g, "");
 }
+
+// Valor monetario: digitos y un solo punto decimal (para Insumos de Almacen).
+function sanitizeMoneyValue(value: string) {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  const firstDot = cleaned.indexOf(".");
+  if (firstDot === -1) {
+    return cleaned;
+  }
+  // Conserva solo el primer punto; elimina los demas.
+  return (
+    cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, "")
+  );
+}
+
+// Formato de dinero para totales: 2 decimales con separador de miles.
+function formatMoney(n: number) {
+  return n.toLocaleString("es-SV", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+// Tipo de valores del tabulador de Insumos: fila -> (columna -> valor string).
+type InsumosValues = Record<string, Record<string, string>>;
 
 function normalizeKey(value: string) {
   return value.trim().toLowerCase();
@@ -3167,6 +3248,9 @@ export default function Home() {
   // Importacion/exportacion de Horas por Excel (servicios grandes, p.ej. Enfermeria).
   const horasFileInputRef = useRef<HTMLInputElement>(null);
   const [isImportingHoras, setIsImportingHoras] = useState(false);
+  // Importacion de un SEPS diario (p.ej. Banco de Sangre) desde su plantilla Excel oficial.
+  const sepsFileInputRef = useRef<HTMLInputElement>(null);
+  const [isImportingSeps, setIsImportingSeps] = useState(false);
   // Paginacion de la tabla de Horas: se renderiza una ventana de filas a la vez para
   // que servicios enormes (p.ej. Enfermeria, 700+ empleados) no congelen la pagina.
   const [horasVisibleCount, setHorasVisibleCount] = useState(HORAS_PAGE_SIZE);
@@ -3497,6 +3581,17 @@ export default function Home() {
   const [censoRedoStack, setCensoRedoStack] = useState<
     { values: CensoValues; extraRows: CensoRow[] }[]
   >([]);
+  // Insumos de Almacen (matriz de costos por mes). Editan admin + servicio "almacen".
+  // Se guarda por MES en Firestore (coleccion "insumosAlmacen"). Sin cierre.
+  const [insumosPeriod, setInsumosPeriod] = useState(() => getClosingPeriodId(new Date()));
+  const [insumosValues, setInsumosValues] = useState<InsumosValues>({});
+  const [isLoadingInsumos, setIsLoadingInsumos] = useState(false);
+  const [isSavingInsumos, setIsSavingInsumos] = useState(false);
+  const [isImportingInsumos, setIsImportingInsumos] = useState(false);
+  const [insumosLoadedPeriod, setInsumosLoadedPeriod] = useState<string | null>(null);
+  const insumosFileInputRef = useRef<HTMLInputElement>(null);
+  const [insumosUndoStack, setInsumosUndoStack] = useState<InsumosValues[]>([]);
+  const [insumosRedoStack, setInsumosRedoStack] = useState<InsumosValues[]>([]);
   // Submenus desplegables del menu lateral (p.ej. PERC -> Censo diario).
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [uiPrefs, setUiPrefs] = useState<UiPrefs>(() => {
@@ -3636,6 +3731,12 @@ export default function Home() {
   const canViewCenso = isAdmin || isSupervisor;
   const canEditCenso =
     isAdmin || normalizeKey(serviceProfile?.username || "") === CENSO_EDITOR_USERNAME;
+  // Insumos de Almacen: el tabulador PERTENECE al Depto. de Abastecimiento (servicio
+  // "almacen"). Lo EDITAN los administradores (incluye a Flor Fuentes) y el usuario del
+  // servicio "almacen". Lo VEN ademas los supervisores.
+  const isAlmacenOwner = serviceProfile?.serviceId === "almacen";
+  const canEditInsumos = isAdmin || isAlmacenOwner;
+  const canViewInsumos = isAdmin || isSupervisor || isAlmacenOwner;
   // Filas efectivas del censo (las 8 base + las que AMONTES haya agregado).
   const censoRows: CensoRow[] = [...CENSO_BASE_ROWS, ...censoExtraRows];
   // Config para el detector de solicitudes nuevas (avisos tipo WhatsApp).
@@ -4159,6 +4260,15 @@ export default function Home() {
     void loadCenso(censoPeriod);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [censoPeriod, canViewCenso, firestoreUnavailable, user]);
+
+  // Insumos de Almacen: carga el mes seleccionado (solo para quienes pueden verlo).
+  useEffect(() => {
+    if (!canViewInsumos || firestoreUnavailable || !user) {
+      return;
+    }
+    void loadInsumos(insumosPeriod);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insumosPeriod, canViewInsumos, firestoreUnavailable, user]);
 
   // Al cargar la plantilla SEPS, todas las tablas/secciones arrancan COLAPSADAS
   // (apiladas, ninguna desplegada). El usuario abre la que necesite.
@@ -5204,6 +5314,251 @@ export default function Home() {
     }
   }
 
+  // ---- Insumos de Almacen (matriz de costos, guardado por mes) --------------
+  async function loadInsumos(period: string) {
+    if (firestoreUnavailable || !user) {
+      return;
+    }
+    setIsLoadingInsumos(true);
+    try {
+      const snap = await getDoc(doc(db, "insumosAlmacen", period));
+      if (snap.exists()) {
+        const data = snap.data() as { values?: InsumosValues };
+        setInsumosValues(
+          data.values && typeof data.values === "object" ? data.values : {},
+        );
+      } else {
+        setInsumosValues({});
+      }
+      setInsumosLoadedPeriod(period);
+      setInsumosUndoStack([]);
+      setInsumosRedoStack([]);
+    } catch (insumosError) {
+      if (await handleFirestoreError(insumosError)) {
+        return;
+      }
+      setError("No pudimos cargar el tabulador de Insumos de Almacén.");
+    } finally {
+      setIsLoadingInsumos(false);
+    }
+  }
+
+  function snapshotInsumos() {
+    setInsumosUndoStack((stack) => {
+      const next = [...stack, insumosValues];
+      return next.length > 100 ? next.slice(next.length - 100) : next;
+    });
+    setInsumosRedoStack([]);
+  }
+
+  function handleInsumosUndo() {
+    if (!canEditInsumos || insumosUndoStack.length === 0) {
+      return;
+    }
+    const prev = insumosUndoStack[insumosUndoStack.length - 1];
+    setInsumosRedoStack((r) => [...r, insumosValues]);
+    setInsumosUndoStack((u) => u.slice(0, -1));
+    setInsumosValues(prev);
+  }
+
+  function handleInsumosRedo() {
+    if (!canEditInsumos || insumosRedoStack.length === 0) {
+      return;
+    }
+    const next = insumosRedoStack[insumosRedoStack.length - 1];
+    setInsumosUndoStack((u) => [...u, insumosValues]);
+    setInsumosRedoStack((r) => r.slice(0, -1));
+    setInsumosValues(next);
+  }
+
+  function handleClearInsumos() {
+    if (!canEditInsumos) {
+      return;
+    }
+    snapshotInsumos();
+    setInsumosValues({});
+    setMessage("Tabla de Insumos borrada. Podés deshacer si fue por error.");
+  }
+
+  function updateInsumosCell(rowKey: string, colKey: string, value: string) {
+    if (!canEditInsumos) {
+      return;
+    }
+    snapshotInsumos();
+    const clean = sanitizeMoneyValue(value);
+    setInsumosValues((current) => ({
+      ...current,
+      [rowKey]: { ...(current[rowKey] || {}), [colKey]: clean },
+    }));
+  }
+
+  // Pega desde Excel: parte de (fila, columna) y llena a la derecha y hacia abajo.
+  // Solo se pega en filas capturables (no en las filas padre calculadas).
+  function handleInsumosPaste(
+    event: ClipboardEvent | { clipboardData: DataTransfer; preventDefault: () => void },
+    startRowKey: string,
+    startColKey: string,
+  ) {
+    if (!canEditInsumos) {
+      return;
+    }
+    const text = event.clipboardData?.getData("text") ?? "";
+    if (!text.includes("\t") && !text.includes("\n")) {
+      return;
+    }
+    event.preventDefault();
+    snapshotInsumos();
+    const lines = text.replace(/\r/g, "").split("\n");
+    while (lines.length > 1 && lines[lines.length - 1] === "") {
+      lines.pop();
+    }
+    const grid = lines.map((line) => line.split("\t"));
+    const rows = INSUMOS_ALMACEN_TEMPLATE.rows;
+    const cols = INSUMOS_ALMACEN_TEMPLATE.columns;
+    const startRowIdx = rows.findIndex((r) => r.key === startRowKey);
+    const startColIdx = cols.findIndex((c) => c.key === startColKey);
+    if (startRowIdx < 0 || startColIdx < 0) {
+      return;
+    }
+    setInsumosValues((current) => {
+      const next: InsumosValues = { ...current };
+      let targetRow = startRowIdx;
+      grid.forEach((cells) => {
+        // Avanza saltando filas padre (calculadas): no reciben pegado.
+        while (targetRow < rows.length && rows[targetRow].sumOf) {
+          targetRow += 1;
+        }
+        const rowObj = rows[targetRow];
+        targetRow += 1;
+        if (!rowObj) {
+          return;
+        }
+        const rowVals = { ...(next[rowObj.key] || {}) };
+        cells.forEach((cell, c) => {
+          const col = cols[startColIdx + c];
+          if (!col) {
+            return;
+          }
+          rowVals[col.key] = sanitizeMoneyValue(cell.trim());
+        });
+        next[rowObj.key] = rowVals;
+      });
+      return next;
+    });
+  }
+
+  async function handleSaveInsumos() {
+    if (!canEditInsumos || firestoreUnavailable) {
+      return;
+    }
+    setIsSavingInsumos(true);
+    setError("");
+    setMessage("");
+    try {
+      await setDoc(
+        doc(db, "insumosAlmacen", insumosPeriod),
+        {
+          periodId: insumosPeriod,
+          values: insumosValues,
+          updatedAt: serverTimestamp(),
+          updatedBy: user?.email || "",
+        },
+        { merge: true },
+      );
+      setMessage(
+        `Insumos de Almacén guardado correctamente (${getPeriodLabel(insumosPeriod)}).`,
+      );
+    } catch (insumosError) {
+      if (await handleFirestoreError(insumosError)) {
+        return;
+      }
+      setError("No pudimos guardar Insumos de Almacén. Intente de nuevo.");
+    } finally {
+      setIsSavingInsumos(false);
+    }
+  }
+
+  // Sube la plantilla Excel oficial de Insumos y llena la matriz. Emparejamiento por
+  // POSICION: la fila r{n} del modelo corresponde a la fila n del Excel; columnas C..AG
+  // -> c1..c31. Solo se importan filas capturables (las padre se calculan solas).
+  async function handleUploadInsumosFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !canEditInsumos) {
+      return;
+    }
+    setIsImportingInsumos(true);
+    setError("");
+    setMessage("");
+    try {
+      const XLSX = await import("xlsx");
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const norm = (s: unknown) =>
+        String(s ?? "")
+          .normalize("NFKD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toUpperCase()
+          .replace(/\s+/g, "");
+      const monthSheet = norm(getShortPeriodLabel(insumosPeriod).replace(" - ", " "));
+      const names = wb.SheetNames;
+      const pick =
+        names.find((n) => norm(n) === monthSheet) ||
+        names.find((n) => norm(n) !== "BACKUP") ||
+        names[0];
+      const ws = pick ? wb.Sheets[pick] : undefined;
+      if (!ws) {
+        throw new Error("No se encontró una hoja válida en el Excel");
+      }
+      const aoa = XLSX.utils.sheet_to_json(ws, {
+        header: 1,
+        raw: true,
+        defval: null,
+        blankrows: true,
+      }) as unknown[][];
+
+      const next: InsumosValues = {};
+      let filled = 0;
+      INSUMOS_ALMACEN_TEMPLATE.rows.forEach((row) => {
+        if (row.sumOf) {
+          return; // fila padre calculada
+        }
+        const excelRow = Number.parseInt(row.key.replace(/^r/, ""), 10);
+        const dataRow = aoa[excelRow - 1] || [];
+        const rowVals: Record<string, string> = {};
+        INSUMOS_ALMACEN_TEMPLATE.columns.forEach((col, i) => {
+          const raw = dataRow[i + 2]; // columna C = indice 2
+          const num = typeof raw === "number" ? raw : Number.parseFloat(String(raw ?? ""));
+          if (Number.isFinite(num) && num !== 0) {
+            rowVals[col.key] = String(num);
+            filled += 1;
+          }
+        });
+        if (Object.keys(rowVals).length > 0) {
+          next[row.key] = rowVals;
+        }
+      });
+
+      if (filled === 0) {
+        throw new Error(
+          "No se encontraron valores. Verifique que subió la hoja del mes correcto.",
+        );
+      }
+      snapshotInsumos();
+      setInsumosValues(next);
+      setMessage(
+        `Se importaron ${filled} valores desde la hoja "${pick}". Revise y presione Guardar.`,
+      );
+    } catch (insumosError) {
+      console.error(insumosError);
+      setError(
+        "No pudimos leer el Excel. Suba la plantilla oficial de Insumos de Almacén sin cambiar la estructura.",
+      );
+    } finally {
+      setIsImportingInsumos(false);
+    }
+  }
+
   async function refreshPublicDashboard(showMessage: boolean) {
     if (firestoreUnavailable) {
       return;
@@ -6107,6 +6462,114 @@ export default function Home() {
     setError("");
   }
 
+  // Lee la plantilla Excel oficial de un SEPS diario (p.ej. Banco de Sangre) y llena
+  // la tabla. El emparejamiento es POSICIONAL: cada tabla del tabulador se ubica por su
+  // fila "Días del mes" (hay una por tabla, en el mismo orden) y las filas de datos que
+  // siguen se asignan en orden a las filas de la plantilla. Las columnas de dia se leen
+  // directamente (no estan combinadas), asi que no hace falta resolver merges.
+  async function handleUploadSepsFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !sepsTemplate || !sepsTemplate.tables) {
+      return;
+    }
+    setIsImportingSeps(true);
+    setError("");
+    setMessage("");
+    try {
+      const XLSX = await import("xlsx");
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+
+      // Elegir hoja: primero el mes del periodo (p.ej. "JUNIO 2026"), luego "MES ACTUAL",
+      // luego la primera hoja que no sea plantilla/historico, y por ultimo la primera.
+      const norm = (s: unknown) =>
+        String(s ?? "")
+          .normalize("NFKD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .trim()
+          .toUpperCase();
+      const monthSheet = getShortPeriodLabel(sepsPeriodId)
+        .replace(" - ", " ")
+        .toUpperCase();
+      const names = wb.SheetNames;
+      const pick =
+        names.find((n) => norm(n) === norm(monthSheet)) ||
+        names.find((n) => norm(n) === "MES ACTUAL") ||
+        names.find((n) => !["FORMATO", "HISTORICO BS"].includes(norm(n))) ||
+        names[0];
+      const ws = pick ? wb.Sheets[pick] : undefined;
+      if (!ws) {
+        throw new Error("No se encontró una hoja válida en el Excel");
+      }
+      const aoa = XLSX.utils.sheet_to_json(ws, {
+        header: 1,
+        raw: true,
+        defval: null,
+        blankrows: true,
+      }) as unknown[][];
+
+      // Filas "Días del mes" (una por tabla del tabulador, en orden).
+      const headerRows: number[] = [];
+      for (let r = 0; r < aoa.length; r += 1) {
+        const row = aoa[r] || [];
+        if (row.some((c) => typeof c === "string" && c.includes("Días del mes"))) {
+          headerRows.push(r);
+        }
+      }
+
+      const next = buildEmptySeps(sepsTemplate, sepsPeriodId);
+      const dayCols = getDayColumns(sepsPeriodId);
+      let filledCells = 0;
+
+      sepsTemplate.tables.forEach((table, ti) => {
+        const hr = headerRows[ti];
+        if (hr === undefined) {
+          return;
+        }
+        // Fila de numeros de dia = hr + 1; localizar la columna del dia "1".
+        const dayNumRow = aoa[hr + 1] || [];
+        let day1Col = dayNumRow.findIndex((c) => Number(c) === 1);
+        if (day1Col < 0) {
+          day1Col = 5; // Columna F por defecto (formato oficial MINSAL).
+        }
+        const dataStart = hr + 2;
+        table.rows.forEach((row, ri) => {
+          const dataRow = aoa[dataStart + ri] || [];
+          // Las filas calculadas (p.ej. "Tamizada") se derivan solas; no se importan.
+          if (row.readOnly) {
+            return;
+          }
+          dayCols.forEach((day, di) => {
+            const raw = dataRow[day1Col + di];
+            const value = sanitizeNumericValue(String(raw ?? ""));
+            if (value !== "") {
+              next[row.key] = { ...(next[row.key] || {}), [day]: value };
+              filledCells += 1;
+            }
+          });
+        });
+      });
+
+      if (filledCells === 0) {
+        throw new Error(
+          "No se encontraron valores en el Excel. Verifique que subió la hoja del mes correcto.",
+        );
+      }
+      setSepsValues(next);
+      setMessage(
+        `Se importaron ${filledCells} valores desde la hoja "${pick}". Revise los datos y presione Guardar SEPS para confirmar.`,
+      );
+    } catch (err) {
+      console.error(err);
+      setError(
+        "No pudimos leer el Excel. Suba la plantilla oficial de Banco de Sangre sin cambiar la estructura de las tablas.",
+      );
+    } finally {
+      setIsImportingSeps(false);
+    }
+  }
+
   // --- Distribucion de Horas (empleados) ---
   function updateHorasEmployee(index: number, patch: Partial<HorasEmployee>) {
     setHorasEmployees((current) =>
@@ -6621,7 +7084,11 @@ export default function Home() {
   // Logica compartida al tocar un item del menu (sidebar y barra inferior movil).
   // `requestable` se pasa desde el render porque vive dentro del bloque de sesion.
   function runSidebarItem(itemId: string, requestable: ModuleId[] = []) {
-    if (itemId.startsWith("panel-module-")) {
+    if (itemId === "panel-monitor-perc") {
+      // Submenu "Monitoreo" bajo PERC: abre el modal de servicios que completaron.
+      setStatsModule("perc");
+      setShowStatsModal(true);
+    } else if (itemId.startsWith("panel-module-")) {
       setStatsModule(itemId.replace("panel-module-", "") as ModuleId);
       setShowStatsModal(true);
     } else if (itemId === "panel-users") {
@@ -7327,24 +7794,42 @@ export default function Home() {
                 );
               })
             : (sepsTemplate.tables ?? []).map((table) => {
-            const hasGroups = table.rows.some((row) => row.group);
-            // rowSpan por grupo (solo en la primera fila del grupo).
-            const groupSpan: Record<number, number> = {};
-            for (let i = 0; i < table.rows.length; ) {
-              const g = table.rows[i].group;
-              if (!g) {
-                i += 1;
-                continue;
+            // Grupos ANIDADOS (N niveles), igual que el Excel. Cada fila se normaliza
+            // a un arreglo de grupos (externo -> interno); cada nivel se dibuja en su
+            // propia columna con celdas combinadas (rowspan).
+            const rowGroups = table.rows.map((row) =>
+              row.groups && row.groups.length > 0
+                ? row.groups
+                : row.group
+                  ? [row.group]
+                  : [],
+            );
+            const maxDepth = rowGroups.reduce((m, g) => Math.max(m, g.length), 0);
+            const hasGroups = maxDepth > 0;
+            // groupSpans[L][i] = filas que abarca la celda del nivel L que INICIA en i
+            // (0 = no inicia: la cubre un rowspan de arriba, o la fila no llega a ese nivel).
+            const groupSpans: number[][] = [];
+            for (let L = 0; L < maxDepth; L += 1) {
+              const spans = new Array<number>(table.rows.length).fill(0);
+              let i = 0;
+              while (i < table.rows.length) {
+                if (rowGroups[i].length <= L) {
+                  i += 1;
+                  continue;
+                }
+                const prefix = rowGroups[i].slice(0, L + 1).join("");
+                let j = i + 1;
+                while (
+                  j < table.rows.length &&
+                  rowGroups[j].length > L &&
+                  rowGroups[j].slice(0, L + 1).join("") === prefix
+                ) {
+                  j += 1;
+                }
+                spans[i] = j - i;
+                i = j;
               }
-              let j = i;
-              while (j < table.rows.length && table.rows[j].group === g) {
-                j += 1;
-              }
-              groupSpan[i] = j - i;
-              for (let k = i + 1; k < j; k += 1) {
-                groupSpan[k] = 0;
-              }
-              i = j;
+              groupSpans.push(spans);
             }
 
             const tableOpen = openSepsTables.has(table.id);
@@ -7385,11 +7870,14 @@ export default function Home() {
                   <table className={`border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                     <thead>
                       <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
-                        {hasGroups ? (
-                          <th className={`sticky left-0 z-10 px-3 py-2 text-left font-medium ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>
-                            Grupo
+                        {Array.from({ length: maxDepth }).map((_, L) => (
+                          <th
+                            key={`ghead-${L}`}
+                            className={`${L === 0 ? `sticky left-0 z-10 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}` : ""} px-3 py-2 text-left font-medium`}
+                          >
+                            {L === 0 ? "Grupo" : ""}
                           </th>
-                        ) : null}
+                        ))}
                         <th
                           className={`${hasGroups ? "" : `sticky left-0 z-10 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`} px-3 py-2 text-left font-medium`}
                         >
@@ -7406,15 +7894,19 @@ export default function Home() {
                     <tbody>
                       {table.rows.map((row, index) => (
                         <tr key={row.key} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
-                          {hasGroups && groupSpan[index] !== 0 ? (
-                            <td
-                              rowSpan={groupSpan[index] || 1}
-                              className={`sticky left-0 z-10 px-3 py-1.5 align-middle font-medium ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"}`}
-                            >
-                              {row.group}
-                            </td>
-                          ) : null}
+                          {Array.from({ length: maxDepth }).map((_, L) =>
+                            groupSpans[L][index] > 0 ? (
+                              <td
+                                key={`gcell-${L}`}
+                                rowSpan={groupSpans[L][index]}
+                                className={`${L === 0 ? "sticky left-0 z-10" : ""} whitespace-nowrap px-3 py-1.5 align-middle font-medium ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"}`}
+                              >
+                                {rowGroups[index][L]}
+                              </td>
+                            ) : null,
+                          )}
                           <td
+                            colSpan={hasGroups ? maxDepth - rowGroups[index].length + 1 : 1}
                             className={`${hasGroups ? "" : `sticky left-0 z-10 ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"}`} whitespace-nowrap px-3 py-1.5 ${
                               row.readOnly ? "font-semibold text-cyan-200" : ""
                             }`}
@@ -7442,7 +7934,7 @@ export default function Home() {
                             </td>
                           ))}
                           <td className={`px-3 py-1.5 text-center font-semibold text-cyan-100 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>
-                            {sepsRowTotal(row)}
+                            {row.hideTotal ? "" : sepsRowTotal(row)}
                           </td>
                         </tr>
                       ))}
@@ -7485,6 +7977,31 @@ export default function Home() {
                 </svg>
                 Limpiar tabla
               </button>
+              {sepsTemplate?.tables ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => sepsFileInputRef.current?.click()}
+                    disabled={sepsEditingBlocked || isImportingSeps}
+                    title="Subir plantilla Excel"
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 21V9" />
+                      <path d="m7 12 5-5 5 5" />
+                      <path d="M5 3h14" />
+                    </svg>
+                    {isImportingSeps ? "Procesando…" : "Subir plantilla Excel"}
+                  </button>
+                  <input
+                    ref={sepsFileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(event) => void handleUploadSepsFile(event)}
+                    className="hidden"
+                  />
+                </>
+              ) : null}
               {!isSepsHistory ? (
                 <button
                   type="button"
@@ -7569,16 +8086,55 @@ export default function Home() {
       label: mod.id === "distribucion" ? "Dis/horas" : mod.name,
       detail: "Ir al tabulador",
       badge: moduleBadges[mod.id],
-      // Submenu bajo PERC: "Censo diario de pacientes" (solo admin/supervisores).
+      // Submenu bajo PERC: Monitoreo (modal), Abrir PERC, Censo, Insumos.
       children:
-        mod.id === "perc" && canViewCenso
+        mod.id === "perc" && (canViewCenso || canViewInsumos || isAdmin || isSupervisor)
           ? [
-              {
-                id: "panel-censo",
-                label: "Censo diario de pacientes",
-                detail: "Solo supervisión",
-                badge: "CD",
-              },
+              // Al desplegarse, PERC deja de abrir directo; este item reabre el tabulador.
+              ...(currentService
+                ? [
+                    {
+                      id: "panel-tabulator",
+                      label: "Abrir PERC",
+                      detail: "Ir al tabulador PERC",
+                      badge: "PE",
+                      icon: "perc",
+                    },
+                  ]
+                : []),
+              ...(isAdmin || isSupervisor
+                ? [
+                    {
+                      id: "panel-monitor-perc",
+                      label: "Monitoreo",
+                      detail: "Servicios que completaron",
+                      badge: "MO",
+                      icon: "monitor",
+                    },
+                  ]
+                : []),
+              ...(canViewCenso
+                ? [
+                    {
+                      id: "panel-censo",
+                      label: "Censo diario de pacientes",
+                      detail: "Solo supervisión",
+                      badge: "CD",
+                      icon: "censo",
+                    },
+                  ]
+                : []),
+              ...(canViewInsumos
+                ? [
+                    {
+                      id: "panel-insumos",
+                      label: "Insumos de Almacén",
+                      detail: "Costos de insumos",
+                      badge: "IA",
+                      icon: "insumos",
+                    },
+                  ]
+                : []),
             ]
           : undefined,
     }));
@@ -8369,6 +8925,225 @@ export default function Home() {
       </section>
     );
 
+    // ---- Insumos de Almacen (matriz de costos) ------------------------------
+    const insumosCols = INSUMOS_ALMACEN_TEMPLATE.columns;
+    const insumosRows = INSUMOS_ALMACEN_TEMPLATE.rows;
+    const insumosNum = (rowKey: string, colKey: string) => {
+      const n = Number.parseFloat(insumosValues[rowKey]?.[colKey] ?? "");
+      return Number.isFinite(n) ? n : 0;
+    };
+    // Valor de una celda: filas padre suman sus hijas (por columna); las demas, su valor.
+    const insumosCellNum = (row: InsumoRow, colKey: string) =>
+      row.sumOf
+        ? row.sumOf.reduce((acc, childKey) => acc + insumosNum(childKey, colKey), 0)
+        : insumosNum(row.key, colKey);
+    // Total por producto (fila) = suma de las 31 columnas de esa fila.
+    const insumosRowTotal = (row: InsumoRow) =>
+      insumosCols.reduce((acc, col) => acc + insumosCellNum(row, col.key), 0);
+    // Total por servicio (columna) = suma de TODAS las filas 2..97 (formula =SUM(C2:C97)
+    // del Excel: incluye padres e hijas, tal cual la plantilla original).
+    const insumosColTotal = (colKey: string) =>
+      insumosRows.reduce((acc, row) => acc + insumosCellNum(row, colKey), 0);
+    const insumosCellClass = `w-24 rounded border px-1.5 py-1 text-right text-xs outline-none focus:border-indigo-400 disabled:cursor-default disabled:opacity-80 ${
+      isLightPanelTheme ? "border-slate-200 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"
+    }`;
+
+    const insumosSection = (
+      <section
+        id="panel-insumos"
+        className={`rounded-[24px] border p-3 shadow-[0_24px_80px_rgba(3,7,18,0.35)] sm:p-5 ${
+          isLightPanelTheme ? "border-indigo-200 bg-white" : "border-indigo-400/20 bg-[#202c41]"
+        }`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-md shadow-black/30">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 8V5a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 5v3" />
+                <path d="M3 8v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8M3 8h18M12 3v18" />
+              </svg>
+            </span>
+            <div className="min-w-0">
+              <h2 className={`text-xl font-bold sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                Insumos de Almacén
+              </h2>
+              <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                Costos por centro de costo · {getPeriodLabel(insumosPeriod)}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+              <span className="font-semibold uppercase tracking-wide">Mes</span>
+              <input
+                type="month"
+                value={insumosPeriod}
+                onChange={(event) => setInsumosPeriod(event.target.value || insumosPeriod)}
+                className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`}
+              />
+            </label>
+            {canEditInsumos ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Edición
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-500/15 px-2.5 py-1 text-[11px] font-semibold text-slate-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" /> Solo lectura
+              </span>
+            )}
+          </div>
+        </div>
+
+        {canEditInsumos ? (
+          <p className={`mt-3 rounded-xl border px-3 py-2 text-[11px] ${isLightPanelTheme ? "border-indigo-200 bg-indigo-50/70 text-slate-600" : "border-indigo-400/20 bg-indigo-400/5 text-slate-300"}`}>
+            Podés <strong>pegar desde Excel</strong> (Ctrl+V) sobre la celda inicial, escribir manualmente, o <strong>subir la plantilla</strong>. Las filas en <span className="font-semibold text-indigo-300">negrita</span> son totales que se calculan solos (suma de sus subfilas), igual que el Excel. Guardá cuando quieras; no tiene cierre.
+          </p>
+        ) : null}
+
+        {canEditInsumos ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleInsumosUndo}
+              disabled={insumosUndoStack.length === 0}
+              title="Deshacer"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${isLightPanelTheme ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h11a5 5 0 0 1 0 10h-1" /></svg>
+              Deshacer
+            </button>
+            <button
+              type="button"
+              onClick={handleInsumosRedo}
+              disabled={insumosRedoStack.length === 0}
+              title="Rehacer"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${isLightPanelTheme ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5" /><path d="M20 9H9a5 5 0 0 0 0 10h1" /></svg>
+              Rehacer
+            </button>
+            <button
+              type="button"
+              onClick={() => insumosFileInputRef.current?.click()}
+              disabled={isImportingInsumos}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21V9" /><path d="m7 12 5-5 5 5" /><path d="M5 3h14" /></svg>
+              {isImportingInsumos ? "Procesando…" : "Subir plantilla Excel"}
+            </button>
+            <input
+              ref={insumosFileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(event) => void handleUploadInsumosFile(event)}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={handleClearInsumos}
+              title="Borrar toda la tabla (se puede deshacer)"
+              aria-label="Borrar toda la tabla"
+              className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10 text-rose-300 transition hover:bg-rose-500/20"
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>
+            </button>
+          </div>
+        ) : null}
+
+        {isLoadingInsumos && insumosLoadedPeriod !== insumosPeriod ? (
+          <p className="mt-4 text-sm text-slate-400">Cargando insumos…</p>
+        ) : (
+          <div className={`show-scrollbar mt-4 overflow-x-auto rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+            <table className={`border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+              <thead>
+                <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
+                  <th className={`sticky left-0 z-20 min-w-[11rem] border-r px-2 py-2 text-left align-bottom font-semibold sm:min-w-[15rem] sm:px-3 ${isLightPanelTheme ? "border-slate-200 bg-slate-100" : "border-white/10 bg-[#1a2334]"}`}>
+                    <span className="block">Centro de Costo</span>
+                    <span className={`block text-[10px] font-medium uppercase tracking-wide ${isLightPanelTheme ? "text-slate-400" : "text-slate-500"}`}>
+                      {getPeriodLabel(insumosPeriod)}
+                    </span>
+                  </th>
+                  {insumosCols.map((col) => (
+                    <th key={col.key} className="w-24 px-1 py-2 align-bottom text-center font-medium" title={col.label}>
+                      <span className="block whitespace-normal text-[10px] leading-tight">{col.label}</span>
+                    </th>
+                  ))}
+                  <th className={`px-2 py-2 text-center align-bottom font-bold ${isLightPanelTheme ? "bg-slate-200 text-slate-700" : "bg-[#243049] text-white"}`}>
+                    {INSUMOS_ALMACEN_TEMPLATE.rowTotalLabel}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {insumosRows.map((row) => {
+                  const isParent = !!row.sumOf;
+                  return (
+                    <tr key={row.key} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"} ${isParent ? (isLightPanelTheme ? "bg-indigo-50/60" : "bg-indigo-500/10") : ""}`}>
+                      <td className={`sticky left-0 z-10 min-w-[11rem] border-r px-2 py-1.5 sm:min-w-[15rem] sm:px-3 ${isLightPanelTheme ? "border-slate-200 " + (isParent ? "bg-indigo-50" : "bg-white") : "border-white/10 " + (isParent ? "bg-[#26314a]" : "bg-[#202c41]")}`}>
+                        <span className={`block text-[11px] ${isParent ? "font-bold uppercase tracking-wide " + (isLightPanelTheme ? "text-indigo-700" : "text-indigo-200") : isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>
+                          {row.label}
+                        </span>
+                      </td>
+                      {insumosCols.map((col) => (
+                        <td key={col.key} className="px-0.5 py-1 text-center">
+                          {isParent ? (
+                            <span className={`block w-24 px-1.5 text-right text-xs font-semibold ${isLightPanelTheme ? "text-indigo-600" : "text-indigo-300"}`}>
+                              {formatMoney(insumosCellNum(row, col.key))}
+                            </span>
+                          ) : (
+                            <input
+                              value={insumosValues[row.key]?.[col.key] ?? ""}
+                              onChange={(event) => updateInsumosCell(row.key, col.key, event.target.value)}
+                              onPaste={(event) => handleInsumosPaste(event, row.key, col.key)}
+                              disabled={!canEditInsumos}
+                              inputMode="decimal"
+                              className={insumosCellClass}
+                            />
+                          )}
+                        </td>
+                      ))}
+                      <td className={`px-2 py-1.5 text-right font-bold ${isLightPanelTheme ? "bg-slate-50 text-indigo-600" : "bg-[#1b2537] text-indigo-300"}`}>
+                        {formatMoney(insumosRowTotal(row))}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className={`border-t-2 ${isLightPanelTheme ? "border-slate-300 bg-slate-100 text-slate-800" : "border-white/20 bg-[#243049] text-white"}`}>
+                  <td className={`sticky left-0 z-10 min-w-[11rem] border-r px-2 py-2 font-bold uppercase tracking-wide sm:min-w-[15rem] sm:px-3 ${isLightPanelTheme ? "border-slate-300 bg-slate-100" : "border-white/10 bg-[#243049]"}`}>
+                    {INSUMOS_ALMACEN_TEMPLATE.grandTotalLabel}
+                  </td>
+                  {insumosCols.map((col) => (
+                    <td key={col.key} className="px-1 py-2 text-right font-semibold text-blue-300">
+                      {formatMoney(insumosColTotal(col.key))}
+                    </td>
+                  ))}
+                  <td className={`px-2 py-2 text-right text-sm font-extrabold ${isLightPanelTheme ? "bg-slate-200 text-indigo-700" : "bg-[#1a2334] text-indigo-300"}`} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+
+        {canEditInsumos ? (
+          <div className={`mt-4 flex flex-wrap items-center justify-end gap-2 border-t pt-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+            <button
+              type="button"
+              onClick={() => void handleSaveInsumos()}
+              disabled={isSavingInsumos}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <path d="M17 21v-8H7v8M7 3v5h8" />
+              </svg>
+              {isSavingInsumos ? "Guardando…" : "Guardar insumos"}
+            </button>
+          </div>
+        ) : null}
+      </section>
+    );
+
     const sidebarItems = [
       {
         id: "panel-overview",
@@ -8404,7 +9179,7 @@ export default function Home() {
         ? [
             {
               id: "panel-calendar",
-              label: "Config/Mensual",
+              label: "Config/días-hábiles",
               detail: "Dias habiles",
               badge: "CM",
             },
@@ -8586,7 +9361,7 @@ export default function Home() {
             />
           ) : null}
           <aside
-            className={`self-start overflow-y-auto px-4 pt-4 pb-28 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] xl:inset-x-auto xl:bottom-auto xl:z-auto xl:w-auto xl:max-h-[calc(100vh-3rem)] xl:rounded-[24px] xl:p-4 xl:pb-4 xl:shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:-translate-y-1/2 xl:transition-none xl:sticky xl:top-1/2 ${
+            className={`self-start overflow-y-auto px-4 pt-4 pb-28 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] xl:inset-x-auto xl:bottom-auto xl:z-auto xl:w-auto xl:max-h-[calc(100vh-2rem)] xl:rounded-[24px] xl:p-4 xl:pb-4 xl:shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:transition-none xl:sticky xl:top-4 ${
               menuOpen ? "translate-y-0" : "translate-y-full xl:hidden"
             } ${
               isLightPanelTheme
@@ -8638,7 +9413,7 @@ export default function Home() {
                 const hasAlert = item.id === "panel-requests" && pendingRequestCount > 0;
                 const tileGradient =
                   SIDEBAR_TILE_GRADIENT[item.id] ?? "from-cyan-500 to-blue-600";
-                const itemChildren = (item as { children?: { id: string; label: string; detail: string; badge: string }[] }).children;
+                const itemChildren = (item as { children?: { id: string; label: string; detail: string; badge: string; icon?: string }[] }).children;
                 const hasChildren = Array.isArray(itemChildren) && itemChildren.length > 0;
                 const isExpanded = expandedMenu === item.id;
 
@@ -8743,11 +9518,16 @@ export default function Home() {
                             onClick={() => {
                               const isMobile =
                                 typeof window !== "undefined" && window.innerWidth < 1280;
-                              if (isMobile) {
+                              // Los items tipo modal (Monitoreo) abren el modal en PC y movil.
+                              const isModalChild =
+                                child.id === "panel-monitor-perc" ||
+                                child.id.startsWith("panel-module-");
+                              if (isMobile && !isModalChild) {
                                 setMobileView(child.id);
                                 setMenuOpen(false);
                               } else {
                                 runSidebarItem(child.id, requestableModules);
+                                if (isMobile) setMenuOpen(false);
                               }
                             }}
                             className={`col-span-3 flex items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition xl:ml-3 xl:w-[calc(100%-0.75rem)] ${
@@ -8758,13 +9538,8 @@ export default function Home() {
                                   : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
                             }`}
                           >
-                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-teal-500/15 text-teal-300">
-                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M3 3v18h18" />
-                                <rect x="7" y="9" width="3" height="9" />
-                                <rect x="12" y="5" width="3" height="13" />
-                                <rect x="17" y="12" width="3" height="6" />
-                              </svg>
+                            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${SUBMENU_ICON_TINT[child.icon ?? ""] ?? "bg-slate-500/15 text-slate-300"}`}>
+                              {renderSubmenuIcon(child.icon)}
                             </span>
                             <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-tight xl:text-[12.5px]">
                               {child.label}
@@ -9196,7 +9971,7 @@ export default function Home() {
 
             {/* Barra de "volver a Inicio" — SOLO movil, en cualquier vista que no sea Inicio. */}
             <div
-              data-view="panel-services panel-tabulator panel-seps panel-horas panel-censo panel-calendar panel-admin-export panel-capture-toggle"
+              data-view="panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-calendar panel-admin-export panel-capture-toggle"
               className="flex items-center gap-3 xl:hidden"
             >
               <button
@@ -9217,6 +9992,8 @@ export default function Home() {
                       ? "Distribución de Horas"
                       : mobileView === "panel-censo"
                       ? "Censo diario de pacientes"
+                      : mobileView === "panel-insumos"
+                      ? "Insumos de Almacén"
                       : mobileView === "panel-calendar"
                         ? "Configuración mensual"
                         : mobileView === "panel-admin-export"
@@ -10244,6 +11021,16 @@ export default function Home() {
             <>
             {renderSectionDivider("Censo diario", "Censo diario de pacientes (solo supervisión)", "teal", isLightPanelTheme)}
             <div data-view="panel-censo">{censoSection}</div>
+            </>
+          ) : null}
+
+          {/* Insumos de Almacén: admin/supervisores + servicio Almacén, SOLO cuando se
+              elige en el submenu bajo PERC (debajo del Censo). */}
+          {canViewInsumos &&
+          (activeSidebarSection === "panel-insumos" || mobileView === "panel-insumos") ? (
+            <>
+            {renderSectionDivider("Insumos de Almacén", "Costos de insumos por centro de costo", "indigo", isLightPanelTheme)}
+            <div data-view="panel-insumos">{insumosSection}</div>
             </>
           ) : null}
 
