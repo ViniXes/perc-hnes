@@ -1107,6 +1107,7 @@ const SUBMENU_ICON_TINT: Record<string, string> = {
   monitor: "bg-cyan-500/15 text-cyan-300",
   censo: "bg-teal-500/15 text-teal-300",
   insumos: "bg-indigo-500/15 text-indigo-300",
+  consolidado: "bg-sky-500/15 text-sky-300",
 };
 
 // Icono propio de cada submenu bajo PERC (Abrir PERC / Monitoreo / Censo / Insumos).
@@ -1142,6 +1143,15 @@ function renderSubmenuIcon(icon: string | undefined): ReactNode {
       <svg {...common}>
         <path d="M21 8V5a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 5v3" />
         <path d="M3 8v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8M3 8h18M12 3v18" />
+      </svg>
+    );
+  }
+  if (icon === "consolidado") {
+    return (
+      <svg {...common}>
+        <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+        <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" />
+        <path d="M12 12v5m0 0-2-2m2 2 2-2" />
       </svg>
     );
   }
@@ -8135,6 +8145,17 @@ export default function Home() {
                     },
                   ]
                 : []),
+              ...(isAdmin
+                ? [
+                    {
+                      id: "panel-admin-export",
+                      label: "Consolidados PERC",
+                      detail: "Descarga consolidado",
+                      badge: "XL",
+                      icon: "consolidado",
+                    },
+                  ]
+                : []),
             ]
           : undefined,
     }));
@@ -9182,12 +9203,6 @@ export default function Home() {
               label: "Config/días-hábiles",
               detail: "Dias habiles",
               badge: "CM",
-            },
-            {
-              id: "panel-admin-export",
-              label: "Consolidados PERC",
-              detail: "Descarga consolidado",
-              badge: "XL",
             },
             {
               id: "panel-users",
