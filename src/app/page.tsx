@@ -9507,9 +9507,16 @@ export default function Home() {
                       </svg>
                     ) : null}
                   </button>
-                  {hasChildren && isExpanded
-                    ? itemChildren!.map((child) => {
+                  {hasChildren && isExpanded ? (
+                    <div
+                      className={`col-span-3 mt-1 space-y-0.5 xl:mt-1 xl:ml-[22px] xl:border-l xl:pl-3 ${
+                        isLightPanelTheme ? "xl:border-slate-200" : "xl:border-white/10"
+                      }`}
+                    >
+                      {itemChildren!.map((child) => {
                         const childActive = activeSidebarSection === child.id;
+                        const childTint =
+                          SUBMENU_ICON_TINT[child.icon ?? ""] ?? "bg-slate-500/15 text-slate-300";
                         return (
                           <button
                             key={child.id}
@@ -9530,24 +9537,37 @@ export default function Home() {
                                 if (isMobile) setMenuOpen(false);
                               }
                             }}
-                            className={`col-span-3 flex items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition xl:ml-3 xl:w-[calc(100%-0.75rem)] ${
+                            className={`group relative flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${
                               childActive
-                                ? "border-[#cad5ee] bg-[#e8eefb] text-slate-900 shadow-sm"
+                                ? isLightPanelTheme
+                                  ? "bg-slate-100 text-slate-900"
+                                  : "bg-white/10 text-white"
                                 : isLightPanelTheme
-                                  ? "border-slate-200 bg-white/70 text-slate-700 hover:bg-white"
-                                  : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                                  ? "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
+                                  : "text-slate-300 hover:bg-white/5 hover:text-white"
                             }`}
                           >
-                            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${SUBMENU_ICON_TINT[child.icon ?? ""] ?? "bg-slate-500/15 text-slate-300"}`}>
+                            {childActive ? (
+                              <span
+                                aria-hidden="true"
+                                className="absolute -left-3 top-1/2 hidden h-5 w-[3px] -translate-y-1/2 rounded-full bg-current opacity-80 xl:block"
+                              />
+                            ) : null}
+                            <span
+                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1 transition ${childTint} ${
+                                childActive ? "ring-white/20" : "ring-transparent group-hover:ring-white/10"
+                              }`}
+                            >
                               {renderSubmenuIcon(child.icon)}
                             </span>
-                            <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-tight xl:text-[12.5px]">
+                            <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium leading-tight">
                               {child.label}
                             </span>
                           </button>
                         );
-                      })
-                    : null}
+                      })}
+                    </div>
+                  ) : null}
                   </Fragment>
                 );
               })}
