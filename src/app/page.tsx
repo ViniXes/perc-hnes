@@ -13880,16 +13880,22 @@ export default function Home() {
                 </p>
                 <p>
                   <strong className="text-white">17. Compromiso antisoborno y anticorrupción
-                  (MINSAL).</strong> El Hospital Nacional adhiere a la Ley de Ética Gubernamental y
-                  a la Política y Sistema de Gestión Antisoborno del Ministerio de Salud (MINSAL).
-                  En el uso de PULSO queda estrictamente{" "}
-                  <strong className="text-white">prohibido</strong>: ofrecer, prometer, solicitar,
-                  dar o aceptar —directa o indirectamente— dinero, dádivas, regalos, comisiones,
-                  favores o cualquier ventaja indebida a cambio de registrar, alterar, ocultar,
-                  agilizar u omitir información de producción; manipular o falsear los datos para
-                  obtener beneficios propios o de terceros o para encubrir irregularidades; y
-                  utilizar el sistema o su información para actos de corrupción, tráfico de
-                  influencias o conflicto de interés.
+                  (MINSAL).</strong> El Hospital Nacional adhiere a la Ley de Ética Gubernamental,
+                  al Sistema de Gestión Antisoborno del Ministerio de Salud (MINSAL) y a los
+                  estándares internacionales en la materia (norma ISO 37001). Aplicado al uso de
+                  PULSO, queda estrictamente <strong className="text-white">prohibido</strong>{" "}
+                  ofrecer, prometer, solicitar, dar o aceptar —directa o indirectamente— dinero,
+                  dádivas, regalos, comisiones, favores o cualquier ventaja indebida para:{" "}
+                  <strong className="text-white">(a)</strong> registrar, alterar, inflar, disminuir,
+                  ocultar, agilizar u omitir datos de producción;{" "}
+                  <strong className="text-white">(b)</strong> aprobar cuentas, otorgar o ampliar
+                  permisos, o habilitar/cerrar tableros de captura fuera de los criterios
+                  institucionales; <strong className="text-white">(c)</strong> modificar o emitir
+                  consolidados que no reflejen la realidad; o{" "}
+                  <strong className="text-white">(d)</strong> favorecer indebidamente a un servicio,
+                  usuario o tercero. Se prohíbe además manipular o falsear información para obtener
+                  beneficios propios o de terceros o para encubrir irregularidades, así como todo
+                  acto de corrupción, tráfico de influencias o conflicto de interés.
                 </p>
                 <p>
                   <strong className="text-white">18. Deber de denuncia y no represalia.</strong>{" "}
