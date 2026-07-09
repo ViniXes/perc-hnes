@@ -164,3 +164,16 @@ export const INSUMOS_ALMACEN_TEMPLATE: InsumosTemplate = {
     { key: "r97", label: "Unidad de Gestion Documental" },
   ],
 };
+
+// Orden OFICIAL del CONSOLIDADO de Insumos de Almacen (descarga a Excel). Cada
+// bloque padre se colapsa en UNA sola fila (con la suma de sus subservicios) y
+// los servicios independientes van tal cual. Es una lista de keys de la
+// plantilla, en el orden EXACTO del Excel oficial (ojo: 670-Administracion va
+// antes que 702-Docencia). NO reordenar: la etiqueta y el valor de cada fila se
+// derivan de la plantilla, respetando la estructura del reporte.
+export const INSUMOS_CONSOLIDADO_ORDER: string[] = [
+  "r2", "r7", "r10", "r15", "r23", "r27", "r29", "r30", "r33", "r35",
+  "r36", "r37", "r38", "r39", "r40", "r41", "r42", "r43", "r44", "r45",
+  "r46", "r47", "r48", "r49", "r50", "r51", "r52", "r53", "r54", "r55",
+  "r56", "r57", "r61", "r62", "r63", "r64", "r67", "r69", "r68",
+];

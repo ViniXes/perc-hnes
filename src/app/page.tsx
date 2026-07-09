@@ -57,7 +57,7 @@ import {
   type SepsTemplate,
 } from "@/lib/seps-templates";
 import { getHorasTemplate, type HorasTemplate } from "@/lib/horas-templates";
-import { INSUMOS_ALMACEN_TEMPLATE, type InsumoRow } from "@/lib/insumos-almacen";
+import { INSUMOS_ALMACEN_TEMPLATE, INSUMOS_CONSOLIDADO_ORDER, type InsumoRow } from "@/lib/insumos-almacen";
 import {
   matchAction,
   matchSmalltalk,
@@ -5716,6 +5716,53 @@ export default function Home() {
     }
   }
 
+  // Descarga el CONSOLIDADO de Insumos (solo admin y supervisores). Colapsa cada
+  // bloque padre en UNA fila con la suma de sus subservicios y deja los servicios
+  // independientes tal cual, en el ORDEN OFICIAL (INSUMOS_CONSOLIDADO_ORDER).
+  // Respeta la estructura del reporte: encabezado, filas y columnas idénticos; los
+  // valores son las mismas sumas que muestra el tabulador (incluye filas agregadas
+  // que cuelguen de un bloque). No altera nada de la plantilla oficial.
+  async function handleDownloadInsumosConsolidado() {
+    if (!(isAdmin || isSupervisor)) {
+      return;
+    }
+    try {
+      const XLSX = await import("xlsx");
+      const cols = INSUMOS_ALMACEN_TEMPLATE.columns;
+      const tplByKey = new Map(INSUMOS_ALMACEN_TEMPLATE.rows.map((r) => [r.key, r]));
+      const effByKey = new Map(insumosEffectiveRows.map((r) => [r.key, r]));
+      const insNum = (rowKey: string, colKey: string) => {
+        const n = Number.parseFloat(insumosValues[rowKey]?.[colKey] ?? "");
+        return Number.isFinite(n) ? n : 0;
+      };
+      // Valor consolidado de una fila: si es bloque padre, suma sus hijas (sumOf
+      // efectivo, que ya incluye filas agregadas y excluye ocultas); si no, su valor.
+      const cellValue = (sourceKey: string, colKey: string) => {
+        const eff = effByKey.get(sourceKey);
+        if (!eff) {
+          return 0;
+        }
+        return eff.sumOf
+          ? eff.sumOf.reduce((acc, childKey) => acc + insNum(childKey, colKey), 0)
+          : insNum(sourceKey, colKey);
+      };
+      const header = ["Centro de Costo", ...cols.map((c) => c.label)];
+      const body = INSUMOS_CONSOLIDADO_ORDER.map((key) => [
+        tplByKey.get(key)?.label ?? key,
+        ...cols.map((c) => cellValue(key, c.key)),
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([header, ...body]);
+      ws["!cols"] = [{ wch: 42 }, ...cols.map(() => ({ wch: 16 }))];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "consolidado");
+      XLSX.writeFile(wb, `Consolidado_Insumos_Almacen_${insumosPeriod}.xlsx`);
+      setMessage(`Consolidado de Insumos descargado (${getPeriodLabel(insumosPeriod)}).`);
+    } catch (err) {
+      console.error(err);
+      setError("No pudimos generar el consolidado de Insumos.");
+    }
+  }
+
   // Sube la plantilla Excel oficial de Insumos y llena la matriz. Emparejamiento por
   // POSICION: la fila r{n} del modelo corresponde a la fila n del Excel; columnas C..AG
   // -> c1..c31. Solo se importan filas capturables (las padre se calculan solas).
@@ -9264,6 +9311,17 @@ export default function Home() {
                 <path d="M6 9l6 6 6-6" />
               </svg>
             </button>
+            {isAdmin || isSupervisor ? (
+              <button
+                type="button"
+                onClick={() => void handleDownloadInsumosConsolidado()}
+                title="Descargar el consolidado (Excel) del mes seleccionado"
+                className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-bold text-slate-950 transition hover:bg-emerald-400"
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12" /><path d="m7 12 5 5 5-5" /><path d="M5 21h14" /></svg>
+                Consolidado Excel
+              </button>
+            ) : null}
           </div>
         </div>
 
