@@ -3837,11 +3837,11 @@ export default function Home() {
   const isAlmacenOwner = serviceProfile?.serviceId === "almacen";
   const canEditInsumos = isAdmin || isAlmacenOwner;
   const canViewInsumos = isAdmin || isSupervisor || isAlmacenOwner;
-  // Agregar/quitar/renombrar filas del tabulador de Insumos: admin, supervisores
-  // y el servicio Almacen (los que capturan). Nota: para PERSISTIR una fila hace
-  // falta permiso de escritura del doc; los supervisores lo tendran cuando se
-  // publiquen las reglas de Firestore correspondientes.
-  const canManageInsumosRows = isAdmin || isSupervisor || isAlmacenOwner;
+  // Agregar/quitar/renombrar filas del tabulador de Insumos: SOLO admin y
+  // supervisores. El servicio Almacen captura valores pero NO gestiona filas.
+  // Nota: para PERSISTIR una fila hace falta permiso de escritura del doc; los
+  // supervisores lo tendran cuando se publiquen las reglas de Firestore.
+  const canManageInsumosRows = isAdmin || isSupervisor;
   // Filas efectivas (plantilla + extras - ocultas). Se usa en el render y en los
   // handlers de pegado/navegacion, por eso se memoiza a nivel de componente.
   const insumosEffectiveRows = useMemo(
@@ -9457,12 +9457,14 @@ export default function Home() {
           </div>
         ) : null}
 
-        {canManageInsumosRows ? (
+        {canEditInsumos || canManageInsumosRows ? (
           <div className={`mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
             <p className={`text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-              {canManageInsumosRows && !canEditInsumos
-                ? "Podés agregar/quitar filas y guardarlas. La captura de valores la hace el servicio Almacén."
-                : "Usá + para agregar una fila y el bote para quitarla; luego guardá."}
+              {!canManageInsumosRows
+                ? "Completá los valores del mes y tocá «Guardar insumos»."
+                : canEditInsumos
+                  ? "Usá + para agregar una fila y el bote para quitarla; luego guardá."
+                  : "Podés agregar/quitar filas y guardarlas. La captura de valores la hace el servicio Almacén."}
             </p>
             <button
               type="button"
