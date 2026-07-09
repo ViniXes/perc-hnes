@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, CSSProperties, Fragment, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, CSSProperties, Fragment, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Auth,
   type AuthError,
@@ -5405,6 +5405,64 @@ export default function Home() {
     }));
   }
 
+  // Navegacion tipo Excel entre celdas de Insumos con las 4 flechas (y Enter = abajo).
+  // ArrowUp/Down saltan las filas padre (totales) y caen en la siguiente celda
+  // editable. ArrowLeft/Right solo cambian de celda cuando el cursor esta al borde
+  // del texto, para no estorbar la edicion dentro de la celda. Al enfocar, la celda
+  // se desplaza a la vista: asi no hace falta bajar a buscar la barra de scroll.
+  function handleInsumosKeyNav(
+    event: ReactKeyboardEvent<HTMLInputElement>,
+    rowKey: string,
+    colKey: string,
+  ) {
+    const key = event.key;
+    if (
+      key !== "ArrowUp" &&
+      key !== "ArrowDown" &&
+      key !== "ArrowLeft" &&
+      key !== "ArrowRight" &&
+      key !== "Enter"
+    ) {
+      return;
+    }
+    // Solo filas capturables (las padre calculadas no tienen input).
+    const rows = INSUMOS_ALMACEN_TEMPLATE.rows.filter((r) => !r.sumOf);
+    const cols = INSUMOS_ALMACEN_TEMPLATE.columns;
+    const rIdx = rows.findIndex((r) => r.key === rowKey);
+    const cIdx = cols.findIndex((c) => c.key === colKey);
+    if (rIdx < 0 || cIdx < 0) {
+      return;
+    }
+    const input = event.currentTarget;
+    const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
+    const atEnd =
+      input.selectionStart === input.value.length &&
+      input.selectionEnd === input.value.length;
+    let tr = rIdx;
+    let tc = cIdx;
+    if (key === "ArrowUp") {
+      tr = rIdx - 1;
+    } else if (key === "ArrowDown" || key === "Enter") {
+      tr = rIdx + 1;
+    } else if (key === "ArrowLeft") {
+      if (!atStart) return;
+      tc = cIdx - 1;
+    } else if (key === "ArrowRight") {
+      if (!atEnd) return;
+      tc = cIdx + 1;
+    }
+    if (tr < 0 || tr >= rows.length || tc < 0 || tc >= cols.length) {
+      return;
+    }
+    event.preventDefault();
+    const target = window.document.getElementById(`ins-${rows[tr].key}-${cols[tc].key}`);
+    if (target instanceof HTMLInputElement) {
+      target.focus();
+      target.select();
+      target.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }
+
   // Pega desde Excel: parte de (fila, columna) y llena a la derecha y hacia abajo.
   // Solo se pega en filas capturables (no en las filas padre calculadas).
   function handleInsumosPaste(
@@ -9107,22 +9165,22 @@ export default function Home() {
         {isLoadingInsumos && insumosLoadedPeriod !== insumosPeriod ? (
           <p className="mt-4 text-sm text-slate-400">Cargando insumos…</p>
         ) : (
-          <div className={`show-scrollbar mt-4 overflow-x-auto rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+          <div className={`show-scrollbar mt-4 max-h-[68vh] overflow-auto rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
             <table className={`border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
               <thead>
                 <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
-                  <th className={`sticky left-0 z-20 min-w-[11rem] border-r px-2 py-2 text-left align-bottom font-semibold sm:min-w-[15rem] sm:px-3 ${isLightPanelTheme ? "border-slate-200 bg-slate-100" : "border-white/10 bg-[#1a2334]"}`}>
+                  <th className={`sticky left-0 top-0 z-30 min-w-[11rem] border-r px-2 py-2 text-left align-bottom font-semibold sm:min-w-[15rem] sm:px-3 ${isLightPanelTheme ? "border-slate-200 bg-slate-100" : "border-white/10 bg-[#1a2334]"}`}>
                     <span className="block">Centro de Costo</span>
                     <span className={`block text-[10px] font-medium uppercase tracking-wide ${isLightPanelTheme ? "text-slate-400" : "text-slate-500"}`}>
                       {getPeriodLabel(insumosPeriod)}
                     </span>
                   </th>
                   {insumosCols.map((col) => (
-                    <th key={col.key} className="w-24 px-1 py-2 align-bottom text-center font-medium" title={col.label}>
+                    <th key={col.key} className={`sticky top-0 z-20 w-24 px-1 py-2 align-bottom text-center font-medium ${isLightPanelTheme ? "bg-slate-100" : "bg-[#1a2334]"}`} title={col.label}>
                       <span className="block whitespace-normal text-[10px] leading-tight">{col.label}</span>
                     </th>
                   ))}
-                  <th className={`px-2 py-2 text-center align-bottom font-bold ${isLightPanelTheme ? "bg-slate-200 text-slate-700" : "bg-[#243049] text-white"}`}>
+                  <th className={`sticky top-0 z-20 px-2 py-2 text-center align-bottom font-bold ${isLightPanelTheme ? "bg-slate-200 text-slate-700" : "bg-[#243049] text-white"}`}>
                     {INSUMOS_ALMACEN_TEMPLATE.rowTotalLabel}
                   </th>
                 </tr>
@@ -9145,9 +9203,11 @@ export default function Home() {
                             </span>
                           ) : (
                             <input
+                              id={`ins-${row.key}-${col.key}`}
                               value={insumosValues[row.key]?.[col.key] ?? ""}
                               onChange={(event) => updateInsumosCell(row.key, col.key, event.target.value)}
                               onPaste={(event) => handleInsumosPaste(event, row.key, col.key)}
+                              onKeyDown={(event) => handleInsumosKeyNav(event, row.key, col.key)}
                               disabled={!canEditInsumos}
                               inputMode="decimal"
                               className={insumosCellClass}
