@@ -3602,6 +3602,9 @@ export default function Home() {
   const insumosFileInputRef = useRef<HTMLInputElement>(null);
   const [insumosUndoStack, setInsumosUndoStack] = useState<InsumosValues[]>([]);
   const [insumosRedoStack, setInsumosRedoStack] = useState<InsumosValues[]>([]);
+  // La "gran tabla" de Insumos de Almacen arranca CONTRAIDA: al abrir la seccion
+  // no se ve la tabla enorme, se muestra con el boton Mostrar/Ocultar. Solo estetico.
+  const [insumosCollapsed, setInsumosCollapsed] = useState(true);
   // Submenus desplegables del menu lateral (p.ej. PERC -> Censo diario).
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [uiPrefs, setUiPrefs] = useState<UiPrefs>(() => {
@@ -7084,11 +7087,20 @@ export default function Home() {
     setActiveSidebarSection(sectionId);
     // Al ir a Horas se expande el tabulador (solo arranca colapsado en el login).
     if (sectionId === "panel-horas") setHorasCollapsed(false);
-    const section = window.document.getElementById(sectionId);
-
-    if (section) {
-      section.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    // El scroll se DIFIERE: algunas secciones (Censo, Insumos) se montan recien
+    // cuando pasan a ser la seccion activa. En el primer clic el nodo todavia no
+    // existe en el DOM, por eso antes hacia falta un segundo clic. Esperamos al
+    // siguiente frame (post-render) y reintentamos unos pocos frames por si el
+    // montaje tarda, asi el PRIMER clic en el submenu ya lleva al tabulador.
+    const scrollToSection = (attempt: number) => {
+      const section = window.document.getElementById(sectionId);
+      if (section) {
+        section.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else if (attempt < 5) {
+        window.requestAnimationFrame(() => scrollToSection(attempt + 1));
+      }
+    };
+    window.requestAnimationFrame(() => scrollToSection(0));
   }
 
   // Logica compartida al tocar un item del menu (sidebar y barra inferior movil).
@@ -9012,9 +9024,30 @@ export default function Home() {
                 <span className="h-1.5 w-1.5 rounded-full bg-slate-400" /> Solo lectura
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => setInsumosCollapsed((v) => !v)}
+              aria-expanded={!insumosCollapsed}
+              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                isLightPanelTheme
+                  ? "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+              }`}
+            >
+              {insumosCollapsed ? "Mostrar tabla" : "Ocultar tabla"}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={`h-3.5 w-3.5 transition-transform ${insumosCollapsed ? "" : "rotate-180"}`} aria-hidden="true">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
           </div>
         </div>
 
+        {insumosCollapsed ? (
+          <p className={`mt-4 rounded-2xl border border-dashed px-4 py-8 text-center text-sm ${isLightPanelTheme ? "border-slate-200 text-slate-500" : "border-white/10 text-slate-400"}`}>
+            La tabla está oculta. Tocá <span className="font-semibold">«Mostrar tabla»</span> para ver el tabulador de insumos.
+          </p>
+        ) : (
+          <>
         {canEditInsumos ? (
           <p className={`mt-3 rounded-xl border px-3 py-2 text-[11px] ${isLightPanelTheme ? "border-indigo-200 bg-indigo-50/70 text-slate-600" : "border-indigo-400/20 bg-indigo-400/5 text-slate-300"}`}>
             Podés <strong>pegar desde Excel</strong> (Ctrl+V) sobre la celda inicial, escribir manualmente, o <strong>subir la plantilla</strong>. Las filas en <span className="font-semibold text-indigo-300">negrita</span> son totales que se calculan solos (suma de sus subfilas), igual que el Excel. Guardá cuando quieras; no tiene cierre.
@@ -9162,6 +9195,8 @@ export default function Home() {
             </button>
           </div>
         ) : null}
+          </>
+        )}
       </section>
     );
 
