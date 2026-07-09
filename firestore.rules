@@ -90,6 +90,20 @@ service cloud.firestore {
             || userProfile().role == 'admin'
             || request.auth.token.email == 'amontes@perc-hnes.app');
     }
+    // Insumos de Almacen (id = "<periodo>", p.ej. "2026-06"). Guardado por mes.
+    // Lo VEN admin, supervisores y el servicio Almacen. Lo EDITAN esos mismos:
+    // admin y Almacen capturan valores; admin y supervisores tambien pueden
+    // agregar/quitar filas (se guardan junto con los valores del mes).
+    match /insumosAlmacen/{periodId} {
+      allow read: if isSignedIn()
+        && (isAdmin()
+            || userProfile().role == 'supervisor'
+            || userProfile().serviceId == 'almacen');
+      allow write: if isSignedIn()
+        && (isAdmin()
+            || userProfile().role == 'supervisor'
+            || userProfile().serviceId == 'almacen');
+    }
     // Solicitudes de registro de jefes de servicio: cualquiera puede CREAR su
     // solicitud (sin sesion, con validacion de campos y estado "pending"); solo
     // los admins pueden leerlas, aprobarlas o rechazarlas.

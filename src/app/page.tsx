@@ -2193,6 +2193,89 @@ function formatMoney(n: number) {
 // Tipo de valores del tabulador de Insumos: fila -> (columna -> valor string).
 type InsumosValues = Record<string, Record<string, string>>;
 
+// Fila agregada a mano (admin/supervisor) al tabulador de Insumos. Se guarda POR
+// MES junto con los valores. `afterKey` = fila (oficial o custom) tras la cual se
+// inserta; `parentKey` = bloque padre cuyo total la incluye (si aplica).
+type InsumoExtraRow = {
+  key: string;
+  label: string;
+  afterKey: string;
+  parentKey?: string;
+};
+
+// Fila efectiva (ya combinada plantilla + extras - ocultas) que se renderiza.
+type InsumoEffectiveRow = {
+  key: string;
+  label: string;
+  sumOf?: string[];
+  isExtra: boolean;
+  parentKey?: string;
+};
+
+// Devuelve el padre (bloque) al que pertenece una fila ancla, para que una fila
+// nueva insertada debajo se sume en el total correcto.
+function findInsumosParentKey(
+  anchorKey: string,
+  extraRows: InsumoExtraRow[],
+): string | undefined {
+  const tpl = INSUMOS_ALMACEN_TEMPLATE.rows.find((r) => r.key === anchorKey);
+  if (tpl?.sumOf) {
+    return anchorKey; // el ancla es un bloque padre: la nueva es su primera hija
+  }
+  const parent = INSUMOS_ALMACEN_TEMPLATE.rows.find((r) => r.sumOf?.includes(anchorKey));
+  if (parent) {
+    return parent.key;
+  }
+  const ex = extraRows.find((e) => e.key === anchorKey);
+  return ex?.parentKey;
+}
+
+// Construye la lista de filas EFECTIVAS: plantilla oficial (sin las ocultas) con
+// las filas extra insertadas tras su ancla, y el `sumOf` de cada padre ajustado
+// (sin hijas ocultas, con hijas extra).
+function buildInsumosEffectiveRows(
+  extraRows: InsumoExtraRow[],
+  hiddenKeys: string[],
+): InsumoEffectiveRow[] {
+  const hidden = new Set(hiddenKeys);
+  const effSumOf = (r: InsumoRow): string[] => {
+    const base = (r.sumOf || []).filter((k) => !hidden.has(k));
+    const extras = extraRows
+      .filter((e) => e.parentKey === r.key && !hidden.has(e.key))
+      .map((e) => e.key);
+    return [...base, ...extras];
+  };
+  const list: InsumoEffectiveRow[] = INSUMOS_ALMACEN_TEMPLATE.rows
+    .filter((r) => !hidden.has(r.key))
+    .map((r) => ({
+      key: r.key,
+      label: r.label,
+      sumOf: r.sumOf ? effSumOf(r) : undefined,
+      isExtra: false,
+    }));
+  const insertedAfter: Record<string, number> = {};
+  extraRows.forEach((ex) => {
+    if (hidden.has(ex.key)) {
+      return;
+    }
+    const row: InsumoEffectiveRow = {
+      key: ex.key,
+      label: ex.label,
+      isExtra: true,
+      parentKey: ex.parentKey,
+    };
+    const idx = list.findIndex((r) => r.key === ex.afterKey);
+    if (idx < 0) {
+      list.push(row);
+      return;
+    }
+    const offset = insertedAfter[ex.afterKey] || 0;
+    list.splice(idx + 1 + offset, 0, row);
+    insertedAfter[ex.afterKey] = offset + 1;
+  });
+  return list;
+}
+
 function normalizeKey(value: string) {
   return value.trim().toLowerCase();
 }
@@ -3602,6 +3685,10 @@ export default function Home() {
   const insumosFileInputRef = useRef<HTMLInputElement>(null);
   const [insumosUndoStack, setInsumosUndoStack] = useState<InsumosValues[]>([]);
   const [insumosRedoStack, setInsumosRedoStack] = useState<InsumosValues[]>([]);
+  // Filas agregadas a mano y filas oficiales ocultas (admin/supervisor). Se guardan
+  // POR MES junto con los valores (igual que las filas extra del Censo diario).
+  const [insumosExtraRows, setInsumosExtraRows] = useState<InsumoExtraRow[]>([]);
+  const [insumosHiddenKeys, setInsumosHiddenKeys] = useState<string[]>([]);
   // La "gran tabla" de Insumos de Almacen arranca CONTRAIDA: al abrir la seccion
   // no se ve la tabla enorme, se muestra con el boton Mostrar/Ocultar. Solo estetico.
   const [insumosCollapsed, setInsumosCollapsed] = useState(true);
@@ -3750,6 +3837,17 @@ export default function Home() {
   const isAlmacenOwner = serviceProfile?.serviceId === "almacen";
   const canEditInsumos = isAdmin || isAlmacenOwner;
   const canViewInsumos = isAdmin || isSupervisor || isAlmacenOwner;
+  // Agregar/quitar/renombrar filas del tabulador de Insumos: admin, supervisores
+  // y el servicio Almacen (los que capturan). Nota: para PERSISTIR una fila hace
+  // falta permiso de escritura del doc; los supervisores lo tendran cuando se
+  // publiquen las reglas de Firestore correspondientes.
+  const canManageInsumosRows = isAdmin || isSupervisor || isAlmacenOwner;
+  // Filas efectivas (plantilla + extras - ocultas). Se usa en el render y en los
+  // handlers de pegado/navegacion, por eso se memoiza a nivel de componente.
+  const insumosEffectiveRows = useMemo(
+    () => buildInsumosEffectiveRows(insumosExtraRows, insumosHiddenKeys),
+    [insumosExtraRows, insumosHiddenKeys],
+  );
   // Filas efectivas del censo (las 8 base + las que AMONTES haya agregado).
   const censoRows: CensoRow[] = [...CENSO_BASE_ROWS, ...censoExtraRows];
   // Config para el detector de solicitudes nuevas (avisos tipo WhatsApp).
@@ -5336,12 +5434,20 @@ export default function Home() {
     try {
       const snap = await getDoc(doc(db, "insumosAlmacen", period));
       if (snap.exists()) {
-        const data = snap.data() as { values?: InsumosValues };
+        const data = snap.data() as {
+          values?: InsumosValues;
+          extraRows?: InsumoExtraRow[];
+          hiddenKeys?: string[];
+        };
         setInsumosValues(
           data.values && typeof data.values === "object" ? data.values : {},
         );
+        setInsumosExtraRows(Array.isArray(data.extraRows) ? data.extraRows : []);
+        setInsumosHiddenKeys(Array.isArray(data.hiddenKeys) ? data.hiddenKeys : []);
       } else {
         setInsumosValues({});
+        setInsumosExtraRows([]);
+        setInsumosHiddenKeys([]);
       }
       setInsumosLoadedPeriod(period);
       setInsumosUndoStack([]);
@@ -5393,6 +5499,61 @@ export default function Home() {
     setMessage("Tabla de Insumos borrada. Podés deshacer si fue por error.");
   }
 
+  // Inserta una fila nueva (editable) justo debajo de `anchorKey`. Si el ancla
+  // pertenece a un bloque, la nueva fila se suma en el total de ese bloque.
+  function handleAddInsumosRow(anchorKey: string) {
+    if (!canManageInsumosRows) {
+      return;
+    }
+    const parentKey = findInsumosParentKey(anchorKey, insumosExtraRows);
+    const key = `x-${Math.floor(Date.now())}-${insumosExtraRows.length + 1}`;
+    setInsumosExtraRows((current) => [
+      ...current,
+      { key, label: "NUEVO SERVICIO", afterKey: anchorKey, parentKey },
+    ]);
+    setMessage("Fila agregada. Escribí su nombre y no olvides «Guardar insumos».");
+  }
+
+  function handleRenameInsumosRow(key: string, label: string) {
+    if (!canManageInsumosRows) {
+      return;
+    }
+    setInsumosExtraRows((current) =>
+      current.map((row) => (row.key === key ? { ...row, label } : row)),
+    );
+  }
+
+  // Quita una fila. Las agregadas a mano se borran; las oficiales se OCULTAN (sus
+  // datos no se destruyen y se pueden restaurar). Pide confirmacion para oficiales.
+  function handleRemoveInsumosRow(key: string, isExtra: boolean, label: string) {
+    if (!canManageInsumosRows) {
+      return;
+    }
+    if (isExtra) {
+      setInsumosExtraRows((current) => current.filter((row) => row.key !== key));
+      return;
+    }
+    const ok =
+      typeof window === "undefined" ||
+      window.confirm(
+        `¿Ocultar la fila oficial «${label}»? No se borran sus datos y podés restaurarla luego. Recordá guardar.`,
+      );
+    if (!ok) {
+      return;
+    }
+    setInsumosHiddenKeys((current) =>
+      current.includes(key) ? current : [...current, key],
+    );
+  }
+
+  function handleRestoreInsumosRows() {
+    if (!canManageInsumosRows) {
+      return;
+    }
+    setInsumosHiddenKeys([]);
+    setMessage("Filas oficiales restauradas. Recordá «Guardar insumos».");
+  }
+
   function updateInsumosCell(rowKey: string, colKey: string, value: string) {
     if (!canEditInsumos) {
       return;
@@ -5425,8 +5586,9 @@ export default function Home() {
     ) {
       return;
     }
-    // Solo filas capturables (las padre calculadas no tienen input).
-    const rows = INSUMOS_ALMACEN_TEMPLATE.rows.filter((r) => !r.sumOf);
+    // Solo filas capturables (las padre calculadas no tienen input). Se usa la
+    // lista EFECTIVA para incluir filas agregadas y respetar las ocultas.
+    const rows = insumosEffectiveRows.filter((r) => !r.sumOf);
     const cols = INSUMOS_ALMACEN_TEMPLATE.columns;
     const rIdx = rows.findIndex((r) => r.key === rowKey);
     const cIdx = cols.findIndex((c) => c.key === colKey);
@@ -5484,7 +5646,8 @@ export default function Home() {
       lines.pop();
     }
     const grid = lines.map((line) => line.split("\t"));
-    const rows = INSUMOS_ALMACEN_TEMPLATE.rows;
+    // Lista EFECTIVA: el pegado respeta filas agregadas y saltea las padre/ocultas.
+    const rows = insumosEffectiveRows;
     const cols = INSUMOS_ALMACEN_TEMPLATE.columns;
     const startRowIdx = rows.findIndex((r) => r.key === startRowKey);
     const startColIdx = cols.findIndex((c) => c.key === startColKey);
@@ -5519,7 +5682,9 @@ export default function Home() {
   }
 
   async function handleSaveInsumos() {
-    if (!canEditInsumos || firestoreUnavailable) {
+    // Guardan quienes editan celdas (admin/almacen) o gestionan filas (además
+    // supervisores). La persistencia real la valida Firestore por sus reglas.
+    if ((!canEditInsumos && !canManageInsumosRows) || firestoreUnavailable) {
       return;
     }
     setIsSavingInsumos(true);
@@ -5531,6 +5696,8 @@ export default function Home() {
         {
           periodId: insumosPeriod,
           values: insumosValues,
+          extraRows: insumosExtraRows,
+          hiddenKeys: insumosHiddenKeys,
           updatedAt: serverTimestamp(),
           updatedBy: user?.email || "",
         },
@@ -9018,7 +9185,7 @@ export default function Home() {
 
     // ---- Insumos de Almacen (matriz de costos) ------------------------------
     const insumosCols = INSUMOS_ALMACEN_TEMPLATE.columns;
-    const insumosRows = INSUMOS_ALMACEN_TEMPLATE.rows;
+    const insumosRows = insumosEffectiveRows;
     const insumosNum = (rowKey: string, colKey: string) => {
       const n = Number.parseFloat(insumosValues[rowKey]?.[colKey] ?? "");
       return Number.isFinite(n) ? n : 0;
@@ -9183,17 +9350,30 @@ export default function Home() {
                   <th className={`sticky top-0 z-20 px-2 py-2 text-center align-bottom font-bold ${isLightPanelTheme ? "bg-slate-200 text-slate-700" : "bg-[#243049] text-white"}`}>
                     {INSUMOS_ALMACEN_TEMPLATE.rowTotalLabel}
                   </th>
+                  {canManageInsumosRows ? (
+                    <th className={`sticky top-0 z-20 px-1 py-2 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#1a2334]"}`} />
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
                 {insumosRows.map((row) => {
                   const isParent = !!row.sumOf;
+                  const isExtra = row.isExtra;
                   return (
-                    <tr key={row.key} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"} ${isParent ? (isLightPanelTheme ? "bg-indigo-50/60" : "bg-indigo-500/10") : ""}`}>
-                      <td className={`sticky left-0 z-10 min-w-[11rem] border-r px-2 py-1.5 sm:min-w-[15rem] sm:px-3 ${isLightPanelTheme ? "border-slate-200 " + (isParent ? "bg-indigo-50" : "bg-white") : "border-white/10 " + (isParent ? "bg-[#26314a]" : "bg-[#202c41]")}`}>
-                        <span className={`block text-[11px] ${isParent ? "font-bold uppercase tracking-wide " + (isLightPanelTheme ? "text-indigo-700" : "text-indigo-200") : isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>
-                          {row.label}
-                        </span>
+                    <tr key={row.key} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"} ${isParent ? (isLightPanelTheme ? "bg-indigo-50/60" : "bg-indigo-500/10") : isExtra ? (isLightPanelTheme ? "bg-emerald-50/60" : "bg-emerald-500/5") : ""}`}>
+                      <td className={`sticky left-0 z-10 min-w-[11rem] border-r px-2 py-1.5 sm:min-w-[15rem] sm:px-3 ${isLightPanelTheme ? "border-slate-200 " + (isParent ? "bg-indigo-50" : isExtra ? "bg-emerald-50" : "bg-white") : "border-white/10 " + (isParent ? "bg-[#26314a]" : isExtra ? "bg-[#1e2f3a]" : "bg-[#202c41]")}`}>
+                        {isExtra && canManageInsumosRows ? (
+                          <input
+                            value={row.label}
+                            onChange={(event) => handleRenameInsumosRow(row.key, event.target.value)}
+                            placeholder="Nombre del servicio"
+                            className={`w-full rounded border px-2 py-1 text-[11px] font-semibold uppercase outline-none focus:border-emerald-400 ${isLightPanelTheme ? "border-slate-200 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`}
+                          />
+                        ) : (
+                          <span className={`block text-[11px] ${isParent ? "font-bold uppercase tracking-wide " + (isLightPanelTheme ? "text-indigo-700" : "text-indigo-200") : isExtra ? "font-semibold uppercase tracking-wide " + (isLightPanelTheme ? "text-emerald-700" : "text-emerald-200") : isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>
+                            {row.label}
+                          </span>
+                        )}
                       </td>
                       {insumosCols.map((col) => (
                         <td key={col.key} className="px-0.5 py-1 text-center">
@@ -9218,6 +9398,28 @@ export default function Home() {
                       <td className={`px-2 py-1.5 text-right font-bold ${isLightPanelTheme ? "bg-slate-50 text-indigo-600" : "bg-[#1b2537] text-indigo-300"}`}>
                         {formatMoney(insumosRowTotal(row))}
                       </td>
+                      {canManageInsumosRows ? (
+                        <td className="whitespace-nowrap px-1 py-1 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleAddInsumosRow(row.key)}
+                            title="Agregar una fila debajo"
+                            aria-label="Agregar una fila debajo"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-emerald-500/10 hover:text-emerald-300"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveInsumosRow(row.key, isExtra, row.label)}
+                            title={isExtra ? "Quitar esta fila" : "Ocultar esta fila oficial"}
+                            aria-label={isExtra ? "Quitar esta fila" : "Ocultar esta fila oficial"}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-300"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>
+                          </button>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}
@@ -9233,14 +9435,35 @@ export default function Home() {
                     </td>
                   ))}
                   <td className={`px-2 py-2 text-right text-sm font-extrabold ${isLightPanelTheme ? "bg-slate-200 text-indigo-700" : "bg-[#1a2334] text-indigo-300"}`} />
+                  {canManageInsumosRows ? <td className="px-1 py-2" /> : null}
                 </tr>
               </tfoot>
             </table>
           </div>
         )}
 
-        {canEditInsumos ? (
-          <div className={`mt-4 flex flex-wrap items-center justify-end gap-2 border-t pt-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+        {canManageInsumosRows && insumosHiddenKeys.length > 0 ? (
+          <div className={`mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] ${isLightPanelTheme ? "border-amber-200 bg-amber-50/70 text-amber-800" : "border-amber-400/20 bg-amber-400/5 text-amber-200"}`}>
+            <span>
+              Hay {insumosHiddenKeys.length} fila(s) oficial(es) oculta(s). Sus datos siguen guardados.
+            </span>
+            <button
+              type="button"
+              onClick={handleRestoreInsumosRows}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-semibold transition ${isLightPanelTheme ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-amber-400/15 text-amber-100 hover:bg-amber-400/25"}`}
+            >
+              Restaurar filas ocultas
+            </button>
+          </div>
+        ) : null}
+
+        {canManageInsumosRows ? (
+          <div className={`mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+            <p className={`text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+              {canManageInsumosRows && !canEditInsumos
+                ? "Podés agregar/quitar filas y guardarlas. La captura de valores la hace el servicio Almacén."
+                : "Usá + para agregar una fila y el bote para quitarla; luego guardá."}
+            </p>
             <button
               type="button"
               onClick={() => void handleSaveInsumos()}
