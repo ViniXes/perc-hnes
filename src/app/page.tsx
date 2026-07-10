@@ -1778,7 +1778,7 @@ const PERC_SERV_CONSOLIDADO: {
   },
 ];
 
-function buildEmptyTable(service: ServiceDefinition): TableValues {
+function buildEmptyTable(service: ServiceDefinition, extraKeys: string[] = []): TableValues {
   const servFields = getPercServFields(service.id);
   if (servFields) {
     return { [PERC_SERV_ROW]: Object.fromEntries(servFields.map((f) => [f.key, ""])) };
@@ -1790,6 +1790,12 @@ function buildEmptyTable(service: ServiceDefinition): TableValues {
       Object.fromEntries(TABULATOR_HEADERS.map((header) => [header, ""])),
     ]),
   );
+  // Filas agregadas a mano (admin/supervisor): fila de columnas vacia por cada key.
+  for (const key of extraKeys) {
+    if (!table[key]) {
+      table[key] = Object.fromEntries(TABULATOR_HEADERS.map((header) => [header, ""]));
+    }
+  }
 
   applyFixedValues(table);
   return table;
@@ -1798,6 +1804,7 @@ function buildEmptyTable(service: ServiceDefinition): TableValues {
 function mergeWithTemplate(
   service: ServiceDefinition,
   savedValues?: Record<string, Record<string, unknown>>,
+  extraKeys: string[] = [],
 ) {
   const servFields = getPercServFields(service.id);
   if (servFields) {
@@ -1815,13 +1822,13 @@ function mergeWithTemplate(
     return template;
   }
 
-  const template = buildEmptyTable(service);
+  const template = buildEmptyTable(service, extraKeys);
 
   if (!savedValues) {
     return template;
   }
 
-  for (const row of service.rows) {
+  for (const row of [...service.rows, ...extraKeys]) {
     for (const header of TABULATOR_HEADERS) {
       const cellValue = savedValues[row]?.[header];
 
@@ -2591,18 +2598,31 @@ function sortManagedUsers(users: ManagedUser[]) {
   });
 }
 
-async function fetchSavedDataForPeriod(service: ServiceDefinition, periodId: string) {
+// Fila PERC agregada a mano (admin/supervisor). `afterKey` = fila tras la cual va.
+type PercExtraRow = { key: string; label: string; afterKey: string };
+type PercData = { values: TableValues; extraRows: PercExtraRow[]; hiddenKeys: string[] };
+
+async function fetchSavedDataForPeriod(
+  service: ServiceDefinition,
+  periodId: string,
+): Promise<PercData> {
   const snapshot = await getDoc(doc(db, "serviceTabulators", `${periodId}__${service.id}`));
 
   if (!snapshot.exists()) {
-    return buildEmptyTable(service);
+    return { values: buildEmptyTable(service), extraRows: [], hiddenKeys: [] };
   }
 
   const data = snapshot.data() as {
     values?: Record<string, Record<string, unknown>>;
+    extraRows?: PercExtraRow[];
+    hiddenKeys?: string[];
   };
-
-  return mergeWithTemplate(service, data.values);
+  const extraRows = Array.isArray(data.extraRows) ? data.extraRows : [];
+  return {
+    values: mergeWithTemplate(service, data.values, extraRows.map((e) => e.key)),
+    extraRows,
+    hiddenKeys: Array.isArray(data.hiddenKeys) ? data.hiddenKeys : [],
+  };
 }
 
 // ---- SEPS (tabuladores diarios) -------------------------------------------
@@ -3387,6 +3407,10 @@ export default function Home() {
   // niveles: primero las divisiones, luego sus servicios). null = mostrar divisiones.
   const [adminPickerGroup, setAdminPickerGroup] = useState<string | null>(null);
   const [tableValues, setTableValues] = useState<TableValues>({});
+  // Filas PERC agregadas a mano y filas oficiales ocultas (admin/supervisores),
+  // por servicio+mes. Se guardan en el doc serviceTabulators junto con los valores.
+  const [percExtraRows, setPercExtraRows] = useState<PercExtraRow[]>([]);
+  const [percHiddenKeys, setPercHiddenKeys] = useState<string[]>([]);
   const [sepsValues, setSepsValues] = useState<SepsValues>({});
   // Filas agregadas a mano y filas ocultas del SEPS (admin/supervisores). Se
   // guardan POR MES junto con los valores del tabulador SEPS del servicio.
@@ -4928,12 +4952,16 @@ export default function Home() {
 
         const matchedService = getServiceById(profile.serviceId);
         if (matchedService) {
-          const values = await fetchSavedDataForPeriod(matchedService, periodId);
+          const data = await fetchSavedDataForPeriod(matchedService, periodId);
           if (!cancelled) {
-            setTableValues(values);
+            setTableValues(data.values);
+            setPercExtraRows(data.extraRows);
+            setPercHiddenKeys(data.hiddenKeys);
           }
         } else if (!cancelled) {
           setTableValues({});
+          setPercExtraRows([]);
+          setPercHiddenKeys([]);
         }
 
         if (profile.permissions.canManageUsers || profile.role === "admin") {
@@ -5028,12 +5056,15 @@ export default function Home() {
     setIsLoadingData(true);
 
     try {
-      const values = await fetchSavedDataForPeriod(currentService, periodId);
+      const data = await fetchSavedDataForPeriod(currentService, periodId);
+      const values = data.values;
       const isEmpty = Object.values(values).every((row) =>
         Object.values(row).every((cell) => cell === ""),
       );
 
       setTableValues(values);
+      setPercExtraRows(data.extraRows);
+      setPercHiddenKeys(data.hiddenKeys);
 
       if (showEmptyMessage && isEmpty) {
         setMessage("No hay datos guardados todavia para este servicio en el mes actual.");
@@ -5064,8 +5095,10 @@ export default function Home() {
     setIsLoadingData(true);
 
     try {
-      const values = await fetchSavedDataForPeriod(currentService, period);
-      setTableValues(values);
+      const data = await fetchSavedDataForPeriod(currentService, period);
+      setTableValues(data.values);
+      setPercExtraRows(data.extraRows);
+      setPercHiddenKeys(data.hiddenKeys);
       setPercViewPeriod(period === periodId ? null : period);
 
       if (period !== periodId) {
@@ -5093,18 +5126,24 @@ export default function Home() {
     const service = getServiceById(serviceId);
     if (!service || firestoreUnavailable) {
       setTableValues({});
+      setPercExtraRows([]);
+      setPercHiddenKeys([]);
       return;
     }
 
     setIsLoadingData(true);
     try {
-      const values = await fetchSavedDataForPeriod(service, periodId);
-      setTableValues(values);
+      const data = await fetchSavedDataForPeriod(service, periodId);
+      setTableValues(data.values);
+      setPercExtraRows(data.extraRows);
+      setPercHiddenKeys(data.hiddenKeys);
     } catch (loadError) {
       if (await handleFirestoreError(loadError)) {
         return;
       }
       setTableValues(buildEmptyTable(service));
+      setPercExtraRows([]);
+      setPercHiddenKeys([]);
     } finally {
       setIsLoadingData(false);
     }
@@ -6583,6 +6622,54 @@ export default function Home() {
     }));
   }
 
+  // ---- Filas PERC agregadas/ocultas (solo admin y supervisores) -------------
+  function handleAddPercRow(anchorKey: string) {
+    if (!(isAdmin || isSupervisor)) {
+      return;
+    }
+    const key = `px-${Math.floor(Date.now())}-${percExtraRows.length + 1}`;
+    setPercExtraRows((cur) => [...cur, { key, label: "NUEVA FILA", afterKey: anchorKey }]);
+    setTableValues((cur) => ({
+      ...cur,
+      [key]: Object.fromEntries(TABULATOR_HEADERS.map((h) => [h, ""])),
+    }));
+    setMessage("Fila agregada al PERC. Escribí su nombre y no olvides «Guardar datos».");
+  }
+
+  function handleRenamePercRow(key: string, label: string) {
+    if (!(isAdmin || isSupervisor)) {
+      return;
+    }
+    setPercExtraRows((cur) => cur.map((r) => (r.key === key ? { ...r, label } : r)));
+  }
+
+  function handleRemovePercRow(key: string, isExtra: boolean, label: string) {
+    if (!(isAdmin || isSupervisor)) {
+      return;
+    }
+    if (isExtra) {
+      setPercExtraRows((cur) => cur.filter((r) => r.key !== key));
+      return;
+    }
+    const ok =
+      typeof window === "undefined" ||
+      window.confirm(
+        `¿Ocultar la fila oficial «${label}»? No se borran sus datos y podés restaurarla luego. Recordá guardar.`,
+      );
+    if (!ok) {
+      return;
+    }
+    setPercHiddenKeys((cur) => (cur.includes(key) ? cur : [...cur, key]));
+  }
+
+  function handleRestorePercRows() {
+    if (!(isAdmin || isSupervisor)) {
+      return;
+    }
+    setPercHiddenKeys([]);
+    setMessage("Filas PERC oficiales restauradas. Recordá «Guardar datos».");
+  }
+
   function handleClearTable() {
     if (!currentService) {
       return;
@@ -6634,7 +6721,11 @@ export default function Home() {
     setError("");
     setMessage("");
 
-    const normalizedValues = mergeWithTemplate(currentService, tableValues);
+    const normalizedValues = mergeWithTemplate(
+      currentService,
+      tableValues,
+      percExtraRows.map((e) => e.key),
+    );
 
     try {
       await setDoc(
@@ -6646,6 +6737,8 @@ export default function Home() {
           serviceName: currentService.name,
           headers: TABULATOR_HEADERS,
           rows: currentService.rows,
+          extraRows: percExtraRows,
+          hiddenKeys: percHiddenKeys,
           userId: user.uid,
           userEmail: user.email || "",
           values: normalizedValues,
@@ -7434,10 +7527,14 @@ export default function Home() {
 
         const updatedService = getServiceById(updated?.serviceId);
         if (updatedService) {
-          const values = await fetchSavedDataForPeriod(updatedService, periodId);
-          setTableValues(values);
+          const data = await fetchSavedDataForPeriod(updatedService, periodId);
+          setTableValues(data.values);
+          setPercExtraRows(data.extraRows);
+          setPercHiddenKeys(data.hiddenKeys);
         } else {
           setTableValues({});
+          setPercExtraRows([]);
+          setPercHiddenKeys([]);
         }
       }
 
@@ -7550,6 +7647,30 @@ export default function Home() {
     // El admin nunca queda bloqueado; el servicio: historial = solo lectura, mes actual = ventana.
     const percEditingBlocked = isAdmin ? false : isPercHistory ? true : isFormLocked;
     const percHistoryOptions = buildRecentPeriods(periodId, 12);
+    // Gestion de filas del tabulador PERC (agregar/quitar): solo admin/supervisores.
+    const canManagePercRows = isAdmin || isSupervisor;
+    // Filas EFECTIVAS del PERC: oficiales (sin las ocultas) + agregadas a mano.
+    const percEffectiveRows: { key: string; label: string; isExtra: boolean }[] = (() => {
+      if (!currentService) return [];
+      const hidden = new Set(percHiddenKeys);
+      const list = currentService.rows
+        .filter((r) => !hidden.has(r))
+        .map((r) => ({ key: r, label: r, isExtra: false }));
+      const insertedAfter: Record<string, number> = {};
+      percExtraRows.forEach((ex) => {
+        if (hidden.has(ex.key)) return;
+        const row = { key: ex.key, label: ex.label, isExtra: true };
+        const idx = list.findIndex((r) => r.key === ex.afterKey);
+        if (idx < 0) {
+          list.push(row);
+          return;
+        }
+        const off = insertedAfter[ex.afterKey] || 0;
+        list.splice(idx + 1 + off, 0, row);
+        insertedAfter[ex.afterKey] = off + 1;
+      });
+      return list;
+    })();
 
     // Selector de mes reutilizable (PERC/SEPS/Horas). Pinta verde el mes con datos, gris el vacio.
     const renderHistorySelector = (config: {
@@ -11232,22 +11353,35 @@ export default function Home() {
                           {header}
                         </th>
                       ))}
+                      {canManagePercRows ? <th className="border-b px-1 py-2" /> : null}
                     </tr>
                   </thead>
                   <tbody>
-                    {currentService.rows.map((row) => {
+                    {percEffectiveRows.map((effRow) => {
+                      const row = effRow.key;
                       const rowIsFixed = isFixedRow(row);
                       const fixedValues = getFixedValuesForRow(row);
 
                       return (
-                      <tr key={row} className={`${isLightPanelTheme ? "odd:bg-white even:bg-slate-50" : "odd:bg-white/[0.02] even:bg-white/[0.05]"}`}>
+                      <tr key={row} className={`${effRow.isExtra ? (isLightPanelTheme ? "bg-emerald-50/60" : "bg-emerald-500/[0.06]") : isLightPanelTheme ? "odd:bg-white even:bg-slate-50" : "odd:bg-white/[0.02] even:bg-white/[0.05]"}`}>
                         <th className={`sticky left-0 z-10 border-r px-3 py-3 text-left text-[11px] font-semibold leading-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-100 text-slate-800" : "border-white/10 bg-[#3a465d] text-slate-100"}`}>
-                          {row}
-                          {rowIsFixed ? (
-                            <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300">
-                              Fijo
-                            </span>
-                          ) : null}
+                          {effRow.isExtra && canManagePercRows ? (
+                            <input
+                              value={effRow.label}
+                              onChange={(event) => handleRenamePercRow(row, event.target.value)}
+                              placeholder="Nombre de la fila"
+                              className={`w-full min-w-[150px] rounded border px-2 py-1 text-[11px] font-semibold outline-none focus:border-emerald-400 ${isLightPanelTheme ? "border-slate-200 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`}
+                            />
+                          ) : (
+                            <>
+                              {effRow.label}
+                              {rowIsFixed ? (
+                                <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300">
+                                  Fijo
+                                </span>
+                              ) : null}
+                            </>
+                          )}
                         </th>
                         {TABULATOR_HEADERS.map((header) => {
                           const isSelf = percBlockedHeaders.has(header);
@@ -11281,6 +11415,28 @@ export default function Home() {
                           </td>
                           );
                         })}
+                        {canManagePercRows ? (
+                          <td className={`whitespace-nowrap border-l px-1 py-1 text-center ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+                            <button
+                              type="button"
+                              onClick={() => handleAddPercRow(row)}
+                              title="Agregar una fila debajo"
+                              aria-label="Agregar una fila debajo"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-emerald-500/10 hover:text-emerald-300"
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePercRow(row, effRow.isExtra, effRow.label)}
+                              title={effRow.isExtra ? "Quitar esta fila" : "Ocultar esta fila oficial"}
+                              aria-label={effRow.isExtra ? "Quitar esta fila" : "Ocultar esta fila oficial"}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-300"
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>
+                            </button>
+                          </td>
+                        ) : null}
                       </tr>
                       );
                     })}
@@ -11450,7 +11606,8 @@ export default function Home() {
                         </button>
                         {open ? (
                           <div className={`space-y-2.5 border-t px-4 py-3 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
-                            {currentService.rows.map((row) => {
+                            {percEffectiveRows.map((effRow) => {
+                              const row = effRow.key;
                               const rowIsFixed = isFixedRow(row);
                               const fixedValues = getFixedValuesForRow(row);
                               return (
@@ -11459,7 +11616,7 @@ export default function Home() {
                                   className="flex items-center justify-between gap-3"
                                 >
                                   <span className={`min-w-0 flex-1 text-xs leading-tight ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                                    {row}
+                                    {effRow.label}
                                     {rowIsFixed ? (
                                       <span className="ml-1.5 inline-block rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-300">
                                         Fijo
@@ -11508,6 +11665,19 @@ export default function Home() {
               </div>
               </>
               )}
+
+              {canManagePercRows && percHiddenKeys.length > 0 ? (
+                <div className={`mx-5 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] ${isLightPanelTheme ? "border-amber-200 bg-amber-50/70 text-amber-800" : "border-amber-400/20 bg-amber-400/5 text-amber-200"}`}>
+                  <span>Hay {percHiddenKeys.length} fila(s) oficial(es) oculta(s). Sus datos siguen guardados.</span>
+                  <button
+                    type="button"
+                    onClick={handleRestorePercRows}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-semibold transition ${isLightPanelTheme ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-amber-400/15 text-amber-100 hover:bg-amber-400/25"}`}
+                  >
+                    Restaurar filas ocultas
+                  </button>
+                </div>
+              ) : null}
 
               {/* Acciones del tabulador PERC. En historial cambia segun el rol. */}
               <div className={`flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
