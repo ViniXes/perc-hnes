@@ -10573,7 +10573,7 @@ export default function Home() {
           ) : null}
 
           {isAdmin || isSupervisor ? (
-            <section data-view="panel-services" className={`relative z-20 rounded-[24px] border border-amber-400/45 p-5 ring-1 ring-amber-400/10 ${
+            <section id="panel-services" data-view="panel-services" className={`relative z-20 rounded-[24px] border border-amber-400/45 p-5 ring-1 ring-amber-400/10 ${
               isLightPanelTheme
                 ? "bg-white text-slate-900 shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_18px_50px_rgba(15,23,42,0.10)]"
                 : "bg-gradient-to-br from-[#232f46] to-[#1a2334] text-slate-100 shadow-[0_0_0_1px_rgba(251,191,36,0.15),0_24px_80px_rgba(3,7,18,0.45)]"
