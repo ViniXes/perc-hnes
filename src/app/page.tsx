@@ -3580,8 +3580,25 @@ export default function Home() {
   const [assistantSuggestOpen, setAssistantSuggestOpen] = useState(false);
   const [assistantDragOver, setAssistantDragOver] = useState(false);
   const assistantFileRef = useRef<HTMLInputElement>(null);
+  // Configuracion de la vista pedida por chat (tema, acento, tipografia, tamano,
+  // fondo, widgets). Se aplica al instante sobre las preferencias.
+  function applyAssistantConfig(id: string) {
+    if (id === "cfg_theme_dark") return setPanelTheme("dark");
+    if (id === "cfg_theme_light") return setPanelTheme("light");
+    if (id.startsWith("cfg_accent_")) return updateUiPrefs({ accent: id.replace("cfg_accent_", "") });
+    if (id.startsWith("cfg_font_")) return updateUiPrefs({ font: id.replace("cfg_font_", "") });
+    if (id.startsWith("cfg_size_")) return updateUiPrefs({ fontSize: id.replace("cfg_size_", "") });
+    if (id.startsWith("cfg_bg_")) return updateUiPrefs({ background: id.replace("cfg_bg_", "") });
+    if (id === "cfg_widget_greeting") return updateUiPrefs({ showGreeting: !uiPrefs.showGreeting });
+    if (id === "cfg_widget_clock") return updateUiPrefs({ showClock: !uiPrefs.showClock });
+  }
+
   // Ejecuta la accion que el asistente propone (navegar, abrir modal, guardar...).
   function runAssistantAction(id: AssistantActionId) {
+    if (id.startsWith("cfg_")) {
+      applyAssistantConfig(id);
+      return;
+    }
     switch (id) {
       case "go_inicio":
         handleSidebarNavigation("panel-overview");

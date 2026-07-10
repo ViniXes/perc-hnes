@@ -18,7 +18,10 @@ export type AssistantActionId =
   | "request_enable"
   | "save_perc"
   | "save_seps"
-  | "save_horas";
+  | "save_horas"
+  // Configuracion de la vista por chat (tema, acento, tipografia, tamano, fondo,
+  // widgets). Se resuelven en el cliente por prefijo "cfg_".
+  | `cfg_${string}`;
 
 // Contexto minimo (rol y modulos disponibles). NO incluye datos sensibles.
 export type AssistantContext = {
@@ -98,9 +101,9 @@ export const ASSISTANT_ACTION_DEFS: ActionDef[] = [
   },
   {
     id: "toggle_theme",
-    label: "Cambiar modo claro/oscuro",
-    reply: "Puedo cambiar entre modo claro y oscuro. Toque el botón para alternarlo.",
-    keywords: ["modo claro", "modo oscuro", "tema oscuro", "tema claro", "cambiar tema", "modo noche", "modo dia", "modo oscuro claro"],
+    label: "Alternar claro/oscuro",
+    reply: "Puedo alternar entre modo claro y oscuro. Toque el botón para cambiarlo.",
+    keywords: ["cambiar tema", "alternar tema", "cambiar modo", "cambiar el modo", "modo claro oscuro"],
     available: () => true,
   },
   {
@@ -146,6 +149,31 @@ export const ASSISTANT_ACTION_DEFS: ActionDef[] = [
     available: (c) => c.hasService && c.hasHoras,
   },
 ];
+
+// --- Configuracion de la vista por chat (se aplican en el cliente por "cfg_"). ---
+const CFG_DEFS: ActionDef[] = [
+  { id: "cfg_theme_dark", label: "Activar modo oscuro", reply: "Le activo el modo oscuro. Toque el botón.", keywords: ["modo oscuro", "tema oscuro", "poner oscuro", "ponme oscuro", "quiero oscuro", "modo noche", "oscuro"], available: () => true },
+  { id: "cfg_theme_light", label: "Activar modo claro", reply: "Le activo el modo claro. Toque el botón.", keywords: ["modo claro", "tema claro", "poner claro", "ponme claro", "quiero claro", "modo dia", "claro"], available: () => true },
+  { id: "cfg_accent_dorado", label: "Color de acento dorado", reply: "Le pongo el acento dorado. Toque el botón.", keywords: ["acento dorado", "color dorado", "color amarillo", "dorado"], available: () => true },
+  { id: "cfg_accent_azul", label: "Color de acento azul", reply: "Le pongo el acento azul. Toque el botón.", keywords: ["acento azul", "color de acento azul", "color azul"], available: () => true },
+  { id: "cfg_accent_verde", label: "Color de acento verde", reply: "Le pongo el acento verde. Toque el botón.", keywords: ["acento verde", "color de acento verde", "color verde"], available: () => true },
+  { id: "cfg_accent_violeta", label: "Color de acento violeta", reply: "Le pongo el acento violeta. Toque el botón.", keywords: ["acento violeta", "color violeta", "color morado", "acento morado", "acento lila"], available: () => true },
+  { id: "cfg_font_sans", label: "Tipografía Moderna", reply: "Le pongo la tipografía Moderna. Toque el botón.", keywords: ["tipografia moderna", "fuente moderna", "letra moderna", "tipografia sans"], available: () => true },
+  { id: "cfg_font_serif", label: "Tipografía Clásica", reply: "Le pongo la tipografía Clásica. Toque el botón.", keywords: ["tipografia clasica", "fuente clasica", "letra clasica", "con serifa", "serif"], available: () => true },
+  { id: "cfg_font_rounded", label: "Tipografía Redondeada", reply: "Le pongo la tipografía Redondeada. Toque el botón.", keywords: ["tipografia redondeada", "fuente redondeada", "letra redondeada", "redonda"], available: () => true },
+  { id: "cfg_font_mono", label: "Tipografía Monoespaciada", reply: "Le pongo la tipografía Monoespaciada. Toque el botón.", keywords: ["tipografia monoespaciada", "monoespaciada", "monospace", "letra mono"], available: () => true },
+  { id: "cfg_size_normal", label: "Tamaño de letra Normal", reply: "Le pongo el tamaño de letra Normal. Toque el botón.", keywords: ["letra normal", "tamano normal", "tamano de letra normal", "achicar letra", "letra chica"], available: () => true },
+  { id: "cfg_size_grande", label: "Tamaño de letra Grande", reply: "Le pongo el tamaño de letra Grande. Toque el botón.", keywords: ["letra grande", "tamano grande", "agrandar letra", "letra mas grande"], available: () => true },
+  { id: "cfg_size_xl", label: "Tamaño de letra Más grande", reply: "Le pongo el tamaño de letra Más grande. Toque el botón.", keywords: ["letra muy grande", "letra extra grande", "mas grande la letra", "tamano xl", "letra enorme"], available: () => true },
+  { id: "cfg_bg_default", label: "Fondo Por defecto", reply: "Le pongo el fondo por defecto. Toque el botón.", keywords: ["fondo por defecto", "fondo normal", "fondo default", "quitar fondo"], available: () => true },
+  { id: "cfg_bg_azul", label: "Fondo Azul noche", reply: "Le pongo el fondo Azul noche. Toque el botón.", keywords: ["fondo azul", "fondo azul noche", "azul noche"], available: () => true },
+  { id: "cfg_bg_violeta", label: "Fondo Violeta", reply: "Le pongo el fondo Violeta. Toque el botón.", keywords: ["fondo violeta", "fondo morado", "fondo lila"], available: () => true },
+  { id: "cfg_bg_verde", label: "Fondo Bosque", reply: "Le pongo el fondo Bosque. Toque el botón.", keywords: ["fondo verde", "fondo bosque", "bosque"], available: () => true },
+  { id: "cfg_bg_grafito", label: "Fondo Grafito", reply: "Le pongo el fondo Grafito. Toque el botón.", keywords: ["fondo grafito", "fondo gris", "grafito"], available: () => true },
+  { id: "cfg_widget_greeting", label: "Mostrar/ocultar saludo", reply: "Alterno el saludo de bienvenida del inicio. Toque el botón.", keywords: ["saludo de bienvenida", "mostrar saludo", "ocultar saludo", "quitar saludo", "saludo"], available: () => true },
+  { id: "cfg_widget_clock", label: "Mostrar/ocultar reloj", reply: "Alterno el reloj y la fecha del inicio. Toque el botón.", keywords: ["reloj y fecha", "mostrar reloj", "ocultar reloj", "quitar reloj", "reloj", "fecha"], available: () => true },
+];
+ASSISTANT_ACTION_DEFS.push(...CFG_DEFS);
 
 export const KNOWN_ACTION_IDS: AssistantActionId[] = ASSISTANT_ACTION_DEFS.map((a) => a.id);
 
