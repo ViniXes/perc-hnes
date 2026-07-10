@@ -13676,60 +13676,89 @@ export default function Home() {
               <div
                 onClick={(event) => event.stopPropagation()}
                 style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))" }}
-                className="modal-pop-in relative my-8 w-full max-w-lg overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+                className="modal-pop-in relative my-8 w-full max-w-xl overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
               >
-                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-blue-500" />
-                <div className="max-h-[85vh] overflow-y-auto px-5 pb-5 pt-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+                <div className="h-1.5 w-full" style={{ background: "linear-gradient(90deg, var(--accent-btn), #7c3aed)" }} />
+                <div className="max-h-[86vh] overflow-y-auto px-5 pb-6 pt-5 sm:px-6">
+                  <div className="mb-5 flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-2xl text-white shadow-lg" style={{ background: "linear-gradient(135deg, var(--accent-btn), #7c3aed)", boxShadow: "0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent)" }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6" aria-hidden="true">
                           <circle cx="12" cy="12" r="3" />
                           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
                         </svg>
                       </span>
                       <div>
-                        <h3 className="text-base font-semibold text-white">Configuración</h3>
-                        <p className="text-[11px] text-slate-400">Personalizá tu vista</p>
+                        <h3 className="text-xl font-bold" style={{ color: "var(--text)" }}>Configuración</h3>
+                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>Personalizá tu experiencia · se guarda automáticamente</p>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => setShowConfigModal(false)}
                       aria-label="Cerrar"
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border text-lg leading-none transition hover:brightness-125"
+                      style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" }}
                     >
                       ✕
                     </button>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-3.5">
                     {/* Tema */}
-                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm font-semibold text-white">Tema</p>
-                      <div className="mt-2.5 grid grid-cols-2 gap-2">
-                        {(["light", "dark"] as const).map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => setPanelTheme(t)}
-                            className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
-                              panelTheme === t
-                                ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
-                                : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                            }`}
-                          >
-                            {t === "light" ? IconSun : IconMoon}
-                            {t === "light" ? "Claro" : "Oscuro"}
-                          </button>
-                        ))}
+                    <section className="rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                      <div className="mb-3 flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }}>
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" /></svg>
+                        </span>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Apariencia</p>
+                          <p className="text-sm font-bold" style={{ color: "var(--text)" }}>Tema</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {(["light", "dark"] as const).map((t) => {
+                          const on = panelTheme === t;
+                          return (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setPanelTheme(t)}
+                              className="group flex items-center gap-3 rounded-xl border p-2.5 text-left transition hover:brightness-110"
+                              style={on
+                                ? { borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 12%, transparent)" }
+                                : { borderColor: "var(--border)", background: "var(--surface-3)" }}
+                            >
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)", background: t === "light" ? "#f1f4f9" : "#0a0f1c" }}>
+                                <span className="h-3.5 w-3.5 rounded-sm" style={{ background: t === "light" ? "#0891b2" : "#38d6ee" }} />
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: on ? "var(--accent)" : "var(--text)" }}>
+                                  {t === "light" ? IconSun : IconMoon}
+                                  {t === "light" ? "Claro" : "Oscuro"}
+                                </span>
+                              </span>
+                              {on ? (
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                              ) : null}
+                            </button>
+                          );
+                        })}
                       </div>
                     </section>
 
                     {/* Color de acento */}
-                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm font-semibold text-white">Color de acento</p>
-                      <div className="mt-2.5 flex flex-wrap gap-2.5">
+                    <section className="rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                      <div className="mb-3 flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }}>
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor" /><circle cx="17.5" cy="10.5" r=".5" fill="currentColor" /><circle cx="8.5" cy="7.5" r=".5" fill="currentColor" /><circle cx="6.5" cy="12.5" r=".5" fill="currentColor" /><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996C18.978 15.398 22 12.375 22 8.375 22 4.855 17.523 2 12 2Z" /></svg>
+                        </span>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Personalización</p>
+                          <p className="text-sm font-bold" style={{ color: "var(--text)" }}>Color de acento</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-3">
                         {ACCENT_OPTIONS.map((opt) => {
                           const selected = uiPrefs.accent === opt.id;
                           return (
@@ -13739,13 +13768,11 @@ export default function Home() {
                               onClick={() => updateUiPrefs({ accent: opt.id })}
                               aria-label={opt.label}
                               title={opt.label}
-                              className={`relative flex h-8 w-8 items-center justify-center rounded-full ring-2 transition ${
-                                selected ? "ring-white" : "ring-transparent hover:ring-white/30"
-                              }`}
-                              style={{ backgroundColor: opt.accent }}
+                              className="relative flex h-10 w-10 items-center justify-center rounded-full transition hover:scale-105"
+                              style={{ backgroundColor: opt.accent, boxShadow: selected ? `0 0 0 2px var(--surface-2), 0 0 0 4px ${opt.accent}, 0 6px 16px ${opt.accent}66` : "0 2px 6px rgba(0,0,0,0.3)" }}
                             >
                               {selected ? (
-                                <svg viewBox="0 0 24 24" fill="none" stroke={opt.ink} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke={opt.ink} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
                                   <path d="M20 6 9 17l-5-5" />
                                 </svg>
                               ) : null}
@@ -13756,96 +13783,137 @@ export default function Home() {
                     </section>
 
                     {/* Tipografia */}
-                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm font-semibold text-white">Tipografía</p>
-                      <div className="mt-2.5 grid grid-cols-2 gap-2">
-                        {FONT_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => updateUiPrefs({ font: opt.id })}
-                            style={{ fontFamily: opt.stack }}
-                            className={`rounded-xl border px-3 py-2 text-sm transition ${
-                              uiPrefs.font === opt.id
-                                ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
-                                : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
+                    <section className="rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                      <div className="mb-3 flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }}>
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7V5h16v2M9 19h6M12 5v14" /></svg>
+                        </span>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Legibilidad</p>
+                          <p className="text-sm font-bold" style={{ color: "var(--text)" }}>Tipografía</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {FONT_OPTIONS.map((opt) => {
+                          const on = uiPrefs.font === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => updateUiPrefs({ font: opt.id })}
+                              className="flex items-center gap-3 rounded-xl border p-2.5 text-left transition hover:brightness-110"
+                              style={on
+                                ? { borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 12%, transparent)" }
+                                : { borderColor: "var(--border)", background: "var(--surface-3)" }}
+                            >
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg font-bold" style={{ fontFamily: opt.stack, background: "var(--surface-2)", color: on ? "var(--accent)" : "var(--text)" }}>Aa</span>
+                              <span className="min-w-0 flex-1 truncate text-sm font-semibold" style={{ fontFamily: opt.stack, color: on ? "var(--accent)" : "var(--text)" }}>{opt.label}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </section>
 
                     {/* Tamaño de letra */}
-                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm font-semibold text-white">Tamaño de letra</p>
-                      <div className="mt-2.5 flex gap-2">
-                        {FONT_SIZE_OPTIONS.map((opt, i) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => updateUiPrefs({ fontSize: opt.id })}
-                            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-3 py-2 transition ${
-                              uiPrefs.fontSize === opt.id
-                                ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
-                                : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                            }`}
-                          >
-                            <span style={{ fontSize: `${12 + i * 3}px` }} className="font-bold leading-none">A</span>
-                            <span className="text-xs font-semibold">{opt.label}</span>
-                          </button>
-                        ))}
+                    <section className="rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                      <div className="mb-3 flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }}>
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 19 5-13 5 13M5 14h6M14 19l3.5-9 3.5 9M15.5 16h4" /></svg>
+                        </span>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Accesibilidad</p>
+                          <p className="text-sm font-bold" style={{ color: "var(--text)" }}>Tamaño de letra</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 rounded-xl border p-1" style={{ borderColor: "var(--border)", background: "var(--surface-3)" }}>
+                        {FONT_SIZE_OPTIONS.map((opt, i) => {
+                          const on = uiPrefs.fontSize === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => updateUiPrefs({ fontSize: opt.id })}
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 transition hover:brightness-110"
+                              style={on
+                                ? { background: "var(--accent-btn)", color: "var(--accent-ink)", boxShadow: "0 4px 12px color-mix(in srgb, var(--accent) 40%, transparent)" }
+                                : { background: "transparent", color: "var(--text-muted)" }}
+                            >
+                              <span style={{ fontSize: `${12 + i * 3}px` }} className="font-bold leading-none">A</span>
+                              <span className="text-xs font-semibold">{opt.label}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </section>
 
                     {/* Fondo */}
-                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm font-semibold text-white">Fondo</p>
-                      <div className="mt-2.5 flex flex-wrap gap-2">
-                        {BACKGROUND_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => updateUiPrefs({ background: opt.id })}
-                            className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-medium transition ${
-                              uiPrefs.background === opt.id
-                                ? "border-cyan-400 bg-cyan-500/15 text-cyan-200"
-                                : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                            }`}
-                          >
-                            <span
-                              className="h-4 w-6 rounded border border-white/20"
-                              style={opt.css ? { backgroundImage: opt.css } : { backgroundColor: "var(--bg)" }}
-                            />
-                            {opt.label}
-                          </button>
-                        ))}
+                    <section className="rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                      <div className="mb-3 flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }}>
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="m3 15 4-4 4 4M14 13l2-2 5 5" /><circle cx="8.5" cy="8.5" r="1.5" /></svg>
+                        </span>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Ambiente</p>
+                          <p className="text-sm font-bold" style={{ color: "var(--text)" }}>Fondo de pantalla</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                        {BACKGROUND_OPTIONS.map((opt) => {
+                          const on = uiPrefs.background === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => updateUiPrefs({ background: opt.id })}
+                              className="overflow-hidden rounded-xl border text-left transition hover:brightness-110"
+                              style={on ? { borderColor: "var(--accent)", boxShadow: "0 0 0 1px var(--accent)" } : { borderColor: "var(--border)" }}
+                            >
+                              <span className="relative flex h-12 w-full items-center justify-center" style={opt.css ? { backgroundImage: opt.css } : { backgroundColor: "var(--bg)" }}>
+                                {on ? (
+                                  <span className="flex h-5 w-5 items-center justify-center rounded-full" style={{ background: "var(--accent-btn)", color: "var(--accent-ink)" }}>
+                                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span className="block px-2.5 py-1.5 text-[11px] font-semibold" style={{ background: "var(--surface-3)", color: on ? "var(--accent)" : "var(--text-muted)" }}>{opt.label}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </section>
 
                     {/* Widgets */}
-                    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="text-sm font-semibold text-white">Widgets</p>
-                      <div className="mt-2.5 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => updateUiPrefs({ showGreeting: !uiPrefs.showGreeting })}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                            uiPrefs.showGreeting ? "bg-cyan-500/15 text-cyan-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
-                          }`}
-                        >
-                          {uiPrefs.showGreeting ? "✓ " : ""}Saludo de bienvenida
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => updateUiPrefs({ showClock: !uiPrefs.showClock })}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                            uiPrefs.showClock ? "bg-cyan-500/15 text-cyan-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
-                          }`}
-                        >
-                          {uiPrefs.showClock ? "✓ " : ""}Reloj y fecha
-                        </button>
+                    <section className="rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                      <div className="mb-3 flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }}>
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+                        </span>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Inicio</p>
+                          <p className="text-sm font-bold" style={{ color: "var(--text)" }}>Widgets del panel</p>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        {([
+                          { key: "showGreeting", label: "Saludo de bienvenida", desc: "Muestra tu nombre al entrar", on: uiPrefs.showGreeting },
+                          { key: "showClock", label: "Reloj y fecha", desc: "Hora y fecha en el inicio", on: uiPrefs.showClock },
+                        ] as const).map((w) => (
+                          <button
+                            key={w.key}
+                            type="button"
+                            onClick={() => updateUiPrefs({ [w.key]: !w.on } as Partial<UiPrefs>)}
+                            className="flex w-full items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition hover:brightness-110"
+                            style={{ background: "var(--surface-3)" }}
+                          >
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold" style={{ color: "var(--text)" }}>{w.label}</span>
+                              <span className="block text-[11px]" style={{ color: "var(--text-faint)" }}>{w.desc}</span>
+                            </span>
+                            <span className="relative flex h-6 w-11 shrink-0 items-center rounded-full transition" style={{ background: w.on ? "var(--accent-btn)" : "color-mix(in srgb, var(--text-faint) 40%, transparent)" }}>
+                              <span className="absolute h-5 w-5 rounded-full bg-white shadow transition-all" style={{ left: w.on ? "22px" : "2px" }} />
+                            </span>
+                          </button>
+                        ))}
                       </div>
                     </section>
 
@@ -13854,8 +13922,10 @@ export default function Home() {
                       onClick={() => {
                         updateUiPrefs(DEFAULT_UI_PREFS);
                       }}
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition hover:brightness-110"
+                      style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" }}
                     >
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
                       Restablecer a los valores por defecto
                     </button>
                   </div>
