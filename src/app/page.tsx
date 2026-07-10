@@ -3927,9 +3927,9 @@ export default function Home() {
     return serviceProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Usuario";
   }, [serviceProfile?.name, user?.displayName, user?.email]);
   const isAdmin = !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
-  // Revisor de SEPS (Juan Carlos Miranda, jmiranda): nivel de supervisor + permiso
-  // de EDICION del SEPS de cualquier servicio y de dejar comentarios de revision.
-  const isSepsStaff = normalizeKey(user?.email || "") === normalizeKey("jmiranda@perc-hnes.app");
+  // Revisor de SEPS (Juan Carlos Miranda, usuario "jcmiranda"): nivel de supervisor
+  // + permiso de EDICION del SEPS de cualquier servicio y de dejar comentarios.
+  const isSepsStaff = normalizeKey(user?.email || "") === normalizeKey("jcmiranda@perc-hnes.app");
   const isSupervisor = serviceProfile?.role === "supervisor" || isSepsStaff;
   // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
   // y los administradores (por temas de calidad y control).
