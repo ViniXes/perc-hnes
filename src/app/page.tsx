@@ -2726,7 +2726,15 @@ function mergeSepsWithTemplate(
   return values;
 }
 
-type SepsData = { values: SepsValues; extraRows: SepsExtraRow[]; hiddenKeys: string[] };
+// Comentario de revision que el revisor (o admin/supervisor) deja en el SEPS de
+// un servicio+mes, para que el servicio vea cuando le corrigen o le cuadran algo.
+type SepsComment = { id: string; author: string; text: string; at: number };
+type SepsData = {
+  values: SepsValues;
+  extraRows: SepsExtraRow[];
+  hiddenKeys: string[];
+  comments: SepsComment[];
+};
 
 async function fetchSepsDataForPeriod(
   template: SepsTemplate,
@@ -2737,19 +2745,21 @@ async function fetchSepsDataForPeriod(
   );
 
   if (!snapshot.exists()) {
-    return { values: buildEmptySeps(template, periodId), extraRows: [], hiddenKeys: [] };
+    return { values: buildEmptySeps(template, periodId), extraRows: [], hiddenKeys: [], comments: [] };
   }
 
   const data = snapshot.data() as {
     values?: Record<string, Record<string, unknown>>;
     extraRows?: SepsExtraRow[];
     hiddenKeys?: string[];
+    comments?: SepsComment[];
   };
   const extraRows = Array.isArray(data.extraRows) ? data.extraRows : [];
   return {
     values: mergeSepsWithTemplate(template, periodId, data.values, extraRows.map((e) => e.key)),
     extraRows,
     hiddenKeys: Array.isArray(data.hiddenKeys) ? data.hiddenKeys : [],
+    comments: Array.isArray(data.comments) ? data.comments : [],
   };
 }
 
@@ -3416,6 +3426,9 @@ export default function Home() {
   // guardan POR MES junto con los valores del tabulador SEPS del servicio.
   const [sepsExtraRows, setSepsExtraRows] = useState<SepsExtraRow[]>([]);
   const [sepsHiddenKeys, setSepsHiddenKeys] = useState<string[]>([]);
+  // Comentarios de revision del SEPS (los deja el revisor/admin; los ve el servicio).
+  const [sepsComments, setSepsComments] = useState<SepsComment[]>([]);
+  const [sepsCommentDraft, setSepsCommentDraft] = useState("");
   const [isSavingSeps, setIsSavingSeps] = useState(false);
   const [isLoadingSeps, setIsLoadingSeps] = useState(false);
   // Tablas SEPS abiertas (colapsables). Por defecto solo la primera.
@@ -3914,7 +3927,10 @@ export default function Home() {
     return serviceProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Usuario";
   }, [serviceProfile?.name, user?.displayName, user?.email]);
   const isAdmin = !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
-  const isSupervisor = serviceProfile?.role === "supervisor";
+  // Revisor de SEPS (Juan Carlos Miranda, jmiranda): nivel de supervisor + permiso
+  // de EDICION del SEPS de cualquier servicio y de dejar comentarios de revision.
+  const isSepsStaff = normalizeKey(user?.email || "") === normalizeKey("jmiranda@perc-hnes.app");
+  const isSupervisor = serviceProfile?.role === "supervisor" || isSepsStaff;
   // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
   // y los administradores (por temas de calidad y control).
   const canViewCenso = isAdmin || isSupervisor;
@@ -4386,6 +4402,7 @@ export default function Home() {
           setSepsValues({});
           setSepsExtraRows([]);
           setSepsHiddenKeys([]);
+          setSepsComments([]);
         }
         return;
       }
@@ -4396,6 +4413,7 @@ export default function Home() {
           setSepsValues(data.values);
           setSepsExtraRows(data.extraRows);
           setSepsHiddenKeys(data.hiddenKeys);
+          setSepsComments(data.comments);
         }
       } catch (sepsError) {
         if (await handleFirestoreError(sepsError)) {
@@ -4405,6 +4423,7 @@ export default function Home() {
           setSepsValues(buildEmptySeps(sepsTemplate, sepsPeriodId));
           setSepsExtraRows([]);
           setSepsHiddenKeys([]);
+          setSepsComments([]);
         }
       }
     })();
@@ -6882,6 +6901,65 @@ export default function Home() {
     setMessage("Filas SEPS oficiales restauradas. Recordá «Guardar».");
   }
 
+  // ---- Comentarios de revision del SEPS (admin/supervisores/revisor) --------
+  // Quien puede dejar comentarios en el SEPS de un servicio.
+  const canCommentSeps = isAdmin || isSupervisor || isSepsStaff;
+
+  // Agrega un comentario y lo GUARDA de inmediato en el doc del mes/servicio
+  // (merge, sin tocar valores), para que el servicio lo vea aunque no se guarde
+  // toda la tabla. Requiere permiso de escritura del doc (reglas de Firestore).
+  async function handleAddSepsComment() {
+    if (!canCommentSeps || !sepsTemplate || !user || firestoreUnavailable) {
+      return;
+    }
+    const text = sepsCommentDraft.trim();
+    if (!text) {
+      return;
+    }
+    const author = serviceProfile?.name || user.email?.split("@")[0] || "Revisor";
+    const comment: SepsComment = {
+      id: `c-${Math.floor(Date.now())}-${sepsComments.length + 1}`,
+      author,
+      text,
+      at: Date.now(),
+    };
+    const targetPeriod = sepsViewPeriod ?? sepsPeriodId;
+    const nextComments = [...sepsComments, comment];
+    setSepsComments(nextComments);
+    setSepsCommentDraft("");
+    try {
+      await setDoc(
+        doc(db, "sepsTabulators", `${targetPeriod}__${sepsTemplate.serviceId}`),
+        { comments: nextComments, updatedAt: serverTimestamp() },
+        { merge: true },
+      );
+      setMessage("Comentario enviado. El servicio podrá verlo en su SEPS.");
+    } catch (commentError) {
+      if (await handleFirestoreError(commentError)) {
+        return;
+      }
+      setError("No pudimos enviar el comentario.");
+    }
+  }
+
+  async function handleDeleteSepsComment(commentId: string) {
+    if (!canCommentSeps || !sepsTemplate || firestoreUnavailable) {
+      return;
+    }
+    const targetPeriod = sepsViewPeriod ?? sepsPeriodId;
+    const nextComments = sepsComments.filter((c) => c.id !== commentId);
+    setSepsComments(nextComments);
+    try {
+      await setDoc(
+        doc(db, "sepsTabulators", `${targetPeriod}__${sepsTemplate.serviceId}`),
+        { comments: nextComments, updatedAt: serverTimestamp() },
+        { merge: true },
+      );
+    } catch (deleteError) {
+      await handleFirestoreError(deleteError);
+    }
+  }
+
   async function handleSaveSeps() {
     if (!user || !sepsTemplate || !serviceProfile || firestoreUnavailable) {
       return;
@@ -6900,19 +6978,19 @@ export default function Home() {
       return;
     }
 
-    if (editingHistory && !isAdmin) {
+    if (editingHistory && !isAdmin && !isSepsStaff) {
       setError("Solo el administrador puede editar meses anteriores.");
       setMessage("");
       return;
     }
 
-    if (!serviceProfile.permissions.canEdit && !isAdmin) {
+    if (!serviceProfile.permissions.canEdit && !isAdmin && !isSepsStaff) {
       setError("Tu cuenta no tiene permiso de captura en este momento.");
       setMessage("");
       return;
     }
 
-    if (!editingHistory && !sepsCaptureOpen && !isAdmin) {
+    if (!editingHistory && !sepsCaptureOpen && !isAdmin && !isSepsStaff) {
       setError("La captura SEPS esta cerrada en este momento.");
       setMessage("");
       return;
@@ -6943,6 +7021,7 @@ export default function Home() {
           values: normalizedValues,
           extraRows: sepsExtraRows,
           hiddenKeys: sepsHiddenKeys,
+          comments: sepsComments,
           updatedAt: serverTimestamp(),
         },
         { merge: true },
@@ -6977,6 +7056,7 @@ export default function Home() {
       setSepsValues(data.values);
       setSepsExtraRows(data.extraRows);
       setSepsHiddenKeys(data.hiddenKeys);
+      setSepsComments(data.comments);
       setMessage(`Datos SEPS recuperados (${sepsPeriodLabel}).`);
     } catch (loadError) {
       if (await handleFirestoreError(loadError)) {
@@ -7003,6 +7083,7 @@ export default function Home() {
       setSepsValues(data.values);
       setSepsExtraRows(data.extraRows);
       setSepsHiddenKeys(data.hiddenKeys);
+      setSepsComments(data.comments);
       setSepsViewPeriod(period === sepsPeriodId ? null : period);
 
       if (period !== sepsPeriodId) {
@@ -8235,7 +8316,7 @@ export default function Home() {
     const activeSepsPeriod = sepsViewPeriod ?? sepsPeriodId;
     const isSepsHistory = sepsViewPeriod !== null;
     const sepsHistReadOnly = isSepsHistory && !isAdmin;
-    const sepsEditingBlocked = isAdmin ? false : isSepsHistory ? true : sepsLocked;
+    const sepsEditingBlocked = isAdmin || isSepsStaff ? false : isSepsHistory ? true : sepsLocked;
     const sepsHistoryOptions = buildRecentPeriods(sepsPeriodId, 12);
     const sepsPhaseLabel =
       sepsWindow.phase === "cierre"
@@ -8284,6 +8365,71 @@ export default function Home() {
         <p className={`mt-3 rounded-xl border px-4 py-2 text-sm ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-200"}`}>
           {sepsPhaseLabel}. Los totales y la fila de suma se calculan solos.
         </p>
+
+        {/* Comentarios de revision: los deja el revisor/admin; los VE el servicio. */}
+        {sepsComments.length > 0 || canCommentSeps ? (
+          <div className={`mt-3 rounded-2xl border p-3 sm:p-4 ${isLightPanelTheme ? "border-amber-200 bg-amber-50/60" : "border-amber-400/20 bg-amber-400/[0.06]"}`}>
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isLightPanelTheme ? "text-amber-600" : "text-amber-300"} aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+              <span className={`text-sm font-bold ${isLightPanelTheme ? "text-amber-800" : "text-amber-200"}`}>
+                Comentarios de revisión
+              </span>
+            </div>
+            {sepsComments.length > 0 ? (
+              <ul className="mt-3 space-y-2">
+                {sepsComments.map((c) => (
+                  <li key={c.id} className={`rounded-xl border px-3 py-2 text-sm ${isLightPanelTheme ? "border-amber-200/70 bg-white" : "border-white/10 bg-[#1b2537]"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`min-w-0 flex-1 whitespace-pre-wrap ${isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>{c.text}</p>
+                      {canCommentSeps ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteSepsComment(c.id)}
+                          title="Borrar comentario"
+                          aria-label="Borrar comentario"
+                          className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-300"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className={`mt-1 text-[11px] font-medium ${isLightPanelTheme ? "text-amber-700" : "text-amber-300/80"}`}>
+                      {c.author} · {SHORT_DATE_FORMATTER.format(new Date(c.at))}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={`mt-2 text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                Sin comentarios todavía. Dejá una nota para el servicio.
+              </p>
+            )}
+            {canCommentSeps ? (
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={sepsCommentDraft}
+                  onChange={(event) => setSepsCommentDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void handleAddSepsComment();
+                    }
+                  }}
+                  placeholder="Escribí una corrección o nota para el servicio…"
+                  className={`flex-1 rounded-xl border px-3 py-2 text-sm outline-none focus:border-amber-400 ${isLightPanelTheme ? "border-amber-200 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleAddSepsComment()}
+                  disabled={!sepsCommentDraft.trim()}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50"
+                >
+                  Enviar
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-5 space-y-6">
           {sepsTemplate.kind === "matrix"

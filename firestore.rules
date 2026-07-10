@@ -40,8 +40,12 @@ service cloud.firestore {
     }
     match /sepsTabulators/{docId} {
       allow read: if isSignedIn();
+      // Escriben: admin, el dueño del servicio (su propio userId) y el revisor de
+      // SEPS Juan Carlos Miranda (jmiranda), que edita/agrega-quita filas y deja
+      // comentarios en el SEPS de cualquier servicio.
       allow create, update: if isAdmin()
-        || (isSignedIn() && request.resource.data.userId == request.auth.uid);
+        || (isSignedIn() && request.resource.data.userId == request.auth.uid)
+        || request.auth.token.email == 'jmiranda@perc-hnes.app';
       allow delete: if isAdmin();
     }
     match /horasTabulators/{docId} {
