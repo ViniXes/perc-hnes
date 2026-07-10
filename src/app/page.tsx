@@ -3576,6 +3576,10 @@ export default function Home() {
   const [assistantInput, setAssistantInput] = useState("");
   const [botTyping, setBotTyping] = useState(false);
   const [assistantCat, setAssistantCat] = useState<AssistantCategory>("Captura");
+  // Panel de sugerencias (categorias/FAQ) plegable — el chat arranca limpio.
+  const [assistantSuggestOpen, setAssistantSuggestOpen] = useState(false);
+  const [assistantDragOver, setAssistantDragOver] = useState(false);
+  const assistantFileRef = useRef<HTMLInputElement>(null);
   // Ejecuta la accion que el asistente propone (navegar, abrir modal, guardar...).
   function runAssistantAction(id: AssistantActionId) {
     switch (id) {
@@ -3742,6 +3746,51 @@ export default function Home() {
       setBotTyping(false);
     }
   }
+  // El asistente recibe un Excel (arrastrado o adjuntado) y lo carga en el
+  // tabulador que corresponda a la cuenta (SEPS / Distribucion de Horas / Insumos),
+  // reutilizando el mismo importador oficial de cada modulo. Autocompleta el mes
+  // actual; luego el usuario revisa y guarda.
+  async function handleAssistantFile(file: File | undefined | null) {
+    if (!file) return;
+    const name = file.name || "archivo";
+    if (!/\.xlsx?$/i.test(name)) {
+      setAssistantMsgs((c) => [...c, { from: "bot", text: "Por ahora solo puedo leer archivos de Excel (.xlsx o .xls). Adjuntá el Excel de tu servicio y lo cargo." }]);
+      return;
+    }
+    setAssistantMsgs((c) => [
+      ...c,
+      { from: "user", text: `📎 ${name}` },
+      { from: "bot", text: "Estoy analizando el Excel y completando tu tabulador del mes actual…" },
+    ]);
+    setBotTyping(true);
+    const fakeEvent = { target: { files: [file], value: "" } } as unknown as ChangeEvent<HTMLInputElement>;
+    try {
+      let target = "";
+      if (sepsTemplate) {
+        target = "SEPS";
+        await handleUploadSepsFile(fakeEvent);
+      } else if (horasTemplate) {
+        target = "Distribución de Horas";
+        await handleUploadHorasFile(fakeEvent);
+      } else if (isAdmin || isSupervisor || isAlmacenOwner) {
+        target = "Insumos de Almacén";
+        await handleUploadInsumosFile(fakeEvent);
+      }
+      if (!target) {
+        setAssistantMsgs((c) => [...c, { from: "bot", text: "No encontré un tabulador para cargar este Excel desde tu cuenta. Entrá al servicio correspondiente y volvé a intentarlo." }]);
+        return;
+      }
+      setAssistantMsgs((c) => [
+        ...c,
+        { from: "bot", text: `Listo ✅ Cargué el Excel en tu tabulador de ${target}. Revisá los datos y, cuando estés conforme, tocá «Guardar».` },
+      ]);
+    } catch {
+      setAssistantMsgs((c) => [...c, { from: "bot", text: "No pude leer ese Excel. Verificá que sea la plantilla del mes de tu servicio e intentá de nuevo." }]);
+    } finally {
+      setBotTyping(false);
+    }
+  }
+
   function openAssistant() {
     setAssistantOpen((open) => !open);
   }
@@ -14083,32 +14132,20 @@ export default function Home() {
           {/* Asistente virtual (robot medico) - abajo a la derecha. SOLO en PC. */}
           <div className="fixed bottom-5 right-5 z-40 hidden flex-col items-end gap-3 xl:flex">
             {assistantOpen ? (
-              <div className="modal-pop-in flex h-[66vh] max-h-[540px] w-[350px] max-w-[88vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/50">
-                <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-cyan-500/25 to-blue-500/25 px-4 py-3">
+              <div className="modal-pop-in flex h-[66vh] max-h-[560px] w-[360px] max-w-[90vw] flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
+                {/* Encabezado */}
+                <div className="flex items-center justify-between gap-2 px-4 py-3" style={{ background: "linear-gradient(120deg, rgba(34,211,238,0.16), rgba(124,58,237,0.16))", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 ring-1 ring-white/30">
-                      <svg viewBox="0 0 40 40" className="h-6 w-6" aria-hidden="true">
-                        <line x1="20" y1="4" x2="20" y2="9" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
-                        <circle cx="20" cy="3.4" r="2.1" fill="#ffffff" />
-                        <rect x="3.5" y="16" width="3.6" height="8.5" rx="1.8" fill="#ffffff" />
-                        <rect x="32.9" y="16" width="3.6" height="8.5" rx="1.8" fill="#ffffff" />
-                        <rect x="7" y="9" width="26" height="22" rx="8.5" fill="#ffffff" />
-                        <circle cx="15" cy="19" r="2.7" fill="#6d28d9" />
-                        <circle cx="25" cy="19" r="2.7" fill="#6d28d9" />
-                        <path
-                          d="M14.5 24.5 q5.5 4.5 11 0"
-                          stroke="#0891b2"
-                          strokeWidth="2.1"
-                          strokeLinecap="round"
-                          fill="none"
-                          className={botTyping ? "bot-talk" : ""}
-                        />
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full" style={{ background: "linear-gradient(135deg, #22d3ee, #6366f1)", boxShadow: "0 6px 16px rgba(99,102,241,0.45)" }}>
+                      <svg viewBox="0 0 24 24" className={`h-5 w-5 ${botTyping ? "bot-talk" : ""}`} fill="#fff" aria-hidden="true">
+                        <path d="M12 2.5l1.9 4.8 4.8 1.9-4.8 1.9L12 15.9l-1.9-4.8L5.3 9.2l4.8-1.9z" />
+                        <path d="M18.6 14.4l.82 2.08 2.08.82-2.08.82-.82 2.08-.82-2.08-2.08-.82 2.08-.82z" opacity="0.92" />
                       </svg>
                     </span>
                     <div>
                       <p className="text-sm font-semibold text-white">Asistente PULSO</p>
                       <p className="flex items-center gap-1 text-[10px] text-emerald-300">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> En línea · guía del sistema
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> En línea · listo para ayudarte
                       </p>
                     </div>
                   </div>
@@ -14136,98 +14173,129 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Mensajes */}
-                <div className="flex-1 space-y-2 overflow-y-auto p-3">
-                  {assistantMsgs.map((msg, index) => {
-                    const action = msg.from === "bot" ? msg.action : undefined;
-                    return (
-                      <div
-                        key={index}
-                        className={`flex flex-col ${msg.from === "user" ? "items-end" : "items-start"}`}
-                      >
-                        <p
-                          className={`w-fit max-w-[88%] rounded-2xl px-3 py-2 text-sm leading-6 ${
-                            msg.from === "user"
-                              ? "rounded-tr-sm bg-cyan-500/20 font-medium text-cyan-100"
-                              : "rounded-tl-sm bg-white/5 text-slate-200"
-                          }`}
-                        >
-                          {msg.text}
-                        </p>
-                        {action ? (
+                {/* Mensajes (+ arrastrar Excel aquí) */}
+                <div
+                  className="relative flex-1 overflow-y-auto p-3"
+                  onDragOver={(event) => { event.preventDefault(); setAssistantDragOver(true); }}
+                  onDragLeave={() => setAssistantDragOver(false)}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setAssistantDragOver(false);
+                    void handleAssistantFile(event.dataTransfer.files?.[0]);
+                  }}
+                >
+                  {assistantMsgs.length === 0 && !botTyping ? (
+                    <div className="flex h-full flex-col items-center justify-center px-3 text-center">
+                      <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-full" style={{ background: "linear-gradient(135deg, rgba(34,211,238,0.22), rgba(99,102,241,0.22))" }}>
+                        <svg viewBox="0 0 24 24" className="h-7 w-7" fill="#38d6ee" aria-hidden="true"><path d="M12 2.5l1.9 4.8 4.8 1.9-4.8 1.9L12 15.9l-1.9-4.8L5.3 9.2l4.8-1.9z" /></svg>
+                      </span>
+                      <p className="text-base font-bold text-white">¿En qué te ayudo?</p>
+                      <p className="mt-1 max-w-[240px] text-xs leading-5 text-slate-400">
+                        Escribí lo que necesitás. También podés <strong className="text-slate-200">soltar un Excel</strong> de tu servicio acá y lo completo por vos.
+                      </p>
+                      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                        {[
+                          getSepsTemplate(currentService?.id) ? "Ir a mi SEPS" : "Ir a mi PERC",
+                          "Cambiar el tema",
+                          "Guardar mi captura",
+                          "¿Cómo uso el sistema?",
+                        ].map((q) => (
                           <button
+                            key={q}
                             type="button"
-                            onClick={() => runAssistantAction(action.id)}
-                            className="mt-1.5 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
+                            onClick={() => void pushAssistant(q, assistantCtx)}
+                            className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-slate-200 transition hover:border-cyan-400/40 hover:bg-cyan-500/10"
                           >
-                            {action.label}
-                            <span aria-hidden>→</span>
+                            {q}
                           </button>
-                        ) : null}
+                        ))}
                       </div>
-                    );
-                  })}
-                  {botTyping ? (
-                    <div className="flex w-fit items-center gap-1 rounded-2xl rounded-tl-sm bg-white/5 px-3 py-2.5">
-                      <span className="bot-dot h-1.5 w-1.5 rounded-full bg-slate-300" />
-                      <span className="bot-dot h-1.5 w-1.5 rounded-full bg-slate-300" style={{ animationDelay: "0.15s" }} />
-                      <span className="bot-dot h-1.5 w-1.5 rounded-full bg-slate-300" style={{ animationDelay: "0.3s" }} />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {assistantMsgs.map((msg, index) => {
+                        const action = msg.from === "bot" ? msg.action : undefined;
+                        return (
+                          <div key={index} className={`flex flex-col ${msg.from === "user" ? "items-end" : "items-start"}`}>
+                            <p className={`w-fit max-w-[88%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-6 ${msg.from === "user" ? "rounded-tr-sm bg-cyan-500/20 font-medium text-cyan-100" : "rounded-tl-sm bg-white/5 text-slate-200"}`}>
+                              {msg.text}
+                            </p>
+                            {action ? (
+                              <button
+                                type="button"
+                                onClick={() => runAssistantAction(action.id)}
+                                className="mt-1.5 inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
+                                style={{ background: "linear-gradient(135deg, #22d3ee, #6366f1)" }}
+                              >
+                                {action.label}
+                                <span aria-hidden>→</span>
+                              </button>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                      {botTyping ? (
+                        <div className="flex w-fit items-center gap-1 rounded-2xl rounded-tl-sm bg-white/5 px-3 py-2.5">
+                          <span className="bot-dot h-1.5 w-1.5 rounded-full bg-slate-300" />
+                          <span className="bot-dot h-1.5 w-1.5 rounded-full bg-slate-300" style={{ animationDelay: "0.15s" }} />
+                          <span className="bot-dot h-1.5 w-1.5 rounded-full bg-slate-300" style={{ animationDelay: "0.3s" }} />
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                  {assistantDragOver ? (
+                    <div className="pointer-events-none absolute inset-2 flex items-center justify-center rounded-2xl border-2 border-dashed border-cyan-400/70 bg-cyan-500/10 text-sm font-semibold text-cyan-100">
+                      Soltá el Excel para completarlo
                     </div>
                   ) : null}
                 </div>
 
-                {/* Temas (categorias) + sugerencias: una sola barra delgada, scroll horizontal */}
-                <div className="border-t border-white/10 bg-white/[0.02]">
-                  <div className="flex gap-1.5 overflow-x-auto px-2.5 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {ASSISTANT_CATEGORIES.map((cat) => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setAssistantCat(cat)}
-                        className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition ${
-                          assistantCat === cat
-                            ? "bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm shadow-cyan-900/40"
-                            : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
+                {/* Sugerencias bajo demanda (no ocupan la pantalla) */}
+                {assistantSuggestOpen ? (
+                  <div className="border-t border-white/10 bg-white/[0.02]">
+                    <div className="flex gap-1.5 overflow-x-auto px-2.5 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      {ASSISTANT_CATEGORIES.map((cat) => (
+                        <button key={cat} type="button" onClick={() => setAssistantCat(cat)} className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold transition ${assistantCat === cat ? "text-white shadow-sm" : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"}`} style={assistantCat === cat ? { background: "linear-gradient(135deg, #22d3ee, #6366f1)" } : undefined}>
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5 overflow-x-auto px-2.5 pb-2 pt-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      {ASSISTANT_FAQS.filter((faq) => faq.cat === assistantCat).map((faq, index) => (
+                        <button key={index} type="button" onClick={() => { void pushAssistant(faq.q, assistantCtx); setAssistantSuggestOpen(false); }} className="shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-300 transition hover:border-cyan-400/40 hover:bg-cyan-500/10">
+                          {faq.q}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex gap-1.5 overflow-x-auto px-2.5 pb-2 pt-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {ASSISTANT_FAQS.filter((faq) => faq.cat === assistantCat).map((faq, index) => (
-                      <button
-                        key={index}
-                        type="button"
-                        onClick={() => void pushAssistant(faq.q, assistantCtx)}
-                        className="shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-slate-300 transition hover:border-cyan-400/40 hover:bg-cyan-500/10"
-                      >
-                        {faq.q}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                ) : null}
 
-                {/* Entrada de texto */}
+                {/* Entrada tipo pill: adjuntar Excel + escribir + enviar */}
                 <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void pushAssistant(assistantInput, assistantCtx);
-                  }}
+                  onSubmit={(event) => { event.preventDefault(); void pushAssistant(assistantInput, assistantCtx); }}
                   className="flex items-center gap-2 border-t border-white/10 p-2.5"
                 >
+                  <input ref={assistantFileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => { void handleAssistantFile(event.target.files?.[0]); event.target.value = ""; }} />
+                  <button type="button" onClick={() => assistantFileRef.current?.click()} title="Adjuntar Excel" aria-label="Adjuntar Excel" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10">
+                    <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+                  </button>
+                  <button type="button" onClick={() => setAssistantSuggestOpen((v) => !v)} title="Sugerencias" aria-label="Sugerencias" className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 transition ${assistantSuggestOpen ? "bg-cyan-500/20 text-cyan-200" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z" /></svg>
+                  </button>
                   <input
                     value={assistantInput}
                     onChange={(event) => setAssistantInput(event.target.value)}
-                    placeholder="Escriba su pregunta…"
-                    className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400"
+                    placeholder="Escribí lo que necesitás…"
+                    className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#18233a] px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400"
                   />
                   <button
                     type="submit"
                     disabled={!assistantInput.trim()}
-                    className="shrink-0 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+                    aria-label="Enviar"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition hover:opacity-90 disabled:opacity-40"
+                    style={{ background: "linear-gradient(135deg, #22d3ee, #3b82f6)" }}
                   >
-                    Enviar
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#07131f" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z" /></svg>
                   </button>
                 </form>
               </div>
@@ -14237,32 +14305,16 @@ export default function Home() {
               type="button"
               onClick={openAssistant}
               aria-label="Asistente virtual"
-              className={`flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-900/40 ring-2 ring-white/20 transition hover:scale-105 ${
+              className={`flex h-12 w-12 items-center justify-center rounded-full ring-2 ring-white/20 transition hover:scale-105 ${
                 assistantOpen ? "" : "bot-float"
               }`}
+              style={{ background: "linear-gradient(135deg, #22d3ee, #6366f1)", boxShadow: "0 12px 30px rgba(99,102,241,0.5)" }}
             >
-              {/* Robot asistente */}
-              <svg viewBox="0 0 40 40" className="h-7 w-7" aria-hidden="true">
-                {/* antena */}
-                <line x1="20" y1="4" x2="20" y2="9" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
-                <circle cx="20" cy="3.4" r="2.1" fill="#ffffff" />
-                {/* audifonos de asistente */}
-                <rect x="3.5" y="16" width="3.6" height="8.5" rx="1.8" fill="#ffffff" />
-                <rect x="32.9" y="16" width="3.6" height="8.5" rx="1.8" fill="#ffffff" />
-                {/* cabeza */}
-                <rect x="7" y="9" width="26" height="22" rx="8.5" fill="#ffffff" />
-                {/* ojos */}
-                <circle cx="15" cy="19" r="2.7" fill="#6d28d9" />
-                <circle cx="25" cy="19" r="2.7" fill="#6d28d9" />
-                {/* sonrisa (se mueve al escribir) */}
-                <path
-                  d="M14.5 24.5 q5.5 4.5 11 0"
-                  stroke="#0891b2"
-                  strokeWidth="2.1"
-                  strokeLinecap="round"
-                  fill="none"
-                  className={botTyping ? "bot-talk" : ""}
-                />
+              {/* Chispa IA */}
+              <svg viewBox="0 0 24 24" className="h-7 w-7" fill="#ffffff" aria-hidden="true">
+                <path d="M12 2.2l2.05 5.15 5.15 2.05-5.15 2.05L12 16.6l-2.05-5.15L4.8 9.4l5.15-2.05z" />
+                <path d="M18.7 14.2l.9 2.25 2.25.9-2.25.9-.9 2.25-.9-2.25-2.25-.9 2.25-.9z" opacity="0.9" />
+                <path d="M5 3.6l.62 1.55L7.17 5.77 5.62 6.4 5 7.95 4.38 6.4 2.83 5.77l1.55-.62z" opacity="0.85" />
               </svg>
             </button>
           </div>
