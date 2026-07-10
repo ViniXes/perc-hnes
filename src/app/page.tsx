@@ -6904,6 +6904,9 @@ export default function Home() {
   // ---- Comentarios de revision del SEPS (admin/supervisores/revisor) --------
   // Quien puede dejar comentarios en el SEPS de un servicio.
   const canCommentSeps = isAdmin || isSupervisor || isSepsStaff;
+  // Para el SERVICIO (no revisor): cuantos comentarios de revision tiene su SEPS,
+  // para destacarlos (badge en el menu + panel resaltado).
+  const serviceSepsCommentCount = !canCommentSeps ? sepsComments.length : 0;
 
   // Agrega un comentario y lo GUARDA de inmediato en el doc del mes/servicio
   // (merge, sin tocar valores), para que el servicio lo vea aunque no se guarde
@@ -8366,15 +8369,26 @@ export default function Home() {
           {sepsPhaseLabel}. Los totales y la fila de suma se calculan solos.
         </p>
 
-        {/* Comentarios de revision: los deja el revisor/admin; los VE el servicio. */}
+        {/* Comentarios de revision: los deja el revisor/admin; los VE el servicio.
+            Para el SERVICIO con notas, la tarjeta se resalta y pulsa para que las note. */}
         {sepsComments.length > 0 || canCommentSeps ? (
-          <div className={`mt-3 rounded-2xl border p-3 sm:p-4 ${isLightPanelTheme ? "border-amber-200 bg-amber-50/60" : "border-amber-400/20 bg-amber-400/[0.06]"}`}>
+          <div className={`mt-3 rounded-2xl border p-3 sm:p-4 ${serviceSepsCommentCount > 0 ? "seps-comment-glow " : ""}${isLightPanelTheme ? (serviceSepsCommentCount > 0 ? "border-amber-400 bg-amber-100/70" : "border-amber-200 bg-amber-50/60") : serviceSepsCommentCount > 0 ? "border-amber-400/60 bg-amber-400/[0.12]" : "border-amber-400/20 bg-amber-400/[0.06]"}`}>
             <div className="flex items-center gap-2">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isLightPanelTheme ? "text-amber-600" : "text-amber-300"} aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
               <span className={`text-sm font-bold ${isLightPanelTheme ? "text-amber-800" : "text-amber-200"}`}>
                 Comentarios de revisión
               </span>
+              {serviceSepsCommentCount > 0 ? (
+                <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-bold text-white">
+                  {serviceSepsCommentCount}
+                </span>
+              ) : null}
             </div>
+            {serviceSepsCommentCount > 0 ? (
+              <p className={`mt-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${isLightPanelTheme ? "bg-amber-200/60 text-amber-900" : "bg-amber-400/15 text-amber-100"}`}>
+                📌 El revisor dejó {serviceSepsCommentCount === 1 ? "una nota" : `${serviceSepsCommentCount} notas`} para tu servicio. Revisá y corregí lo indicado.
+              </p>
+            ) : null}
             {sepsComments.length > 0 ? (
               <ul className="mt-3 space-y-2">
                 {sepsComments.map((c) => (
@@ -10332,8 +10346,12 @@ export default function Home() {
             <nav className="mt-5 grid grid-cols-3 gap-2 xl:mt-3 xl:block xl:space-y-0.5">
               {sidebarItems.map((item) => {
                 const isActive = activeSidebarSection === item.id;
-                // Alerta roja cuando hay solicitudes pendientes.
-                const hasAlert = item.id === "panel-requests" && pendingRequestCount > 0;
+                // Alerta roja cuando hay solicitudes pendientes, o cuando el SERVICIO
+                // tiene comentarios de revision sin leer en su SEPS.
+                const sepsCommentAlert = item.id === "panel-seps" && serviceSepsCommentCount > 0;
+                const hasAlert =
+                  (item.id === "panel-requests" && pendingRequestCount > 0) || sepsCommentAlert;
+                const alertCount = sepsCommentAlert ? serviceSepsCommentCount : pendingRequestCount;
                 const tileGradient =
                   SIDEBAR_TILE_GRADIENT[item.id] ?? "from-cyan-500 to-blue-600";
                 const itemChildren = (item as { children?: { id: string; label: string; detail: string; badge: string; icon?: string }[] }).children;
@@ -10398,7 +10416,7 @@ export default function Home() {
                       {SIDEBAR_ICON_BY_ID[item.id] ?? item.badge}
                       {hasAlert ? (
                         <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white ring-2 ring-[#0e1626]">
-                          {pendingRequestCount}
+                          {alertCount}
                         </span>
                       ) : null}
                     </span>
