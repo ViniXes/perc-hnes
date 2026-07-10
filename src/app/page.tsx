@@ -54,6 +54,8 @@ import {
   getSepsTemplate,
   SEPS_LAB_PROC_COLS,
   SEPS_LAB_RESULT_COLS,
+  type SepsRow,
+  type SepsTable,
   type SepsTemplate,
 } from "@/lib/seps-templates";
 import { getHorasTemplate, type HorasTemplate } from "@/lib/horas-templates";
@@ -2608,6 +2610,42 @@ async function fetchSavedDataForPeriod(service: ServiceDefinition, periodId: str
 // (se recalculan en vivo). Doc id en coleccion "sepsTabulators".
 type SepsValues = Record<string, Record<string, string>>;
 
+// Fila agregada a mano a una tabla SEPS (admin/supervisor). `tableId` = tabla en
+// la que va; `afterKey` = fila tras la cual se inserta; hereda el grupo del ancla.
+type SepsExtraRow = { tableId: string; key: string; label: string; afterKey: string };
+
+// Devuelve las filas EFECTIVAS de una tabla SEPS: filas de plantilla (sin las
+// ocultas) con las filas extra insertadas tras su ancla (heredando su grupo).
+function buildSepsEffectiveRows(
+  table: SepsTable,
+  extraRows: SepsExtraRow[],
+  hiddenKeys: string[],
+): (SepsRow & { isExtra?: boolean })[] {
+  const hidden = new Set(hiddenKeys);
+  const groupsOf = (r: SepsRow): string[] =>
+    r.groups && r.groups.length > 0 ? r.groups : r.group ? [r.group] : [];
+  const list: (SepsRow & { isExtra?: boolean })[] = table.rows
+    .filter((r) => !hidden.has(r.key))
+    .map((r) => ({ ...r }));
+  const groupByKey = new Map<string, string[]>(list.map((r) => [r.key, groupsOf(r)]));
+  const extras = extraRows.filter((e) => e.tableId === table.id && !hidden.has(e.key));
+  const insertedAfter: Record<string, number> = {};
+  extras.forEach((ex) => {
+    const g = groupByKey.get(ex.afterKey) || [];
+    const row: SepsRow & { isExtra?: boolean } = { key: ex.key, label: ex.label, groups: g, isExtra: true };
+    groupByKey.set(ex.key, g);
+    const idx = list.findIndex((r) => r.key === ex.afterKey);
+    if (idx < 0) {
+      list.push(row);
+      return;
+    }
+    const off = insertedAfter[ex.afterKey] || 0;
+    list.splice(idx + 1 + off, 0, row);
+    insertedAfter[ex.afterKey] = off + 1;
+  });
+  return list;
+}
+
 function buildEmptySeps(template: SepsTemplate, periodId: string): SepsValues {
   const values: SepsValues = {};
 
@@ -2637,8 +2675,20 @@ function mergeSepsWithTemplate(
   template: SepsTemplate,
   periodId: string,
   saved?: Record<string, Record<string, unknown>>,
+  extraKeys: string[] = [],
 ): SepsValues {
   const values = buildEmptySeps(template, periodId);
+
+  // Filas agregadas a mano: se les crea su fila de dias vacia para que sus
+  // valores se conserven al guardar/cargar (no estan en la plantilla oficial).
+  if (template.kind !== "matrix") {
+    const days = getDayColumns(periodId);
+    for (const key of extraKeys) {
+      if (!values[key]) {
+        values[key] = Object.fromEntries(days.map((day) => [day, ""]));
+      }
+    }
+  }
 
   if (!saved) {
     return values;
@@ -2656,20 +2706,31 @@ function mergeSepsWithTemplate(
   return values;
 }
 
+type SepsData = { values: SepsValues; extraRows: SepsExtraRow[]; hiddenKeys: string[] };
+
 async function fetchSepsDataForPeriod(
   template: SepsTemplate,
   periodId: string,
-): Promise<SepsValues> {
+): Promise<SepsData> {
   const snapshot = await getDoc(
     doc(db, "sepsTabulators", `${periodId}__${template.serviceId}`),
   );
 
   if (!snapshot.exists()) {
-    return buildEmptySeps(template, periodId);
+    return { values: buildEmptySeps(template, periodId), extraRows: [], hiddenKeys: [] };
   }
 
-  const data = snapshot.data() as { values?: Record<string, Record<string, unknown>> };
-  return mergeSepsWithTemplate(template, periodId, data.values);
+  const data = snapshot.data() as {
+    values?: Record<string, Record<string, unknown>>;
+    extraRows?: SepsExtraRow[];
+    hiddenKeys?: string[];
+  };
+  const extraRows = Array.isArray(data.extraRows) ? data.extraRows : [];
+  return {
+    values: mergeSepsWithTemplate(template, periodId, data.values, extraRows.map((e) => e.key)),
+    extraRows,
+    hiddenKeys: Array.isArray(data.hiddenKeys) ? data.hiddenKeys : [],
+  };
 }
 
 function hasAnySepsValue(values: SepsValues | undefined) {
@@ -3327,6 +3388,10 @@ export default function Home() {
   const [adminPickerGroup, setAdminPickerGroup] = useState<string | null>(null);
   const [tableValues, setTableValues] = useState<TableValues>({});
   const [sepsValues, setSepsValues] = useState<SepsValues>({});
+  // Filas agregadas a mano y filas ocultas del SEPS (admin/supervisores). Se
+  // guardan POR MES junto con los valores del tabulador SEPS del servicio.
+  const [sepsExtraRows, setSepsExtraRows] = useState<SepsExtraRow[]>([]);
+  const [sepsHiddenKeys, setSepsHiddenKeys] = useState<string[]>([]);
   const [isSavingSeps, setIsSavingSeps] = useState(false);
   const [isLoadingSeps, setIsLoadingSeps] = useState(false);
   // Tablas SEPS abiertas (colapsables). Por defecto solo la primera.
@@ -4295,14 +4360,18 @@ export default function Home() {
       if (!sepsTemplate) {
         if (!cancelled) {
           setSepsValues({});
+          setSepsExtraRows([]);
+          setSepsHiddenKeys([]);
         }
         return;
       }
 
       try {
-        const values = await fetchSepsDataForPeriod(sepsTemplate, sepsPeriodId);
+        const data = await fetchSepsDataForPeriod(sepsTemplate, sepsPeriodId);
         if (!cancelled) {
-          setSepsValues(values);
+          setSepsValues(data.values);
+          setSepsExtraRows(data.extraRows);
+          setSepsHiddenKeys(data.hiddenKeys);
         }
       } catch (sepsError) {
         if (await handleFirestoreError(sepsError)) {
@@ -4310,6 +4379,8 @@ export default function Home() {
         }
         if (!cancelled) {
           setSepsValues(buildEmptySeps(sepsTemplate, sepsPeriodId));
+          setSepsExtraRows([]);
+          setSepsHiddenKeys([]);
         }
       }
     })();
@@ -6610,6 +6681,50 @@ export default function Home() {
     }));
   }
 
+  // ---- Filas SEPS agregadas/ocultas (solo admin y supervisores) -------------
+  function handleAddSepsRow(tableId: string, anchorKey: string) {
+    if (!(isAdmin || isSupervisor)) {
+      return;
+    }
+    const key = `sx-${Math.floor(Date.now())}-${sepsExtraRows.length + 1}`;
+    setSepsExtraRows((cur) => [...cur, { tableId, key, label: "NUEVA FILA", afterKey: anchorKey }]);
+    setMessage("Fila agregada al SEPS. Escribí su nombre y no olvides «Guardar».");
+  }
+
+  function handleRenameSepsRow(key: string, label: string) {
+    if (!(isAdmin || isSupervisor)) {
+      return;
+    }
+    setSepsExtraRows((cur) => cur.map((r) => (r.key === key ? { ...r, label } : r)));
+  }
+
+  function handleRemoveSepsRow(key: string, isExtra: boolean, label: string) {
+    if (!(isAdmin || isSupervisor)) {
+      return;
+    }
+    if (isExtra) {
+      setSepsExtraRows((cur) => cur.filter((r) => r.key !== key));
+      return;
+    }
+    const ok =
+      typeof window === "undefined" ||
+      window.confirm(
+        `¿Ocultar la fila oficial «${label}»? No se borran sus datos y podés restaurarla luego. Recordá guardar.`,
+      );
+    if (!ok) {
+      return;
+    }
+    setSepsHiddenKeys((cur) => (cur.includes(key) ? cur : [...cur, key]));
+  }
+
+  function handleRestoreSepsRows() {
+    if (!(isAdmin || isSupervisor)) {
+      return;
+    }
+    setSepsHiddenKeys([]);
+    setMessage("Filas SEPS oficiales restauradas. Recordá «Guardar».");
+  }
+
   async function handleSaveSeps() {
     if (!user || !sepsTemplate || !serviceProfile || firestoreUnavailable) {
       return;
@@ -6650,7 +6765,12 @@ export default function Home() {
     setError("");
     setMessage("");
 
-    const normalizedValues = mergeSepsWithTemplate(sepsTemplate, targetPeriod, sepsValues);
+    const normalizedValues = mergeSepsWithTemplate(
+      sepsTemplate,
+      targetPeriod,
+      sepsValues,
+      sepsExtraRows.map((e) => e.key),
+    );
 
     try {
       await setDoc(
@@ -6664,6 +6784,8 @@ export default function Home() {
           userId: user.uid,
           userEmail: user.email || "",
           values: normalizedValues,
+          extraRows: sepsExtraRows,
+          hiddenKeys: sepsHiddenKeys,
           updatedAt: serverTimestamp(),
         },
         { merge: true },
@@ -6694,8 +6816,10 @@ export default function Home() {
     setIsLoadingSeps(true);
 
     try {
-      const values = await fetchSepsDataForPeriod(sepsTemplate, sepsPeriodId);
-      setSepsValues(values);
+      const data = await fetchSepsDataForPeriod(sepsTemplate, sepsPeriodId);
+      setSepsValues(data.values);
+      setSepsExtraRows(data.extraRows);
+      setSepsHiddenKeys(data.hiddenKeys);
       setMessage(`Datos SEPS recuperados (${sepsPeriodLabel}).`);
     } catch (loadError) {
       if (await handleFirestoreError(loadError)) {
@@ -6718,8 +6842,10 @@ export default function Home() {
     setIsLoadingSeps(true);
 
     try {
-      const values = await fetchSepsDataForPeriod(sepsTemplate, period);
-      setSepsValues(values);
+      const data = await fetchSepsDataForPeriod(sepsTemplate, period);
+      setSepsValues(data.values);
+      setSepsExtraRows(data.extraRows);
+      setSepsHiddenKeys(data.hiddenKeys);
       setSepsViewPeriod(period === sepsPeriodId ? null : period);
 
       if (period !== sepsPeriodId) {
@@ -8091,7 +8217,10 @@ export default function Home() {
             // Grupos ANIDADOS (N niveles), igual que el Excel. Cada fila se normaliza
             // a un arreglo de grupos (externo -> interno); cada nivel se dibuja en su
             // propia columna con celdas combinadas (rowspan).
-            const rowGroups = table.rows.map((row) =>
+            // Filas EFECTIVAS: plantilla + filas agregadas a mano - filas ocultas.
+            const effRows = buildSepsEffectiveRows(table, sepsExtraRows, sepsHiddenKeys);
+            const canManageTabRows = isAdmin || isSupervisor;
+            const rowGroups = effRows.map((row) =>
               row.groups && row.groups.length > 0
                 ? row.groups
                 : row.group
@@ -8104,9 +8233,9 @@ export default function Home() {
             // (0 = no inicia: la cubre un rowspan de arriba, o la fila no llega a ese nivel).
             const groupSpans: number[][] = [];
             for (let L = 0; L < maxDepth; L += 1) {
-              const spans = new Array<number>(table.rows.length).fill(0);
+              const spans = new Array<number>(effRows.length).fill(0);
               let i = 0;
-              while (i < table.rows.length) {
+              while (i < effRows.length) {
                 if (rowGroups[i].length <= L) {
                   i += 1;
                   continue;
@@ -8114,7 +8243,7 @@ export default function Home() {
                 const prefix = rowGroups[i].slice(0, L + 1).join("");
                 let j = i + 1;
                 while (
-                  j < table.rows.length &&
+                  j < effRows.length &&
                   rowGroups[j].length > L &&
                   rowGroups[j].slice(0, L + 1).join("") === prefix
                 ) {
@@ -8183,11 +8312,12 @@ export default function Home() {
                           </th>
                         ))}
                         <th className={`px-3 py-2 text-center font-semibold ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>Total</th>
+                        {canManageTabRows ? <th className="px-1 py-2" /> : null}
                       </tr>
                     </thead>
                     <tbody>
-                      {table.rows.map((row, index) => (
-                        <tr key={row.key} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                      {effRows.map((row, index) => (
+                        <tr key={row.key} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"} ${row.isExtra ? (isLightPanelTheme ? "bg-emerald-50/50" : "bg-emerald-500/5") : ""}`}>
                           {Array.from({ length: maxDepth }).map((_, L) =>
                             groupSpans[L][index] > 0 ? (
                               <td
@@ -8206,7 +8336,16 @@ export default function Home() {
                             }`}
                             style={row.indent ? { paddingLeft: `${12 + row.indent * 14}px` } : undefined}
                           >
-                            {row.label}
+                            {row.isExtra && canManageTabRows ? (
+                              <input
+                                value={row.label}
+                                onChange={(event) => handleRenameSepsRow(row.key, event.target.value)}
+                                placeholder="Nombre de la fila"
+                                className={`w-full min-w-[8rem] rounded border px-2 py-1 text-xs outline-none focus:border-emerald-400 ${isLightPanelTheme ? "border-slate-200 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`}
+                              />
+                            ) : (
+                              row.label
+                            )}
                           </td>
                           {sepsDayColumns.map((day) => (
                             <td key={day} className="px-0.5 py-1 text-center">
@@ -8230,6 +8369,28 @@ export default function Home() {
                           <td className={`px-3 py-1.5 text-center font-semibold text-cyan-100 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>
                             {row.hideTotal ? "" : sepsRowTotal(row)}
                           </td>
+                          {canManageTabRows ? (
+                            <td className="whitespace-nowrap px-1 py-1 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleAddSepsRow(table.id, row.key)}
+                                title="Agregar una fila debajo"
+                                aria-label="Agregar una fila debajo"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-emerald-500/10 hover:text-emerald-300"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSepsRow(row.key, !!row.isExtra, row.label)}
+                                title={row.isExtra ? "Quitar esta fila" : "Ocultar esta fila oficial"}
+                                aria-label={row.isExtra ? "Quitar esta fila" : "Ocultar esta fila oficial"}
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-300"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>
+                              </button>
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                     </tbody>
@@ -8239,6 +8400,19 @@ export default function Home() {
             );
           })}
         </div>
+
+        {(isAdmin || isSupervisor) && sepsHiddenKeys.length > 0 ? (
+          <div className={`mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] ${isLightPanelTheme ? "border-amber-200 bg-amber-50/70 text-amber-800" : "border-amber-400/20 bg-amber-400/5 text-amber-200"}`}>
+            <span>Hay {sepsHiddenKeys.length} fila(s) oficial(es) oculta(s). Sus datos siguen guardados.</span>
+            <button
+              type="button"
+              onClick={handleRestoreSepsRows}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-semibold transition ${isLightPanelTheme ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-amber-400/15 text-amber-100 hover:bg-amber-400/25"}`}
+            >
+              Restaurar filas ocultas
+            </button>
+          </div>
+        ) : null}
 
         {/* Acciones del tabulador SEPS. En historial cambia segun el rol. */}
         <div className={`mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
