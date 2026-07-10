@@ -6774,6 +6774,70 @@ export default function Home() {
     }));
   }
 
+  // Navegacion tipo Excel entre celdas SEPS con las 4 flechas (y Enter = abajo).
+  // ArrowUp/Down se mueven entre filas capturables (saltan las de solo lectura);
+  // ArrowLeft/Right cambian de dia solo cuando el cursor esta al borde del texto.
+  function handleSepsKeyNav(
+    event: ReactKeyboardEvent<HTMLInputElement>,
+    tableId: string,
+    rowKey: string,
+    day: string,
+  ) {
+    const key = event.key;
+    if (
+      key !== "ArrowUp" &&
+      key !== "ArrowDown" &&
+      key !== "ArrowLeft" &&
+      key !== "ArrowRight" &&
+      key !== "Enter"
+    ) {
+      return;
+    }
+    const table = (sepsTemplate?.tables ?? []).find((t) => t.id === tableId);
+    if (!table) {
+      return;
+    }
+    const rows = buildSepsEffectiveRows(table, sepsExtraRows, sepsHiddenKeys).filter(
+      (r) => !r.readOnly,
+    );
+    const days = sepsDayColumns;
+    const rIdx = rows.findIndex((r) => r.key === rowKey);
+    const cIdx = days.indexOf(day);
+    if (rIdx < 0 || cIdx < 0) {
+      return;
+    }
+    const input = event.currentTarget;
+    const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
+    const atEnd =
+      input.selectionStart === input.value.length &&
+      input.selectionEnd === input.value.length;
+    let tr = rIdx;
+    let tc = cIdx;
+    if (key === "ArrowUp") {
+      tr = rIdx - 1;
+    } else if (key === "ArrowDown" || key === "Enter") {
+      tr = rIdx + 1;
+    } else if (key === "ArrowLeft") {
+      if (!atStart) return;
+      tc = cIdx - 1;
+    } else if (key === "ArrowRight") {
+      if (!atEnd) return;
+      tc = cIdx + 1;
+    }
+    if (tr < 0 || tr >= rows.length || tc < 0 || tc >= days.length) {
+      return;
+    }
+    event.preventDefault();
+    const target = window.document.getElementById(
+      `seps-${tableId}-${rows[tr].key}-${days[tc]}`,
+    );
+    if (target instanceof HTMLInputElement) {
+      target.focus();
+      target.select();
+      target.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }
+
   // ---- Filas SEPS agregadas/ocultas (solo admin y supervisores) -------------
   function handleAddSepsRow(tableId: string, anchorKey: string) {
     if (!(isAdmin || isSupervisor)) {
@@ -7591,11 +7655,32 @@ export default function Home() {
       const section = window.document.getElementById(sectionId);
       if (section) {
         section.scrollIntoView({ behavior: "smooth", block: "start" });
+        highlightLocatedSection(section);
       } else if (attempt < 5) {
         window.requestAnimationFrame(() => scrollToSection(attempt + 1));
       }
     };
     window.requestAnimationFrame(() => scrollToSection(0));
+  }
+
+  // Enciende una "luz" blanca suave en el borde (las 4 lineas) de la seccion a la
+  // que se acaba de navegar, ~2 s, para ubicar rapido lo que se buscaba. Usa la
+  // Web Animations API para no interferir con el className que maneja React.
+  function highlightLocatedSection(section: HTMLElement) {
+    if (typeof section.animate !== "function") {
+      return;
+    }
+    section.animate(
+      [
+        { boxShadow: "0 0 0 2px rgba(255,255,255,0.95), 0 0 24px 6px rgba(255,255,255,0.55)" },
+        {
+          boxShadow: "0 0 0 2px rgba(255,255,255,0.6), 0 0 16px 3px rgba(255,255,255,0.3)",
+          offset: 0.7,
+        },
+        { boxShadow: "0 0 0 0 rgba(255,255,255,0)" },
+      ],
+      { duration: 2000, easing: "ease-out" },
+    );
   }
 
   // Logica compartida al tocar un item del menu (sidebar y barra inferior movil).
@@ -8476,9 +8561,13 @@ export default function Home() {
                                 </span>
                               ) : (
                                 <input
+                                  id={`seps-${table.id}-${row.key}-${day}`}
                                   value={sepsValues[row.key]?.[day] ?? ""}
                                   onChange={(event) =>
                                     handleSepsCellChange(row.key, day, event.target.value)
+                                  }
+                                  onKeyDown={(event) =>
+                                    handleSepsKeyNav(event, table.id, row.key, day)
                                   }
                                   disabled={sepsEditingBlocked}
                                   inputMode="numeric"
