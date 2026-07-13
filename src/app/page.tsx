@@ -1110,6 +1110,9 @@ const SUBMENU_ICON_TINT: Record<string, string> = {
   censo: "bg-teal-500/15 text-teal-300",
   insumos: "bg-indigo-500/15 text-indigo-300",
   consolidado: "bg-sky-500/15 text-sky-300",
+  servicios: "bg-sky-500/15 text-sky-300",
+  seps: "bg-blue-500/15 text-blue-300",
+  horas: "bg-amber-500/15 text-amber-300",
 };
 
 // Icono propio de cada submenu bajo PERC (Abrir PERC / Monitoreo / Censo / Insumos).
@@ -1154,6 +1157,32 @@ function renderSubmenuIcon(icon: string | undefined): ReactNode {
         <path d="M14 3v4a1 1 0 0 0 1 1h4" />
         <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" />
         <path d="M12 12v5m0 0-2-2m2 2 2-2" />
+      </svg>
+    );
+  }
+  if (icon === "servicios") {
+    return (
+      <svg {...common}>
+        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      </svg>
+    );
+  }
+  if (icon === "seps") {
+    return (
+      <svg {...common}>
+        <path d="M3 3v18h18" />
+        <path d="m7 14 3-3 3 3 4-5" />
+      </svg>
+    );
+  }
+  if (icon === "horas") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
       </svg>
     );
   }
@@ -7836,9 +7865,15 @@ export default function Home() {
   // Logica compartida al tocar un item del menu (sidebar y barra inferior movil).
   // `requestable` se pasa desde el render porque vive dentro del bloque de sesion.
   function runSidebarItem(itemId: string, requestable: ModuleId[] = []) {
-    if (itemId === "panel-monitor-perc") {
-      // Submenu "Monitoreo" bajo PERC: abre el modal de servicios que completaron.
-      setStatsModule("perc");
+    if (itemId.startsWith("panel-monitor-")) {
+      // Submenu "Monitoreo" bajo cada modulo: abre el modal de servicios que
+      // completaron. panel-monitor-perc/seps/horas -> perc/sesps/distribucion.
+      const monitorModule: Record<string, ModuleId> = {
+        "panel-monitor-perc": "perc",
+        "panel-monitor-seps": "sesps",
+        "panel-monitor-horas": "distribucion",
+      };
+      setStatsModule(monitorModule[itemId] ?? "perc");
       setShowStatsModal(true);
     } else if (itemId.startsWith("panel-module-")) {
       setStatsModule(itemId.replace("panel-module-", "") as ModuleId);
@@ -8990,68 +9025,67 @@ export default function Home() {
       label: mod.id === "distribucion" ? "Dis/horas" : mod.name,
       detail: "Ir al tabulador",
       badge: moduleBadges[mod.id],
-      // Submenu bajo PERC: Monitoreo (modal), Abrir PERC, Censo, Insumos.
-      children:
-        mod.id === "perc" && (canViewCenso || canViewInsumos || isAdmin || isSupervisor)
-          ? [
-              // Al desplegarse, PERC deja de abrir directo; este item reabre el tabulador.
-              ...(currentService
-                ? [
-                    {
-                      id: "panel-tabulator",
-                      label: "Abrir PERC",
-                      detail: "Ir al tabulador PERC",
-                      badge: "PE",
-                      icon: "perc",
-                    },
-                  ]
-                : []),
-              ...(isAdmin || isSupervisor
-                ? [
-                    {
-                      id: "panel-monitor-perc",
-                      label: "Monitoreo",
-                      detail: "Servicios que completaron",
-                      badge: "MO",
-                      icon: "monitor",
-                    },
-                  ]
-                : []),
-              ...(canViewCenso
-                ? [
-                    {
-                      id: "panel-censo",
-                      label: "Censo diario de pacientes",
-                      detail: "Solo supervisión",
-                      badge: "CD",
-                      icon: "censo",
-                    },
-                  ]
-                : []),
-              ...(canViewInsumos
-                ? [
-                    {
-                      id: "panel-insumos",
-                      label: "Insumos de Almacén",
-                      detail: "Costos de insumos",
-                      badge: "IA",
-                      icon: "insumos",
-                    },
-                  ]
-                : []),
-              ...(isAdmin
-                ? [
-                    {
-                      id: "panel-admin-export",
-                      label: "Consolidados PERC",
-                      detail: "Descarga consolidado",
-                      badge: "XL",
-                      icon: "consolidado",
-                    },
-                  ]
-                : []),
-            ]
-          : undefined,
+      // Submenu por modulo (solo admin/supervisores lo despliegan en SEPS y Horas):
+      // PERC -> Abrir/Monitoreo/Censo/Insumos/Consolidados/PERC Servicios.
+      // SEPS -> Abrir SEPS/Monitoreo/SEPS Servicios. Horas -> igual con Horas.
+      // "X Servicios" lleva a la ventana "ver tabuladores por servicio" (panel-services).
+      children: (() => {
+        const canManage = isAdmin || isSupervisor;
+        const serviciosChild = (label: string) => ({
+          id: "panel-services",
+          label,
+          detail: "Ver tabuladores por servicio",
+          badge: "SV",
+          icon: "servicios",
+        });
+        const monitorChild = (id: string) => ({
+          id,
+          label: "Monitoreo",
+          detail: "Servicios que completaron",
+          badge: "MO",
+          icon: "monitor",
+        });
+        if (mod.id === "perc") {
+          if (!(canViewCenso || canViewInsumos || canManage)) return undefined;
+          return [
+            ...(currentService
+              ? [{ id: "panel-tabulator", label: "Abrir PERC", detail: "Ir al tabulador PERC", badge: "PE", icon: "perc" }]
+              : []),
+            ...(canManage ? [monitorChild("panel-monitor-perc")] : []),
+            ...(canViewCenso
+              ? [{ id: "panel-censo", label: "Censo diario de pacientes", detail: "Solo supervisión", badge: "CD", icon: "censo" }]
+              : []),
+            ...(canViewInsumos
+              ? [{ id: "panel-insumos", label: "Insumos de Almacén", detail: "Costos de insumos", badge: "IA", icon: "insumos" }]
+              : []),
+            ...(isAdmin
+              ? [{ id: "panel-admin-export", label: "Consolidados PERC", detail: "Descarga consolidado", badge: "XL", icon: "consolidado" }]
+              : []),
+            ...(canManage ? [serviciosChild("PERC Servicios")] : []),
+          ];
+        }
+        if (mod.id === "sesps") {
+          if (!canManage) return undefined;
+          return [
+            ...(sepsTemplate
+              ? [{ id: "panel-seps", label: "Abrir SEPS", detail: "Ir al tabulador SEPS", badge: "SE", icon: "seps" }]
+              : []),
+            monitorChild("panel-monitor-seps"),
+            serviciosChild("SEPS Servicios"),
+          ];
+        }
+        if (mod.id === "distribucion") {
+          if (!canManage) return undefined;
+          return [
+            ...(currentService
+              ? [{ id: "panel-horas", label: "Abrir Dis/horas", detail: "Ir al tabulador de Horas", badge: "HO", icon: "horas" }]
+              : []),
+            monitorChild("panel-monitor-horas"),
+            serviciosChild("Horas Servicios"),
+          ];
+        }
+        return undefined;
+      })(),
     }));
 
     // Seccion "Distribucion de Horas": aun sin plantilla propia. Da un destino con
@@ -10160,17 +10194,8 @@ export default function Home() {
         detail: isAdmin ? "Resumen general" : "Estado del periodo",
         badge: "IN",
       },
-      // Elegir servicio (admin/supervisor): vista propia "Servicios" en movil.
-      ...(isAdmin || isSupervisor
-        ? [
-            {
-              id: "panel-services",
-              label: "Servicios",
-              detail: "Elegir servicio para ver sus tabuladores",
-              badge: "SV",
-            },
-          ]
-        : []),
+      // "Servicios" ya no es un item suelto: cada modulo (PERC/SEPS/Horas) lo
+      // ofrece como submenu "X Servicios" que abre la misma vista panel-services.
       ...moduleSidebarItems,
       {
         id: "panel-docs",
@@ -10534,7 +10559,7 @@ export default function Home() {
                                 typeof window !== "undefined" && window.innerWidth < 1280;
                               // Los items tipo modal (Monitoreo) abren el modal en PC y movil.
                               const isModalChild =
-                                child.id === "panel-monitor-perc" ||
+                                child.id.startsWith("panel-monitor-") ||
                                 child.id.startsWith("panel-module-");
                               if (isMobile && !isModalChild) {
                                 setMobileView(child.id);
