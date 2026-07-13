@@ -101,11 +101,12 @@ service cloud.firestore {
     match /insumosAlmacen/{periodId} {
       allow read: if isSignedIn()
         && (isAdmin()
+            || userProfile().role == 'admin'
             || userProfile().role == 'supervisor'
             || userProfile().serviceId == 'almacen');
       allow write: if isSignedIn()
         && (isAdmin()
-            || userProfile().role == 'supervisor'
+            || userProfile().role == 'admin'
             || userProfile().serviceId == 'almacen');
     }
     // Solicitudes de registro de jefes de servicio: cualquiera puede CREAR su
