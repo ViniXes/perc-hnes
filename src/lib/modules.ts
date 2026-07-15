@@ -132,6 +132,8 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   // Transporte General: SOLO PERC. Su Distribucion de Horas se reporta dentro del
   // servicio "Servicios Varios" (Saneamiento + Transporte), no aqui.
   "transporte-general": ["perc"],
+  // Saneamiento Ambiental (Medio Ambiente): PERC y SEPS.
+  "saneamiento-ambiental": ["perc", "sesps"],
   // Trabajo Social: PERC, SEPS y Distribucion de Horas.
   "trabajo-social": ["perc", "sesps", "distribucion"],
   // Laboratorio Clinico: PERC, SEPS (matricial por examen) y Horas.
