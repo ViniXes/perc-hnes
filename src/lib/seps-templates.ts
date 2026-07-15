@@ -13,6 +13,7 @@ import { BANCO_SANGRE_TEMPLATE } from "@/lib/seps-banco-sangre";
 import { FARMACIA_TEMPLATE } from "@/lib/seps-farmacia";
 import { FISIOTERAPIA_TEMPLATE } from "@/lib/seps-fisioterapia";
 import { LABORATORIO_TEMPLATE } from "@/lib/seps-laboratorio";
+import { RADIOLOGIA_TEMPLATE } from "@/lib/seps-radiologia";
 import { NUTRICION_TEMPLATE } from "@/lib/seps-nutricion";
 import { PSICOLOGIA_TEMPLATE } from "@/lib/seps-psicologia";
 import { TERAPIA_RESPIRATORIA_TEMPLATE } from "@/lib/seps-terapia-respiratoria";
@@ -163,6 +164,7 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "servicio-farmaceutico": FARMACIA_TEMPLATE,
   // Laboratorio Clinico (formato matricial por examen).
   "laboratorio-clinico": LABORATORIO_TEMPLATE,
+  radiologia: RADIOLOGIA_TEMPLATE,
   // Fisioterapia (= servicio "terapia-fisica"). Plantilla grande (8 tablas)
   // auto-generada desde el Excel oficial "FISIOTERAPIA_1.xlsx" (hoja MES ACTUAL).
   "terapia-fisica": FISIOTERAPIA_TEMPLATE,
