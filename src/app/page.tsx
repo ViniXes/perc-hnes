@@ -8865,6 +8865,26 @@ export default function Home() {
                         </tr>
                       ))}
                     </tbody>
+                    {table.showColumnTotals ? (
+                      <tfoot>
+                        <tr className={`border-t-2 font-semibold ${isLightPanelTheme ? "border-slate-300 bg-slate-100 text-slate-800" : "border-white/20 bg-[#243049] text-white"}`}>
+                          <td
+                            colSpan={maxDepth + 1}
+                            className={`sticky left-0 z-10 px-3 py-2 text-left uppercase tracking-wide ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}
+                          >
+                            Total
+                          </td>
+                          {sepsDayColumns.map((day) => (
+                            <td key={day} className="px-1 py-2 text-center text-cyan-200">
+                              {table.rows.reduce((acc, r) => acc + sepsDayCell(r, day), 0)}
+                            </td>
+                          ))}
+                          <td className={`px-3 py-2 text-center font-extrabold ${isLightPanelTheme ? "bg-slate-200 text-cyan-700" : "bg-[#1a2334] text-cyan-200"}`}>
+                            {table.rows.reduce((acc, r) => acc + sepsRowTotal(r), 0)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    ) : null}
                   </table>
                 </div>
               </div>

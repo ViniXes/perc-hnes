@@ -15,6 +15,7 @@ import { FISIOTERAPIA_TEMPLATE } from "@/lib/seps-fisioterapia";
 import { LABORATORIO_TEMPLATE } from "@/lib/seps-laboratorio";
 import { NUTRICION_TEMPLATE } from "@/lib/seps-nutricion";
 import { PSICOLOGIA_TEMPLATE } from "@/lib/seps-psicologia";
+import { TERAPIA_RESPIRATORIA_TEMPLATE } from "@/lib/seps-terapia-respiratoria";
 
 export type SepsRow = {
   /** Id estable para guardar (no cambia aunque cambie la etiqueta). */
@@ -50,6 +51,8 @@ export type SepsTable = {
   subtitle?: string;
   /** Etiqueta de la primera columna (por defecto "Detalle"). */
   detailLabel?: string;
+  /** Si true, dibuja una fila de totales por columna (por dia + total general). */
+  showColumnTotals?: boolean;
   rows: SepsRow[];
 };
 
@@ -163,6 +166,9 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   // Fisioterapia (= servicio "terapia-fisica"). Plantilla grande (8 tablas)
   // auto-generada desde el Excel oficial "FISIOTERAPIA_1.xlsx" (hoja MES ACTUAL).
   "terapia-fisica": FISIOTERAPIA_TEMPLATE,
+  // Terapia Respiratoria (= servicio "terapia-respiratoria"). Auto-generada
+  // desde el Excel oficial "Terapia respiratoria.xlsx" (hoja MES ACTUAL).
+  "terapia-respiratoria": TERAPIA_RESPIRATORIA_TEMPLATE,
 };
 
 export function getSepsTemplate(serviceId: string | null | undefined): SepsTemplate | null {
