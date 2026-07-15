@@ -13,6 +13,7 @@ import { BANCO_SANGRE_TEMPLATE } from "@/lib/seps-banco-sangre";
 import { FARMACIA_TEMPLATE } from "@/lib/seps-farmacia";
 import { FISIOTERAPIA_TEMPLATE } from "@/lib/seps-fisioterapia";
 import { LABORATORIO_TEMPLATE } from "@/lib/seps-laboratorio";
+import { CEYE_TEMPLATE } from "@/lib/seps-ceye";
 import { SANEAMIENTO_AMBIENTAL_TEMPLATE } from "@/lib/seps-saneamiento-ambiental";
 import { RADIOLOGIA_TEMPLATE } from "@/lib/seps-radiologia";
 import { NUTRICION_TEMPLATE } from "@/lib/seps-nutricion";
@@ -165,6 +166,7 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "servicio-farmaceutico": FARMACIA_TEMPLATE,
   // Laboratorio Clinico (formato matricial por examen).
   "laboratorio-clinico": LABORATORIO_TEMPLATE,
+  "central-de-esterilizacion": CEYE_TEMPLATE,
   "saneamiento-ambiental": SANEAMIENTO_AMBIENTAL_TEMPLATE,
   radiologia: RADIOLOGIA_TEMPLATE,
   // Fisioterapia (= servicio "terapia-fisica"). Plantilla grande (8 tablas)

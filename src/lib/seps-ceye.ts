@@ -1,0 +1,43 @@
+import type { SepsTemplate } from "@/lib/seps-templates";
+
+export const CEYE_TEMPLATE: SepsTemplate = {
+  serviceId: "central-de-esterilizacion",
+  establishment: "HOSPITAL NACIONAL EL SALVADOR",
+  tables: [
+    {
+      id: "ceye1",
+      title: "TABULADOR DE ACTIVIDADES DIARIAS Y PRODUCCIÓN",
+      subtitle: "CENTRAL DE ESTERILIZACIÓN Y EQUIPOS",
+      detailLabel: "Actividad",
+      rows: [
+        { key: "ceye_torundas_algodon", label: "TORUNDAS DE ALGODÓN" },
+        { key: "ceye_venopuncion", label: "VENOPUNCION" },
+        { key: "ceye_torundas_gasa", label: "TORUNDAS DE GASA" },
+        { key: "ceye_curaciones_simples", label: "CURACIONES SIMPLES" },
+        { key: "ceye_curaciones_compuesta", label: "CURACIONES COMPUESTA" },
+        { key: "ceye_curaciones_especiales", label: "CURACIONES ESPECIALES" },
+        { key: "ceye_paquetes_ropa", label: "PAQUETES DE ROPA" },
+        { key: "ceye_paquete_compresas", label: "PAQUETE DE COMPRESAS" },
+        { key: "ceye_kik_alimentacion", label: "KIK DE ALIMENTACION" },
+        { key: "ceye_cubiertas_pequenas", label: "CUBIERTAS PEQUEÑAS" },
+        { key: "ceye_cubiertas_medianas", label: "CUBIERTAS MEDIANAS" },
+        { key: "ceye_lonas_fundas_mayo", label: "LONAS Y FUNDAS MAYO" },
+        { key: "ceye_contenedor_metalico", label: "CONTENEDOR METALICO" },
+        { key: "ceye_gabachones_individuales", label: "GABACHOMES INDIVIDUALES" },
+        { key: "ceye_campos_corrientes", label: "CAMPOS CORRIENTES" },
+        { key: "ceye_campos_hendidos", label: "CAMPOS HENDIDOS" },
+        { key: "ceye_media_sabana", label: "MEDIA SABANA" },
+        { key: "ceye_bandejas_pequenas", label: "BANDEJAS PEQUEÑAS" },
+        { key: "ceye_esteril_vapor", label: "PROCESO DE ESTERILIZACION A VAPOR" },
+        { key: "ceye_tiempo_vapor", label: "TIEMPO DE ESTERILIZACION (Min)" },
+        { key: "ceye_esteril_formaldehido", label: "PROCESO DE ESTERILIZACION A FORMALDEHIDO" },
+        { key: "ceye_tiempo_formaldehido", label: "TIEMPO DE ESTERILIZACION (Min)" },
+        { key: "ceye_esteril_peroxido", label: "PROCESO DE ESTERILIZACION CON PEROXIDO DE HIDROGENO" },
+        { key: "ceye_tiempo_peroxido", label: "TIEMPO DE ESTERILIZACION (Min)" },
+        { key: "ceye_lavado_equipos", label: "LAVADO DE EQUIPOS" },
+        { key: "ceye_empaque_equipos", label: "EMPAQUE DE EQUIPOS" },
+        { key: "ceye_empaque_textiles", label: "EMPAQUE DE TEXTILES" },
+      ],
+    },
+  ],
+};
