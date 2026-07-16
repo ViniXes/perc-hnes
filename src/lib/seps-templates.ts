@@ -19,6 +19,7 @@ import { RADIOLOGIA_TEMPLATE } from "@/lib/seps-radiologia";
 import { NUTRICION_TEMPLATE } from "@/lib/seps-nutricion";
 import { PSICOLOGIA_TEMPLATE } from "@/lib/seps-psicologia";
 import { TERAPIA_RESPIRATORIA_TEMPLATE } from "@/lib/seps-terapia-respiratoria";
+import { ENFERMERIA_TEMPLATE } from "@/lib/seps-enfermeria";
 
 export type SepsRow = {
   /** Id estable para guardar (no cambia aunque cambie la etiqueta). */
@@ -175,6 +176,8 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   // Terapia Respiratoria (= servicio "terapia-respiratoria"). Auto-generada
   // desde el Excel oficial "Terapia respiratoria.xlsx" (hoja MES ACTUAL).
   "terapia-respiratoria": TERAPIA_RESPIRATORIA_TEMPLATE,
+  // Division de Enfermeria: SEPS diario.
+  "enfermeria": ENFERMERIA_TEMPLATE,
 };
 
 export function getSepsTemplate(serviceId: string | null | undefined): SepsTemplate | null {

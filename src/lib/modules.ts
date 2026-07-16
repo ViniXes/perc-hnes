@@ -202,8 +202,8 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   ucp: ["distribucion"],
   // Unidad de Gestion Documental: por ahora SOLO Distribucion de Horas.
   "gestion-documental": ["distribucion"],
-  // Enfermeria: por ahora SOLO Distribucion de Horas.
-  enfermeria: ["distribucion"],
+  // Enfermeria: SEPS y Distribucion de Horas.
+  enfermeria: ["distribucion", "sesps"],
   // Direccion: por ahora SOLO Distribucion de Horas.
   direccion: ["distribucion"],
   // Servicios PERC/SERV (productividad). Por ahora solo PERC; SEPS y Horas se
