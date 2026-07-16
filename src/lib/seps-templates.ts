@@ -20,6 +20,7 @@ import { NUTRICION_TEMPLATE } from "@/lib/seps-nutricion";
 import { PSICOLOGIA_TEMPLATE } from "@/lib/seps-psicologia";
 import { TERAPIA_RESPIRATORIA_TEMPLATE } from "@/lib/seps-terapia-respiratoria";
 import { ENFERMERIA_TEMPLATE } from "@/lib/seps-enfermeria";
+import { MEDICINA_INTERNA_TEMPLATE } from "@/lib/seps-medicina-interna";
 
 export type SepsRow = {
   /** Id estable para guardar (no cambia aunque cambie la etiqueta). */
@@ -178,6 +179,8 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "terapia-respiratoria": TERAPIA_RESPIRATORIA_TEMPLATE,
   // Division de Enfermeria: SEPS diario.
   "enfermeria": ENFERMERIA_TEMPLATE,
+  "medicina-interna": MEDICINA_INTERNA_TEMPLATE,
+  // Hospitalizacion Medicina Interna: SEPS diario.
 };
 
 export function getSepsTemplate(serviceId: string | null | undefined): SepsTemplate | null {

@@ -185,7 +185,7 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   // Medicina Preventiva: por ahora SOLO Distribucion de Horas.
   "medicina-preventiva": ["distribucion"],
   // Medicina Interna: por ahora SOLO Distribucion de Horas.
-  "medicina-interna": ["distribucion"],
+  "medicina-interna": ["distribucion", "sesps"],
   // Anestesiologia: por ahora SOLO Distribucion de Horas.
   anestesiologia: ["distribucion"],
   // Medicina Critica: por ahora SOLO Distribucion de Horas.
