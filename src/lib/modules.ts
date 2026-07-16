@@ -211,7 +211,7 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   //   - maxima-emergencia: ["perc", "sesps", "distribucion"]
   //   - centro-quirurgico: ["perc", "sesps", "distribucion"]
   //   - clinica-de-empleados: ["perc", "distribucion"]
-  "maxima-emergencia": ["perc", "distribucion"],
+  "maxima-emergencia": ["perc", "sesps", "distribucion"],
   "centro-quirurgico": ["perc", "distribucion"],
   "clinica-de-empleados": ["perc", "distribucion"],
   // PENDIENTE: completar el resto con el listado de PERC y SESPS.
