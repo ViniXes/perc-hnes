@@ -27,6 +27,7 @@ import { RRHH_TEMPLATE } from "@/lib/seps-rrhh";
 import { UCIN_AISLADOS_TEMPLATE, UCIN_CRONICOS_TEMPLATE, UCIN_TEMPLATE, UCIN_CONSOLIDADO_TEMPLATE } from "@/lib/seps-ucin";
 import { UCI_AISLADOS_TEMPLATE, UCI_CARDIOVASCULAR_TEMPLATE, UCI_EXTRACORPOREA_TEMPLATE, UCI_GENERAL_1_TEMPLATE, UCI_GENERAL_2_TEMPLATE, UCI_NEUROCRITICOS_TEMPLATE, UCI_QUIRURGICA_TEMPLATE, UCI_CONSOLIDADO_TEMPLATE } from "@/lib/seps-uci";
 import { CARDIOLOGIA_TEMPLATE } from "@/lib/seps-cardiologia";
+import { ANESTESIOLOGIA_TEMPLATE } from "@/lib/seps-anestesiologia";
 
 export type SepsRow = {
   /** Id estable para guardar (no cambia aunque cambie la etiqueta). */
@@ -212,6 +213,7 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "uci-consolidado": UCI_CONSOLIDADO_TEMPLATE,
   // Cardiologia (Servicios de Apoyo II).
   "cardiologia": CARDIOLOGIA_TEMPLATE,
+  "anestesiologia": ANESTESIOLOGIA_TEMPLATE,
   // Hospitalizacion Medicina Interna: SEPS diario.
 };
 
