@@ -542,6 +542,35 @@ const SERVICE_SEARCH_ALIASES: Record<string, string[]> = {
   "gestion-documental": ["ugd", "ugda"],
 };
 
+// Familias de subservicios que se agrupan bajo un padre desplegable en el buscador
+// (p. ej. UCI y UCIN): al tocar el padre se ven sus subunidades.
+const SERVICE_FAMILIES: { id: string; title: string; group: string; members: string[] }[] = [
+  {
+    id: "ucin",
+    title: "UCIN",
+    group: "medica",
+    members: ["ucin-aislados", "ucin-cronicos", "ucin", "ucin-consolidado"],
+  },
+  {
+    id: "uci",
+    title: "UCI",
+    group: "medica",
+    members: [
+      "uci-aislados",
+      "uci-cardiovascular",
+      "uci-extracorporea",
+      "uci-general-1",
+      "uci-general-2",
+      "uci-neurocriticos",
+      "uci-quirurgica",
+      "uci-consolidado",
+    ],
+  },
+];
+const SERVICE_FAMILY_BY_ID: Record<string, string> = Object.fromEntries(
+  SERVICE_FAMILIES.flatMap((f) => f.members.map((m) => [m, f.id] as const)),
+);
+
 const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   // --- DIRECCION (unidades staff + almacen medicamentos/farmacia/asesores) ---
   direccion: "direccion",
@@ -3489,6 +3518,8 @@ export default function Home() {
   // Division seleccionada dentro del dropdown "Elegir servicio" (navegacion en 2
   // niveles: primero las divisiones, luego sus servicios). null = mostrar divisiones.
   const [adminPickerGroup, setAdminPickerGroup] = useState<string | null>(null);
+  // Familia (UCI/UCIN) abierta dentro de una division (3er nivel). null = ninguna.
+  const [adminPickerFamily, setAdminPickerFamily] = useState<string | null>(null);
   const [tableValues, setTableValues] = useState<TableValues>({});
   // Filas PERC agregadas a mano y filas oficiales ocultas (admin/supervisores),
   // por servicio+mes. Se guardan en el doc serviceTabulators junto con los valores.
@@ -11455,6 +11486,7 @@ export default function Home() {
                                     setAdminServicePickerOpen(false);
                                     setAdminServiceQuery("");
                                     setAdminPickerGroup(null);
+                                    setAdminPickerFamily(null);
                                     // En movil, ir al tabulador que el servicio reporta:
                                     // PERC si lo tiene; si no, Horas; si no, Inicio.
                                     if (
@@ -11508,17 +11540,59 @@ export default function Home() {
                               );
                             }
 
-                            // 2) Detalle de una division: boton "volver" + sus servicios.
+                            // 2) Detalle de una division: boton "volver" + familias + servicios.
                             if (adminPickerGroup) {
                               const group = adminServiceGroups.find(
                                 (g) => g.id === adminPickerGroup,
                               );
                               if (!group) return null;
+
+                              // 2b) Detalle de una FAMILIA (UCI/UCIN): sus subunidades.
+                              if (adminPickerFamily) {
+                                const fam = SERVICE_FAMILIES.find(
+                                  (f) => f.id === adminPickerFamily,
+                                );
+                                const famServices = group.services.filter(
+                                  (s) => SERVICE_FAMILY_BY_ID[s.id] === adminPickerFamily,
+                                );
+                                return (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => setAdminPickerFamily(null)}
+                                      className="mb-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5"
+                                    >
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-400" aria-hidden>
+                                        <path d="m15 18-6-6 6-6" />
+                                      </svg>
+                                      <span className="font-semibold">{fam?.title ?? "Grupo"}</span>
+                                      <span className="ml-auto text-xs text-slate-500">
+                                        {famServices.length}
+                                      </span>
+                                    </button>
+                                    {famServices.map(renderServiceBtn)}
+                                  </>
+                                );
+                              }
+
+                              const familiesHere = SERVICE_FAMILIES.filter(
+                                (f) =>
+                                  f.group === group.id &&
+                                  group.services.some(
+                                    (s) => SERVICE_FAMILY_BY_ID[s.id] === f.id,
+                                  ),
+                              );
+                              const looseServices = group.services.filter(
+                                (s) => !SERVICE_FAMILY_BY_ID[s.id],
+                              );
                               return (
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => setAdminPickerGroup(null)}
+                                    onClick={() => {
+                                      setAdminPickerGroup(null);
+                                      setAdminPickerFamily(null);
+                                    }}
                                     className="mb-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5"
                                   >
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-400" aria-hidden>
@@ -11529,7 +11603,33 @@ export default function Home() {
                                       {group.services.length}
                                     </span>
                                   </button>
-                                  {group.services.map(renderServiceBtn)}
+                                  {familiesHere.map((fam) => {
+                                    const count = group.services.filter(
+                                      (s) => SERVICE_FAMILY_BY_ID[s.id] === fam.id,
+                                    ).length;
+                                    return (
+                                      <button
+                                        key={fam.id}
+                                        type="button"
+                                        onClick={() => setAdminPickerFamily(fam.id)}
+                                        className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-white/5"
+                                      >
+                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-400/10 text-cyan-200">
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                                          </svg>
+                                        </span>
+                                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-100">
+                                          {fam.title}
+                                        </span>
+                                        <span className="text-xs text-slate-500">{count}</span>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-400" aria-hidden>
+                                          <path d="m9 18 6-6-6-6" />
+                                        </svg>
+                                      </button>
+                                    );
+                                  })}
+                                  {looseServices.map(renderServiceBtn)}
                                 </>
                               );
                             }
@@ -11544,7 +11644,10 @@ export default function Home() {
                                 <button
                                   key={group.id}
                                   type="button"
-                                  onClick={() => setAdminPickerGroup(group.id)}
+                                  onClick={() => {
+                                    setAdminPickerGroup(group.id);
+                                    setAdminPickerFamily(null);
+                                  }}
                                   className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition ${
                                     active ? "bg-amber-400/10" : "hover:bg-white/5"
                                   }`}
