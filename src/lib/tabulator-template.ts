@@ -377,6 +377,11 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: [],
   },
   {
+    id: "ucin-consolidado",
+    name: "UCIN Consolidado",
+    rows: [],
+  },
+  {
     // Anestesiologia: por ahora SOLO Distribucion de Horas.
     id: "anestesiologia",
     name: "Anestesiologia",

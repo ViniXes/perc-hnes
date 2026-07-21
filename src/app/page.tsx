@@ -588,6 +588,7 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "ucin-aislados": "medica",
   "ucin-cronicos": "medica",
   "ucin": "medica",
+  "ucin-consolidado": "medica",
   anestesiologia: "medica",
   "medicina-critica": "medica",
   // --- SUBDIRECCION ADMINISTRATIVA ---
@@ -2773,6 +2774,37 @@ async function fetchSepsDataForPeriod(
   template: SepsTemplate,
   periodId: string,
 ): Promise<SepsData> {
+  // Consolidado (solo lectura): suma los SEPS de varios servicios (mismas claves de fila).
+  if (template.consolidatesFrom && template.consolidatesFrom.length > 0) {
+    const base = buildEmptySeps(template, periodId);
+    const sums: Record<string, Record<string, number>> = {};
+    for (const srcId of template.consolidatesFrom) {
+      const src = await getDoc(doc(db, "sepsTabulators", `${periodId}__${srcId}`));
+      if (!src.exists()) continue;
+      const srcVals =
+        (src.data() as { values?: Record<string, Record<string, unknown>> }).values || {};
+      for (const rowKey of Object.keys(srcVals)) {
+        for (const day of Object.keys(srcVals[rowKey] || {})) {
+          const raw = (srcVals[rowKey] || {})[day];
+          if (raw === "" || raw === null || raw === undefined) continue;
+          const n = Number(raw);
+          if (!Number.isFinite(n)) continue;
+          if (!sums[rowKey]) sums[rowKey] = {};
+          sums[rowKey][day] = (sums[rowKey][day] || 0) + n;
+        }
+      }
+    }
+    const values: SepsValues = {};
+    for (const rowKey of Object.keys(base)) {
+      values[rowKey] = {};
+      for (const day of Object.keys(base[rowKey])) {
+        const s = sums[rowKey]?.[day];
+        values[rowKey][day] = s === undefined ? "" : String(s);
+      }
+    }
+    return { values, extraRows: [], hiddenKeys: [], comments: [] };
+  }
+
   const snapshot = await getDoc(
     doc(db, "sepsTabulators", `${periodId}__${template.serviceId}`),
   );
@@ -7067,6 +7099,11 @@ export default function Home() {
       return;
     }
 
+    // El consolidado es de solo lectura (suma calculada): no se guarda.
+    if (sepsTemplate.consolidatesFrom) {
+      return;
+    }
+
     const targetPeriod = sepsViewPeriod ?? sepsPeriodId;
     const targetPeriodLabel = getPeriodLabel(targetPeriod);
     const editingHistory = sepsViewPeriod !== null;
@@ -8424,7 +8461,13 @@ export default function Home() {
     const activeSepsPeriod = sepsViewPeriod ?? sepsPeriodId;
     const isSepsHistory = sepsViewPeriod !== null;
     const sepsHistReadOnly = isSepsHistory && !isAdmin;
-    const sepsEditingBlocked = isAdmin || isSepsStaff ? false : isSepsHistory ? true : sepsLocked;
+    const sepsEditingBlocked = sepsTemplate?.consolidatesFrom
+      ? true
+      : isAdmin || isSepsStaff
+        ? false
+        : isSepsHistory
+          ? true
+          : sepsLocked;
     const sepsHistoryOptions = buildRecentPeriods(sepsPeriodId, 12);
     const sepsPhaseLabel =
       sepsWindow.phase === "cierre"
@@ -14868,7 +14911,7 @@ export default function Home() {
                     className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
                   >
                     <option value="">Elegí tu servicio…</option>
-                    {SERVICE_DEFINITIONS.map((s) => (
+                    {SERVICE_DEFINITIONS.filter((s) => !getSepsTemplate(s.id)?.consolidatesFrom).map((s) => (
                       <option key={s.id} value={s.id} className="bg-[#1b2537] text-white">
                         {s.name}
                       </option>

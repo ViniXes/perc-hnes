@@ -24,7 +24,7 @@ import { MEDICINA_INTERNA_TEMPLATE } from "@/lib/seps-medicina-interna";
 import { MAXIMA_EMERGENCIA_TEMPLATE } from "@/lib/seps-maxima-emergencia";
 import { CENTRO_QUIRURGICO_TEMPLATE } from "@/lib/seps-centro-quirurgico";
 import { RRHH_TEMPLATE } from "@/lib/seps-rrhh";
-import { UCIN_AISLADOS_TEMPLATE, UCIN_CRONICOS_TEMPLATE, UCIN_TEMPLATE } from "@/lib/seps-ucin";
+import { UCIN_AISLADOS_TEMPLATE, UCIN_CRONICOS_TEMPLATE, UCIN_TEMPLATE, UCIN_CONSOLIDADO_TEMPLATE } from "@/lib/seps-ucin";
 
 export type SepsRow = {
   /** Id estable para guardar (no cambia aunque cambie la etiqueta). */
@@ -91,6 +91,9 @@ export type SepsTemplate = {
   serviceId: string;
   /** Nombre a mostrar en el tabulador SEPS (2do nombre), si difiere del servicio. */
   displayName?: string;
+  /** Si está presente: tabulador CONSOLIDADO de solo lectura que SUMA los SEPS
+   * de estos serviceIds (mismas claves de fila). Lo ven admin/supervisores. */
+  consolidatesFrom?: string[];
   /** Establecimiento fijo que va en el encabezado. */
   establishment: string;
   /** "daily" (por defecto) = tabulador diario; "matrix" = por examen (Laboratorio). */
@@ -195,6 +198,7 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "ucin-aislados": UCIN_AISLADOS_TEMPLATE,
   "ucin-cronicos": UCIN_CRONICOS_TEMPLATE,
   "ucin": UCIN_TEMPLATE,
+  "ucin-consolidado": UCIN_CONSOLIDADO_TEMPLATE,
   // Hospitalizacion Medicina Interna: SEPS diario.
 };
 

@@ -38,3 +38,12 @@ export const UCIN_TEMPLATE: SepsTemplate = {
   establishment: "HOSPITAL NACIONAL EL SALVADOR",
   tables: UCIN_TABLES,
 };
+
+// Consolidado (solo lectura): suma los SEPS de las 3 subunidades. Solo admin/supervisores.
+export const UCIN_CONSOLIDADO_TEMPLATE: SepsTemplate = {
+  serviceId: "ucin-consolidado",
+  establishment: "HOSPITAL NACIONAL EL SALVADOR",
+  displayName: "UCIN Consolidado",
+  tables: UCIN_TABLES,
+  consolidatesFrom: ["ucin-aislados", "ucin-cronicos", "ucin"],
+};
