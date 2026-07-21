@@ -22,6 +22,7 @@ import { TERAPIA_RESPIRATORIA_TEMPLATE } from "@/lib/seps-terapia-respiratoria";
 import { ENFERMERIA_TEMPLATE } from "@/lib/seps-enfermeria";
 import { MEDICINA_INTERNA_TEMPLATE } from "@/lib/seps-medicina-interna";
 import { MAXIMA_EMERGENCIA_TEMPLATE } from "@/lib/seps-maxima-emergencia";
+import { CENTRO_QUIRURGICO_TEMPLATE } from "@/lib/seps-centro-quirurgico";
 
 export type SepsRow = {
   /** Id estable para guardar (no cambia aunque cambie la etiqueta). */
@@ -182,6 +183,8 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "enfermeria": ENFERMERIA_TEMPLATE,
   "medicina-interna": MEDICINA_INTERNA_TEMPLATE,
   "maxima-emergencia": MAXIMA_EMERGENCIA_TEMPLATE,
+  // Cirugia (Centro Quirurgico): SEPS diario.
+  "centro-quirurgico": CENTRO_QUIRURGICO_TEMPLATE,
   // Hospitalizacion Medicina Interna: SEPS diario.
 };
 
