@@ -627,6 +627,7 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "uci-quirurgica": "medica",
   "uci-consolidado": "medica",
   cardiologia: "medica",
+  nefrologia: "medica",
   anestesiologia: "medica",
   "medicina-critica": "medica",
   // --- SUBDIRECCION ADMINISTRATIVA ---
