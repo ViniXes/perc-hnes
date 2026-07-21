@@ -13257,7 +13257,7 @@ export default function Home() {
                           {ordered.map((it) => {
                             const fam = it.family;
                             const done = fam ? fam.pct === 100 : it.done;
-                            const greenish = fam ? true : done;
+                            const greenish = done;
                             return (
                               <div
                                 key={it.id}
@@ -13283,7 +13283,11 @@ export default function Home() {
                                   {it.name}
                                 </span>
                                 {fam ? (
-                                  <span className="shrink-0 text-[11px] font-bold text-emerald-300">
+                                  <span
+                                    className={`shrink-0 text-[11px] font-bold ${
+                                      done ? "text-emerald-300" : "text-amber-300"
+                                    }`}
+                                  >
                                     {fam.pct}%
                                   </span>
                                 ) : (
