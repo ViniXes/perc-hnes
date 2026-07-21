@@ -193,7 +193,7 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   // Biologia Molecular: por ahora SOLO Distribucion de Horas.
   "biologia-molecular": ["distribucion"],
   // Recursos Humanos: por ahora SOLO Distribucion de Horas.
-  rrhh: ["distribucion"],
+  rrhh: ["distribucion", "sesps"],
   // Servicios Varios: por ahora SOLO Distribucion de Horas.
   "servicios-varios": ["distribucion"],
   // Departamento de Tecnologia: por ahora SOLO Distribucion de Horas.
