@@ -13185,11 +13185,9 @@ export default function Home() {
                 const completosCount = statsItems.filter((it) => it.done).length;
                 const incompletosCount = total - completosCount;
                 const pct = total > 0 ? Math.round((completosCount / total) * 100) : 0;
-                const ordered = [
-                  ...statsItems.filter((it) => it.family),
-                  ...statsItems.filter((it) => !it.family && it.done),
-                  ...statsItems.filter((it) => !it.family && !it.done),
-                ];
+                const ordered = [...statsItems].sort((a, b) =>
+                  a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+                );
                 return (
                   <div
                     role="dialog"
