@@ -382,6 +382,46 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: [],
   },
   {
+    id: "uci-aislados",
+    name: "UCI Aislados",
+    rows: [],
+  },
+  {
+    id: "uci-cardiovascular",
+    name: "UCI Cardiovascular",
+    rows: [],
+  },
+  {
+    id: "uci-extracorporea",
+    name: "UCI Extracorpórea",
+    rows: [],
+  },
+  {
+    id: "uci-general-1",
+    name: "UCI General 1",
+    rows: [],
+  },
+  {
+    id: "uci-general-2",
+    name: "UCI General 2",
+    rows: [],
+  },
+  {
+    id: "uci-neurocriticos",
+    name: "UCI Neurocríticos",
+    rows: [],
+  },
+  {
+    id: "uci-quirurgica",
+    name: "UCI Quirúrgica",
+    rows: [],
+  },
+  {
+    id: "uci-consolidado",
+    name: "UCI Consolidado",
+    rows: [],
+  },
+  {
     // Anestesiologia: por ahora SOLO Distribucion de Horas.
     id: "anestesiologia",
     name: "Anestesiologia",

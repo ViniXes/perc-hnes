@@ -25,6 +25,7 @@ import { MAXIMA_EMERGENCIA_TEMPLATE } from "@/lib/seps-maxima-emergencia";
 import { CENTRO_QUIRURGICO_TEMPLATE } from "@/lib/seps-centro-quirurgico";
 import { RRHH_TEMPLATE } from "@/lib/seps-rrhh";
 import { UCIN_AISLADOS_TEMPLATE, UCIN_CRONICOS_TEMPLATE, UCIN_TEMPLATE, UCIN_CONSOLIDADO_TEMPLATE } from "@/lib/seps-ucin";
+import { UCI_AISLADOS_TEMPLATE, UCI_CARDIOVASCULAR_TEMPLATE, UCI_EXTRACORPOREA_TEMPLATE, UCI_GENERAL_1_TEMPLATE, UCI_GENERAL_2_TEMPLATE, UCI_NEUROCRITICOS_TEMPLATE, UCI_QUIRURGICA_TEMPLATE, UCI_CONSOLIDADO_TEMPLATE } from "@/lib/seps-uci";
 
 export type SepsRow = {
   /** Id estable para guardar (no cambia aunque cambie la etiqueta). */
@@ -199,6 +200,15 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "ucin-cronicos": UCIN_CRONICOS_TEMPLATE,
   "ucin": UCIN_TEMPLATE,
   "ucin-consolidado": UCIN_CONSOLIDADO_TEMPLATE,
+  // UCI: subunidades (mismo cuadro) + consolidado.
+  "uci-aislados": UCI_AISLADOS_TEMPLATE,
+  "uci-cardiovascular": UCI_CARDIOVASCULAR_TEMPLATE,
+  "uci-extracorporea": UCI_EXTRACORPOREA_TEMPLATE,
+  "uci-general-1": UCI_GENERAL_1_TEMPLATE,
+  "uci-general-2": UCI_GENERAL_2_TEMPLATE,
+  "uci-neurocriticos": UCI_NEUROCRITICOS_TEMPLATE,
+  "uci-quirurgica": UCI_QUIRURGICA_TEMPLATE,
+  "uci-consolidado": UCI_CONSOLIDADO_TEMPLATE,
   // Hospitalizacion Medicina Interna: SEPS diario.
 };
 
