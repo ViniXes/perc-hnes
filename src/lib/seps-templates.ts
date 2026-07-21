@@ -24,6 +24,7 @@ import { MEDICINA_INTERNA_TEMPLATE } from "@/lib/seps-medicina-interna";
 import { MAXIMA_EMERGENCIA_TEMPLATE } from "@/lib/seps-maxima-emergencia";
 import { CENTRO_QUIRURGICO_TEMPLATE } from "@/lib/seps-centro-quirurgico";
 import { RRHH_TEMPLATE } from "@/lib/seps-rrhh";
+import { UCIN_AISLADOS_TEMPLATE, UCIN_CRONICOS_TEMPLATE, UCIN_TEMPLATE } from "@/lib/seps-ucin";
 
 export type SepsRow = {
   /** Id estable para guardar (no cambia aunque cambie la etiqueta). */
@@ -190,6 +191,10 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "centro-quirurgico": CENTRO_QUIRURGICO_TEMPLATE,
   // Recursos Humanos (Salud Mental I): SEPS diario.
   "rrhh": RRHH_TEMPLATE,
+  // UCIN: 3 subunidades (mismo cuadro Hospitalizacion).
+  "ucin-aislados": UCIN_AISLADOS_TEMPLATE,
+  "ucin-cronicos": UCIN_CRONICOS_TEMPLATE,
+  "ucin": UCIN_TEMPLATE,
   // Hospitalizacion Medicina Interna: SEPS diario.
 };
 

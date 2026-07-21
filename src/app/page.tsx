@@ -585,6 +585,9 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "cuidados-paliativos": "medica",
   "medicina-preventiva": "medica",
   "medicina-interna": "medica",
+  "ucin-aislados": "medica",
+  "ucin-cronicos": "medica",
+  "ucin": "medica",
   anestesiologia: "medica",
   "medicina-critica": "medica",
   // --- SUBDIRECCION ADMINISTRATIVA ---

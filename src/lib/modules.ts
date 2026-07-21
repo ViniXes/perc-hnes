@@ -194,6 +194,10 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "biologia-molecular": ["distribucion"],
   // Recursos Humanos: por ahora SOLO Distribucion de Horas.
   rrhh: ["distribucion", "sesps"],
+  // UCIN (Unidad de Cuidados Intermedios): 3 subunidades, solo SEPS.
+  "ucin-aislados": ["sesps"],
+  "ucin-cronicos": ["sesps"],
+  "ucin": ["sesps"],
   // Servicios Varios: por ahora SOLO Distribucion de Horas.
   "servicios-varios": ["distribucion"],
   // Departamento de Tecnologia: por ahora SOLO Distribucion de Horas.
