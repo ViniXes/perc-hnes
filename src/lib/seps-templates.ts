@@ -87,6 +87,8 @@ export const SEPS_LAB_PROC_COLS: { key: string; label: string }[] = [
 
 export type SepsTemplate = {
   serviceId: string;
+  /** Nombre a mostrar en el tabulador SEPS (2do nombre), si difiere del servicio. */
+  displayName?: string;
   /** Establecimiento fijo que va en el encabezado. */
   establishment: string;
   /** "daily" (por defecto) = tabulador diario; "matrix" = por examen (Laboratorio). */

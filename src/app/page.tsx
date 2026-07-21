@@ -7114,7 +7114,7 @@ export default function Home() {
           periodLabel: targetPeriodLabel,
           module: "sesps",
           serviceId: sepsTemplate.serviceId,
-          serviceName: currentService?.name || sepsTemplate.serviceId,
+          serviceName: sepsTemplate.displayName ?? currentService?.name ?? sepsTemplate.serviceId,
           userId: user.uid,
           userEmail: user.email || "",
           values: normalizedValues,
@@ -8442,7 +8442,7 @@ export default function Home() {
             </p>
             <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>SEPS</h2>
             <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-              {currentService?.name || sepsTemplate.serviceId} · {sepsPeriodLabel} ·{" "}
+              {sepsTemplate.displayName ?? currentService?.name ?? sepsTemplate.serviceId} · {sepsPeriodLabel} ·{" "}
               {sepsTemplate.establishment}
             </p>
           </div>

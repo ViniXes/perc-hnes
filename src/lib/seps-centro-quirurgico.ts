@@ -5,6 +5,7 @@ import type { SepsTemplate } from "@/lib/seps-templates";
 
 export const CENTRO_QUIRURGICO_TEMPLATE: SepsTemplate = {
   serviceId: "centro-quirurgico",
+  displayName: "Cirugías Menores",
   establishment: "HOSPITAL NACIONAL EL SALVADOR",
   tables: [
     {
