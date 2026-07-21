@@ -208,6 +208,7 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "uci-neurocriticos": ["sesps"],
   "uci-quirurgica": ["sesps"],
   "uci-consolidado": ["sesps"],
+  "cardiologia": ["sesps"],
   // Servicios Varios: por ahora SOLO Distribucion de Horas.
   "servicios-varios": ["distribucion"],
   // Departamento de Tecnologia: por ahora SOLO Distribucion de Horas.

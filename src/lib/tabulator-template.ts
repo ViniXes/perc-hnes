@@ -422,6 +422,11 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: [],
   },
   {
+    id: "cardiologia",
+    name: "Cardiología",
+    rows: [],
+  },
+  {
     // Anestesiologia: por ahora SOLO Distribucion de Horas.
     id: "anestesiologia",
     name: "Anestesiologia",
