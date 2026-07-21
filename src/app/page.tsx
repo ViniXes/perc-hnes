@@ -13140,17 +13140,54 @@ export default function Home() {
             ? (() => {
                 const statsLabel =
                   statsModule === "perc" ? "PERC" : statsModule === "sesps" ? "SEPS" : "Horas";
-                const statsServices = dashboardGroups
+                const rawStats = dashboardGroups
                   .flatMap((g) => g.services)
                   .filter((s) => s.modules.some((m) => m.label === statsLabel));
-                const completos = statsServices.filter(
-                  (s) => s.modules.find((m) => m.label === statsLabel)?.completed,
-                );
-                const incompletos = statsServices.filter(
-                  (s) => !s.modules.find((m) => m.label === statsLabel)?.completed,
-                );
-                const total = statsServices.length;
-                const pct = total > 0 ? Math.round((completos.length / total) * 100) : 0;
+                const isStatsDone = (s: (typeof rawStats)[number]) =>
+                  !!s.modules.find((m) => m.label === statsLabel)?.completed;
+                // UCI/UCIN se muestran como 1 entrada agregada con % (subunidades llenas
+                // / total). El consolidado no cuenta como subunidad a llenar.
+                type StatsItem = {
+                  id: string;
+                  name: string;
+                  done: boolean;
+                  family?: { done: number; total: number; pct: number };
+                };
+                const statsItems: StatsItem[] = [];
+                const seenFam = new Set<string>();
+                for (const s of rawStats) {
+                  const famId = SERVICE_FAMILY_BY_ID[s.id];
+                  if (famId) {
+                    if (seenFam.has(famId)) continue;
+                    seenFam.add(famId);
+                    const famDef = SERVICE_FAMILIES.find((f) => f.id === famId);
+                    const members = rawStats.filter(
+                      (x) =>
+                        SERVICE_FAMILY_BY_ID[x.id] === famId &&
+                        !getSepsTemplate(x.id)?.consolidatesFrom,
+                    );
+                    const dm = members.filter(isStatsDone).length;
+                    const tm = members.length;
+                    const pm = tm > 0 ? Math.round((dm / tm) * 100) : 0;
+                    statsItems.push({
+                      id: famId,
+                      name: famDef?.title ?? famId,
+                      done: pm === 100,
+                      family: { done: dm, total: tm, pct: pm },
+                    });
+                  } else {
+                    statsItems.push({ id: s.id, name: s.name, done: isStatsDone(s) });
+                  }
+                }
+                const total = statsItems.length;
+                const completosCount = statsItems.filter((it) => it.done).length;
+                const incompletosCount = total - completosCount;
+                const pct = total > 0 ? Math.round((completosCount / total) * 100) : 0;
+                const ordered = [
+                  ...statsItems.filter((it) => it.family),
+                  ...statsItems.filter((it) => !it.family && it.done),
+                  ...statsItems.filter((it) => !it.family && !it.done),
+                ];
                 return (
                   <div
                     role="dialog"
@@ -13187,7 +13224,7 @@ export default function Home() {
                         <div className="flex items-end justify-between">
                           <div>
                             <p className="text-3xl font-bold leading-none text-white">
-                              {completos.length}
+                              {completosCount}
                               <span className="text-lg font-medium text-slate-400"> / {total}</span>
                             </p>
                             <p className="mt-1 text-xs text-slate-400">servicios completos</p>
@@ -13203,11 +13240,11 @@ export default function Home() {
                         <div className="mt-3 flex items-center gap-4 text-xs">
                           <span className="flex items-center gap-1.5 text-slate-300">
                             <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                            {completos.length} completos
+                            {completosCount} completos
                           </span>
                           <span className="flex items-center gap-1.5 text-slate-300">
                             <span className="h-2 w-2 rounded-full bg-amber-400" />
-                            {incompletos.length} incompletos
+                            {incompletosCount} incompletos
                           </span>
                         </div>
                       </div>
@@ -13217,34 +13254,46 @@ export default function Home() {
                           y el estado como punto de color para no cortar el texto. */}
                       <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
                         <div className="grid grid-cols-2 gap-1.5">
-                          {[...completos, ...incompletos].map((s) => {
-                            const done = s.modules.find((m) => m.label === statsLabel)?.completed;
+                          {ordered.map((it) => {
+                            const fam = it.family;
+                            const done = fam ? fam.pct === 100 : it.done;
+                            const greenish = fam ? true : done;
                             return (
                               <div
-                                key={s.id}
-                                title={`${s.name} — ${done ? "Completo" : "Pendiente"}`}
+                                key={it.id}
+                                title={
+                                  fam
+                                    ? `${it.name} — ${fam.done}/${fam.total} (${fam.pct}%)`
+                                    : `${it.name} — ${done ? "Completo" : "Pendiente"}`
+                                }
                                 className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2 ${
-                                  done
+                                  greenish
                                     ? "border-emerald-400/15 bg-emerald-500/[0.06]"
                                     : "border-amber-400/15 bg-amber-500/[0.06]"
                                 }`}
                               >
                                 <span
                                   className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${
-                                    done ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"
+                                    greenish ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"
                                   }`}
                                 >
-                                  <ServiceIcon serviceId={s.id} className="h-3.5 w-3.5" />
+                                  <ServiceIcon serviceId={it.id} className="h-3.5 w-3.5" />
                                 </span>
                                 <span className="line-clamp-2 min-w-0 flex-1 text-[11.5px] font-medium leading-tight text-slate-200">
-                                  {s.name}
+                                  {it.name}
                                 </span>
-                                <span
-                                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                                    done ? "bg-emerald-400" : "bg-amber-400"
-                                  }`}
-                                  aria-label={done ? "Completo" : "Pendiente"}
-                                />
+                                {fam ? (
+                                  <span className="shrink-0 text-[11px] font-bold text-emerald-300">
+                                    {fam.pct}%
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                                      done ? "bg-emerald-400" : "bg-amber-400"
+                                    }`}
+                                    aria-label={done ? "Completo" : "Pendiente"}
+                                  />
+                                )}
                               </div>
                             );
                           })}
