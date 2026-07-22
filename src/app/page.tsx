@@ -8643,109 +8643,123 @@ export default function Home() {
 
         <div className="mt-5 space-y-6">
           {sepsTemplate.serviceId === "laboratorio-clinico" ? (
-            <div className="space-y-5">
-              <div className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-white" : "border-cyan-400/20 bg-[#101a2e]"}`}>
-                <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-cyan-300/90">Laboratorio clínico</p>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <label className="block">
-                    <span className="text-xs font-semibold text-slate-400">Establecimiento</span>
-                    <div className="mt-1 truncate rounded-lg border border-white/10 bg-[#0f1a30] px-2.5 py-2 text-sm text-slate-300">{sepsTemplate.establishment}</div>
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold text-slate-400">Recurso</span>
-                    <div className="mt-1 rounded-lg border border-white/10 bg-[#0f1a30] px-2.5 py-2 text-sm text-slate-300">No Aplica</div>
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold text-slate-400">Año</span>
-                    <select value={labYear} onChange={(e) => setLabYear(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f1a30] px-2.5 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400">
-                      {Array.from({ length: 10 }, (_, i) => 2026 + i).map((y) => (
-                        <option key={y} value={y} className="bg-[#0f1a30]">{y}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold text-slate-400">Mes</span>
-                    <select value={labMonth} onChange={(e) => setLabMonth(e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f1a30] px-2.5 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400">
-                      <option value="" className="bg-[#0f1a30]">[Seleccione…]</option>
-                      {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map((m) => (
-                        <option key={m} value={m} className="bg-[#0f1a30]">{m}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold text-slate-400">Convenio</span>
-                    <div className="mt-1 rounded-lg border border-white/10 bg-[#0f1a30] px-2.5 py-2 text-sm text-slate-300">No Aplica</div>
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold text-slate-400">Sección</span>
-                    <select value={labSection} onChange={(e) => { setLabSection(e.target.value); setLabTest(""); }} className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f1a30] px-2.5 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400">
-                      <option value="" className="bg-[#0f1a30]">[Seleccione…]</option>
-                      {LAB_SECTIONS.map((s) => (
-                        <option key={s.code} value={s.code} className="bg-[#0f1a30]">{s.code} - {s.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block sm:col-span-2">
-                    <span className="text-xs font-semibold text-slate-400">Prueba</span>
-                    <select value={labTest} disabled={!labSection} onChange={(e) => setLabTest(e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f1a30] px-2.5 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400 disabled:opacity-50">
-                      <option value="" className="bg-[#0f1a30]">[Seleccione…]</option>
-                      {(LAB_SECTIONS.find((s) => s.code === labSection)?.tests ?? []).map((t) => (
-                        <option key={t.code} value={t.code} className="bg-[#0f1a30]">{t.code} - {t.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold text-slate-400">Estrategia</span>
-                    <div className="mt-1 rounded-lg border border-white/10 bg-[#0f1a30] px-2.5 py-2 text-sm text-slate-500">[Seleccione…]</div>
-                  </label>
+            <div className="text-[13px]">
+              <div className="mx-auto max-w-2xl overflow-hidden rounded-md border border-[#5b7f99] shadow">
+                <div className="bg-[#3aa5d1] py-1.5 text-center text-sm font-bold text-white">Laboratorio clínico</div>
+                <table className="w-full border-collapse bg-white">
+                  <tbody>
+                    <tr>
+                      <td className="w-44 border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Establecimiento</td>
+                      <td className="border border-[#c9d6e0] px-2 py-1 text-[#333]">{sepsTemplate.establishment}</td>
+                    </tr>
+                    <tr>
+                      <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Recurso</td>
+                      <td className="border border-[#c9d6e0] px-2 py-1 text-[#333]">Laboratorio</td>
+                    </tr>
+                    <tr>
+                      <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Año</td>
+                      <td className="border border-[#c9d6e0] p-0">
+                        <select value={labYear} onChange={(e) => setLabYear(Number(e.target.value))} className="w-full border-0 bg-white px-2 py-1 text-[#333] outline-none">
+                          {Array.from({ length: 10 }, (_, i) => 2026 + i).map((y) => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Mes</td>
+                      <td className="border border-[#c9d6e0] p-0">
+                        <select value={labMonth} onChange={(e) => setLabMonth(e.target.value)} className="w-full border-0 bg-white px-2 py-1 text-[#333] outline-none">
+                          <option value="">[Seleccione…]</option>
+                          {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Convenio</td>
+                      <td className="border border-[#c9d6e0] px-2 py-1 text-[#333]">Ninguno</td>
+                    </tr>
+                    <tr>
+                      <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Sección</td>
+                      <td className="border border-[#c9d6e0] p-0">
+                        <select value={labSection} onChange={(e) => { setLabSection(e.target.value); setLabTest(""); setLabValues({}); }} className="w-full border-0 bg-white px-2 py-1 text-[#333] outline-none">
+                          <option value="">[Seleccione…]</option>
+                          {LAB_SECTIONS.map((s) => (
+                            <option key={s.code} value={s.code}>{s.code}- {s.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Prueba</td>
+                      <td className="border border-[#c9d6e0] p-0">
+                        <select value={labTest} disabled={!labSection} onChange={(e) => { setLabTest(e.target.value); setLabValues({}); }} className="w-full border-0 bg-white px-2 py-1 text-[#333] outline-none disabled:bg-[#f3f3f3]">
+                          <option value="">[Seleccione…]</option>
+                          {(LAB_SECTIONS.find((s) => s.code === labSection)?.tests ?? []).map((t) => (
+                            <option key={t.code} value={t.code}>{t.code}- {t.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Estrategia</td>
+                      <td className="border border-[#c9d6e0] px-2 py-1 text-[#333]">General</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div className="flex justify-center gap-3 border-t border-[#cdd8e0] bg-[#eef3f7] py-2">
+                  <button type="button" className="rounded border border-[#9fb3c4] bg-white px-5 py-1 text-[#1a3e6e] hover:bg-[#f0f6ff] disabled:opacity-40" disabled={!labTest}>Guardar</button>
+                  <button type="button" onClick={() => { setLabTest(""); setLabValues({}); }} className="rounded border border-[#9fb3c4] bg-white px-5 py-1 text-[#1a3e6e] hover:bg-[#f0f6ff]">Cancelar</button>
                 </div>
               </div>
 
-              <div className={`overflow-hidden rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
-                <div className="show-scrollbar overflow-x-auto">
-                  <table className={`w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+              {labSection && labTest ? (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full min-w-[640px] border-collapse text-[13px]">
                     <thead>
-                      <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
-                        <th className="px-3 py-2 text-left font-medium">Grupo 3</th>
-                        <th className="px-3 py-2 text-left font-medium">Grupo 2</th>
-                        <th className="px-3 py-2 text-left font-medium">Grupo 1</th>
-                        <th className="px-3 py-2 text-left font-medium">Actividad</th>
-                        <th className="px-3 py-2 text-center font-semibold">Total</th>
+                      <tr className="bg-[#f6f2cf] text-[#333]">
+                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold">Grupo 3</th>
+                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold">Grupo 2</th>
+                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold">Grupo 1</th>
+                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold">Actividad</th>
+                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold">Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       {LAB_RESULTADO_ROWS.map((row, i) => (
-                        <tr key={row} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                        <tr key={row}>
                           {i === 0 ? (
-                            <td rowSpan={LAB_RESULTADO_ROWS.length + LAB_PROCEDENCIA_ROWS.length} className={`whitespace-nowrap px-3 py-1.5 align-middle font-medium ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"}`}>GENERAL I</td>
+                            <td rowSpan={LAB_RESULTADO_ROWS.length + LAB_PROCEDENCIA_ROWS.length} className="border border-[#7a7a7a] bg-[#c9c9c9] px-3 text-center align-middle font-medium text-[#333]">GENERAL I</td>
                           ) : null}
                           {i === 0 ? (
-                            <td rowSpan={LAB_RESULTADO_ROWS.length + LAB_PROCEDENCIA_ROWS.length} className={`whitespace-nowrap px-3 py-1.5 align-middle font-medium ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"}`}>GENERAL II</td>
+                            <td rowSpan={LAB_RESULTADO_ROWS.length + LAB_PROCEDENCIA_ROWS.length} className="border border-[#7a7a7a] bg-[#d2d2d2] px-3 text-center align-middle font-medium text-[#333]">GENERAL II</td>
                           ) : null}
                           {i === 0 ? (
-                            <td rowSpan={LAB_RESULTADO_ROWS.length} className={`whitespace-nowrap px-3 py-1.5 align-middle font-medium ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"}`}>Resultado</td>
+                            <td rowSpan={LAB_RESULTADO_ROWS.length} className="border border-[#7a7a7a] bg-[#b4dce8] px-3 align-middle text-[#1a3e6e]">Resultado</td>
                           ) : null}
-                          <td className="whitespace-nowrap px-3 py-1.5">{row}</td>
-                          <td className="px-2 py-1 text-center">
-                            <input inputMode="numeric" value={labValues[row] ?? ""} onChange={(e) => setLabValues((v) => ({ ...v, [row]: e.target.value }))} placeholder="0" className="w-16 rounded-md border border-white/10 bg-[#0f1a30] px-2 py-1 text-center text-sm text-slate-100 outline-none focus:border-cyan-400" />
+                          <td className="border border-[#7a7a7a] bg-[#b4dce8] px-3 py-2 text-[#1a3e6e]">{row}</td>
+                          <td className="border border-[#7a7a7a] bg-white px-2 py-1 text-center">
+                            <input inputMode="numeric" value={labValues[row] ?? ""} onChange={(e) => setLabValues((v) => ({ ...v, [row]: e.target.value }))} placeholder="0" className="w-16 border border-[#9fb3c4] bg-white px-1 py-0.5 text-center text-[#333] outline-none focus:border-[#3aa5d1]" />
                           </td>
                         </tr>
                       ))}
                       {LAB_PROCEDENCIA_ROWS.map((row, i) => (
-                        <tr key={row} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                        <tr key={row}>
                           {i === 0 ? (
-                            <td rowSpan={LAB_PROCEDENCIA_ROWS.length} className={`whitespace-nowrap px-3 py-1.5 align-middle font-medium ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"}`}>Servicio de procedencia</td>
+                            <td rowSpan={LAB_PROCEDENCIA_ROWS.length} className="border border-[#7a7a7a] bg-white px-3 align-middle text-[#1a3e6e]">Servicio de procedencia</td>
                           ) : null}
-                          <td className="whitespace-nowrap px-3 py-1.5">{row}</td>
-                          <td className="px-2 py-1 text-center">
-                            <input inputMode="numeric" value={labValues[row] ?? ""} onChange={(e) => setLabValues((v) => ({ ...v, [row]: e.target.value }))} placeholder="0" className="w-16 rounded-md border border-white/10 bg-[#0f1a30] px-2 py-1 text-center text-sm text-slate-100 outline-none focus:border-cyan-400" />
+                          <td className="border border-[#7a7a7a] bg-white px-3 py-2 text-[#1a3e6e]">{row}</td>
+                          <td className="border border-[#7a7a7a] bg-white px-2 py-1 text-center">
+                            <input inputMode="numeric" value={labValues[row] ?? ""} onChange={(e) => setLabValues((v) => ({ ...v, [row]: e.target.value }))} placeholder="0" className="w-16 border border-[#9fb3c4] bg-white px-1 py-0.5 text-center text-[#333] outline-none focus:border-[#3aa5d1]" />
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </div>
+              ) : null}
             </div>
           ) : sepsTemplate.kind === "matrix"
             ? (sepsTemplate.sections ?? []).map((section) => {
