@@ -8644,22 +8644,22 @@ export default function Home() {
         <div className="mt-5 space-y-6">
           {sepsTemplate.serviceId === "laboratorio-clinico" ? (
             <div className="text-[13px]">
-              <div className="mx-auto max-w-2xl overflow-hidden rounded-md border border-[#5b7f99] shadow">
+              <div className="mx-auto max-w-2xl overflow-hidden rounded-md border border-[#5b7f99] bg-white shadow">
                 <div className="bg-[#3aa5d1] py-1.5 text-center text-sm font-bold text-white">Laboratorio clínico</div>
                 <table className="w-full border-collapse bg-white">
                   <tbody>
                     <tr>
                       <td className="w-44 border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Establecimiento</td>
-                      <td className="border border-[#c9d6e0] px-2 py-1 text-[#333]">{sepsTemplate.establishment}</td>
+                      <td className="border border-[#c9d6e0] bg-white px-2 py-1 text-[#1a1a1a]">{sepsTemplate.establishment}</td>
                     </tr>
                     <tr>
                       <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Recurso</td>
-                      <td className="border border-[#c9d6e0] px-2 py-1 text-[#333]">Laboratorio</td>
+                      <td className="border border-[#c9d6e0] bg-white px-2 py-1 text-[#1a1a1a]">Laboratorio</td>
                     </tr>
                     <tr>
                       <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Año</td>
-                      <td className="border border-[#c9d6e0] p-0">
-                        <select value={labYear} onChange={(e) => setLabYear(Number(e.target.value))} className="w-full border-0 bg-white px-2 py-1 text-[#333] outline-none">
+                      <td className="border border-[#c9d6e0] bg-white p-0">
+                        <select value={labYear} onChange={(e) => setLabYear(Number(e.target.value))} className="w-full border-0 bg-white px-2 py-1 text-[#1a1a1a] outline-none">
                           {Array.from({ length: 10 }, (_, i) => 2026 + i).map((y) => (
                             <option key={y} value={y}>{y}</option>
                           ))}
@@ -8668,8 +8668,8 @@ export default function Home() {
                     </tr>
                     <tr>
                       <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Mes</td>
-                      <td className="border border-[#c9d6e0] p-0">
-                        <select value={labMonth} onChange={(e) => setLabMonth(e.target.value)} className="w-full border-0 bg-white px-2 py-1 text-[#333] outline-none">
+                      <td className="border border-[#c9d6e0] bg-white p-0">
+                        <select value={labMonth} onChange={(e) => setLabMonth(e.target.value)} className="w-full border-0 bg-white px-2 py-1 text-[#1a1a1a] outline-none">
                           <option value="">[Seleccione…]</option>
                           {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map((m) => (
                             <option key={m} value={m}>{m}</option>
@@ -8679,12 +8679,12 @@ export default function Home() {
                     </tr>
                     <tr>
                       <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Convenio</td>
-                      <td className="border border-[#c9d6e0] px-2 py-1 text-[#333]">Ninguno</td>
+                      <td className="border border-[#c9d6e0] bg-white px-2 py-1 text-[#1a1a1a]">Ninguno</td>
                     </tr>
                     <tr>
                       <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Sección</td>
-                      <td className="border border-[#c9d6e0] p-0">
-                        <select value={labSection} onChange={(e) => { setLabSection(e.target.value); setLabTest(""); setLabValues({}); }} className="w-full border-0 bg-white px-2 py-1 text-[#333] outline-none">
+                      <td className="border border-[#c9d6e0] bg-white p-0">
+                        <select value={labSection} onChange={(e) => { setLabSection(e.target.value); setLabTest(""); setLabValues({}); }} className="w-full border-0 bg-white px-2 py-1 text-[#1a1a1a] outline-none">
                           <option value="">[Seleccione…]</option>
                           {LAB_SECTIONS.map((s) => (
                             <option key={s.code} value={s.code}>{s.code}- {s.name}</option>
@@ -8694,8 +8694,8 @@ export default function Home() {
                     </tr>
                     <tr>
                       <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Prueba</td>
-                      <td className="border border-[#c9d6e0] p-0">
-                        <select value={labTest} disabled={!labSection} onChange={(e) => { setLabTest(e.target.value); setLabValues({}); }} className="w-full border-0 bg-white px-2 py-1 text-[#333] outline-none disabled:bg-[#f3f3f3]">
+                      <td className="border border-[#c9d6e0] bg-white p-0">
+                        <select value={labTest} disabled={!labSection} onChange={(e) => { setLabTest(e.target.value); setLabValues({}); }} className="w-full border-0 bg-white px-2 py-1 text-[#1a1a1a] outline-none disabled:bg-[#f3f3f3]">
                           <option value="">[Seleccione…]</option>
                           {(LAB_SECTIONS.find((s) => s.code === labSection)?.tests ?? []).map((t) => (
                             <option key={t.code} value={t.code}>{t.code}- {t.name}</option>
@@ -8705,7 +8705,7 @@ export default function Home() {
                     </tr>
                     <tr>
                       <td className="border border-[#c9d6e0] bg-[#eef3f7] px-2 py-1 font-bold text-[#1a3e6e]">Estrategia</td>
-                      <td className="border border-[#c9d6e0] px-2 py-1 text-[#333]">General</td>
+                      <td className="border border-[#c9d6e0] bg-white px-2 py-1 text-[#1a1a1a]">General</td>
                     </tr>
                   </tbody>
                 </table>
