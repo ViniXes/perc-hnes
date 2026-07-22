@@ -62,6 +62,8 @@ import { downloadSepsTemplate } from "@/lib/seps-download";
 import { getHorasTemplate, type HorasTemplate } from "@/lib/horas-templates";
 import { INSUMOS_ALMACEN_TEMPLATE, INSUMOS_CONSOLIDADO_ORDER, type InsumoRow } from "@/lib/insumos-almacen";
 import { LAB_SECTIONS, LAB_RESULTADO_ROWS, LAB_PROCEDENCIA_ROWS } from "@/lib/seps-laboratorio-lnr";
+const LAB_MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+type LabSavedPrueba = { section: string; sectionName: string; test: string; testName: string; rows: Record<string, string>; total: number; userEmail: string };
 import {
   matchAction,
   matchSmalltalk,
@@ -3529,6 +3531,10 @@ export default function Home() {
   const [labSection, setLabSection] = useState("");
   const [labTest, setLabTest] = useState("");
   const [labValues, setLabValues] = useState<Record<string, string>>({});
+  const [labSaved, setLabSaved] = useState<Record<string, LabSavedPrueba>>({});
+  const [labError, setLabError] = useState("");
+  const [labMsg, setLabMsg] = useState("");
+  const [labSaving, setLabSaving] = useState(false);
   const [tableValues, setTableValues] = useState<TableValues>({});
   // Filas PERC agregadas a mano y filas oficiales ocultas (admin/supervisores),
   // por servicio+mes. Se guardan en el doc serviceTabulators junto con los valores.
@@ -4611,6 +4617,26 @@ export default function Home() {
       cancelled = true;
     };
   }, [sepsTemplate, sepsPeriodId, firestoreUnavailable, user]);
+
+  const labPeriodId = labMonth ? `LAB${labYear}${String(LAB_MONTHS.indexOf(labMonth) + 1).padStart(2, "0")}` : "";
+  useEffect(() => {
+    if (sepsTemplate?.serviceId !== "laboratorio-clinico" || !labPeriodId || firestoreUnavailable) {
+      setLabSaved({});
+      return;
+    }
+    let active = true;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "sepsTabulators", `${labPeriodId}__laboratorio-clinico`));
+        if (!active) return;
+        const data = snap.exists() ? (snap.data() as { pruebas?: Record<string, LabSavedPrueba> }) : null;
+        setLabSaved(data?.pruebas ?? {});
+      } catch {
+        if (active) setLabSaved({});
+      }
+    })();
+    return () => { active = false; };
+  }, [sepsTemplate, labPeriodId, firestoreUnavailable, user]);
 
   // Carga el tabulador de Horas (empleados) del periodo de cierre del servicio.
   useEffect(() => {
@@ -7142,6 +7168,73 @@ export default function Home() {
     }
   }
 
+  function handleCancelLabTest() {
+    setLabTest("");
+    setLabValues({});
+    setLabError("");
+    setLabMsg("");
+  }
+
+  async function handleSaveLabTest() {
+    if (!user || firestoreUnavailable) return;
+    if (!labMonth) { setLabError("Selecciona el mes antes de guardar."); setLabMsg(""); return; }
+    if (!labSection || !labTest) { setLabError("Selecciona seccion y prueba."); setLabMsg(""); return; }
+    const resTotal = LAB_RESULTADO_ROWS.reduce((a, r) => a + (Number(labValues[r]) || 0), 0);
+    const procTotal = LAB_PROCEDENCIA_ROWS.reduce((a, r) => a + (Number(labValues[r]) || 0), 0);
+    if (resTotal !== procTotal) {
+      setLabError(`Los totales deben ser iguales: Resultado (${resTotal}) y Servicio de procedencia (${procTotal}) no coinciden.`);
+      setLabMsg("");
+      return;
+    }
+    const sec = LAB_SECTIONS.find((x) => x.code === labSection);
+    const tst = sec?.tests.find((x) => x.code === labTest);
+    const key = `${labSection}|${labTest}`;
+    const cleanRows: Record<string, string> = {};
+    [...LAB_RESULTADO_ROWS, ...LAB_PROCEDENCIA_ROWS].forEach((r) => { if (labValues[r] !== undefined && labValues[r] !== "") cleanRows[r] = String(labValues[r]); });
+    const prueba: LabSavedPrueba = {
+      section: labSection,
+      sectionName: sec?.name ?? "",
+      test: labTest,
+      testName: tst ? `${tst.code}- ${tst.name}` : labTest,
+      rows: cleanRows,
+      total: resTotal,
+      userEmail: user.email || "",
+    };
+    const periodId = `LAB${labYear}${String(LAB_MONTHS.indexOf(labMonth) + 1).padStart(2, "0")}`;
+    const nextSaved = { ...labSaved, [key]: prueba };
+    setLabSaving(true);
+    setLabError("");
+    setLabMsg("");
+    try {
+      await setDoc(
+        doc(db, "sepsTabulators", `${periodId}__laboratorio-clinico`),
+        {
+          periodId,
+          module: "sesps",
+          serviceId: "laboratorio-clinico",
+          serviceName: "Laboratorio clinico",
+          establishment: "HOSPITAL NACIONAL EL SALVADOR",
+          year: labYear,
+          month: labMonth,
+          userId: user.uid,
+          userEmail: user.email || "",
+          pruebas: nextSaved,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      setLabSaved(nextSaved);
+      setLabMsg(`Prueba guardada: ${prueba.testName} (${labMonth} ${labYear}).`);
+      setLabTest("");
+      setLabValues({});
+    } catch (e) {
+      if (await handleFirestoreError(e)) return;
+      setLabError("No pudimos guardar la prueba. Revisa Firestore e intentalo de nuevo.");
+    } finally {
+      setLabSaving(false);
+    }
+  }
+
   async function handleSaveSeps() {
     if (!user || !sepsTemplate || !serviceProfile || firestoreUnavailable) {
       return;
@@ -8695,7 +8788,7 @@ export default function Home() {
                     <tr>
                       <td className="border border-[#c9d6e0] px-2 py-1 font-bold" style={{ backgroundColor: "#eef3f7", color: "#1a3e6e" }}>Prueba</td>
                       <td className="border border-[#c9d6e0] p-0" style={{ backgroundColor: "#ffffff" }}>
-                        <select value={labTest} disabled={!labSection} onChange={(e) => { setLabTest(e.target.value); setLabValues({}); }} className="w-full border-0 px-2 py-1 outline-none disabled:bg-[#f3f3f3]" style={{ backgroundColor: "#ffffff", color: "#1a1a1a" }}>
+                        <select value={labTest} disabled={!labSection} onChange={(e) => { const tv = e.target.value; setLabTest(tv); setLabValues(labSaved[`${labSection}|${tv}`]?.rows ?? {}); setLabMsg(""); setLabError(""); }} className="w-full border-0 px-2 py-1 outline-none disabled:bg-[#f3f3f3]" style={{ backgroundColor: "#ffffff", color: "#1a1a1a" }}>
                           <option value="">[Seleccione…]</option>
                           {(LAB_SECTIONS.find((s) => s.code === labSection)?.tests ?? []).map((t) => (
                             <option key={t.code} value={t.code}>{t.code}- {t.name}</option>
@@ -8710,54 +8803,103 @@ export default function Home() {
                   </tbody>
                 </table>
                 <div className="flex justify-center gap-3 border-t border-[#cdd8e0] py-2" style={{ backgroundColor: "#eef3f7" }}>
-                  <button type="button" className="rounded border border-[#9fb3c4] px-5 py-1 hover:bg-[#f0f6ff] disabled:opacity-40" style={{ backgroundColor: "#ffffff", color: "#1a3e6e" }} disabled={!labTest}>Guardar</button>
-                  <button type="button" onClick={() => { setLabTest(""); setLabValues({}); }} className="rounded border border-[#9fb3c4] px-5 py-1 hover:bg-[#f0f6ff]" style={{ backgroundColor: "#ffffff", color: "#1a3e6e" }}>Cancelar</button>
+                  <button type="button" onClick={handleSaveLabTest} className="rounded border border-[#9fb3c4] px-5 py-1 hover:bg-[#f0f6ff] disabled:opacity-40" style={{ backgroundColor: "#ffffff", color: "#1a3e6e" }} disabled={!labTest || !labMonth || labSaving}>{labSaving ? "Guardando…" : "Guardar"}</button>
+                  <button type="button" onClick={handleCancelLabTest} className="rounded border border-[#9fb3c4] px-5 py-1 hover:bg-[#f0f6ff]" style={{ backgroundColor: "#ffffff", color: "#1a3e6e" }}>Cancelar</button>
                 </div>
               </div>
 
+              {labError ? (
+                <div className="mx-auto mt-3 max-w-2xl rounded border px-3 py-2 text-center text-[13px] font-semibold" style={{ backgroundColor: "#fdeaea", color: "#a12020", borderColor: "#e6b0b0" }}>{labError}</div>
+              ) : null}
+              {labMsg ? (
+                <div className="mx-auto mt-3 max-w-2xl rounded border px-3 py-2 text-center text-[13px] font-semibold" style={{ backgroundColor: "#e8f6ec", color: "#1c6b34", borderColor: "#b5dcc2" }}>{labMsg}</div>
+              ) : null}
+
               {labSection && labTest ? (
                 <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[640px] border-collapse text-[13px]">
+                  <table className="w-full min-w-[640px] border-collapse text-[13px]" style={{ backgroundColor: "#ffffff" }}>
                     <thead>
-                      <tr className="bg-[#f6f2cf] text-[#333]">
-                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold">Grupo 3</th>
-                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold">Grupo 2</th>
-                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold">Grupo 1</th>
-                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold">Actividad</th>
-                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold">Total</th>
+                      <tr>
+                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold" style={{ backgroundColor: "#f6f2cf", color: "#333333" }}>Grupo 3</th>
+                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold" style={{ backgroundColor: "#f6f2cf", color: "#333333" }}>Grupo 2</th>
+                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold" style={{ backgroundColor: "#f6f2cf", color: "#333333" }}>Grupo 1</th>
+                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold" style={{ backgroundColor: "#f6f2cf", color: "#333333" }}>Actividad</th>
+                        <th className="border border-[#7a7a7a] px-3 py-2 font-bold" style={{ backgroundColor: "#f6f2cf", color: "#333333" }}>Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       {LAB_RESULTADO_ROWS.map((row, i) => (
                         <tr key={row}>
                           {i === 0 ? (
-                            <td rowSpan={LAB_RESULTADO_ROWS.length + LAB_PROCEDENCIA_ROWS.length} className="border border-[#7a7a7a] bg-[#c9c9c9] px-3 text-center align-middle font-medium text-[#333]">GENERAL I</td>
+                            <td rowSpan={LAB_RESULTADO_ROWS.length + LAB_PROCEDENCIA_ROWS.length} className="border border-[#7a7a7a] px-3 text-center align-middle font-medium" style={{ backgroundColor: "#c9c9c9", color: "#333333" }}>GENERAL I</td>
                           ) : null}
                           {i === 0 ? (
-                            <td rowSpan={LAB_RESULTADO_ROWS.length + LAB_PROCEDENCIA_ROWS.length} className="border border-[#7a7a7a] bg-[#d2d2d2] px-3 text-center align-middle font-medium text-[#333]">GENERAL II</td>
+                            <td rowSpan={LAB_RESULTADO_ROWS.length + LAB_PROCEDENCIA_ROWS.length} className="border border-[#7a7a7a] px-3 text-center align-middle font-medium" style={{ backgroundColor: "#d2d2d2", color: "#333333" }}>GENERAL II</td>
                           ) : null}
                           {i === 0 ? (
-                            <td rowSpan={LAB_RESULTADO_ROWS.length} className="border border-[#7a7a7a] bg-[#b4dce8] px-3 align-middle text-[#1a3e6e]">Resultado</td>
+                            <td rowSpan={LAB_RESULTADO_ROWS.length} className="border border-[#7a7a7a] px-3 align-middle" style={{ backgroundColor: "#b4dce8", color: "#1a3e6e" }}>Resultado</td>
                           ) : null}
-                          <td className="border border-[#7a7a7a] bg-[#b4dce8] px-3 py-2 text-[#1a3e6e]">{row}</td>
-                          <td className="border border-[#7a7a7a] bg-white px-2 py-1 text-center">
-                            <input inputMode="numeric" value={labValues[row] ?? ""} onChange={(e) => setLabValues((v) => ({ ...v, [row]: e.target.value }))} placeholder="0" className="w-16 border border-[#9fb3c4] bg-white px-1 py-0.5 text-center text-[#333] outline-none focus:border-[#3aa5d1]" />
+                          <td className="border border-[#7a7a7a] px-3 py-2" style={{ backgroundColor: "#b4dce8", color: "#1a3e6e" }}>{row}</td>
+                          <td className="border border-[#7a7a7a] px-2 py-1 text-center" style={{ backgroundColor: "#ffffff" }}>
+                            <input inputMode="numeric" value={labValues[row] ?? ""} onChange={(e) => setLabValues((v) => ({ ...v, [row]: e.target.value }))} placeholder="0" className="w-16 border border-[#9fb3c4] px-1 py-0.5 text-center outline-none focus:border-[#3aa5d1]" style={{ backgroundColor: "#ffffff", color: "#333333" }} />
                           </td>
                         </tr>
                       ))}
                       {LAB_PROCEDENCIA_ROWS.map((row, i) => (
                         <tr key={row}>
                           {i === 0 ? (
-                            <td rowSpan={LAB_PROCEDENCIA_ROWS.length} className="border border-[#7a7a7a] bg-white px-3 align-middle text-[#1a3e6e]">Servicio de procedencia</td>
+                            <td rowSpan={LAB_PROCEDENCIA_ROWS.length} className="border border-[#7a7a7a] px-3 align-middle" style={{ backgroundColor: "#ffffff", color: "#1a3e6e" }}>Servicio de procedencia</td>
                           ) : null}
-                          <td className="border border-[#7a7a7a] bg-white px-3 py-2 text-[#1a3e6e]">{row}</td>
-                          <td className="border border-[#7a7a7a] bg-white px-2 py-1 text-center">
-                            <input inputMode="numeric" value={labValues[row] ?? ""} onChange={(e) => setLabValues((v) => ({ ...v, [row]: e.target.value }))} placeholder="0" className="w-16 border border-[#9fb3c4] bg-white px-1 py-0.5 text-center text-[#333] outline-none focus:border-[#3aa5d1]" />
+                          <td className="border border-[#7a7a7a] px-3 py-2" style={{ backgroundColor: "#ffffff", color: "#1a3e6e" }}>{row}</td>
+                          <td className="border border-[#7a7a7a] px-2 py-1 text-center" style={{ backgroundColor: "#ffffff" }}>
+                            <input inputMode="numeric" value={labValues[row] ?? ""} onChange={(e) => setLabValues((v) => ({ ...v, [row]: e.target.value }))} placeholder="0" className="w-16 border border-[#9fb3c4] px-1 py-0.5 text-center outline-none focus:border-[#3aa5d1]" style={{ backgroundColor: "#ffffff", color: "#333333" }} />
                           </td>
                         </tr>
                       ))}
+                      <tr>
+                        <td colSpan={4} className="border border-[#7a7a7a] px-3 py-1 text-right font-bold" style={{ backgroundColor: "#eef3f7", color: "#1a3e6e" }}>Total Resultado</td>
+                        <td className="border border-[#7a7a7a] px-2 py-1 text-center font-bold" style={{ backgroundColor: "#eef3f7", color: "#1a3e6e" }}>{LAB_RESULTADO_ROWS.reduce((a, r) => a + (Number(labValues[r]) || 0), 0)}</td>
+                      </tr>
+                      <tr>
+                        <td colSpan={4} className="border border-[#7a7a7a] px-3 py-1 text-right font-bold" style={{ backgroundColor: "#eef3f7", color: "#1a3e6e" }}>Total Servicio de procedencia</td>
+                        <td className="border border-[#7a7a7a] px-2 py-1 text-center font-bold" style={{ backgroundColor: "#eef3f7", color: "#1a3e6e" }}>{LAB_PROCEDENCIA_ROWS.reduce((a, r) => a + (Number(labValues[r]) || 0), 0)}</td>
+                      </tr>
                     </tbody>
                   </table>
+                </div>
+              ) : null}
+
+              {Object.keys(labSaved).length > 0 ? (
+                <div className="mx-auto mt-6 max-w-6xl">
+                  <div className="mb-2 text-center text-sm font-bold" style={{ color: "#1a3e6e" }}>Consolidado del mes{labMonth ? ` — ${labMonth} ${labYear}` : ""}</div>
+                  <div className="overflow-x-auto rounded-md border border-[#5b7f99]" style={{ backgroundColor: "#ffffff" }}>
+                    <table className="w-full border-collapse text-[12px]" style={{ backgroundColor: "#ffffff" }}>
+                      <thead>
+                        <tr>
+                          <th className="border border-[#7a7a7a] px-2 py-1 font-bold" style={{ backgroundColor: "#f6f2cf", color: "#333333" }}>Seccion</th>
+                          <th className="border border-[#7a7a7a] px-2 py-1 text-left font-bold" style={{ backgroundColor: "#f6f2cf", color: "#333333" }}>Prueba</th>
+                          {LAB_RESULTADO_ROWS.map((r) => (<th key={r} className="border border-[#7a7a7a] px-1 py-1 font-bold" style={{ backgroundColor: "#b4dce8", color: "#1a3e6e" }}>{r}</th>))}
+                          {LAB_PROCEDENCIA_ROWS.map((r) => (<th key={r} className="border border-[#7a7a7a] px-1 py-1 font-bold" style={{ backgroundColor: "#dfeef4", color: "#1a3e6e" }}>{r}</th>))}
+                          <th className="border border-[#7a7a7a] px-2 py-1 font-bold" style={{ backgroundColor: "#f6f2cf", color: "#333333" }}>Total</th>
+                          <th className="border border-[#7a7a7a] px-1 py-1 font-bold" style={{ backgroundColor: "#f6f2cf", color: "#333333" }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(labSaved).sort((a, b) => a[0].localeCompare(b[0])).map(([k, pr]) => (
+                          <tr key={k}>
+                            <td className="border border-[#c9d6e0] px-2 py-1 text-center" style={{ backgroundColor: "#eef3f7", color: "#1a3e6e" }}>{pr.section}</td>
+                            <td className="border border-[#c9d6e0] px-2 py-1" style={{ backgroundColor: "#ffffff", color: "#1a1a1a" }}>{pr.testName}</td>
+                            {LAB_RESULTADO_ROWS.map((r) => (<td key={r} className="border border-[#c9d6e0] px-1 py-1 text-center" style={{ backgroundColor: "#ffffff", color: "#333333" }}>{pr.rows?.[r] ?? ""}</td>))}
+                            {LAB_PROCEDENCIA_ROWS.map((r) => (<td key={r} className="border border-[#c9d6e0] px-1 py-1 text-center" style={{ backgroundColor: "#ffffff", color: "#333333" }}>{pr.rows?.[r] ?? ""}</td>))}
+                            <td className="border border-[#c9d6e0] px-2 py-1 text-center font-bold" style={{ backgroundColor: "#f3f7fa", color: "#1a3e6e" }}>{pr.total}</td>
+                            <td className="border border-[#c9d6e0] px-1 py-1 text-center" style={{ backgroundColor: "#ffffff" }}>
+                              <button type="button" onClick={() => { setLabSection(pr.section); setLabTest(pr.test); setLabValues(pr.rows ?? {}); setLabMsg(""); setLabError(""); }} className="rounded border border-[#9fb3c4] px-2 py-0.5 text-[11px]" style={{ backgroundColor: "#ffffff", color: "#1a3e6e" }}>Editar</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : null}
             </div>
