@@ -8709,9 +8709,9 @@ export default function Home() {
                     </tr>
                   </tbody>
                 </table>
-                <div className="flex justify-center gap-3 border-t border-[#cdd8e0] bg-[#eef3f7] py-2">
-                  <button type="button" className="rounded border border-[#9fb3c4] bg-white px-5 py-1 text-[#1a3e6e] hover:bg-[#f0f6ff] disabled:opacity-40" disabled={!labTest}>Guardar</button>
-                  <button type="button" onClick={() => { setLabTest(""); setLabValues({}); }} className="rounded border border-[#9fb3c4] bg-white px-5 py-1 text-[#1a3e6e] hover:bg-[#f0f6ff]">Cancelar</button>
+                <div className="flex justify-center gap-3 border-t border-[#cdd8e0] py-2" style={{ backgroundColor: "#eef3f7" }}>
+                  <button type="button" className="rounded border border-[#9fb3c4] px-5 py-1 hover:bg-[#f0f6ff] disabled:opacity-40" style={{ backgroundColor: "#ffffff", color: "#1a3e6e" }} disabled={!labTest}>Guardar</button>
+                  <button type="button" onClick={() => { setLabTest(""); setLabValues({}); }} className="rounded border border-[#9fb3c4] px-5 py-1 hover:bg-[#f0f6ff]" style={{ backgroundColor: "#ffffff", color: "#1a3e6e" }}>Cancelar</button>
                 </div>
               </div>
 
