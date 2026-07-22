@@ -14,6 +14,10 @@ export const NEFROLOGIA_TEMPLATE: SepsTemplate = {
       rows: [
         { key: "nefro_personas_1ra_vez", label: "No. de personas de 1ra. vez en la vida en hemodiálisis", groups: ["Procedimientos", "Nefrología", "Nefrología"] },
         { key: "nefro_hemodialisis", label: "No. hemodiálisis (incluye procedimientos realizados a personas de 1ra. vez y control subsecuente)", groups: ["Procedimientos", "Nefrología", "Nefrología"] },
+        { key: "nefro_perit_personas_1ra", label: "No. de personas de 1ra. vez en la vida en diálisis peritoneal", groups: ["Procedimientos", "Nefrología", "Nefrología"] },
+        { key: "nefro_perit_dialisis", label: "No. diálisis peritoneal (incluye procedimientos realizados a personas de 1ra. vez en la vida y control subsecuente)", groups: ["Procedimientos", "Nefrología", "Nefrología"] },
+        { key: "nefro_perit_amb_personas", label: "No. de personas en diálisis peritoneal ambulatoria domiciliar", groups: ["Procedimientos", "Nefrología", "Nefrología"] },
+        { key: "nefro_perit_amb_dialisis", label: "No. de diálisis peritoneal ambulatoria domiciliar", groups: ["Procedimientos", "Nefrología", "Nefrología"] },
       ],
     },
   ],
