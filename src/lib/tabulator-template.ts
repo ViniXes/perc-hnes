@@ -382,6 +382,41 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: [],
   },
   {
+    id: "cuidados-paliativos",
+    name: "Cuidados Paliativos",
+    rows: [],
+  },
+  {
+    id: "cuidados-paliativos-enfermeria",
+    name: "Cuidados Paliativos - Enfermería",
+    rows: [],
+  },
+  {
+    id: "cuidados-paliativos-psicologo",
+    name: "Cuidados Paliativos - Psicólogo",
+    rows: [],
+  },
+  {
+    id: "cuidados-paliativos-fisioterapia",
+    name: "Cuidados Paliativos - Fisioterapia",
+    rows: [],
+  },
+  {
+    id: "cuidados-paliativos-ts",
+    name: "Cuidados Paliativos - Trabajo Social",
+    rows: [],
+  },
+  {
+    id: "cuidados-paliativos-espiritual",
+    name: "Cuidados Paliativos - Intervención Espiritual",
+    rows: [],
+  },
+  {
+    id: "cuidados-paliativos-consolidado",
+    name: "Cuidados Paliativos Consolidado",
+    rows: [],
+  },
+  {
     id: "uci-aislados",
     name: "UCI Aislados",
     rows: [],

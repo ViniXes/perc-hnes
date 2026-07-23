@@ -25,6 +25,7 @@ import { MAXIMA_EMERGENCIA_TEMPLATE } from "@/lib/seps-maxima-emergencia";
 import { CENTRO_QUIRURGICO_TEMPLATE } from "@/lib/seps-centro-quirurgico";
 import { RRHH_TEMPLATE } from "@/lib/seps-rrhh";
 import { UCIN_AISLADOS_TEMPLATE, UCIN_CRONICOS_TEMPLATE, UCIN_TEMPLATE, UCIN_CONSOLIDADO_TEMPLATE } from "@/lib/seps-ucin";
+import { CUIDADOS_PALIATIVOS_MEDICO_TEMPLATE, CUIDADOS_PALIATIVOS_ENFERMERIA_TEMPLATE, CUIDADOS_PALIATIVOS_PSICOLOGO_TEMPLATE, CUIDADOS_PALIATIVOS_FISIOTERAPIA_TEMPLATE, CUIDADOS_PALIATIVOS_TS_TEMPLATE, CUIDADOS_PALIATIVOS_ESPIRITUAL_TEMPLATE, CUIDADOS_PALIATIVOS_CONSOLIDADO_TEMPLATE } from "@/lib/seps-cuidados-paliativos";
 import { UCI_AISLADOS_TEMPLATE, UCI_CARDIOVASCULAR_TEMPLATE, UCI_EXTRACORPOREA_TEMPLATE, UCI_GENERAL_1_TEMPLATE, UCI_GENERAL_2_TEMPLATE, UCI_NEUROCRITICOS_TEMPLATE, UCI_QUIRURGICA_TEMPLATE, UCI_CONSOLIDADO_TEMPLATE } from "@/lib/seps-uci";
 import { CARDIOLOGIA_TEMPLATE } from "@/lib/seps-cardiologia";
 import { ANESTESIOLOGIA_TEMPLATE } from "@/lib/seps-anestesiologia";
@@ -203,6 +204,14 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "ucin-cronicos": UCIN_CRONICOS_TEMPLATE,
   "ucin": UCIN_TEMPLATE,
   "ucin-consolidado": UCIN_CONSOLIDADO_TEMPLATE,
+  // Cuidados Paliativos: tabla compartida por 6 areas + consolidado (solo lectura).
+  "cuidados-paliativos": CUIDADOS_PALIATIVOS_MEDICO_TEMPLATE,
+  "cuidados-paliativos-enfermeria": CUIDADOS_PALIATIVOS_ENFERMERIA_TEMPLATE,
+  "cuidados-paliativos-psicologo": CUIDADOS_PALIATIVOS_PSICOLOGO_TEMPLATE,
+  "cuidados-paliativos-fisioterapia": CUIDADOS_PALIATIVOS_FISIOTERAPIA_TEMPLATE,
+  "cuidados-paliativos-ts": CUIDADOS_PALIATIVOS_TS_TEMPLATE,
+  "cuidados-paliativos-espiritual": CUIDADOS_PALIATIVOS_ESPIRITUAL_TEMPLATE,
+  "cuidados-paliativos-consolidado": CUIDADOS_PALIATIVOS_CONSOLIDADO_TEMPLATE,
   // UCI: subunidades (mismo cuadro) + consolidado.
   "uci-aislados": UCI_AISLADOS_TEMPLATE,
   "uci-cardiovascular": UCI_CARDIOVASCULAR_TEMPLATE,

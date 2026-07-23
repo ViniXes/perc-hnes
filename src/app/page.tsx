@@ -569,6 +569,12 @@ const SERVICE_FAMILIES: { id: string; title: string; group: string; members: str
       "uci-consolidado",
     ],
   },
+  {
+    id: "cuidados-paliativos",
+    title: "Cuidados Paliativos",
+    group: "medica",
+    members: ["cuidados-paliativos", "cuidados-paliativos-enfermeria", "cuidados-paliativos-psicologo", "cuidados-paliativos-fisioterapia", "cuidados-paliativos-ts", "cuidados-paliativos-espiritual", "cuidados-paliativos-consolidado"],
+  },
 ];
 const SERVICE_FAMILY_BY_ID: Record<string, string> = Object.fromEntries(
   SERVICE_FAMILIES.flatMap((f) => f.members.map((m) => [m, f.id] as const)),
@@ -621,6 +627,13 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "ucin-cronicos": "medica",
   "ucin": "medica",
   "ucin-consolidado": "medica",
+  "cuidados-paliativos": "medica",
+  "cuidados-paliativos-enfermeria": "medica",
+  "cuidados-paliativos-psicologo": "medica",
+  "cuidados-paliativos-fisioterapia": "medica",
+  "cuidados-paliativos-ts": "medica",
+  "cuidados-paliativos-espiritual": "medica",
+  "cuidados-paliativos-consolidado": "medica",
   "uci-aislados": "medica",
   "uci-cardiovascular": "medica",
   "uci-extracorporea": "medica",
