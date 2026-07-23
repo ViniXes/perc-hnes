@@ -58,7 +58,7 @@ import {
   type SepsTemplate,
 } from "@/lib/seps-templates";
 import { downloadSepsTemplate } from "@/lib/seps-download";
-import { getHorasTemplate, type HorasTemplate } from "@/lib/horas-templates";
+import { getHorasTemplate, HORAS_TEMPLATES, type HorasTemplate } from "@/lib/horas-templates";
 import { INSUMOS_ALMACEN_TEMPLATE, INSUMOS_CONSOLIDADO_ORDER, type InsumoRow } from "@/lib/insumos-almacen";
 import { LAB_SECTIONS, LAB_RESULTADO_ROWS, LAB_PROCEDENCIA_ROWS } from "@/lib/seps-laboratorio-lnr";
 const LAB_MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -2532,37 +2532,65 @@ function computeConsolidado(
 }
 
 async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
-  const snapshot = await getDocs(
-    query(collection(db, "horasTabulators"), where("periodId", "==", periodId)),
-  );
-  type HorasRow = { servicio: string; empleado: string; dui: string; centro: string; horas: string };
-  const rows: HorasRow[] = [];
-  const docsData = snapshot.docs
-    .map(
-      (d) =>
-        d.data() as {
-          serviceName?: string;
-          serviceId?: string;
-          employees?: Array<{ name?: string; dui?: string; hours?: Record<string, string> }>;
-        },
-    )
-    .sort((a, b) =>
-      String(a.serviceName || a.serviceId || "").localeCompare(String(b.serviceName || b.serviceId || "")),
+  // Lo YA guardado del mes (para superponer las horas reales cuando existan).
+  const savedByService: Record<
+    string,
+    { employees?: Array<{ name?: string; dui?: string; hours?: Record<string, string> }> }
+  > = {};
+  try {
+    const snapshot = await getDocs(
+      query(collection(db, "horasTabulators"), where("periodId", "==", periodId)),
     );
-  for (const data of docsData) {
-    const servicio = String(data.serviceName || data.serviceId || "");
-    for (const emp of data.employees ?? []) {
-      const empName = String(emp?.name || "").trim();
-      const dui = String(emp?.dui || "").trim();
-      const hours = emp?.hours ?? {};
-      for (const [centro, val] of Object.entries(hours)) {
-        const v = String(val ?? "").trim();
-        if (v === "" || Number(v) === 0) continue;
-        rows.push({ servicio, empleado: empName, dui, centro, horas: v });
+    for (const d of snapshot.docs) {
+      const data = d.data() as {
+        serviceId?: string;
+        employees?: Array<{ name?: string; dui?: string; hours?: Record<string, string> }>;
+      };
+      if (data.serviceId) savedByService[data.serviceId] = data;
+    }
+  } catch {
+    // Sin conexion: el consolidado se arma igual con la nomina de las plantillas.
+  }
+
+  type HorasRow = { division: string; servicio: string; empleado: string; dui: string; total: string };
+  const rows: HorasRow[] = [];
+  for (const sid of Object.keys(HORAS_TEMPLATES)) {
+    const template = HORAS_TEMPLATES[sid];
+    const division = SERVICE_GROUP_LABELS[SERVICE_GROUP_BY_ID[sid] || "apoyo"] || "Otros";
+    const servicio = template.displayName || getServiceById(sid)?.name || sid;
+    const saved = savedByService[sid];
+    const employees =
+      saved && Array.isArray(saved.employees) && saved.employees.length > 0
+        ? saved.employees.map((e) => ({
+            name: String(e?.name || ""),
+            dui: String(e?.dui || ""),
+            hours: e?.hours ?? {},
+          }))
+        : seedHorasEmployees(template).map((e) => ({ name: e.name, dui: e.dui, hours: e.hours }));
+    for (const emp of employees) {
+      if (!String(emp.name).trim() && !String(emp.dui).trim()) continue;
+      let total = 0;
+      for (const v of Object.values(emp.hours || {})) {
+        const nnum = Number(String(v ?? "").trim());
+        if (Number.isFinite(nnum)) total += nnum;
       }
+      rows.push({
+        division,
+        servicio,
+        empleado: String(emp.name).trim(),
+        dui: String(emp.dui).trim(),
+        total: total > 0 ? String(total) : "",
+      });
     }
   }
-  const headers = ["Servicio", "Empleado", "DUI", "Centro de costo", "Horas"];
+  rows.sort(
+    (a, b) =>
+      a.division.localeCompare(b.division) ||
+      a.servicio.localeCompare(b.servicio) ||
+      a.empleado.localeCompare(b.empleado),
+  );
+
+  const headers = ["Division", "Servicio", "Empleado", "DUI", "Total de horas"];
   const headerCells = headers
     .map(
       (h) =>
@@ -2574,10 +2602,10 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
       ? rows
           .map(
             (r) =>
-              `<tr><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.servicio)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.empleado)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.dui)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.centro)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(r.horas)}</td></tr>`,
+              `<tr><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.division)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.servicio)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.empleado)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.dui)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(r.total)}</td></tr>`,
           )
           .join("")
-      : `<tr><td colspan="5" style="border:1px solid #cbd5e1;padding:6px;text-align:center;">Sin registros de horas para ${escapeHtml(periodLabel)}.</td></tr>`;
+      : `<tr><td colspan="5" style="border:1px solid #cbd5e1;padding:6px;text-align:center;">No hay empleados registrados en las plantillas de horas.</td></tr>`;
   const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Consolidado de Horas ${periodId}</title></head><body><h3>Consolidado de Horas - ${escapeHtml(periodLabel)}</h3><table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
   const blob = new Blob(["\ufeff", documentHtml], {
     type: "application/vnd.ms-excel;charset=utf-8;",
@@ -2591,7 +2619,6 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
   window.document.body.removeChild(link);
   window.URL.revokeObjectURL(url);
 }
-
 function downloadServiceProductionReport(
   overview: AdminOverviewEntry[],
   periodId: string,
