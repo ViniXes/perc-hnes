@@ -214,6 +214,15 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
     lastName: "Miranda Marroquin",
     modules: ["sesps"],
   },
+  {
+    // Monitor de RRHH: SOLO ve el Monitoreo de Horas (quien completo) y descarga
+    // el consolidado mensual de horas en Excel. No captura.
+    username: "userrhh",
+    password: DEFAULT_TEMP_PASSWORD,
+    firstName: "Monitor",
+    lastName: "RRHH",
+    modules: ["distribucion"],
+  },
 ];
 // --- Censo Diario de Pacientes (submenu bajo PERC; SOLO supervision) -----------
 // Lo EDITA solo Alfonso Montes (usuario "amontes"); lo VEN admin y supervisores;
@@ -2520,6 +2529,67 @@ function computeConsolidado(
       }),
     };
   });
+}
+
+async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
+  const snapshot = await getDocs(
+    query(collection(db, "horasTabulators"), where("periodId", "==", periodId)),
+  );
+  type HorasRow = { servicio: string; empleado: string; dui: string; centro: string; horas: string };
+  const rows: HorasRow[] = [];
+  const docsData = snapshot.docs
+    .map(
+      (d) =>
+        d.data() as {
+          serviceName?: string;
+          serviceId?: string;
+          employees?: Array<{ name?: string; dui?: string; hours?: Record<string, string> }>;
+        },
+    )
+    .sort((a, b) =>
+      String(a.serviceName || a.serviceId || "").localeCompare(String(b.serviceName || b.serviceId || "")),
+    );
+  for (const data of docsData) {
+    const servicio = String(data.serviceName || data.serviceId || "");
+    for (const emp of data.employees ?? []) {
+      const empName = String(emp?.name || "").trim();
+      const dui = String(emp?.dui || "").trim();
+      const hours = emp?.hours ?? {};
+      for (const [centro, val] of Object.entries(hours)) {
+        const v = String(val ?? "").trim();
+        if (v === "" || Number(v) === 0) continue;
+        rows.push({ servicio, empleado: empName, dui, centro, horas: v });
+      }
+    }
+  }
+  const headers = ["Servicio", "Empleado", "DUI", "Centro de costo", "Horas"];
+  const headerCells = headers
+    .map(
+      (h) =>
+        `<th style="background:#dbe7ff;border:1px solid #cbd5e1;padding:8px;font-weight:700;">${escapeHtml(h)}</th>`,
+    )
+    .join("");
+  const bodyRows =
+    rows.length > 0
+      ? rows
+          .map(
+            (r) =>
+              `<tr><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.servicio)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.empleado)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.dui)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.centro)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(r.horas)}</td></tr>`,
+          )
+          .join("")
+      : `<tr><td colspan="5" style="border:1px solid #cbd5e1;padding:6px;text-align:center;">Sin registros de horas para ${escapeHtml(periodLabel)}.</td></tr>`;
+  const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Consolidado de Horas ${periodId}</title></head><body><h3>Consolidado de Horas - ${escapeHtml(periodLabel)}</h3><table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
+  const blob = new Blob(["\ufeff", documentHtml], {
+    type: "application/vnd.ms-excel;charset=utf-8;",
+  });
+  const url = window.URL.createObjectURL(blob);
+  const link = window.document.createElement("a");
+  link.href = url;
+  link.download = `horas-consolidado-${periodId}.xls`;
+  window.document.body.appendChild(link);
+  link.click();
+  window.document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
 }
 
 function downloadServiceProductionReport(
@@ -13558,6 +13628,16 @@ export default function Home() {
                           ✕
                         </button>
                       </div>
+
+                      {statsModule === "distribucion" ? (
+                        <button
+                          type="button"
+                          onClick={() => void downloadHorasConsolidado(periodId, getPeriodLabel(periodId))}
+                          className="mt-4 shrink-0 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25"
+                        >
+                          Descargar consolidado de horas (Excel)
+                        </button>
+                      ) : null}
 
                       {/* Resumen */}
                       <div className="mt-5 shrink-0 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
