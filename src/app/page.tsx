@@ -2531,6 +2531,75 @@ function computeConsolidado(
   });
 }
 
+// Centros de costo del formato oficial "Programacion Hora" (con codigo), en orden.
+const HORAS_COST_CENTERS: string[] = [
+  "66-Hospitalizacion medicina interna",
+  "95-Hospitalizacion cirugia general",
+  "745-Hospitalizacion servicios por convenios",
+  "166-Unidad de cuidados intensivos",
+  "179-Unidad de cuidados intermedios",
+  "201-Emergencias",
+  "743-Clinica empresarial",
+  "806-Centro quirurgico",
+  "767-Unidad de cuidados especiales",
+  "766-Servicio de apoyo a riiss",
+  "398-Vacunacion",
+  "518-Laboratorio clinico",
+  "530-Laboratorio de biologia molecular",
+  "538-Resonancia magnetica",
+  "541-Tomografia",
+  "791-Estudio de radiologia",
+  "559-Ultrasonografia",
+  "776-Estudios gastroclinicos",
+  "562-Terapia fisica",
+  "566-Terapia respiratoria",
+  "570-Rehabilitacion pulmonar",
+  "575-Banco de sangre",
+  "579-Unidad de hemodinamia",
+  "268-Hemodialisis",
+  "593-Servicio farmaceutico",
+  "803-Rehablitacion psicosocial",
+  "750-Alimentacion enteral",
+  "760-Nutricion parenteral",
+  "662-Central de esterilizacion",
+  "761-Saneamiento ambiental",
+  "648-Aseo",
+  "721-Almacen",
+  "652-Servicio de alimentacion",
+  "659-Lavanderia",
+  "664-Transporte general",
+  "665-Mantenimiento",
+  "713-Trabajo social",
+  "670-Administracion",
+  "702-Docencia e investigacion",
+];
+// Normaliza un nombre de centro de costo: quita tildes, el prefijo de codigo y
+// unifica espacios/mayusculas, para cruzar las columnas del sistema con la plantilla.
+function normHorasCol(x: string): string {
+  let n = x.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  n = n.replace(/^\s*\d+\s*-\s*/, "");
+  n = n.replace(/\s+/g, " ").trim().toUpperCase();
+  return n;
+}
+// Alias para variantes que no calzan por normalizacion simple.
+const HORAS_ALIAS: Record<string, string> = {
+  "BIOLOGIA MOLECULAR": "LABORATORIO DE BIOLOGIA MOLECULAR",
+  "DOCENCIA E INVESTIGACION Y CAPACITACION": "DOCENCIA E INVESTIGACION",
+  "REHABILITACION PSICOSOCIAL": "REHABLITACION PSICOSOCIAL",
+  "SERVICIO DE APOYO A LA RISS": "SERVICIO DE APOYO A RIISS",
+  "SERVICIOS DE APOYO A LA RISS": "SERVICIO DE APOYO A RIISS",
+};
+const HORAS_CC_BY_NORM: Record<string, string> = (() => {
+  const m: Record<string, string> = {};
+  for (const h of HORAS_COST_CENTERS) m[normHorasCol(h)] = h;
+  return m;
+})();
+function mapAppColToTemplate(appCol: string): string | null {
+  let n = normHorasCol(appCol);
+  n = HORAS_ALIAS[n] || n;
+  return HORAS_CC_BY_NORM[n] || null;
+}
+
 async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
   // Lo YA guardado del mes (para superponer las horas reales cuando existan).
   const savedByService: Record<
@@ -2549,11 +2618,11 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
       if (data.serviceId) savedByService[data.serviceId] = data;
     }
   } catch {
-    // Sin conexion: el consolidado se arma igual con la nomina de las plantillas.
+    // Sin conexion: se arma con la nomina de las plantillas.
   }
 
-  type HorasRow = { division: string; servicio: string; empleado: string; dui: string; total: string };
-  const rows: HorasRow[] = [];
+  type EmpRow = { division: string; servicio: string; empleado: string; total: number; cc: Record<string, number> };
+  const rows: EmpRow[] = [];
   for (const sid of Object.keys(HORAS_TEMPLATES)) {
     const template = HORAS_TEMPLATES[sid];
     const division = SERVICE_GROUP_LABELS[SERVICE_GROUP_BY_ID[sid] || "apoyo"] || "Otros";
@@ -2561,26 +2630,22 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
     const saved = savedByService[sid];
     const employees =
       saved && Array.isArray(saved.employees) && saved.employees.length > 0
-        ? saved.employees.map((e) => ({
-            name: String(e?.name || ""),
-            dui: String(e?.dui || ""),
-            hours: e?.hours ?? {},
-          }))
-        : seedHorasEmployees(template).map((e) => ({ name: e.name, dui: e.dui, hours: e.hours }));
+        ? saved.employees.map((e) => ({ name: String(e?.name || ""), hours: e?.hours ?? {} }))
+        : seedHorasEmployees(template).map((e) => ({ name: e.name, hours: e.hours }));
     for (const emp of employees) {
-      if (!String(emp.name).trim() && !String(emp.dui).trim()) continue;
+      const empleado = String(emp.name).trim();
+      if (!empleado) continue;
+      const ccVals: Record<string, number> = {};
       let total = 0;
-      for (const v of Object.values(emp.hours || {})) {
-        const nnum = Number(String(v ?? "").trim());
-        if (Number.isFinite(nnum)) total += nnum;
+      for (const [appCol, val] of Object.entries(emp.hours || {})) {
+        const num = Number(String(val ?? "").trim());
+        if (!Number.isFinite(num) || num === 0) continue;
+        const header = mapAppColToTemplate(appCol);
+        if (!header) continue;
+        ccVals[header] = (ccVals[header] || 0) + num;
+        total += num;
       }
-      rows.push({
-        division,
-        servicio,
-        empleado: String(emp.name).trim(),
-        dui: String(emp.dui).trim(),
-        total: total > 0 ? String(total) : "",
-      });
+      rows.push({ division, servicio, empleado, total, cc: ccVals });
     }
   }
   rows.sort(
@@ -2590,30 +2655,45 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
       a.empleado.localeCompare(b.empleado),
   );
 
-  const headers = ["Division", "Servicio", "Empleado", "DUI", "Total de horas"];
+  const headers = ["Empleado", "Total Empleados", "Total Pagado", "Componente Salarial", ...HORAS_COST_CENTERS];
   const headerCells = headers
     .map(
       (h) =>
-        `<th style="background:#dbe7ff;border:1px solid #cbd5e1;padding:8px;font-weight:700;">${escapeHtml(h)}</th>`,
+        `<th style="background:#dbe7ff;border:1px solid #cbd5e1;padding:6px;font-weight:700;white-space:nowrap;">${escapeHtml(h)}</th>`,
     )
     .join("");
   const bodyRows =
     rows.length > 0
       ? rows
-          .map(
-            (r) =>
-              `<tr><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.division)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.servicio)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.empleado)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(r.dui)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(r.total)}</td></tr>`,
-          )
+          .map((r) => {
+            const fixed = [
+              escapeHtml(r.empleado),
+              "1",
+              r.total > 0 ? String(r.total) : "",
+              "",
+            ];
+            const ccCells = HORAS_COST_CENTERS.map((h) => {
+              const v = r.cc[h];
+              return v && v > 0 ? String(v) : "";
+            });
+            const tds = [...fixed, ...ccCells]
+              .map(
+                (v, i) =>
+                  `<td style="border:1px solid #cbd5e1;padding:4px;${i >= 1 ? "text-align:center;" : ""}">${v}</td>`,
+              )
+              .join("");
+            return `<tr>${tds}</tr>`;
+          })
           .join("")
-      : `<tr><td colspan="5" style="border:1px solid #cbd5e1;padding:6px;text-align:center;">No hay empleados registrados en las plantillas de horas.</td></tr>`;
-  const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Consolidado de Horas ${periodId}</title></head><body><h3>Consolidado de Horas - ${escapeHtml(periodLabel)}</h3><table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
+      : `<tr><td colspan="${headers.length}" style="border:1px solid #cbd5e1;padding:6px;text-align:center;">No hay empleados en las plantillas de horas.</td></tr>`;
+  const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Programacion Hora ${periodId}</title></head><body><table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
   const blob = new Blob(["\ufeff", documentHtml], {
     type: "application/vnd.ms-excel;charset=utf-8;",
   });
   const url = window.URL.createObjectURL(blob);
   const link = window.document.createElement("a");
   link.href = url;
-  link.download = `horas-consolidado-${periodId}.xls`;
+  link.download = `Programacion-Hora-${periodId}.xls`;
   window.document.body.appendChild(link);
   link.click();
   window.document.body.removeChild(link);
