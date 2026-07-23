@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     body = {};
   }
 
-  const message = typeof body.message === "string" ? body.message.slice(0, 500).trim() : "";
+  const message = typeof body.message === "string" ? body.message.slice(0, 280).trim() : "";
   const available = Array.isArray(body.availableActions) ? body.availableActions : [];
 
   if (!message) {
@@ -57,26 +57,14 @@ export async function POST(req: NextRequest) {
   const actionList = available.map((a) => `- ${a.id}: ${a.label}`).join("\n") || "(ninguna disponible)";
 
   const systemPrompt = [
-    "Sos el asistente virtual de PULSO, la plataforma del Hospital Nacional El Salvador para capturar la producción mensual de cada servicio.",
-    "Respondés SIEMPRE en español, con tono cordial y claro. Sé breve (2-3 frases) para pedidos simples; si le piden explicar CÓMO usar una parte del sistema, podés extenderte a 4-6 frases con pasos concretos.",
-    "Tratá al usuario SIEMPRE de «usted» (nunca «vos» ni «tú»): «puede», «escriba», «su captura».",
-    "",
-    "GUÍA DEL SISTEMA (usala para explicar cualquier punto):",
-    "- PULSO organiza la carga en módulos, en este orden: 1) PERC (productividad por centros de costo), 2) SEPS (estadística diaria por servicio), 3) Distribución de Horas (reparto de horas del personal). Además: Insumos de Almacén (costos), Censo Diario, Consolidados y DOCS-POA/MOF.",
-    "- Para capturar: abra su tabulador desde el menú, complete las casillas del período y toque «Guardar». Cada módulo se guarda por separado. Los meses anteriores quedan en solo lectura (salvo administrador).",
-    "- En SEPS las columnas son los días del mes y el Total por fila se calcula solo; puede moverse con las flechas del teclado (↑↓←→) como en Excel.",
-    "- Admin y supervisores pueden agregar o quitar filas en PERC, SEPS e Insumos con los botones + y bote de basura de cada fila.",
-    "- En Configuración se personaliza la vista: tema claro/oscuro, color de acento, tipografía, tamaño de letra, fondo y widgets del inicio.",
-    "- Ventanas de captura: PERC y SEPS cierran el 3er día hábil 2:30 PM; Distribución de Horas el 5º día hábil; SEPS reabre el 6º día hábil.",
-    "",
-    "CAPACIDAD ESPECIAL — Excel: el usuario puede ARRASTRAR o adjuntar un archivo de Excel de su servicio en el chat; el sistema lo lee y COMPLETA automáticamente el tabulador del mes actual (SEPS, Horas o Insumos, según su cuenta); luego el usuario revisa y guarda. Si le preguntan por esto, explíquelo y anímelos a soltar el Excel en el chat.",
-    "",
-    "Cuando el usuario pide hacer algo concreto, proponé UNA acción de esta lista (id EXACTO):",
+    "Sos el asistente de PULSO (Hospital Nacional El Salvador), app para capturar la producción mensual por servicio.",
+    "Respondé SIEMPRE en español, tratando de USTED, breve (2-3 frases; máx 5 si piden un cómo-hacer).",
+    "Módulos: PERC (productividad), SEPS (estadística diaria por días del mes, Total automático), Distribución de Horas; además Insumos, Censo, Consolidados, DOCS. Para capturar: abrir el tabulador, llenar el período y Guardar. Meses previos son solo lectura (salvo admin). Cierres: PERC/SEPS 3er día hábil 2:30pm, Horas 5º, SEPS reabre 6º.",
+    "Se puede arrastrar un Excel del servicio al chat y el sistema llena el tabulador del mes; luego el usuario revisa y guarda.",
+    "No pidas ni menciones datos sensibles de pacientes.",
+    "Si el usuario quiere ejecutar algo, proponé UNA acción por su id EXACTO de esta lista:",
     actionList,
-    "Reglas:",
-    "- Devolvé un JSON con { reply, actionId }.",
-    "- 'actionId' es el id SOLO si el usuario claramente quiere ejecutar una acción de la lista; si solo pregunta o no aplica ninguna, poné null.",
-    "- Nunca inventes ids fuera de la lista. No pidas ni menciones datos sensibles de pacientes.",
+    "Devolvé JSON { reply, actionId }. actionId = id solo si claramente quiere ejecutar una acción; si no, null. Nunca inventes ids.",
   ].join("\n");
 
   try {
@@ -90,7 +78,7 @@ export async function POST(req: NextRequest) {
           contents: [{ role: "user", parts: [{ text: message }] }],
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 500,
+            maxOutputTokens: 300,
             responseMimeType: "application/json",
             responseSchema: {
               type: "object",
@@ -117,46 +105,4 @@ export async function POST(req: NextRequest) {
           (d) => typeof d["@type"] === "string" && (d["@type"] as string).includes("RetryInfo"),
         );
         const retryDelay = retry?.["retryDelay"];
-        const secs = typeof retryDelay === "string" ? parseInt(retryDelay, 10) : NaN;
-        // Respetamos lo que indica Google, con un tope de 6 horas para re-evaluar.
-        if (!Number.isNaN(secs) && secs > 0) delayMs = Math.min(secs * 1000, 6 * 60 * 60 * 1000);
-      } catch {
-        // Si no se pudo leer el detalle, queda el reintento por minuto.
-      }
-      cooldownUntil = Date.now() + delayMs;
-      return NextResponse.json({ reply: LIMIT_REPLY, actionId: null, limited: true });
-    }
-
-    if (!res.ok) throw new Error(`gemini ${res.status}`);
-
-    const data = await res.json();
-    const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-
-    let parsed: { reply?: unknown; actionId?: unknown } = {};
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = {};
-    }
-
-    const reply =
-      typeof parsed.reply === "string" && parsed.reply.trim()
-        ? parsed.reply.trim()
-        : "Perdón, no entendí bien. ¿Puede reformularlo con otras palabras?";
-
-    let actionId: AssistantActionId | null = null;
-    if (typeof parsed.actionId === "string" && KNOWN_ACTION_IDS.includes(parsed.actionId as AssistantActionId)) {
-      // Solo se acepta si tambien esta disponible en el contexto del usuario.
-      if (available.some((a) => a.id === parsed.actionId)) {
-        actionId = parsed.actionId as AssistantActionId;
-      }
-    }
-
-    return NextResponse.json({ reply, actionId });
-  } catch {
-    return NextResponse.json({
-      reply: "No pude conectar con el asistente inteligente en este momento. Pruebe con las opciones de abajo.",
-      actionId: null,
-    });
-  }
-}
+        const secs = typeof retryDelay === "string" ? parse

@@ -8,7 +8,6 @@ import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
-  sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
@@ -165,7 +164,7 @@ type PublicDashboardGroup = {
 // defecto para que el login funcione aunque no esten configuradas en Vercel.
 // SEGURIDAD: al ser app cliente quedan en el bundle; la proteccion real es ROTAR
 // las claves (sobreescribiendolas con las env en Vercel) y poner el repo PRIVADO.
-const DEFAULT_TEMP_PASSWORD = process.env.NEXT_PUBLIC_DEFAULT_TEMP_PASSWORD || "PERC2026!";
+const DEFAULT_TEMP_PASSWORD = process.env.NEXT_PUBLIC_DEFAULT_TEMP_PASSWORD || "123456";
 const ADMIN_USERNAME = process.env.NEXT_PUBLIC_ADMIN_USERNAME || "Hcardoza";
 const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "Cardoza1986";
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "hcardoza.admin@perc-hnes.app";
@@ -6782,6 +6781,19 @@ export default function Home() {
     setSignupBusyId(req.id);
     setError("");
     setMessage("");
+    // Tope de 5 usuarios por servicio (previa autorización del admin/supervisor).
+    try {
+      const existing = await getDocs(
+        query(collection(db, "serviceUsers"), where("serviceId", "==", service.id)),
+      );
+      if (existing.size >= 5) {
+        setError(`El servicio "${service.name}" ya tiene el máximo de 5 usuarios. Desactivá o quitá uno antes de aprobar otro.`);
+        setSignupBusyId("");
+        return;
+      }
+    } catch {
+      // Si no se puede contar, seguimos (no bloqueamos por un error de lectura).
+    }
     const secondary = createSecondaryAuth();
     try {
       const { username } = await createChiefUserAccount(secondary.auth, {
@@ -7989,27 +8001,63 @@ export default function Home() {
     setMessage("");
 
     try {
-      // El reset debe ir al correo de ACCESO real de la cuenta (deterministico),
-      // no al correo de contacto que escribio el admin.
-      const targetEmail =
-        managedUser.role === "service"
-          ? getServiceLoginEmail(managedUser.serviceId) || managedUser.email
-          : managedUser.email;
-      await sendPasswordResetEmail(auth, targetEmail);
-      await setDoc(
-        doc(db, "serviceUsers", uid),
-        {
-          mustChangePassword: true,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-
+      // Reset por SERVIDOR (Admin SDK): pone la clave del usuario en 123456 y
+      // marca mustChangePassword. La SDK de cliente no puede cambiar la clave de
+      // OTRO usuario, por eso va contra /api/admin/reset-password.
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setError("Volvé a iniciar sesión para resetear claves.");
+        return;
+      }
+      const res = await fetch("/api/admin/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, targetUid: uid }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string; password?: string };
+      if (!res.ok || !data.ok) {
+        setError(data.error || "No se pudo resetear la clave.");
+        return;
+      }
       const users = await fetchManagedUsers();
       applyAdminUsers(users);
-      setMessage(`Se envio el correo de restablecimiento a ${targetEmail}.`);
+      setMessage(
+        `Clave de ${managedUser.name || managedUser.username || "usuario"} reseteada a ${data.password || "123456"}. La cambiará al iniciar sesión.`,
+      );
     } catch (resetError) {
       setError(getAuthErrorMessage(resetError));
+    } finally {
+      setAdminBusyUserId("");
+    }
+  }
+
+  // Reset masivo: TODAS las cuentas de servicio ya creadas -> 123456 (para entregar).
+  async function handleResetAllServices() {
+    if (!isAdmin) return;
+    setError("");
+    setMessage("");
+    setAdminBusyUserId("__all__");
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setError("Volvé a iniciar sesión para resetear claves.");
+        return;
+      }
+      const res = await fetch("/api/admin/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, scope: "all-services" }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string; count?: number; total?: number; password?: string };
+      if (!res.ok || !data.ok) {
+        setError(data.error || "No se pudo hacer el reset masivo.");
+        return;
+      }
+      const users = await fetchManagedUsers();
+      applyAdminUsers(users);
+      setMessage(`Se resetearon ${data.count ?? 0} de ${data.total ?? 0} cuentas de servicio a ${data.password || "123456"}.`);
+    } catch (bulkError) {
+      setError(getAuthErrorMessage(bulkError));
     } finally {
       setAdminBusyUserId("");
     }
@@ -12837,11 +12885,23 @@ export default function Home() {
                   </h2>
                   <p className="mt-2 max-w-3xl text-sm text-slate-300">
                     Desde aqui puedes activar o bloquear cuentas, asignar servicios, cambiar roles,
-                    permitir o negar captura y forzar cambio de contrasena mediante correo de
-                    restablecimiento.
+                    permitir o negar captura y resetear la clave a 123456 (el usuario la cambia al
+                    iniciar sesion).
                   </p>
                 </div>
-                <p className="text-sm text-slate-300">Clave temporal inicial: {DEFAULT_TEMP_PASSWORD}</p>
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <p className="text-sm text-slate-300">Clave temporal inicial: {DEFAULT_TEMP_PASSWORD}</p>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleResetAllServices()}
+                      disabled={adminBusyUserId === "__all__"}
+                      className="rounded-xl border border-amber-400/40 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {adminBusyUserId === "__all__" ? "Reseteando…" : "Resetear TODOS los servicios a 123456"}
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
               <div className="mb-6 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
