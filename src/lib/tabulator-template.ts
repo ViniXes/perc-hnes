@@ -382,11 +382,6 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: [],
   },
   {
-    id: "cuidados-paliativos",
-    name: "Cuidados Paliativos",
-    rows: [],
-  },
-  {
     id: "cuidados-paliativos-enfermeria",
     name: "Cuidados Paliativos - Enfermería",
     rows: [],

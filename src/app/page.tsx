@@ -627,7 +627,6 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "ucin-cronicos": "medica",
   "ucin": "medica",
   "ucin-consolidado": "medica",
-  "cuidados-paliativos": "medica",
   "cuidados-paliativos-enfermeria": "medica",
   "cuidados-paliativos-psicologo": "medica",
   "cuidados-paliativos-fisioterapia": "medica",

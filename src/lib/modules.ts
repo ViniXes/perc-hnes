@@ -181,7 +181,7 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   // UDP: SOLO Distribucion de Horas.
   udp: ["distribucion"],
   // Cuidados Paliativos: por ahora SOLO Distribucion de Horas (SEPS pendiente).
-  "cuidados-paliativos": ["distribucion"],
+  "cuidados-paliativos": ["distribucion", "sesps"],
   // Medicina Preventiva: por ahora SOLO Distribucion de Horas.
   "medicina-preventiva": ["distribucion"],
   // Medicina Interna: por ahora SOLO Distribucion de Horas.
@@ -199,7 +199,6 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "ucin-cronicos": ["sesps"],
   "ucin": ["sesps"],
   "ucin-consolidado": ["sesps"],
-  "cuidados-paliativos": ["sesps"],
   "cuidados-paliativos-enfermeria": ["sesps"],
   "cuidados-paliativos-psicologo": ["sesps"],
   "cuidados-paliativos-fisioterapia": ["sesps"],
