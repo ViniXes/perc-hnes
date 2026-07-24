@@ -549,6 +549,15 @@ const SERVICE_GROUP_LABELS: Record<string, string> = {
   enfermeria: "Division de Enfermeria",
   administrativa: "Subdireccion Administrativa",
 };
+// Orden y etiquetas del desplegable de REGISTRO (agrupado por division). jefeLabel
+// = opcion de "Jefe de division" (solo las 3 con jefatura). El resto solo servicios.
+const SIGNUP_DIVISIONS: { key: string; label: string; jefeLabel: string | null }[] = [
+  { key: "medica", label: "Division Medica", jefeLabel: "Jefe de Division Medica" },
+  { key: "apoyo", label: "Division de Apoyo", jefeLabel: "Jefe de Division de Apoyo" },
+  { key: "enfermeria", label: "Division de Enfermeria", jefeLabel: null },
+  { key: "administrativa", label: "Subdireccion Administrativa", jefeLabel: "Subdireccion Administrativa" },
+  { key: "direccion", label: "Direccion", jefeLabel: null },
+];
 
 // Terminos extra de busqueda por servicio (p.ej. siglas), en minusculas. Permiten
 // encontrar un servicio por su acronimo aunque el nombre visible sea el completo.
@@ -15782,101 +15791,94 @@ export default function Home() {
                     className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
                   />
                 </label>
-                <div>
-                  <span className="text-xs font-medium text-slate-300">¿Cómo vas a ingresar?</span>
-                  <div className="mt-1.5 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSignupForm((f) => ({ ...f, accessType: "service" }))}
-                      className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${signupForm.accessType === "service" ? "border-cyan-400 bg-cyan-500/15 text-cyan-200" : "border-white/10 bg-[#1b2537] text-slate-300"}`}
-                    >
-                      Personal de un servicio
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSignupForm((f) => ({ ...f, accessType: "division" }))}
-                      className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${signupForm.accessType === "division" ? "border-cyan-400 bg-cyan-500/15 text-cyan-200" : "border-white/10 bg-[#1b2537] text-slate-300"}`}
-                    >
-                      Jefe de división
-                    </button>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-300">Cargo / Servicio</span>
+                  <select
+                    value={
+                      signupForm.accessType === "division"
+                        ? signupForm.division
+                          ? `div:${signupForm.division}`
+                          : ""
+                        : signupForm.isChief && signupForm.serviceId
+                          ? `chief:${signupForm.serviceId}`
+                          : signupForm.serviceId
+                            ? `svc:${signupForm.serviceId}`
+                            : ""
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v.startsWith("div:")) {
+                        setSignupForm((f) => ({ ...f, accessType: "division", division: v.slice(4), serviceId: "", isChief: false, captureModules: [] }));
+                      } else if (v.startsWith("chief:")) {
+                        setSignupForm((f) => ({ ...f, accessType: "service", serviceId: v.slice(6), isChief: true, division: "", captureModules: [] }));
+                      } else if (v.startsWith("svc:")) {
+                        setSignupForm((f) => ({ ...f, accessType: "service", serviceId: v.slice(4), isChief: false, division: "", captureModules: [] }));
+                      } else {
+                        setSignupForm((f) => ({ ...f, accessType: "service", serviceId: "", isChief: false, division: "", captureModules: [] }));
+                      }
+                    }}
+                    className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
+                  >
+                    <option value="">Elegí tu cargo o servicio…</option>
+                    {SIGNUP_DIVISIONS.map((d) => {
+                      const svcs = SERVICE_DEFINITIONS.filter(
+                        (s) => (SERVICE_GROUP_BY_ID[s.id] || "apoyo") === d.key && !getSepsTemplate(s.id)?.consolidatesFrom,
+                      );
+                      if (svcs.length === 0 && !d.jefeLabel) return null;
+                      return (
+                        <optgroup key={d.key} label={d.label}>
+                          {d.jefeLabel ? (
+                            <option value={`div:${d.key}`} className="bg-[#1b2537] text-cyan-200">
+                              {d.jefeLabel}
+                            </option>
+                          ) : null}
+                          {svcs.map((s) => (
+                            <option key={`chief:${s.id}`} value={`chief:${s.id}`} className="bg-[#1b2537] text-white">
+                              Jefe — {s.name}
+                            </option>
+                          ))}
+                          {svcs.map((s) => (
+                            <option key={`svc:${s.id}`} value={`svc:${s.id}`} className="bg-[#1b2537] text-white">
+                              {s.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                  </select>
+                  <span className="mt-1 block text-[11px] text-slate-400">
+                    Primero las jefaturas de cada división, luego los servicios. El jefe de división ve todo lo de su división.
+                  </span>
+                </label>
+
+                {signupForm.accessType === "service" && signupForm.serviceId && !signupForm.isChief ? (
+                  <div>
+                    <span className="text-xs font-medium text-slate-300">¿Qué va a llenar?</span>
+                    <div className="mt-1.5 flex flex-wrap gap-2">
+                      {(getAreaById(signupForm.serviceId)?.modules ?? []).map((m) => {
+                        const on = signupForm.captureModules.includes(m);
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() =>
+                              setSignupForm((f) => ({
+                                ...f,
+                                captureModules: on ? f.captureModules.filter((x) => x !== m) : [...f.captureModules, m],
+                              }))
+                            }
+                            className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${on ? "border-cyan-400 bg-cyan-500/15 text-cyan-200" : "border-white/10 bg-[#1b2537] text-slate-300"}`}
+                          >
+                            {getModuleLabel(m)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span className="mt-1 block text-[11px] text-slate-400">Puede elegir 1, 2 o los 3. Solo verá y llenará lo que marque.</span>
                   </div>
-                </div>
+                ) : null}
 
-                {signupForm.accessType === "division" ? (
-                  <label className="block">
-                    <span className="text-xs font-medium text-slate-300">División</span>
-                    <select
-                      value={signupForm.division}
-                      onChange={(e) => setSignupForm((f) => ({ ...f, division: e.target.value }))}
-                      className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
-                    >
-                      <option value="">Elegí tu división…</option>
-                      <option value="medica" className="bg-[#1b2537] text-white">Jefe de División Médica</option>
-                      <option value="apoyo" className="bg-[#1b2537] text-white">Jefe de División de Apoyo</option>
-                      <option value="administrativa" className="bg-[#1b2537] text-white">Subdirección Administrativa</option>
-                    </select>
-                    <span className="mt-1 block text-[11px] text-slate-400">Verás todo lo de tu división (los 3 módulos), no las otras.</span>
-                  </label>
-                ) : (
-                  <>
-                    <label className="block">
-                      <span className="text-xs font-medium text-slate-300">Servicio</span>
-                      <select
-                        value={signupForm.serviceId}
-                        onChange={(e) => setSignupForm((f) => ({ ...f, serviceId: e.target.value, captureModules: [] }))}
-                        className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
-                      >
-                        <option value="">Elegí tu servicio…</option>
-                        {SERVICE_DEFINITIONS.filter((s) => !getSepsTemplate(s.id)?.consolidatesFrom).map((s) => (
-                          <option key={s.id} value={s.id} className="bg-[#1b2537] text-white">
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="flex items-start gap-2.5">
-                      <input
-                        type="checkbox"
-                        checked={signupForm.isChief}
-                        onChange={(e) => setSignupForm((f) => ({ ...f, isChief: e.target.checked }))}
-                        className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-500"
-                      />
-                      <span className="text-xs leading-snug text-slate-300">
-                        ¿Es usted el <b>jefe del servicio</b>? (verá todos los tabuladores de su área)
-                      </span>
-                    </label>
-
-                    {signupForm.serviceId && !signupForm.isChief ? (
-                      <div>
-                        <span className="text-xs font-medium text-slate-300">¿Qué va a llenar?</span>
-                        <div className="mt-1.5 flex flex-wrap gap-2">
-                          {(getAreaById(signupForm.serviceId)?.modules ?? []).map((m) => {
-                            const on = signupForm.captureModules.includes(m);
-                            return (
-                              <button
-                                key={m}
-                                type="button"
-                                onClick={() =>
-                                  setSignupForm((f) => ({
-                                    ...f,
-                                    captureModules: on ? f.captureModules.filter((x) => x !== m) : [...f.captureModules, m],
-                                  }))
-                                }
-                                className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${on ? "border-cyan-400 bg-cyan-500/15 text-cyan-200" : "border-white/10 bg-[#1b2537] text-slate-300"}`}
-                              >
-                                {getModuleLabel(m)}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <span className="mt-1 block text-[11px] text-slate-400">Solo verás y llenarás lo que marqués.</span>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-
-                <label className="flex items-start gap-2.5 pt-1">
+                                <label className="flex items-start gap-2.5 pt-1">
                   <input
                     type="checkbox"
                     checked={signupForm.acceptPrivacy}
