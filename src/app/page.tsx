@@ -96,6 +96,11 @@ type ManagedUser = {
   permissions: ServicePermissions;
   // Modulos que un supervisor puede habilitar/deshabilitar (vacio para otros roles).
   supervisorModules: ModuleId[];
+  // Modulos que ESTE usuario captura en su servicio (subset). Si es jefe ve todos.
+  captureModules: ModuleId[];
+  isChief: boolean;
+  // Para jefes de division: "medica" | "apoyo" | "administrativa" | "enfermeria" | "direccion".
+  division: string | null;
   mustChangePassword: boolean;
   isActive: boolean;
 };
@@ -1470,6 +1475,10 @@ type SignupRequest = {
   serviceName: string;
   status: "pending" | "approved" | "rejected";
   createdUsername?: string;
+  requestType?: "service" | "division";
+  isChief?: boolean;
+  captureModules?: ModuleId[];
+  division?: string;
 };
 
 function getModuleLabel(moduleId: ModuleId) {
@@ -2830,6 +2839,11 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
       canToggleCapture: rawPermissions.canToggleCapture ?? defaultPermissions.canToggleCapture,
     },
     supervisorModules,
+    captureModules: Array.isArray(data.captureModules)
+      ? (data.captureModules.filter((v): v is ModuleId => MODULE_ORDER.includes(v as ModuleId)) as ModuleId[])
+      : [],
+    isChief: data.isChief === true,
+    division: typeof data.division === "string" ? data.division : null,
     mustChangePassword: data.mustChangePassword !== false,
     isActive: data.isActive !== false,
   };
@@ -3561,11 +3575,15 @@ async function createChiefUserAccount(
     contactEmail,
     firstName,
     lastName,
+    isChief,
+    captureModules,
   }: {
     service: ServiceDefinition;
     contactEmail: string;
     firstName: string;
     lastName: string;
+    isChief: boolean;
+    captureModules: ModuleId[];
   },
 ) {
   const base = buildChiefUsername(firstName, lastName);
@@ -3612,12 +3630,77 @@ async function createChiefUserAccount(
     role: "service",
     isActive: true,
     mustChangePassword: true,
-    isChief: true,
+    isChief,
+    captureModules,
     permissions: getDefaultPermissions("service"),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 
+  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+}
+
+// Crea la cuenta de un JEFE DE DIVISION (supervisor con alcance a UNA division).
+// Ve todo lo de su division (los 3 modulos) y nada de las otras.
+async function createDivisionChiefAccount(
+  creationAuth: Auth,
+  {
+    division,
+    divisionLabel,
+    contactEmail,
+    firstName,
+    lastName,
+  }: {
+    division: string;
+    divisionLabel: string;
+    contactEmail: string;
+    firstName: string;
+    lastName: string;
+  },
+) {
+  const base = buildChiefUsername(firstName, lastName);
+  const displayName = buildFullName(firstName.trim(), lastName.trim(), divisionLabel);
+  let username = base;
+  let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    username = attempt === 0 ? base : `${base}${attempt + 1}`;
+    const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+    try {
+      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, CHIEF_TEMP_PASSWORD);
+      break;
+    } catch (err) {
+      if ((err as { code?: string })?.code === "auth/email-already-in-use") {
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (!credential) {
+    throw new Error("username-unavailable");
+  }
+  const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+  await updateProfile(credential.user, { displayName });
+  await setDoc(doc(db, "serviceUsers", credential.user.uid), {
+    serviceId: null,
+    serviceName: divisionLabel,
+    email: contactEmail.trim(),
+    contactEmail: contactEmail.trim(),
+    loginEmail,
+    username,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    name: displayName,
+    role: "supervisor",
+    isActive: true,
+    mustChangePassword: true,
+    isChief: false,
+    captureModules: [],
+    division,
+    supervisorModules: ["perc", "sesps", "distribucion"],
+    permissions: getDefaultPermissions("supervisor"),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
   return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
 }
 
@@ -3664,12 +3747,26 @@ export default function Home() {
   const [showSignupModal, setShowSignupModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [isSubmittingSignup, setIsSubmittingSignup] = useState(false);
-  const [signupForm, setSignupForm] = useState({
+  const [signupForm, setSignupForm] = useState<{
+    firstName: string;
+    lastName: string;
+    email: string;
+    serviceId: string;
+    acceptPrivacy: boolean;
+    accessType: "service" | "division";
+    isChief: boolean;
+    captureModules: ModuleId[];
+    division: string;
+  }>({
     firstName: "",
     lastName: "",
     email: "",
     serviceId: "",
     acceptPrivacy: false,
+    accessType: "service",
+    isChief: false,
+    captureModules: [],
+    division: "",
   });
   // Bandeja de solicitudes de REGISTRO (para los 3 admins).
   const [signupRequests, setSignupRequests] = useState<SignupRequest[]>([]);
@@ -4339,14 +4436,18 @@ export default function Home() {
   // Servicios disponibles en el dropdown "Elegir servicio" (admin = todos;
   // supervisor = solo los modulos que supervisa).
   const adminServiceOptions = useMemo(() => {
-    const base = SERVICE_DEFINITIONS.filter(
-      (service) =>
+    const scopeDiv = serviceProfile?.division || null;
+    const base = SERVICE_DEFINITIONS.filter((service) => {
+      // Jefe de division: SOLO ve los servicios de su division.
+      if (scopeDiv && (SERVICE_GROUP_BY_ID[service.id] || "apoyo") !== scopeDiv) return false;
+      return (
         isAdmin ||
         (getAreaById(service.id)?.modules.some((m) =>
           serviceProfile?.supervisorModules.includes(m),
         ) ??
-          false),
-    );
+          false)
+      );
+    });
     const q = adminServiceQuery.trim().toLowerCase();
     if (!q) return base;
     return base.filter((service) => {
@@ -4358,14 +4459,18 @@ export default function Home() {
   // Servicios visibles agrupados por division, para la navegacion en 2 niveles del
   // dropdown "Elegir servicio". Solo se incluyen las divisiones que tienen servicios.
   const adminServiceGroups = useMemo(() => {
-    const base = SERVICE_DEFINITIONS.filter(
-      (service) =>
+    const scopeDiv = serviceProfile?.division || null;
+    const base = SERVICE_DEFINITIONS.filter((service) => {
+      // Jefe de division: SOLO ve los servicios de su division.
+      if (scopeDiv && (SERVICE_GROUP_BY_ID[service.id] || "apoyo") !== scopeDiv) return false;
+      return (
         isAdmin ||
         (getAreaById(service.id)?.modules.some((m) =>
           serviceProfile?.supervisorModules.includes(m),
         ) ??
-          false),
-    );
+          false)
+      );
+    });
     const byGroup = new Map<string, ServiceDefinition[]>();
     for (const service of base) {
       const gid = SERVICE_GROUP_BY_ID[service.id] || "apoyo";
@@ -6902,15 +7007,31 @@ export default function Home() {
     setError("");
     setMessage("");
 
+    const isDivision = signupForm.accessType === "division";
     const service = getServiceById(signupForm.serviceId);
-    if (
-      !signupForm.firstName.trim() ||
-      !signupForm.lastName.trim() ||
-      !signupForm.email.trim() ||
-      !service
-    ) {
-      setError("Completá nombres, apellidos, correo y elegí tu servicio.");
+    const DIVISION_LABELS: Record<string, string> = {
+      medica: "Jefe de División Médica",
+      apoyo: "Jefe de División de Apoyo",
+      administrativa: "Subdirección Administrativa",
+    };
+    if (!signupForm.firstName.trim() || !signupForm.lastName.trim() || !signupForm.email.trim()) {
+      setError("Completá nombres, apellidos y correo.");
       return;
+    }
+    if (isDivision) {
+      if (!signupForm.division || !DIVISION_LABELS[signupForm.division]) {
+        setError("Elegí tu división.");
+        return;
+      }
+    } else {
+      if (!service) {
+        setError("Elegí tu servicio.");
+        return;
+      }
+      if (!signupForm.isChief && signupForm.captureModules.length === 0) {
+        setError("Marcá al menos un tabulador que vas a llenar (o indicá que sos el jefe del servicio).");
+        return;
+      }
     }
     if (!signupForm.acceptPrivacy) {
       setError("Tenés que aceptar las políticas de privacidad para continuar.");
@@ -6924,8 +7045,12 @@ export default function Home() {
         firstName: signupForm.firstName.trim(),
         lastName: signupForm.lastName.trim(),
         email: signupForm.email.trim(),
-        serviceId: service.id,
-        serviceName: service.name,
+        serviceId: isDivision ? "" : service!.id,
+        serviceName: isDivision ? DIVISION_LABELS[signupForm.division] : service!.name,
+        requestType: isDivision ? "division" : "service",
+        isChief: isDivision ? false : signupForm.isChief,
+        captureModules: isDivision ? [] : signupForm.captureModules,
+        division: isDivision ? signupForm.division : "",
         status: "pending",
         acceptedPrivacy: true,
         createdAt: serverTimestamp(),
@@ -6937,6 +7062,10 @@ export default function Home() {
         email: "",
         serviceId: "",
         acceptPrivacy: false,
+        accessType: "service",
+        isChief: false,
+        captureModules: [],
+        division: "",
       });
       setMessage(
         "¡Solicitud enviada! Un administrador la revisará y te dará acceso pronto.",
@@ -6950,14 +7079,65 @@ export default function Home() {
 
   // Admin aprueba un registro: crea la cuenta del jefe (usuario por nombre, pass 123456).
   async function handleApproveSignup(req: SignupRequest) {
-    const service = getServiceById(req.serviceId);
-    if (!service) {
-      setError("El servicio de la solicitud no es válido.");
-      return;
-    }
     setSignupBusyId(req.id);
     setError("");
     setMessage("");
+    const DIVLBL: Record<string, string> = {
+      medica: "Jefe de División Médica",
+      apoyo: "Jefe de División de Apoyo",
+      administrativa: "Subdirección Administrativa",
+    };
+
+    // --- Solicitud de JEFE DE DIVISION ---
+    if (req.requestType === "division") {
+      const divKey = req.division || "";
+      if (!DIVLBL[divKey]) {
+        setError("La división de la solicitud no es válida.");
+        setSignupBusyId("");
+        return;
+      }
+      const secondaryDiv = createSecondaryAuth();
+      try {
+        const { username } = await createDivisionChiefAccount(secondaryDiv.auth, {
+          division: divKey,
+          divisionLabel: DIVLBL[divKey],
+          contactEmail: req.email,
+          firstName: req.firstName,
+          lastName: req.lastName,
+        });
+        await setDoc(
+          doc(db, "signupRequests", req.id),
+          { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
+          { merge: true },
+        );
+        setMessage(
+          `Cuenta de ${DIVLBL[divKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}".`,
+        );
+      } catch (approveError) {
+        setError(getAuthErrorMessage(approveError));
+      } finally {
+        try {
+          await signOut(secondaryDiv.auth);
+        } catch {
+          // ignore
+        }
+        try {
+          await secondaryDiv.dispose();
+        } catch {
+          // ignore
+        }
+        setSignupBusyId("");
+      }
+      return;
+    }
+
+    // --- Solicitud de SERVICIO ---
+    const service = getServiceById(req.serviceId);
+    if (!service) {
+      setError("El servicio de la solicitud no es válido.");
+      setSignupBusyId("");
+      return;
+    }
     // Tope de 5 usuarios por servicio (previa autorización del admin/supervisor).
     try {
       const existing = await getDocs(
@@ -6978,6 +7158,8 @@ export default function Home() {
         contactEmail: req.email,
         firstName: req.firstName,
         lastName: req.lastName,
+        isChief: req.isChief === true,
+        captureModules: Array.isArray(req.captureModules) ? req.captureModules : [],
       });
       await setDoc(
         doc(db, "signupRequests", req.id),
@@ -7003,7 +7185,6 @@ export default function Home() {
       setSignupBusyId("");
     }
   }
-
   async function handleRejectSignup(req: SignupRequest) {
     setSignupBusyId(req.id);
     try {
@@ -9614,7 +9795,13 @@ export default function Home() {
             )
           : []
         : currentArea
-          ? getAreaModules(currentArea)
+          ? getAreaModules(currentArea).filter((mod) => {
+              // Restriccion por usuario: si eligio modulos al registrarse, solo esos.
+              // Jefe del servicio -> ve todos. Usuarios antiguos (sin seleccion) -> todos.
+              const cm = serviceProfile.captureModules;
+              const restrict = Array.isArray(cm) && cm.length > 0;
+              return serviceProfile.isChief || !restrict || cm.includes(mod.id);
+            })
           : [];
     // Si la seccion de un modulo debe mostrarse para este usuario/servicio.
     const showModule = (moduleId: ModuleId) => visibleModules.some((vm) => vm.id === moduleId);
@@ -13659,9 +13846,11 @@ export default function Home() {
             ? (() => {
                 const statsLabel =
                   statsModule === "perc" ? "PERC" : statsModule === "sesps" ? "SEPS" : "Horas";
+                const statsScopeDiv = serviceProfile?.division || null;
                 const rawStats = dashboardGroups
                   .flatMap((g) => g.services)
-                  .filter((s) => s.modules.some((m) => m.label === statsLabel));
+                  .filter((s) => s.modules.some((m) => m.label === statsLabel))
+                  .filter((s) => !statsScopeDiv || (SERVICE_GROUP_BY_ID[s.id] || "apoyo") === statsScopeDiv);
                 const isStatsDone = (s: (typeof rawStats)[number]) =>
                   !!s.modules.find((m) => m.label === statsLabel)?.completed;
                 // UCI/UCIN se muestran como 1 entrada agregada con % (subunidades llenas
@@ -15593,22 +15782,99 @@ export default function Home() {
                     className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
                   />
                 </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-slate-300">Servicio</span>
-                  <select
-                    value={signupForm.serviceId}
-                    onChange={(e) => setSignupForm((f) => ({ ...f, serviceId: e.target.value }))}
-                    required
-                    className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
-                  >
-                    <option value="">Elegí tu servicio…</option>
-                    {SERVICE_DEFINITIONS.filter((s) => !getSepsTemplate(s.id)?.consolidatesFrom).map((s) => (
-                      <option key={s.id} value={s.id} className="bg-[#1b2537] text-white">
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div>
+                  <span className="text-xs font-medium text-slate-300">¿Cómo vas a ingresar?</span>
+                  <div className="mt-1.5 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSignupForm((f) => ({ ...f, accessType: "service" }))}
+                      className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${signupForm.accessType === "service" ? "border-cyan-400 bg-cyan-500/15 text-cyan-200" : "border-white/10 bg-[#1b2537] text-slate-300"}`}
+                    >
+                      Personal de un servicio
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSignupForm((f) => ({ ...f, accessType: "division" }))}
+                      className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${signupForm.accessType === "division" ? "border-cyan-400 bg-cyan-500/15 text-cyan-200" : "border-white/10 bg-[#1b2537] text-slate-300"}`}
+                    >
+                      Jefe de división
+                    </button>
+                  </div>
+                </div>
+
+                {signupForm.accessType === "division" ? (
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-300">División</span>
+                    <select
+                      value={signupForm.division}
+                      onChange={(e) => setSignupForm((f) => ({ ...f, division: e.target.value }))}
+                      className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
+                    >
+                      <option value="">Elegí tu división…</option>
+                      <option value="medica" className="bg-[#1b2537] text-white">Jefe de División Médica</option>
+                      <option value="apoyo" className="bg-[#1b2537] text-white">Jefe de División de Apoyo</option>
+                      <option value="administrativa" className="bg-[#1b2537] text-white">Subdirección Administrativa</option>
+                    </select>
+                    <span className="mt-1 block text-[11px] text-slate-400">Verás todo lo de tu división (los 3 módulos), no las otras.</span>
+                  </label>
+                ) : (
+                  <>
+                    <label className="block">
+                      <span className="text-xs font-medium text-slate-300">Servicio</span>
+                      <select
+                        value={signupForm.serviceId}
+                        onChange={(e) => setSignupForm((f) => ({ ...f, serviceId: e.target.value, captureModules: [] }))}
+                        className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
+                      >
+                        <option value="">Elegí tu servicio…</option>
+                        {SERVICE_DEFINITIONS.filter((s) => !getSepsTemplate(s.id)?.consolidatesFrom).map((s) => (
+                          <option key={s.id} value={s.id} className="bg-[#1b2537] text-white">
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="flex items-start gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={signupForm.isChief}
+                        onChange={(e) => setSignupForm((f) => ({ ...f, isChief: e.target.checked }))}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-500"
+                      />
+                      <span className="text-xs leading-snug text-slate-300">
+                        ¿Es usted el <b>jefe del servicio</b>? (verá todos los tabuladores de su área)
+                      </span>
+                    </label>
+
+                    {signupForm.serviceId && !signupForm.isChief ? (
+                      <div>
+                        <span className="text-xs font-medium text-slate-300">¿Qué va a llenar?</span>
+                        <div className="mt-1.5 flex flex-wrap gap-2">
+                          {(getAreaById(signupForm.serviceId)?.modules ?? []).map((m) => {
+                            const on = signupForm.captureModules.includes(m);
+                            return (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() =>
+                                  setSignupForm((f) => ({
+                                    ...f,
+                                    captureModules: on ? f.captureModules.filter((x) => x !== m) : [...f.captureModules, m],
+                                  }))
+                                }
+                                className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${on ? "border-cyan-400 bg-cyan-500/15 text-cyan-200" : "border-white/10 bg-[#1b2537] text-slate-300"}`}
+                              >
+                                {getModuleLabel(m)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <span className="mt-1 block text-[11px] text-slate-400">Solo verás y llenarás lo que marqués.</span>
+                      </div>
+                    ) : null}
+                  </>
+                )}
 
                 <label className="flex items-start gap-2.5 pt-1">
                   <input
