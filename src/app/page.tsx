@@ -4412,6 +4412,8 @@ export default function Home() {
   // + permiso de EDICION del SEPS de cualquier servicio y de dejar comentarios.
   const isSepsStaff = normalizeKey(user?.email || "") === normalizeKey("jcmiranda@perc-hnes.app");
   const isSupervisor = serviceProfile?.role === "supervisor" || isSepsStaff;
+  // Monitor de RRHH (userrhh): SOLO monitorea horas y descarga; no habilita tableros.
+  const isHorasMonitor = normalizeKey(serviceProfile?.username || "") === normalizeKey("userrhh");
   // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
   // y los administradores (por temas de calidad y control).
   const canViewCenso = isAdmin || isSupervisor;
@@ -4512,7 +4514,7 @@ export default function Home() {
   }, [isAdmin, serviceProfile]);
   // Modulos que el usuario puede habilitar/deshabilitar: el admin todos; el supervisor
   // solo los suyos. Determina las columnas del panel "Habilitar tableros".
-  const toggleableModules: ModuleId[] = !serviceProfile?.permissions.canToggleCapture
+  const toggleableModules: ModuleId[] = !serviceProfile?.permissions.canToggleCapture || isHorasMonitor
     ? []
     : isAdmin
       ? [...MODULE_ORDER]
@@ -8804,7 +8806,7 @@ export default function Home() {
       );
     };
 
-    const captureToggleSection = serviceProfile.permissions.canToggleCapture ? (
+    const captureToggleSection = serviceProfile.permissions.canToggleCapture && !isHorasMonitor ? (
       <section
         id="panel-capture-toggle"
         className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
@@ -10388,11 +10390,13 @@ export default function Home() {
     ) : null;
 
     // Solicitudes visibles para el usuario actual (admin: todas; supervisor: sus modulos).
-    const visibleRequests = isAdmin
-      ? captureRequests
-      : isSupervisor
-        ? captureRequests.filter((req) => serviceProfile.supervisorModules.includes(req.moduleId))
-        : [];
+    const visibleRequests = isHorasMonitor
+      ? []
+      : isAdmin
+        ? captureRequests
+        : isSupervisor
+          ? captureRequests.filter((req) => serviceProfile.supervisorModules.includes(req.moduleId))
+          : [];
     const pendingRequestCount = visibleRequests.filter((req) => req.status === "pending").length;
     // Soporte: supervisores y admin ven todos los tickets; pendientes para el badge.
     const pendingSupportCount = supportTickets.filter((t) => t.status === "pendiente").length;
@@ -11059,7 +11063,7 @@ export default function Home() {
             },
           ]
         : []),
-      ...(serviceProfile.permissions.canToggleCapture
+      ...(serviceProfile.permissions.canToggleCapture && !isHorasMonitor
         ? [
             {
               id: "panel-capture-toggle",
