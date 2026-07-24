@@ -11023,6 +11023,18 @@ export default function Home() {
         detail: isAdmin ? "Resumen general" : "Estado del periodo",
         badge: "IN",
       },
+      // Monitor de RRHH (userrhh): acceso directo al Monitoreo de Horas, donde esta
+      // el boton para descargar el consolidado mensual de horas de todos los servicios.
+      ...(isHorasMonitor
+        ? [
+            {
+              id: "panel-monitor-horas",
+              label: "Monitoreo de Horas",
+              detail: "Quién completó y descargar consolidado (Excel)",
+              badge: "MH",
+            },
+          ]
+        : []),
       // "Servicios" ya no es un item suelto: cada modulo (PERC/SEPS/Horas) lo
       // ofrece como submenu "X Servicios" que abre la misma vista panel-services.
       ...moduleSidebarItems,
