@@ -3777,6 +3777,8 @@ export default function Home() {
     captureModules: [],
     division: "",
   });
+  // Division que se esta explorando en el registro (paso 1); filtra el 2do desplegable.
+  const [signupDivView, setSignupDivView] = useState("");
   // Bandeja de solicitudes de REGISTRO (para los 3 admins).
   const [signupRequests, setSignupRequests] = useState<SignupRequest[]>([]);
   const [showSignupRequestsModal, setShowSignupRequestsModal] = useState(false);
@@ -7076,6 +7078,7 @@ export default function Home() {
         captureModules: [],
         division: "",
       });
+      setSignupDivView("");
       setMessage(
         "¡Solicitud enviada! Un administrador la revisará y te dará acceso pronto.",
       );
@@ -15792,66 +15795,87 @@ export default function Home() {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-medium text-slate-300">Cargo / Servicio</span>
+                  <span className="text-xs font-medium text-slate-300">División</span>
                   <select
-                    value={
-                      signupForm.accessType === "division"
-                        ? signupForm.division
-                          ? `div:${signupForm.division}`
-                          : ""
-                        : signupForm.isChief && signupForm.serviceId
-                          ? `chief:${signupForm.serviceId}`
-                          : signupForm.serviceId
-                            ? `svc:${signupForm.serviceId}`
-                            : ""
-                    }
+                    value={signupDivView}
                     onChange={(e) => {
-                      const v = e.target.value;
-                      if (v.startsWith("div:")) {
-                        setSignupForm((f) => ({ ...f, accessType: "division", division: v.slice(4), serviceId: "", isChief: false, captureModules: [] }));
-                      } else if (v.startsWith("chief:")) {
-                        setSignupForm((f) => ({ ...f, accessType: "service", serviceId: v.slice(6), isChief: true, division: "", captureModules: [] }));
-                      } else if (v.startsWith("svc:")) {
-                        setSignupForm((f) => ({ ...f, accessType: "service", serviceId: v.slice(4), isChief: false, division: "", captureModules: [] }));
-                      } else {
-                        setSignupForm((f) => ({ ...f, accessType: "service", serviceId: "", isChief: false, division: "", captureModules: [] }));
-                      }
+                      setSignupDivView(e.target.value);
+                      setSignupForm((f) => ({ ...f, accessType: "service", serviceId: "", isChief: false, division: "", captureModules: [] }));
                     }}
                     className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
                   >
-                    <option value="">Elegí tu cargo o servicio…</option>
-                    {SIGNUP_DIVISIONS.map((d) => {
-                      const svcs = SERVICE_DEFINITIONS.filter(
-                        (s) => (SERVICE_GROUP_BY_ID[s.id] || "apoyo") === d.key && !getSepsTemplate(s.id)?.consolidatesFrom,
-                      );
-                      if (svcs.length === 0 && !d.jefeLabel) return null;
-                      return (
-                        <optgroup key={d.key} label={d.label}>
-                          {d.jefeLabel ? (
-                            <option value={`div:${d.key}`} className="bg-[#1b2537] text-cyan-200">
-                              {d.jefeLabel}
-                            </option>
-                          ) : null}
-                          {svcs.map((s) => (
-                            <option key={`chief:${s.id}`} value={`chief:${s.id}`} className="bg-[#1b2537] text-white">
-                              Jefe — {s.name}
-                            </option>
-                          ))}
-                          {svcs.map((s) => (
-                            <option key={`svc:${s.id}`} value={`svc:${s.id}`} className="bg-[#1b2537] text-white">
-                              {s.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
+                    <option value="">Elegí tu división…</option>
+                    {SIGNUP_DIVISIONS.map((d) => (
+                      <option key={d.key} value={d.key} className="bg-[#1b2537] text-white">
+                        {d.label}
+                      </option>
+                    ))}
                   </select>
-                  <span className="mt-1 block text-[11px] text-slate-400">
-                    Primero las jefaturas de cada división, luego los servicios. El jefe de división ve todo lo de su división.
-                  </span>
                 </label>
 
-                {signupForm.accessType === "service" && signupForm.serviceId && !signupForm.isChief ? (
+                {signupDivView ? (
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-300">Cargo / Servicio</span>
+                    <select
+                      value={
+                        signupForm.accessType === "division"
+                          ? signupForm.division
+                            ? `div:${signupForm.division}`
+                            : ""
+                          : signupForm.isChief && signupForm.serviceId
+                            ? `chief:${signupForm.serviceId}`
+                            : signupForm.serviceId
+                              ? `svc:${signupForm.serviceId}`
+                              : ""
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v.startsWith("div:")) {
+                          setSignupForm((f) => ({ ...f, accessType: "division", division: v.slice(4), serviceId: "", isChief: false, captureModules: [] }));
+                        } else if (v.startsWith("chief:")) {
+                          setSignupForm((f) => ({ ...f, accessType: "service", serviceId: v.slice(6), isChief: true, division: "", captureModules: [] }));
+                        } else if (v.startsWith("svc:")) {
+                          setSignupForm((f) => ({ ...f, accessType: "service", serviceId: v.slice(4), isChief: false, division: "", captureModules: [] }));
+                        } else {
+                          setSignupForm((f) => ({ ...f, accessType: "service", serviceId: "", isChief: false, division: "", captureModules: [] }));
+                        }
+                      }}
+                      className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
+                    >
+                      <option value="">Elegí tu cargo o servicio…</option>
+                      {(() => {
+                        const d = SIGNUP_DIVISIONS.find((x) => x.key === signupDivView);
+                        const svcs = SERVICE_DEFINITIONS.filter(
+                          (s) => (SERVICE_GROUP_BY_ID[s.id] || "apoyo") === signupDivView && !getSepsTemplate(s.id)?.consolidatesFrom,
+                        );
+                        return (
+                          <>
+                            {d?.jefeLabel ? (
+                              <option value={`div:${signupDivView}`} className="bg-[#1b2537] text-cyan-200">
+                                {d.jefeLabel}
+                              </option>
+                            ) : null}
+                            {svcs.map((s) => (
+                              <option key={`chief:${s.id}`} value={`chief:${s.id}`} className="bg-[#1b2537] text-white">
+                                Jefe — {s.name}
+                              </option>
+                            ))}
+                            {svcs.map((s) => (
+                              <option key={`svc:${s.id}`} value={`svc:${s.id}`} className="bg-[#1b2537] text-white">
+                                {s.name}
+                              </option>
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </select>
+                    <span className="mt-1 block text-[11px] text-slate-400">
+                      Primero las jefaturas, luego los servicios. El jefe de división ve todo lo de su división.
+                    </span>
+                  </label>
+                ) : null}
+
+                                {signupForm.accessType === "service" && signupForm.serviceId && !signupForm.isChief ? (
                   <div>
                     <span className="text-xs font-medium text-slate-300">¿Qué va a llenar?</span>
                     <div className="mt-1.5 flex flex-wrap gap-2">
