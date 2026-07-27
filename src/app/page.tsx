@@ -60,6 +60,7 @@ import {
 import { downloadSepsTemplate } from "@/lib/seps-download";
 import { getHorasTemplate, HORAS_TEMPLATES, type HorasTemplate } from "@/lib/horas-templates";
 import { INSUMOS_ALMACEN_TEMPLATE, INSUMOS_CONSOLIDADO_ORDER, type InsumoRow } from "@/lib/insumos-almacen";
+import { GASTOS_EXPENSES, GASTOS_COST_CENTERS } from "@/lib/gastos-perc";
 import { LAB_SECTIONS, LAB_RESULTADO_ROWS, LAB_PROCEDENCIA_ROWS } from "@/lib/seps-laboratorio-lnr";
 const LAB_MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 type LabSavedPrueba = { section: string; sectionName: string; test: string; testName: string; rows: Record<string, string>; total: number; userEmail: string };
@@ -4261,6 +4262,27 @@ export default function Home() {
   // Se guarda por MES en Firestore (coleccion "insumosAlmacen"). Sin cierre.
   const [insumosPeriod, setInsumosPeriod] = useState(() => getClosingPeriodId(new Date()));
   const [insumosValues, setInsumosValues] = useState<InsumosValues>({});
+  // Gastos PERC (matriz mensual: 34 categorias x 39 centros de costo + fila Valor General).
+  const [gastosPeriod, setGastosPeriod] = useState(() => getClosingPeriodId(new Date()));
+  const [gastosValues, setGastosValues] = useState<Record<string, string>>({});
+  const [gastosSaving, setGastosSaving] = useState(false);
+  useEffect(() => {
+    if (firestoreUnavailable || !user) return;
+    let active = true;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "sepsTabulators", `GASTOS-${gastosPeriod}`));
+        if (!active) return;
+        const data = snap.exists() ? (snap.data() as { values?: Record<string, string> }) : null;
+        setGastosValues(data?.values ?? {});
+      } catch {
+        if (active) setGastosValues({});
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [gastosPeriod, firestoreUnavailable, user]);
   const [isLoadingInsumos, setIsLoadingInsumos] = useState(false);
   const [isSavingInsumos, setIsSavingInsumos] = useState(false);
   const [isImportingInsumos, setIsImportingInsumos] = useState(false);
@@ -6319,6 +6341,62 @@ export default function Home() {
       });
       return next;
     });
+  }
+
+  async function handleSaveGastos() {
+    if (!user || firestoreUnavailable) return;
+    setGastosSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      await setDoc(
+        doc(db, "sepsTabulators", `GASTOS-${gastosPeriod}`),
+        {
+          periodId: gastosPeriod,
+          module: "gastos-perc",
+          serviceId: "gastos-perc",
+          userId: user.uid,
+          userEmail: user.email || "",
+          values: gastosValues,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      setMessage(`Gastos PERC guardados (${getPeriodLabel(gastosPeriod)}).`);
+    } catch (e) {
+      if (await handleFirestoreError(e)) return;
+      setError("No pudimos guardar Gastos PERC. Revisa Firestore e intentalo de nuevo.");
+    } finally {
+      setGastosSaving(false);
+    }
+  }
+
+  function downloadGastosExcel() {
+    const head = ["", ...GASTOS_EXPENSES.map((e) => e.header)]
+      .map((h) => `<th style="background:#dbe7ff;border:1px solid #cbd5e1;padding:6px;font-weight:700;white-space:nowrap;">${escapeHtml(h)}</th>`)
+      .join("");
+    const rowTipo = [
+      `<td style="border:1px solid #cbd5e1;padding:6px;font-weight:700;background:#eef4f8;white-space:nowrap;">Tipo de Distribución</td>`,
+      ...GASTOS_EXPENSES.map((e) => `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(String(e.tipo))}</td>`),
+    ].join("");
+    const rowVG = [
+      `<td style="border:1px solid #cbd5e1;padding:6px;font-weight:700;background:#eef4f8;white-space:nowrap;">Valor General</td>`,
+      ...GASTOS_EXPENSES.map((_, c) => `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(gastosValues[`vg|${c}`] ?? "")}</td>`),
+    ].join("");
+    const ccRows = GASTOS_COST_CENTERS.map((cc, r) => {
+      const cells = GASTOS_EXPENSES.map((_, c) => `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(gastosValues[`${r}|${c}`] ?? "")}</td>`).join("");
+      return `<tr><td style="border:1px solid #cbd5e1;padding:6px;font-weight:600;white-space:nowrap;">${escapeHtml(cc)}</td>${cells}</tr>`;
+    }).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Distribucion Gasto General ${gastosPeriod}</title></head><body><table><thead><tr>${head}</tr></thead><tbody><tr>${rowTipo}</tr><tr>${rowVG}</tr>${ccRows}</tbody></table></body></html>`;
+    const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const link = window.document.createElement("a");
+    link.href = url;
+    link.download = `gastos-perc-${gastosPeriod}.xls`;
+    window.document.body.appendChild(link);
+    link.click();
+    window.document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   }
 
   async function handleSaveInsumos() {
@@ -9889,6 +9967,9 @@ export default function Home() {
               ? [{ id: "panel-admin-export", label: "Consolidados PERC", detail: "Descarga consolidado", badge: "XL", icon: "consolidado" }]
               : []),
             ...(canManage ? [serviciosChild("PERC Servicios")] : []),
+            ...(isAdmin
+              ? [{ id: "panel-gastos-perc", label: "Gastos PERC", detail: "Distribución de gasto general", badge: "GP", icon: "consolidado" }]
+              : []),
           ];
         }
         if (mod.id === "sesps") {
@@ -10725,6 +10806,66 @@ export default function Home() {
     const insumosCellClass = `w-24 rounded border px-1.5 py-1 text-right text-xs outline-none focus:border-indigo-400 disabled:cursor-default disabled:opacity-80 ${
       isLightPanelTheme ? "border-slate-200 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"
     }`;
+
+    const gastosPercSection = (
+      <section
+        id="panel-gastos-perc"
+        className={`rounded-[24px] border p-3 shadow-[0_24px_80px_rgba(3,7,18,0.35)] sm:p-5 ${isLightPanelTheme ? "border-amber-200 bg-white" : "border-amber-400/20 bg-[#202c41]"}`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className={`text-xl font-bold sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>Gastos PERC</h2>
+            <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>Distribución de Gasto General · {getPeriodLabel(gastosPeriod)}</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+              <span className="font-semibold uppercase tracking-wide">Mes</span>
+              <input type="month" value={gastosPeriod} onChange={(e) => setGastosPeriod(e.target.value || gastosPeriod)} className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`} />
+            </label>
+            <button type="button" onClick={() => void handleSaveGastos()} disabled={gastosSaving} className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50">{gastosSaving ? "Guardando…" : "Guardar"}</button>
+            <button type="button" onClick={() => downloadGastosExcel()} className="rounded-xl border border-sky-400/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/25">Descargar Excel</button>
+          </div>
+        </div>
+        <div className="show-scrollbar mt-4 overflow-x-auto">
+          <table className="border-collapse text-xs">
+            <thead>
+              <tr className={isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}>
+                <th className={`sticky left-0 z-10 min-w-[210px] px-2 py-2 text-left font-semibold ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>Centro de costo / Gasto</th>
+                {GASTOS_EXPENSES.map((e) => (
+                  <th key={e.header} className="min-w-[120px] max-w-[160px] whitespace-normal px-2 py-2 text-left align-bottom font-medium leading-tight">{e.header}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                <td className={`sticky left-0 z-10 px-2 py-1.5 font-semibold ${isLightPanelTheme ? "bg-slate-50 text-slate-700" : "bg-[#1b2537] text-cyan-200"}`}>Tipo de Distribución</td>
+                {GASTOS_EXPENSES.map((e, c) => (
+                  <td key={c} className="px-1 py-1 text-center font-semibold text-cyan-300">{e.tipo}</td>
+                ))}
+              </tr>
+              <tr className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                <td className={`sticky left-0 z-10 px-2 py-1.5 font-semibold ${isLightPanelTheme ? "bg-slate-50 text-slate-700" : "bg-[#1b2537] text-slate-200"}`}>Valor General</td>
+                {GASTOS_EXPENSES.map((_, c) => (
+                  <td key={c} className="px-1 py-1 text-center">
+                    <input inputMode="decimal" value={gastosValues[`vg|${c}`] ?? ""} onChange={(e) => setGastosValues((v) => ({ ...v, [`vg|${c}`]: e.target.value }))} className={`w-20 rounded border px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`} />
+                  </td>
+                ))}
+              </tr>
+              {GASTOS_COST_CENTERS.map((cc, r) => (
+                <tr key={cc} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                  <td className={`sticky left-0 z-10 whitespace-nowrap px-2 py-1.5 ${isLightPanelTheme ? "bg-slate-50 text-slate-800" : "bg-[#1b2537] text-slate-100"}`}>{cc}</td>
+                  {GASTOS_EXPENSES.map((_, c) => (
+                    <td key={c} className="px-1 py-1 text-center">
+                      <input inputMode="decimal" value={gastosValues[`${r}|${c}`] ?? ""} onChange={(e) => setGastosValues((v) => ({ ...v, [`${r}|${c}`]: e.target.value }))} className={`w-20 rounded border px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    );
 
     const insumosSection = (
       <section
@@ -11864,7 +12005,7 @@ export default function Home() {
 
             {/* Barra de "volver a Inicio" — SOLO movil, en cualquier vista que no sea Inicio. */}
             <div
-              data-view="panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-calendar panel-admin-export panel-capture-toggle"
+              data-view="panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-calendar panel-admin-export panel-capture-toggle"
               className="flex items-center gap-3 xl:hidden"
             >
               <button
@@ -13045,6 +13186,15 @@ export default function Home() {
             <>
             {renderSectionDivider("Insumos de Almacén", "Costos de insumos por centro de costo", "indigo", isLightPanelTheme)}
             <div data-view="panel-insumos">{insumosSection}</div>
+            </>
+          ) : null}
+
+          {/* Gastos PERC: matriz mensual de distribucion de gasto general (solo admin). */}
+          {isAdmin &&
+          (activeSidebarSection === "panel-gastos-perc" || mobileView === "panel-gastos-perc") ? (
+            <>
+            {renderSectionDivider("Gastos PERC", "Distribución de gasto general (mensual)", "amber", isLightPanelTheme)}
+            <div data-view="panel-gastos-perc">{gastosPercSection}</div>
             </>
           ) : null}
 
