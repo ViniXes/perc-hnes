@@ -4266,6 +4266,7 @@ export default function Home() {
   const [gastosPeriod, setGastosPeriod] = useState(() => getClosingPeriodId(new Date()));
   const [gastosValues, setGastosValues] = useState<Record<string, string>>({});
   const [gastosSaving, setGastosSaving] = useState(false);
+  const [gastosOpen, setGastosOpen] = useState(false); // matriz colapsada al entrar
   useEffect(() => {
     if (firestoreUnavailable || !user) return;
     let active = true;
@@ -10822,10 +10823,12 @@ export default function Home() {
               <span className="font-semibold uppercase tracking-wide">Mes</span>
               <input type="month" value={gastosPeriod} onChange={(e) => setGastosPeriod(e.target.value || gastosPeriod)} className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`} />
             </label>
+            <button type="button" onClick={() => setGastosOpen((x) => !x)} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">{gastosOpen ? "Ocultar tabla" : "Mostrar tabla"}</button>
             <button type="button" onClick={() => void handleSaveGastos()} disabled={gastosSaving} className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50">{gastosSaving ? "Guardando…" : "Guardar"}</button>
             <button type="button" onClick={() => downloadGastosExcel()} className="rounded-xl border border-sky-400/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/25">Descargar Excel</button>
           </div>
         </div>
+        {gastosOpen ? (
         <div className="show-scrollbar mt-4 overflow-x-auto">
           <table className="border-collapse text-xs">
             <thead>
@@ -10864,6 +10867,11 @@ export default function Home() {
             </tbody>
           </table>
         </div>
+        ) : (
+          <p className={`mt-4 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+            La matriz está colapsada. Tocá <b>Mostrar tabla</b> para verla y cargar los datos.
+          </p>
+        )}
       </section>
     );
 
