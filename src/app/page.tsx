@@ -61,6 +61,7 @@ import { downloadSepsTemplate } from "@/lib/seps-download";
 import { getHorasTemplate, HORAS_TEMPLATES, type HorasTemplate } from "@/lib/horas-templates";
 import { INSUMOS_ALMACEN_TEMPLATE, INSUMOS_CONSOLIDADO_ORDER, type InsumoRow } from "@/lib/insumos-almacen";
 import { GASTOS_EXPENSES, GASTOS_COST_CENTERS } from "@/lib/gastos-perc";
+import { DEPRECIACION_ROWS } from "@/lib/depreciacion-perc";
 import { LAB_SECTIONS, LAB_RESULTADO_ROWS, LAB_PROCEDENCIA_ROWS } from "@/lib/seps-laboratorio-lnr";
 const LAB_MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 type LabSavedPrueba = { section: string; sectionName: string; test: string; testName: string; rows: Record<string, string>; total: number; userEmail: string };
@@ -4267,6 +4268,11 @@ export default function Home() {
   const [gastosValues, setGastosValues] = useState<Record<string, string>>({});
   const [gastosSaving, setGastosSaving] = useState(false);
   const [gastosOpen, setGastosOpen] = useState(false); // matriz colapsada al entrar
+  // Depreciacion Mensual PERC (una fila por centro de produccion; valor mensual).
+  const [deprePeriod, setDeprePeriod] = useState(() => getClosingPeriodId(new Date()));
+  const [depreValues, setDepreValues] = useState<Record<string, string>>({});
+  const [depreSaving, setDepreSaving] = useState(false);
+  const [depreOpen, setDepreOpen] = useState(false);
   useEffect(() => {
     if (firestoreUnavailable || !user) return;
     let active = true;
@@ -4284,6 +4290,23 @@ export default function Home() {
       active = false;
     };
   }, [gastosPeriod, firestoreUnavailable, user]);
+  useEffect(() => {
+    if (firestoreUnavailable || !user) return;
+    let active = true;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "sepsTabulators", `DEPRE-${deprePeriod}`));
+        if (!active) return;
+        const data = snap.exists() ? (snap.data() as { values?: Record<string, string> }) : null;
+        setDepreValues(data?.values ?? {});
+      } catch {
+        if (active) setDepreValues({});
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [deprePeriod, firestoreUnavailable, user]);
   const [isLoadingInsumos, setIsLoadingInsumos] = useState(false);
   const [isSavingInsumos, setIsSavingInsumos] = useState(false);
   const [isImportingInsumos, setIsImportingInsumos] = useState(false);
@@ -6342,6 +6365,54 @@ export default function Home() {
       });
       return next;
     });
+  }
+
+  async function handleSaveDepre() {
+    if (!user || firestoreUnavailable) return;
+    setDepreSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      await setDoc(
+        doc(db, "sepsTabulators", `DEPRE-${deprePeriod}`),
+        {
+          periodId: deprePeriod,
+          module: "depreciacion-perc",
+          serviceId: "depreciacion-perc",
+          userId: user.uid,
+          userEmail: user.email || "",
+          values: depreValues,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      setMessage(`Depreciación Mensual PERC guardada (${getPeriodLabel(deprePeriod)}).`);
+    } catch (e) {
+      if (await handleFirestoreError(e)) return;
+      setError("No pudimos guardar la Depreciación. Revisa Firestore e intentalo de nuevo.");
+    } finally {
+      setDepreSaving(false);
+    }
+  }
+
+  function downloadDepreExcel() {
+    const header = ["Centro de Producción", "Areas incluidas", "Depreciacion mensual"]
+      .map((h) => `<th style="background:#dbe7ff;border:1px solid #cbd5e1;padding:6px;font-weight:700;">${escapeHtml(h)}</th>`)
+      .join("");
+    const body = DEPRECIACION_ROWS.map((row, r) => {
+      const val = depreValues[`${r}`] ?? "";
+      return `<tr><td style="border:1px solid #cbd5e1;padding:6px;font-weight:600;white-space:nowrap;">${escapeHtml(row.centro)}</td><td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(row.areas)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(val)}</td></tr>`;
+    }).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Depreciacion Mensual ${deprePeriod}</title></head><body><table><thead><tr><td colspan="3" style="border:1px solid #cbd5e1;padding:6px;font-weight:700;text-align:center;">HOSPITAL NACIONAL EL SALVADOR</td></tr><tr>${header}</tr></thead><tbody>${body}</tbody></table></body></html>`;
+    const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const link = window.document.createElement("a");
+    link.href = url;
+    link.download = `depreciacion-mensual-${deprePeriod}.xls`;
+    window.document.body.appendChild(link);
+    link.click();
+    window.document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   }
 
   async function handleSaveGastos() {
@@ -9971,6 +10042,9 @@ export default function Home() {
             ...(isAdmin
               ? [{ id: "panel-gastos-perc", label: "Gastos PERC", detail: "Distribución de gasto general", badge: "GP", icon: "consolidado" }]
               : []),
+            ...(isAdmin
+              ? [{ id: "panel-depreciacion-perc", label: "Depreciación Mensual PERC", detail: "Depreciación por centro", badge: "DP", icon: "consolidado" }]
+              : []),
           ];
         }
         if (mod.id === "sesps") {
@@ -10870,6 +10944,57 @@ export default function Home() {
         ) : (
           <p className={`mt-4 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
             La matriz está colapsada. Tocá <b>Mostrar tabla</b> para verla y cargar los datos.
+          </p>
+        )}
+      </section>
+    );
+
+    const depreciacionSection = (
+      <section
+        id="panel-depreciacion-perc"
+        className={`rounded-[24px] border p-3 shadow-[0_24px_80px_rgba(3,7,18,0.35)] sm:p-5 ${isLightPanelTheme ? "border-teal-200 bg-white" : "border-teal-400/20 bg-[#202c41]"}`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className={`text-xl font-bold sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>Depreciación Mensual PERC</h2>
+            <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>Depreciación por centro de producción · {getPeriodLabel(deprePeriod)}</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+              <span className="font-semibold uppercase tracking-wide">Mes</span>
+              <input type="month" value={deprePeriod} onChange={(e) => setDeprePeriod(e.target.value || deprePeriod)} className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`} />
+            </label>
+            <button type="button" onClick={() => setDepreOpen((x) => !x)} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">{depreOpen ? "Ocultar tabla" : "Mostrar tabla"}</button>
+            <button type="button" onClick={() => void handleSaveDepre()} disabled={depreSaving} className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50">{depreSaving ? "Guardando…" : "Guardar"}</button>
+            <button type="button" onClick={() => downloadDepreExcel()} className="rounded-xl border border-sky-400/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/25">Descargar Excel</button>
+          </div>
+        </div>
+        {depreOpen ? (
+        <div className="show-scrollbar mt-4 overflow-x-auto">
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className={isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}>
+                <th className={`px-2 py-2 text-left font-semibold ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>Centro de Producción</th>
+                <th className="px-2 py-2 text-left font-medium">Areas incluidas</th>
+                <th className="px-2 py-2 text-center font-semibold">Depreciación mensual</th>
+              </tr>
+            </thead>
+            <tbody>
+              {DEPRECIACION_ROWS.map((row, r) => (
+                <tr key={row.centro} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                  <td className={`whitespace-nowrap px-2 py-1.5 font-medium ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>{row.centro}</td>
+                  <td className={`min-w-[280px] px-2 py-1.5 ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>{row.areas}</td>
+                  <td className="px-2 py-1.5 text-center">
+                    <input inputMode="decimal" value={depreValues[`${r}`] ?? ""} onChange={(e) => setDepreValues((v) => ({ ...v, [`${r}`]: e.target.value }))} className={`w-28 rounded border px-2 py-1 text-center text-xs outline-none focus:border-cyan-400 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        ) : (
+          <p className={`mt-4 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+            La tabla está colapsada. Tocá <b>Mostrar tabla</b> para verla y cargar los datos.
           </p>
         )}
       </section>
@@ -12013,7 +12138,7 @@ export default function Home() {
 
             {/* Barra de "volver a Inicio" — SOLO movil, en cualquier vista que no sea Inicio. */}
             <div
-              data-view="panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-calendar panel-admin-export panel-capture-toggle"
+              data-view="panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-depreciacion-perc panel-calendar panel-admin-export panel-capture-toggle"
               className="flex items-center gap-3 xl:hidden"
             >
               <button
@@ -13203,6 +13328,15 @@ export default function Home() {
             <>
             {renderSectionDivider("Gastos PERC", "Distribución de gasto general (mensual)", "amber", isLightPanelTheme)}
             <div data-view="panel-gastos-perc">{gastosPercSection}</div>
+            </>
+          ) : null}
+
+          {/* Depreciación Mensual PERC (matriz mensual por centro; solo admin). */}
+          {isAdmin &&
+          (activeSidebarSection === "panel-depreciacion-perc" || mobileView === "panel-depreciacion-perc") ? (
+            <>
+            {renderSectionDivider("Depreciación Mensual PERC", "Depreciación por centro de producción (mensual)", "teal", isLightPanelTheme)}
+            <div data-view="panel-depreciacion-perc">{depreciacionSection}</div>
             </>
           ) : null}
 
