@@ -3579,6 +3579,14 @@ function buildChiefUsername(firstName: string, lastName: string) {
 // Crea una cuenta de JEFE de servicio (aprobada por admin): usuario por nombre,
 // contrasena 123456, perfil de servicio. NO crea serviceAssignment (es un usuario
 // adicional del servicio, no la cuenta unica del servicio).
+function isReservedUsername(username: string) {
+  const key = normalizeKey(username);
+  if (key === normalizeKey(ADMIN_USERNAME)) {
+    return true;
+  }
+  return SUPERVISOR_ACCOUNTS.some((account) => normalizeKey(account.username) === key);
+}
+
 async function createChiefUserAccount(
   creationAuth: Auth,
   {
@@ -3604,6 +3612,9 @@ async function createChiefUserAccount(
   let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
   for (let attempt = 0; attempt < 30; attempt += 1) {
     username = attempt === 0 ? base : `${base}${attempt + 1}`;
+    if (isReservedUsername(username)) {
+      continue;
+    }
     const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
     try {
       credential = await createUserWithEmailAndPassword(
@@ -3675,6 +3686,9 @@ async function createDivisionChiefAccount(
   let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
   for (let attempt = 0; attempt < 30; attempt += 1) {
     username = attempt === 0 ? base : `${base}${attempt + 1}`;
+    if (isReservedUsername(username)) {
+      continue;
+    }
     const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
     try {
       credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, CHIEF_TEMP_PASSWORD);
@@ -3728,10 +3742,6 @@ function resolveLoginEmail(loginIdentifier: string) {
 
   if (normalizedIdentifier.includes("@")) {
     return normalizedIdentifier;
-  }
-
-  if (normalizeKey(normalizedIdentifier) === normalizeKey(ADMIN_USERNAME)) {
-    return ADMIN_EMAIL;
   }
 
   const mappedService = findServiceByUsername(normalizedIdentifier);
