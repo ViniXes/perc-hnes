@@ -3745,6 +3745,172 @@ function resolveLoginEmail(loginIdentifier: string) {
   return `${normalizeKey(normalizedIdentifier)}@${SERVICE_LOGIN_DOMAIN}`;
 }
 
+const PRIVACY_POLICY_VERSION = "1.6.2.6";
+
+function PrivacyPolicyBody() {
+  return (
+    <>
+                <p>
+                  <strong className="text-white">1. Desarrollo y versión.</strong> PULSO fue
+                  desarrollado por el servicio de <strong className="text-cyan-200">ESDOMED</strong>{" "}
+                  (Estadística y Documentos Médicos) del Hospital Nacional, El Salvador. Versión
+                  1.6.2.6.
+                </p>
+                <p>
+                  <strong className="text-white">2. Qué es PULSO.</strong> Plataforma institucional
+                  interna del Hospital Nacional (El Salvador) para la captura, consolidación y
+                  gestión de la producción mensual de los servicios (PERC, SEPS y Distribución de
+                  Horas). Su uso es exclusivo del personal autorizado.
+                </p>
+                <p>
+                  <strong className="text-white">3. Marco legal aplicable.</strong> El tratamiento de
+                  la información en PULSO se enmarca en la normativa salvadoreña vigente, en
+                  particular: la <strong className="text-cyan-200">Ley para la Protección de Datos
+                  Personales</strong> (Decreto Legislativo N.° 144, del 12 de noviembre de 2024,
+                  publicada en el Diario Oficial el 15 de noviembre de 2024); el{" "}
+                  <strong className="text-cyan-200">Código de Salud</strong>; la Ley de Deberes y
+                  Derechos de los Pacientes y Prestadores de Servicios de Salud; los{" "}
+                  <strong className="text-cyan-200">Lineamientos técnicos para el cumplimiento del
+                  secreto profesional en el Sistema Nacional Integrado de Salud</strong> (MINSAL,
+                  Acuerdo Ejecutivo N.° 2745 de 2022); y la Ley de Acceso a la Información Pública.
+                  Asimismo, PULSO se rige por la <strong className="text-cyan-200">Ley de Ética
+                  Gubernamental</strong> y por la <strong className="text-cyan-200">Política y el
+                  Sistema de Gestión Antisoborno del Ministerio de Salud (MINSAL)</strong>.
+                </p>
+                <p>
+                  <strong className="text-white">4. Datos que recolectamos.</strong> Al registrarse:
+                  sus nombres, apellidos, correo y el servicio al que pertenece. Durante el uso, los
+                  datos de producción que usted carga y el registro de sus accesos (fecha, hora y
+                  usuario) con fines de seguridad y trazabilidad.
+                </p>
+                <p>
+                  <strong className="text-white">5. Base legal del tratamiento.</strong> El
+                  tratamiento se sustenta en su <strong className="text-white">consentimiento
+                  informado</strong> —otorgado al aceptar esta política— y en el cumplimiento de las
+                  obligaciones legales e institucionales del hospital como entidad pública de salud.
+                </p>
+                <p>
+                  <strong className="text-white">6. Finalidad.</strong> Los datos se usan únicamente
+                  para identificarlo, crear su usuario y gestionar la captura mensual de su servicio.
+                  No se usan con fines comerciales ni publicitarios, ni se someten a decisiones
+                  automatizadas que le afecten.
+                </p>
+                <p>
+                  <strong className="text-white">7. Confidencialidad y secreto profesional.</strong>{" "}
+                  La información gestionada en PULSO tiene carácter institucional y confidencial.
+                  Todo usuario queda obligado a resguardar el secreto profesional conforme a los
+                  Lineamientos del MINSAL y al Código de Salud, absteniéndose de divulgar, reproducir
+                  o extraer datos fuera de los fines autorizados, tanto durante como después de su
+                  vínculo con la institución.
+                </p>
+                <p>
+                  <strong className="text-white">8. Quién los ve.</strong> Solamente los
+                  administradores y supervisores autorizados y usted. No se comparten con terceros
+                  ajenos al hospital, salvo requerimiento de autoridad competente conforme a la ley.
+                </p>
+                <p>
+                  <strong className="text-white">9. Dónde se guardan y seguridad.</strong> De forma
+                  segura en los servicios de Google Firebase, con acceso restringido por usuario y
+                  contraseña y comunicaciones cifradas. Se aplican medidas técnicas y organizativas
+                  razonables para proteger la información.
+                </p>
+                <p>
+                  <strong className="text-white">10. Conservación.</strong> Sus datos se conservan
+                  mientras su cuenta esté activa y por el plazo que exijan las obligaciones legales,
+                  contables y de archivo de la institución. Concluido ese plazo, se eliminan o
+                  anonimizan.
+                </p>
+                <p>
+                  <strong className="text-white">11. Sus derechos (ARCO-POL).</strong> Conforme a la
+                  Ley para la Protección de Datos Personales, usted puede ejercer sus derechos de{" "}
+                  <strong className="text-white">acceso, rectificación, cancelación, oposición,
+                  portabilidad, olvido (supresión en entornos digitales) y limitación</strong> del
+                  tratamiento. Puede solicitarlos a la administración, que atenderá su petición
+                  dentro de los plazos que fija la ley.
+                </p>
+                <p>
+                  <strong className="text-white">12. Incidentes de seguridad.</strong> Ante una
+                  vulneración que afecte sus datos personales, la institución adoptará las medidas
+                  correctivas y realizará las notificaciones que correspondan conforme a la ley.
+                </p>
+                <p>
+                  <strong className="text-white">13. Aprobación de la cuenta.</strong> El registro no
+                  es automático: su solicitud queda pendiente hasta que un administrador la apruebe.
+                </p>
+                <p>
+                  <strong className="text-white">14. Responsabilidad del usuario.</strong> Usted es
+                  el único responsable de la información que ingresa. Se compromete a que los datos
+                  de producción y demás registros que cargue sean veraces, completos y correspondan a
+                  su servicio. El uso de su usuario y contraseña es personal e intransferible;
+                  cualquier dato ingresado con sus credenciales se considera realizado por usted. La
+                  administración no se hace responsable por errores u omisiones en la información
+                  cargada por cada usuario.
+                </p>
+                <p>
+                  <strong className="text-white">15. Uso permitido y usos prohibidos.</strong> PULSO
+                  es exclusivo para la gestión de la producción de los servicios del hospital. Queda{" "}
+                  <strong className="text-white">prohibido</strong>: ingresar información falsa o
+                  alterada; usar el sistema para fines distintos a los autorizados; compartir,
+                  ceder o revelar sus credenciales; intentar acceder a datos de otros usuarios o
+                  servicios sin autorización; y extraer, copiar o divulgar información confidencial
+                  de la institución.
+                </p>
+                <p>
+                  <strong className="text-white">16. Consecuencias del mal uso.</strong> El
+                  incumplimiento de esta política o el uso indebido del sistema puede dar lugar a la
+                  suspensión o cancelación de la cuenta y a las responsabilidades administrativas,
+                  disciplinarias, civiles o penales que establezca la legislación salvadoreña
+                  aplicable.
+                </p>
+                <p>
+                  <strong className="text-white">17. Compromiso antisoborno y anticorrupción
+                  (MINSAL).</strong> El Hospital Nacional adhiere a la Ley de Ética Gubernamental,
+                  al Sistema de Gestión Antisoborno del Ministerio de Salud (MINSAL) y a los
+                  estándares internacionales en la materia (norma ISO 37001). Aplicado al uso de
+                  PULSO, queda estrictamente <strong className="text-white">prohibido</strong>{" "}
+                  ofrecer, prometer, solicitar, dar o aceptar —directa o indirectamente— dinero,
+                  dádivas, regalos, comisiones, favores o cualquier ventaja indebida para:{" "}
+                  <strong className="text-white">(a)</strong> registrar, alterar, inflar, disminuir,
+                  ocultar, agilizar u omitir datos de producción;{" "}
+                  <strong className="text-white">(b)</strong> aprobar cuentas, otorgar o ampliar
+                  permisos, o habilitar/cerrar tableros de captura fuera de los criterios
+                  institucionales; <strong className="text-white">(c)</strong> modificar o emitir
+                  consolidados que no reflejen la realidad; o{" "}
+                  <strong className="text-white">(d)</strong> favorecer indebidamente a un servicio,
+                  usuario o tercero. Se prohíbe además manipular o falsear información para obtener
+                  beneficios propios o de terceros o para encubrir irregularidades, así como todo
+                  acto de corrupción, tráfico de influencias o conflicto de interés.
+                </p>
+                <p>
+                  <strong className="text-white">18. Deber de denuncia y no represalia.</strong>{" "}
+                  Todo usuario que tenga conocimiento o sospecha razonable de un acto de soborno o
+                  corrupción relacionado con PULSO debe informarlo por los canales institucionales
+                  del MINSAL y del hospital (incluida la Unidad de Ética o la que haga sus veces).
+                  La institución garantiza la confidencialidad del denunciante de buena fe y
+                  prohíbe toda represalia en su contra. El incumplimiento de estas normas
+                  antisoborno puede derivar en responsabilidades administrativas, disciplinarias,
+                  civiles y penales conforme a la legislación salvadoreña.
+                </p>
+                <p>
+                  <strong className="text-white">19. Seguridad de su cuenta.</strong> Mantenga su
+                  contraseña en secreto y cámbiela en su primer ingreso. Si sospecha que alguien
+                  conoce sus credenciales, avise de inmediato a la administración.
+                </p>
+                <p>
+                  <strong className="text-white">20. Contacto y ejercicio de derechos.</strong> Para
+                  ejercer sus derechos, corregir o eliminar sus datos, o realizar consultas sobre
+                  esta política, comuníquese con la administración del sistema a través del servicio
+                  de ESDOMED del Hospital Nacional, El Salvador.
+                </p>
+                <p>
+                  <strong className="text-white">21. Cambios en esta política.</strong> Esta política
+                  puede actualizarse para reflejar mejoras del sistema o cambios normativos. El uso
+                  continuado de PULSO implica la aceptación de la versión vigente.
+                </p>
+    </>
+  );
+}
+
 export default function Home() {
   const [adminCreateForm, setAdminCreateForm] = useState<AdminCreateForm>({
     firstName: "",
@@ -3875,6 +4041,9 @@ export default function Home() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [policyGateAcceptedSession, setPolicyGateAcceptedSession] = useState(false);
+  const [policyGateSaving, setPolicyGateSaving] = useState(false);
+  const [policyScrolledEnd, setPolicyScrolledEnd] = useState(false);
   const [showPasswordText, setShowPasswordText] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showBoardModal, setShowBoardModal] = useState(false);
@@ -8405,6 +8574,29 @@ export default function Home() {
       setError(getAuthErrorMessage(passwordError));
     } finally {
       setIsChangingPassword(false);
+    }
+  }
+
+  async function handleAcceptPolicyGate() {
+    if (!serviceProfile) {
+      return;
+    }
+    setPolicyGateSaving(true);
+    try {
+      await setDoc(
+        doc(db, "serviceUsers", serviceProfile.uid),
+        {
+          policyAcceptedAt: serverTimestamp(),
+          policyAcceptedVersion: PRIVACY_POLICY_VERSION,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } catch (policyError) {
+      console.error("No se pudo guardar la aceptacion de politica", policyError);
+    } finally {
+      setPolicyGateSaving(false);
+      setPolicyGateAcceptedSession(true);
     }
   }
 
@@ -13420,6 +13612,47 @@ export default function Home() {
             </div>
           ) : null}
 
+          {serviceProfile && serviceProfile.mustChangePassword && !isAdmin && !policyGateAcceptedSession ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="policy-gate-title"
+              className="fixed inset-0 z-[140] flex items-start justify-center overflow-y-auto p-4"
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/85 backdrop-blur-sm" />
+              <div className="modal-pop-in relative my-6 w-full max-w-lg overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
+                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-blue-500" />
+                <div className="px-5 pb-6 pt-5 sm:px-6">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300/90">Antes de continuar</p>
+                  <h3 id="policy-gate-title" className="mt-1 text-lg font-bold text-white">Política de Privacidad y Términos de Uso — PULSO</h3>
+                  <p className="mt-2 text-xs text-slate-400">Lea la política completa. Al final podrá aceptar y comprometerse a usar correctamente la aplicación.</p>
+                  <div
+                    onScroll={(event) => {
+                      const el = event.currentTarget;
+                      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 24) {
+                        setPolicyScrolledEnd(true);
+                      }
+                    }}
+                    className="mt-4 max-h-[52vh] space-y-3 overflow-y-auto pr-1 text-xs leading-relaxed text-slate-300"
+                  >
+                    <PrivacyPolicyBody />
+                  </div>
+                  {!policyScrolledEnd ? (
+                    <p className="mt-3 text-center text-[11px] text-amber-300/90">Desliza hasta el final para habilitar el botón.</p>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={!policyScrolledEnd || policyGateSaving}
+                    onClick={() => { void handleAcceptPolicyGate(); }}
+                    className="mt-4 w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {policyGateSaving ? "Guardando…" : "Acepto y me comprometo a usar correctamente PULSO"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {showPasswordModal ? (
             <div
               role="dialog"
@@ -16276,163 +16509,7 @@ export default function Home() {
                 </button>
               </div>
               <div className="mt-4 max-h-[58vh] space-y-3 overflow-y-auto pr-1 text-xs leading-relaxed text-slate-300">
-                <p>
-                  <strong className="text-white">1. Desarrollo y versión.</strong> PULSO fue
-                  desarrollado por el servicio de <strong className="text-cyan-200">ESDOMED</strong>{" "}
-                  (Estadística y Documentos Médicos) del Hospital Nacional, El Salvador. Versión
-                  1.6.2.6.
-                </p>
-                <p>
-                  <strong className="text-white">2. Qué es PULSO.</strong> Plataforma institucional
-                  interna del Hospital Nacional (El Salvador) para la captura, consolidación y
-                  gestión de la producción mensual de los servicios (PERC, SEPS y Distribución de
-                  Horas). Su uso es exclusivo del personal autorizado.
-                </p>
-                <p>
-                  <strong className="text-white">3. Marco legal aplicable.</strong> El tratamiento de
-                  la información en PULSO se enmarca en la normativa salvadoreña vigente, en
-                  particular: la <strong className="text-cyan-200">Ley para la Protección de Datos
-                  Personales</strong> (Decreto Legislativo N.° 144, del 12 de noviembre de 2024,
-                  publicada en el Diario Oficial el 15 de noviembre de 2024); el{" "}
-                  <strong className="text-cyan-200">Código de Salud</strong>; la Ley de Deberes y
-                  Derechos de los Pacientes y Prestadores de Servicios de Salud; los{" "}
-                  <strong className="text-cyan-200">Lineamientos técnicos para el cumplimiento del
-                  secreto profesional en el Sistema Nacional Integrado de Salud</strong> (MINSAL,
-                  Acuerdo Ejecutivo N.° 2745 de 2022); y la Ley de Acceso a la Información Pública.
-                  Asimismo, PULSO se rige por la <strong className="text-cyan-200">Ley de Ética
-                  Gubernamental</strong> y por la <strong className="text-cyan-200">Política y el
-                  Sistema de Gestión Antisoborno del Ministerio de Salud (MINSAL)</strong>.
-                </p>
-                <p>
-                  <strong className="text-white">4. Datos que recolectamos.</strong> Al registrarse:
-                  sus nombres, apellidos, correo y el servicio al que pertenece. Durante el uso, los
-                  datos de producción que usted carga y el registro de sus accesos (fecha, hora y
-                  usuario) con fines de seguridad y trazabilidad.
-                </p>
-                <p>
-                  <strong className="text-white">5. Base legal del tratamiento.</strong> El
-                  tratamiento se sustenta en su <strong className="text-white">consentimiento
-                  informado</strong> —otorgado al aceptar esta política— y en el cumplimiento de las
-                  obligaciones legales e institucionales del hospital como entidad pública de salud.
-                </p>
-                <p>
-                  <strong className="text-white">6. Finalidad.</strong> Los datos se usan únicamente
-                  para identificarlo, crear su usuario y gestionar la captura mensual de su servicio.
-                  No se usan con fines comerciales ni publicitarios, ni se someten a decisiones
-                  automatizadas que le afecten.
-                </p>
-                <p>
-                  <strong className="text-white">7. Confidencialidad y secreto profesional.</strong>{" "}
-                  La información gestionada en PULSO tiene carácter institucional y confidencial.
-                  Todo usuario queda obligado a resguardar el secreto profesional conforme a los
-                  Lineamientos del MINSAL y al Código de Salud, absteniéndose de divulgar, reproducir
-                  o extraer datos fuera de los fines autorizados, tanto durante como después de su
-                  vínculo con la institución.
-                </p>
-                <p>
-                  <strong className="text-white">8. Quién los ve.</strong> Solamente los
-                  administradores y supervisores autorizados y usted. No se comparten con terceros
-                  ajenos al hospital, salvo requerimiento de autoridad competente conforme a la ley.
-                </p>
-                <p>
-                  <strong className="text-white">9. Dónde se guardan y seguridad.</strong> De forma
-                  segura en los servicios de Google Firebase, con acceso restringido por usuario y
-                  contraseña y comunicaciones cifradas. Se aplican medidas técnicas y organizativas
-                  razonables para proteger la información.
-                </p>
-                <p>
-                  <strong className="text-white">10. Conservación.</strong> Sus datos se conservan
-                  mientras su cuenta esté activa y por el plazo que exijan las obligaciones legales,
-                  contables y de archivo de la institución. Concluido ese plazo, se eliminan o
-                  anonimizan.
-                </p>
-                <p>
-                  <strong className="text-white">11. Sus derechos (ARCO-POL).</strong> Conforme a la
-                  Ley para la Protección de Datos Personales, usted puede ejercer sus derechos de{" "}
-                  <strong className="text-white">acceso, rectificación, cancelación, oposición,
-                  portabilidad, olvido (supresión en entornos digitales) y limitación</strong> del
-                  tratamiento. Puede solicitarlos a la administración, que atenderá su petición
-                  dentro de los plazos que fija la ley.
-                </p>
-                <p>
-                  <strong className="text-white">12. Incidentes de seguridad.</strong> Ante una
-                  vulneración que afecte sus datos personales, la institución adoptará las medidas
-                  correctivas y realizará las notificaciones que correspondan conforme a la ley.
-                </p>
-                <p>
-                  <strong className="text-white">13. Aprobación de la cuenta.</strong> El registro no
-                  es automático: su solicitud queda pendiente hasta que un administrador la apruebe.
-                </p>
-                <p>
-                  <strong className="text-white">14. Responsabilidad del usuario.</strong> Usted es
-                  el único responsable de la información que ingresa. Se compromete a que los datos
-                  de producción y demás registros que cargue sean veraces, completos y correspondan a
-                  su servicio. El uso de su usuario y contraseña es personal e intransferible;
-                  cualquier dato ingresado con sus credenciales se considera realizado por usted. La
-                  administración no se hace responsable por errores u omisiones en la información
-                  cargada por cada usuario.
-                </p>
-                <p>
-                  <strong className="text-white">15. Uso permitido y usos prohibidos.</strong> PULSO
-                  es exclusivo para la gestión de la producción de los servicios del hospital. Queda{" "}
-                  <strong className="text-white">prohibido</strong>: ingresar información falsa o
-                  alterada; usar el sistema para fines distintos a los autorizados; compartir,
-                  ceder o revelar sus credenciales; intentar acceder a datos de otros usuarios o
-                  servicios sin autorización; y extraer, copiar o divulgar información confidencial
-                  de la institución.
-                </p>
-                <p>
-                  <strong className="text-white">16. Consecuencias del mal uso.</strong> El
-                  incumplimiento de esta política o el uso indebido del sistema puede dar lugar a la
-                  suspensión o cancelación de la cuenta y a las responsabilidades administrativas,
-                  disciplinarias, civiles o penales que establezca la legislación salvadoreña
-                  aplicable.
-                </p>
-                <p>
-                  <strong className="text-white">17. Compromiso antisoborno y anticorrupción
-                  (MINSAL).</strong> El Hospital Nacional adhiere a la Ley de Ética Gubernamental,
-                  al Sistema de Gestión Antisoborno del Ministerio de Salud (MINSAL) y a los
-                  estándares internacionales en la materia (norma ISO 37001). Aplicado al uso de
-                  PULSO, queda estrictamente <strong className="text-white">prohibido</strong>{" "}
-                  ofrecer, prometer, solicitar, dar o aceptar —directa o indirectamente— dinero,
-                  dádivas, regalos, comisiones, favores o cualquier ventaja indebida para:{" "}
-                  <strong className="text-white">(a)</strong> registrar, alterar, inflar, disminuir,
-                  ocultar, agilizar u omitir datos de producción;{" "}
-                  <strong className="text-white">(b)</strong> aprobar cuentas, otorgar o ampliar
-                  permisos, o habilitar/cerrar tableros de captura fuera de los criterios
-                  institucionales; <strong className="text-white">(c)</strong> modificar o emitir
-                  consolidados que no reflejen la realidad; o{" "}
-                  <strong className="text-white">(d)</strong> favorecer indebidamente a un servicio,
-                  usuario o tercero. Se prohíbe además manipular o falsear información para obtener
-                  beneficios propios o de terceros o para encubrir irregularidades, así como todo
-                  acto de corrupción, tráfico de influencias o conflicto de interés.
-                </p>
-                <p>
-                  <strong className="text-white">18. Deber de denuncia y no represalia.</strong>{" "}
-                  Todo usuario que tenga conocimiento o sospecha razonable de un acto de soborno o
-                  corrupción relacionado con PULSO debe informarlo por los canales institucionales
-                  del MINSAL y del hospital (incluida la Unidad de Ética o la que haga sus veces).
-                  La institución garantiza la confidencialidad del denunciante de buena fe y
-                  prohíbe toda represalia en su contra. El incumplimiento de estas normas
-                  antisoborno puede derivar en responsabilidades administrativas, disciplinarias,
-                  civiles y penales conforme a la legislación salvadoreña.
-                </p>
-                <p>
-                  <strong className="text-white">19. Seguridad de su cuenta.</strong> Mantenga su
-                  contraseña en secreto y cámbiela en su primer ingreso. Si sospecha que alguien
-                  conoce sus credenciales, avise de inmediato a la administración.
-                </p>
-                <p>
-                  <strong className="text-white">20. Contacto y ejercicio de derechos.</strong> Para
-                  ejercer sus derechos, corregir o eliminar sus datos, o realizar consultas sobre
-                  esta política, comuníquese con la administración del sistema a través del servicio
-                  de ESDOMED del Hospital Nacional, El Salvador.
-                </p>
-                <p>
-                  <strong className="text-white">21. Cambios en esta política.</strong> Esta política
-                  puede actualizarse para reflejar mejoras del sistema o cambios normativos. El uso
-                  continuado de PULSO implica la aceptación de la versión vigente.
-                </p>
+                <PrivacyPolicyBody />
               </div>
               <button
                 type="button"
