@@ -2803,10 +2803,6 @@ function normalizeLoginIdentifier(value: string) {
     return "";
   }
 
-  if (!trimmedValue.includes("@") && trimmedValue.toLowerCase() === ADMIN_USERNAME.toLowerCase()) {
-    return ADMIN_EMAIL;
-  }
-
   return trimmedValue;
 }
 
