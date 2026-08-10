@@ -10746,6 +10746,7 @@ export default function Home() {
           ? captureRequests.filter((req) => serviceProfile.supervisorModules.includes(req.moduleId))
           : [];
     const pendingRequestCount = visibleRequests.filter((req) => req.status === "pending").length;
+    const pendingSignupCount = signupRequests.filter((req) => req.status === "pending").length;
     // Soporte: supervisores y admin ven todos los tickets; pendientes para el badge.
     const pendingSupportCount = supportTickets.filter((t) => t.status === "pendiente").length;
     // El servicio logueado puede solicitar habilitacion si tiene un tablero propio.
@@ -11747,9 +11748,14 @@ export default function Home() {
                 // Alerta roja cuando hay solicitudes pendientes, o cuando el SERVICIO
                 // tiene comentarios de revision sin leer en su SEPS.
                 const sepsCommentAlert = item.id === "panel-seps" && serviceSepsCommentCount > 0;
+                const signupAlert = item.id === "panel-signups" && pendingSignupCount > 0;
                 const hasAlert =
-                  (item.id === "panel-requests" && pendingRequestCount > 0) || sepsCommentAlert;
-                const alertCount = sepsCommentAlert ? serviceSepsCommentCount : pendingRequestCount;
+                  (item.id === "panel-requests" && pendingRequestCount > 0) || sepsCommentAlert || signupAlert;
+                const alertCount = sepsCommentAlert
+                  ? serviceSepsCommentCount
+                  : signupAlert
+                    ? pendingSignupCount
+                    : pendingRequestCount;
                 const tileGradient =
                   SIDEBAR_TILE_GRADIENT[item.id] ?? "from-cyan-500 to-blue-600";
                 const itemChildren = (item as { children?: { id: string; label: string; detail: string; badge: string; icon?: string }[] }).children;
@@ -13607,6 +13613,42 @@ export default function Home() {
                         ))
                     )}
                   </div>
+                  {signupRequests.filter((r) => r.status !== "pending").length > 0 ? (
+                    <div className="mt-5 border-t border-white/10 pt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">
+                        Historial (control)
+                      </p>
+                      <div className="mt-2 max-h-[26vh] space-y-2 overflow-y-auto pr-1">
+                        {signupRequests
+                          .filter((r) => r.status !== "pending")
+                          .map((r) => (
+                            <div
+                              key={r.id}
+                              className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-[#141c2b] px-3 py-2"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-semibold text-white">
+                                  {r.firstName} {r.lastName}
+                                </p>
+                                <p className="truncate text-[11px] text-slate-400">
+                                  {r.serviceName}
+                                  {r.createdUsername ? ` · usuario: ${r.createdUsername}` : ""}
+                                </p>
+                              </div>
+                              <span
+                                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                  r.status === "approved"
+                                    ? "bg-emerald-500/15 text-emerald-300"
+                                    : "bg-rose-500/15 text-rose-300"
+                                }`}
+                              >
+                                {r.status === "approved" ? "Aprobado" : "Rechazado"}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
