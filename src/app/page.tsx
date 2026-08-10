@@ -11713,10 +11713,10 @@ export default function Home() {
               className="mx-auto mb-3 block h-1.5 w-12 rounded-full bg-slate-400/40 xl:hidden"
             />
             <div className={`pb-4 text-center xl:pb-3 ${isLightPanelTheme ? "border-b border-slate-200" : "border-b border-white/10"}`}>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
+              <p className="hospital-shimmer text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
                 Hospital Nacional
               </p>
-              <p className="mt-0.5 text-[11px] font-medium tracking-[0.16em] text-slate-500">
+              <p className="hospital-shimmer mt-0.5 text-[11px] font-medium tracking-[0.16em] text-slate-500">
                 El Salvador
               </p>
             </div>

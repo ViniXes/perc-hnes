@@ -450,3 +450,44 @@ body {
   50% { box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.35), 0 0 18px 2px rgba(251, 191, 36, 0.28); }
 }
 .seps-comment-glow { animation: sepsCommentGlow 2.2s ease-in-out infinite; }
+
+/* ---------------------------------------------------------------------------
+   Encabezado "Hospital Nacional / El Salvador": destello de luz suave y
+   elegante (tipo estrella fugaz), que barre las letras cada pocos segundos.
+--------------------------------------------------------------------------- */
+.hospital-shimmer {
+  --shimmer-base: #8ea0b8;
+  --shimmer-hi: #ffffff;
+  --shimmer-hi2: #dbeafe;
+  background-image: linear-gradient(
+    100deg,
+    var(--shimmer-base) 0%,
+    var(--shimmer-base) 40%,
+    var(--shimmer-hi) 48%,
+    var(--shimmer-hi2) 52%,
+    var(--shimmer-base) 60%,
+    var(--shimmer-base) 100%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 0 6px rgba(191, 219, 254, 0.25));
+  animation: hospitalShimmer 6.5s ease-in-out infinite;
+}
+.panel-shell.theme-light .hospital-shimmer {
+  --shimmer-base: #64748b;
+  --shimmer-hi: #0284c7;
+  --shimmer-hi2: #38bdf8;
+  filter: drop-shadow(0 0 5px rgba(2, 132, 199, 0.18));
+}
+@keyframes hospitalShimmer {
+  0% { background-position: 180% 0; }
+  32% { background-position: -80% 0; }
+  100% { background-position: -80% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hospital-shimmer { animation: none; }
+}
