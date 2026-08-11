@@ -3962,6 +3962,12 @@ export default function Home() {
   // Bandeja de solicitudes de REGISTRO (para los 3 admins).
   const [signupRequests, setSignupRequests] = useState<SignupRequest[]>([]);
   const [showSignupRequestsModal, setShowSignupRequestsModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetService, setResetService] = useState<string>("ALL");
+  const [resetPeriod, setResetPeriod] = useState<string>("");
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [resetResult, setResetResult] = useState<string>("");
   const [signupBusyId, setSignupBusyId] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -8612,6 +8618,49 @@ export default function Home() {
     }
   }
 
+  async function handleResetBoard() {
+    if (!isAdmin || !resetPeriod) {
+      return;
+    }
+    setResetBusy(true);
+    setResetResult("");
+    const p = resetPeriod;
+    const services = resetService === "ALL" ? SERVICE_DEFINITIONS.map((s) => s.id) : [resetService];
+    const ids: { col: string; id: string }[] = [];
+    for (const sid of services) {
+      ids.push({ col: "serviceTabulators", id: `${p}__${sid}` });
+      ids.push({ col: "sepsTabulators", id: `${p}__${sid}` });
+      ids.push({ col: "horasTabulators", id: `${p}__${sid}` });
+    }
+    if (resetService === "ALL") {
+      ids.push({ col: "sepsTabulators", id: `GASTOS-${p}` });
+      ids.push({ col: "sepsTabulators", id: `DEPRE-${p}` });
+      ids.push({ col: "censoDiario", id: p });
+      ids.push({ col: "insumosAlmacen", id: p });
+    }
+    let cleared = 0;
+    let failed = 0;
+    for (const t of ids) {
+      try {
+        const ref = doc(db, t.col, t.id);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+          await deleteDoc(ref);
+          cleared += 1;
+        }
+      } catch {
+        failed += 1;
+      }
+    }
+    setResetBusy(false);
+    setResetConfirm(false);
+    setResetResult(
+      cleared === 0 && failed === 0
+        ? `No había datos guardados para ${resetService === "ALL" ? "ningún servicio" : "ese servicio"} en ${getPeriodLabel(p)}.`
+        : `Listo. Se reiniciaron ${cleared} tablero(s) con datos en ${getPeriodLabel(p)}${failed ? ` (${failed} con error).` : "."}`,
+    );
+  }
+
   function updateAdminDraft(uid: string, patch: Partial<AdminDraft>) {
     setAdminDrafts((currentDrafts) => ({
       ...currentDrafts,
@@ -8860,6 +8909,12 @@ export default function Home() {
       setShowConfigModal(true);
     } else if (itemId === "panel-signups") {
       setShowSignupRequestsModal(true);
+    } else if (itemId === "panel-reset") {
+      setResetService("ALL");
+      setResetPeriod(windowPeriodId);
+      setResetConfirm(false);
+      setResetResult("");
+      setShowResetModal(true);
     } else if (itemId === "panel-docs") {
       openDocsModal();
     } else {
@@ -11552,6 +11607,12 @@ export default function Home() {
                   ? String(signupRequests.filter((r) => r.status === "pending").length)
                   : "RG",
             },
+            {
+              id: "panel-reset",
+              label: "Reiniciar tablero",
+              detail: "Borrar datos de un periodo",
+              badge: "RE",
+            },
           ]
         : []),
       ...(serviceProfile.permissions.canToggleCapture && !isHorasMonitor
@@ -13663,6 +13724,77 @@ export default function Home() {
                       </div>
                     </div>
                   ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {isAdmin && showResetModal ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-[95] flex items-start justify-center overflow-y-auto p-4"
+              onClick={() => { if (!resetBusy) setShowResetModal(false); }}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/75 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                className="modal-pop-in relative my-8 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/50"
+              >
+                <div className="h-1 w-full bg-gradient-to-r from-rose-500 to-orange-500" />
+                <div className="px-5 pb-6 pt-5 sm:px-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-rose-300/90">Reinicio de datos</p>
+                      <h3 className="mt-1 text-xl font-bold text-white">Reiniciar tablero</h3>
+                      <p className="mt-1 text-xs text-slate-400">Elegí el servicio y el mes que querés dejar en cero. Borra la información guardada de ese período. No se puede deshacer.</p>
+                    </div>
+                    <button type="button" onClick={() => { if (!resetBusy) setShowResetModal(false); }} aria-label="Cerrar" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10">✕</button>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-300">Servicio</span>
+                      <select
+                        value={resetService}
+                        onChange={(event) => { setResetService(event.target.value); setResetConfirm(false); setResetResult(""); }}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none focus:border-rose-400"
+                      >
+                        <option value="ALL">Todos los servicios</option>
+                        {SERVICE_DEFINITIONS.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-300">Mes</span>
+                      <select
+                        value={resetPeriod}
+                        onChange={(event) => { setResetPeriod(event.target.value); setResetConfirm(false); setResetResult(""); }}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none focus:border-rose-400"
+                      >
+                        {buildRecentPeriods(windowPeriodId, 14).map((pr) => (<option key={pr.id} value={pr.id}>{pr.monthName} - {pr.year}</option>))}
+                      </select>
+                    </label>
+                  </div>
+                  {resetResult ? (
+                    <p className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{resetResult}</p>
+                  ) : null}
+                  {!resetConfirm ? (
+                    <button
+                      type="button"
+                      disabled={!resetPeriod || resetBusy}
+                      onClick={() => { setResetResult(""); setResetConfirm(true); }}
+                      className="mt-5 w-full rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2.5 text-sm font-bold text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Reiniciar {resetService === "ALL" ? "todos los servicios" : (getServiceById(resetService)?.name ?? "servicio")}
+                    </button>
+                  ) : (
+                    <div className="mt-5 rounded-2xl border border-rose-400/40 bg-rose-950/40 p-3.5">
+                      <p className="text-xs font-semibold text-rose-100">¿Seguro? Se borrará la información de <strong>{resetService === "ALL" ? "TODOS los servicios" : (getServiceById(resetService)?.name ?? "")}</strong> del período <strong>{getPeriodLabel(resetPeriod)}</strong>. No se puede deshacer.</p>
+                      <div className="mt-3 flex gap-2">
+                        <button type="button" disabled={resetBusy} onClick={() => void handleResetBoard()} className="flex-1 rounded-xl bg-rose-500 px-3 py-2 text-xs font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50">{resetBusy ? "Borrando…" : "Sí, borrar y dejar en cero"}</button>
+                        <button type="button" disabled={resetBusy} onClick={() => setResetConfirm(false)} className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">Cancelar</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
