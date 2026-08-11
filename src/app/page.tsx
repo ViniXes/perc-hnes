@@ -2405,6 +2405,12 @@ function normalizeKey(value: string) {
   return value.trim().toLowerCase();
 }
 
+function toTitleCase(value: string) {
+  return value
+    .toLocaleLowerCase("es")
+    .replace(/(^|\s|-)([\p{L}])/gu, (_match, sep, ch) => sep + ch.toLocaleUpperCase("es"));
+}
+
 function buildFullName(firstName: string, lastName: string, fallback: string) {
   const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
   return fullName || fallback;
@@ -11740,8 +11746,7 @@ export default function Home() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className={`truncate text-[13px] font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{welcomeName}</p>
-                <p className="truncate text-xs text-[#4f6aa3]">
+                <p className={`truncate text-[13px] font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
                   {currentService?.name || (isAdmin ? "Administrador del sistema" : serviceProfile.email)}
                 </p>
               </div>
@@ -12439,6 +12444,9 @@ export default function Home() {
                         ? "Panel de Supervisión"
                         : "Módulo de Administración"}
                   </h1>
+                  <p className={`mt-0.5 truncate text-sm font-semibold ${isLightPanelTheme ? "text-slate-700" : "text-cyan-200/90"}`}>
+                    Bienvenido/a {toTitleCase(welcomeName)}
+                  </p>
                   {currentService ? (
                     <p className="mt-0.5 truncate text-xs font-medium text-slate-400">
                       Período de {periodLabel}
