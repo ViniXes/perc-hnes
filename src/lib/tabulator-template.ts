@@ -278,9 +278,15 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: [],
   },
   {
-    // Planificacion y Calidad: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    // Unidad de Planificacion: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
     id: "planificacion",
-    name: "Planificacion y Calidad",
+    name: "Unidad de Planificacion",
+    rows: [],
+  },
+  {
+    // Unidad de Calidad: SOLO reporta Distribucion de Horas (sin PERC ni SEPS).
+    id: "calidad",
+    name: "Unidad de Calidad",
     rows: [],
   },
   {

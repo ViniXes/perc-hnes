@@ -613,6 +613,7 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "servicio-farmaceutico": "direccion",
   "docencia-e-investigacion": "direccion",
   planificacion: "direccion",
+  calidad: "direccion",
   epidemiologia: "direccion",
   cumplimiento: "direccion",
   "auditoria-interna": "direccion",
@@ -4729,6 +4730,7 @@ export default function Home() {
     const DIRECCION_PRIORITY: Record<string, number> = {
       esdomed: 0,
       planificacion: 1,
+      calidad: 2,
     };
     return Object.entries(SERVICE_GROUP_LABELS)
       .map(([id, title]) => {

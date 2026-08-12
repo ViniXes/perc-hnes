@@ -158,8 +158,10 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "asesores-de-medicamentos": ["distribucion"],
   // ESDOMED: SOLO Distribucion de Horas.
   esdomed: ["distribucion"],
-  // Planificacion y Calidad: SOLO Distribucion de Horas.
+  // Unidad de Planificacion: SOLO Distribucion de Horas.
   planificacion: ["distribucion"],
+  // Unidad de Calidad: SOLO Distribucion de Horas.
+  calidad: ["distribucion"],
   // Epidemiologia: SOLO Distribucion de Horas.
   epidemiologia: ["distribucion"],
   // Unidad de Cumplimiento: SOLO Distribucion de Horas.

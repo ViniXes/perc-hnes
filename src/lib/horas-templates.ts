@@ -1935,8 +1935,15 @@ export const HORAS_TEMPLATES: Record<string, HorasTemplate> = {
     columns: ["ADMINISTRACION"],
     seedEmployees: [
       { dui: "02597708-6", name: "JOSE ROBERTO CENTENO ZAMBRANO" },
-      { dui: "04320030-6", name: "DAVID ERNESTO ARTEAGA AGUILAR" },
       { dui: "01750504-5", name: "FLOR DE MARIA FUENTES URBINA" },
+    ],
+  },
+  calidad: {
+    serviceId: "calidad",
+    establishment: "HOSPITAL NACIONAL EL SALVADOR",
+    columns: ["ADMINISTRACION"],
+    seedEmployees: [
+      { dui: "04320030-6", name: "DAVID ERNESTO ARTEAGA AGUILAR" },
       { dui: "04563791-5", name: "FRANCISCO OVIDIO COLORADO RIVERA" },
     ],
   },
