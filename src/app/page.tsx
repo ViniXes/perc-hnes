@@ -3969,6 +3969,7 @@ export default function Home() {
   const [resetBusy, setResetBusy] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [resetResult, setResetResult] = useState<string>("");
+  const [resetModule, setResetModule] = useState<"all" | "perc" | "seps" | "horas">("all");
   const [signupBusyId, setSignupBusyId] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -8628,13 +8629,17 @@ export default function Home() {
     setResetResult("");
     const p = resetPeriod;
     const services = resetService === "ALL" ? SERVICE_DEFINITIONS.map((s) => s.id) : [resetService];
+    // Módulo a reiniciar: "all" borra los 3; o solo PERC / SEPS / Horas.
+    const wants = (m: "perc" | "seps" | "horas") => resetModule === "all" || resetModule === m;
     const ids: { col: string; id: string }[] = [];
     for (const sid of services) {
-      ids.push({ col: "serviceTabulators", id: `${p}__${sid}` });
-      ids.push({ col: "sepsTabulators", id: `${p}__${sid}` });
-      ids.push({ col: "horasTabulators", id: `${p}__${sid}` });
+      if (wants("perc")) ids.push({ col: "serviceTabulators", id: `${p}__${sid}` });
+      if (wants("seps")) ids.push({ col: "sepsTabulators", id: `${p}__${sid}` });
+      if (wants("horas")) ids.push({ col: "horasTabulators", id: `${p}__${sid}` });
     }
-    if (resetService === "ALL") {
+    if (resetService === "ALL" && wants("perc")) {
+      // Extras del módulo PERC: Gastos, Depreciación, Censo diario e Insumos.
+      // Solo se limpian si se reinicia PERC (o "Todos").
       ids.push({ col: "sepsTabulators", id: `GASTOS-${p}` });
       ids.push({ col: "sepsTabulators", id: `DEPRE-${p}` });
       ids.push({ col: "censoDiario", id: p });
@@ -13824,7 +13829,7 @@ export default function Home() {
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-rose-300/90">Reinicio de datos</p>
                       <h3 className="mt-1 text-xl font-bold text-white">Reiniciar tablero</h3>
-                      <p className="mt-1 text-xs text-slate-400">Elegí el servicio y el mes que querés dejar en cero. Borra la información guardada de ese período. No se puede deshacer.</p>
+                      <p className="mt-1 text-xs text-slate-400">Elegí el servicio, el tablero y el mes que querés dejar en cero. Borra la información guardada de ese período. No se puede deshacer.</p>
                     </div>
                     <button type="button" onClick={() => { if (!resetBusy) setShowResetModal(false); }} aria-label="Cerrar" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10">✕</button>
                   </div>
@@ -13838,6 +13843,19 @@ export default function Home() {
                       >
                         <option value="ALL">Todos los servicios</option>
                         {SERVICE_DEFINITIONS.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-300">Tablero</span>
+                      <select
+                        value={resetModule}
+                        onChange={(event) => { setResetModule(event.target.value as "all" | "perc" | "seps" | "horas"); setResetConfirm(false); setResetResult(""); }}
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none focus:border-rose-400"
+                      >
+                        <option value="all">Todos (PERC + SEPS + Horas)</option>
+                        <option value="perc">Solo PERC</option>
+                        <option value="seps">Solo SEPS</option>
+                        <option value="horas">Solo Distribución de Horas</option>
                       </select>
                     </label>
                     <label className="block">
@@ -13860,7 +13878,7 @@ export default function Home() {
                     onClick={() => { setResetResult(""); setResetConfirm(true); }}
                     className="mt-5 w-full rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2.5 text-sm font-bold text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Reiniciar {resetService === "ALL" ? "todos los servicios" : (getServiceById(resetService)?.name ?? "servicio")}
+                    Reiniciar {resetModule === "all" ? "todos los tableros" : resetModule === "perc" ? "PERC" : resetModule === "seps" ? "SEPS" : "Horas"} · {resetService === "ALL" ? "todos los servicios" : (getServiceById(resetService)?.name ?? "servicio")}
                   </button>
                 </div>
               </div>
@@ -13884,10 +13902,10 @@ export default function Home() {
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-500/15 text-2xl">⚠️</div>
                   <h3 className="mt-3 text-lg font-bold text-white">¿Estás seguro de reiniciar?</h3>
                   <p className="mt-2 text-sm text-slate-300">
-                    La información de{" "}
-                    <strong className="text-rose-200">{resetService === "ALL" ? "TODOS los servicios" : (getServiceById(resetService)?.name ?? "")}</strong>{" "}
-                    del período <strong className="text-rose-200">{getPeriodLabel(resetPeriod)}</strong> quedará{" "}
-                    <strong className="text-rose-200">a CERO</strong>.
+                    Se pondrá <strong className="text-rose-200">a CERO</strong>{" "}
+                    <strong className="text-rose-200">{resetModule === "all" ? "todos los tableros (PERC + SEPS + Horas)" : resetModule === "perc" ? "el tablero PERC" : resetModule === "seps" ? "el tablero SEPS" : "el tablero de Distribución de Horas"}</strong>{" "}
+                    de <strong className="text-rose-200">{resetService === "ALL" ? "TODOS los servicios" : (getServiceById(resetService)?.name ?? "")}</strong>{" "}
+                    en el período <strong className="text-rose-200">{getPeriodLabel(resetPeriod)}</strong>.
                   </p>
                   <p className="mt-1 text-xs font-semibold text-rose-300">Esta acción no se puede deshacer.</p>
                   <div className="mt-5 flex gap-2">
