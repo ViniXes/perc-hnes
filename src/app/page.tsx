@@ -8808,6 +8808,38 @@ export default function Home() {
     }
   }
 
+  async function handleToggleActiveUser(uid: string, managedUser: ManagedUser, active: boolean) {
+    setAdminBusyUserId(uid);
+    setError("");
+    setMessage("");
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setError("Volvé a iniciar sesión para gestionar usuarios.");
+        return;
+      }
+      const res = await fetch("/api/admin/set-user-active", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, targetUid: uid, active }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        setError(data.error || "No se pudo actualizar el usuario.");
+        return;
+      }
+      const users = await fetchManagedUsers();
+      applyAdminUsers(users);
+      setMessage(
+        `${managedUser.name || managedUser.username || "Usuario"} ${active ? "activado" : "desactivado"}.`,
+      );
+    } catch (toggleError) {
+      setError(getAuthErrorMessage(toggleError));
+    } finally {
+      setAdminBusyUserId("");
+    }
+  }
+
   // Reset masivo: TODAS las cuentas de servicio ya creadas -> 123456 (para entregar).
   async function handleResetAllServices() {
     if (!isAdmin) return;
@@ -13698,31 +13730,74 @@ export default function Home() {
                       <div className="mt-2 max-h-[26vh] space-y-2 overflow-y-auto pr-1">
                         {signupRequests
                           .filter((r) => r.status !== "pending")
-                          .map((r) => (
+                          .map((r) => {
+                            const uname =
+                              r.status === "approved" ? (r.createdUsername || "") : "";
+                            const mu = uname
+                              ? adminUsers.find(
+                                  (u) =>
+                                    (u.username || "").toLowerCase() ===
+                                    uname.toLowerCase(),
+                                )
+                              : undefined;
+                            const busy = mu ? adminBusyUserId === mu.uid : false;
+                            return (
                             <div
                               key={r.id}
-                              className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-[#141c2b] px-3 py-2"
+                              className="rounded-xl border border-white/5 bg-[#141c2b] px-3 py-2"
                             >
-                              <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold text-white">
-                                  {r.firstName} {r.lastName}
-                                </p>
-                                <p className="truncate text-[11px] text-slate-400">
-                                  {r.serviceName}
-                                  {r.createdUsername ? ` · usuario: ${r.createdUsername}` : ""}
-                                </p>
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold text-white">
+                                    {r.firstName} {r.lastName}
+                                  </p>
+                                  <p className="truncate text-[11px] text-slate-400">
+                                    {r.serviceName}
+                                    {r.createdUsername ? ` · usuario: ${r.createdUsername}` : ""}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                    r.status === "approved"
+                                      ? "bg-emerald-500/15 text-emerald-300"
+                                      : "bg-rose-500/15 text-rose-300"
+                                  }`}
+                                >
+                                  {r.status === "approved" ? "Aprobado" : "Rechazado"}
+                                </span>
                               </div>
-                              <span
-                                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                  r.status === "approved"
-                                    ? "bg-emerald-500/15 text-emerald-300"
-                                    : "bg-rose-500/15 text-rose-300"
-                                }`}
-                              >
-                                {r.status === "approved" ? "Aprobado" : "Rechazado"}
-                              </span>
+                              {mu ? (
+                                <div className="mt-2 flex items-center gap-2 border-t border-white/5 pt-2">
+                                  {!mu.isActive ? (
+                                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                                      Desactivado
+                                    </span>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => void handleAdminSendReset(mu.uid, mu)}
+                                    className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {busy ? "…" : "Reiniciar clave"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => void handleToggleActiveUser(mu.uid, mu, !mu.isActive)}
+                                    className={`ml-auto rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                      mu.isActive
+                                        ? "border-rose-400/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20"
+                                        : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
+                                    }`}
+                                  >
+                                    {busy ? "…" : mu.isActive ? "Desactivar" : "Activar"}
+                                  </button>
+                                </div>
+                              ) : null}
                             </div>
-                          ))}
+                            );
+                          })}
                       </div>
                     </div>
                   ) : null}
@@ -13779,24 +13854,60 @@ export default function Home() {
                   {resetResult ? (
                     <p className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{resetResult}</p>
                   ) : null}
-                  {!resetConfirm ? (
+                  <button
+                    type="button"
+                    disabled={!resetPeriod || resetBusy}
+                    onClick={() => { setResetResult(""); setResetConfirm(true); }}
+                    className="mt-5 w-full rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2.5 text-sm font-bold text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Reiniciar {resetService === "ALL" ? "todos los servicios" : (getServiceById(resetService)?.name ?? "servicio")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {isAdmin && showResetModal && resetConfirm ? (
+            <div
+              role="alertdialog"
+              aria-modal="true"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+              onClick={() => { if (!resetBusy) setResetConfirm(false); }}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/80 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                className="modal-pop-in relative w-full max-w-sm overflow-hidden rounded-3xl border border-rose-400/30 bg-[#160e12] shadow-2xl shadow-black/60"
+              >
+                <div className="h-1 w-full bg-gradient-to-r from-rose-500 to-orange-500" />
+                <div className="px-5 pb-6 pt-5 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-500/15 text-2xl">⚠️</div>
+                  <h3 className="mt-3 text-lg font-bold text-white">¿Estás seguro de reiniciar?</h3>
+                  <p className="mt-2 text-sm text-slate-300">
+                    La información de{" "}
+                    <strong className="text-rose-200">{resetService === "ALL" ? "TODOS los servicios" : (getServiceById(resetService)?.name ?? "")}</strong>{" "}
+                    del período <strong className="text-rose-200">{getPeriodLabel(resetPeriod)}</strong> quedará{" "}
+                    <strong className="text-rose-200">a CERO</strong>.
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-rose-300">Esta acción no se puede deshacer.</p>
+                  <div className="mt-5 flex gap-2">
                     <button
                       type="button"
-                      disabled={!resetPeriod || resetBusy}
-                      onClick={() => { setResetResult(""); setResetConfirm(true); }}
-                      className="mt-5 w-full rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 py-2.5 text-sm font-bold text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={resetBusy}
+                      onClick={() => setResetConfirm(false)}
+                      className="flex-1 rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
                     >
-                      Reiniciar {resetService === "ALL" ? "todos los servicios" : (getServiceById(resetService)?.name ?? "servicio")}
+                      Cancelar
                     </button>
-                  ) : (
-                    <div className="mt-5 rounded-2xl border border-rose-400/40 bg-rose-950/40 p-3.5">
-                      <p className="text-xs font-semibold text-rose-100">¿Seguro? Se borrará la información de <strong>{resetService === "ALL" ? "TODOS los servicios" : (getServiceById(resetService)?.name ?? "")}</strong> del período <strong>{getPeriodLabel(resetPeriod)}</strong>. No se puede deshacer.</p>
-                      <div className="mt-3 flex gap-2">
-                        <button type="button" disabled={resetBusy} onClick={() => void handleResetBoard()} className="flex-1 rounded-xl bg-rose-500 px-3 py-2 text-xs font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50">{resetBusy ? "Borrando…" : "Sí, borrar y dejar en cero"}</button>
-                        <button type="button" disabled={resetBusy} onClick={() => setResetConfirm(false)} className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">Cancelar</button>
-                      </div>
-                    </div>
-                  )}
+                    <button
+                      type="button"
+                      disabled={resetBusy}
+                      onClick={() => void handleResetBoard()}
+                      className="flex-1 rounded-xl bg-rose-500 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {resetBusy ? "Borrando…" : "Sí, dejar en cero"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
