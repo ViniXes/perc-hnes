@@ -10486,12 +10486,11 @@ export default function Home() {
           icon: "monitor",
         });
         if (mod.id === "perc") {
-          if (!(canViewCenso || canViewInsumos || canManage)) return undefined;
           return [
             ...(currentService
               ? [{ id: "panel-tabulator", label: "Abrir PERC", detail: "Ir al tabulador PERC", badge: "PE", icon: "perc" }]
               : []),
-            ...(canManage ? [monitorChild("panel-monitor-perc")] : []),
+            monitorChild("panel-monitor-perc"),
             ...(canViewCenso
               ? [{ id: "panel-censo", label: "Censo diario de pacientes", detail: "Solo supervisión", badge: "CD", icon: "censo" }]
               : []),
@@ -10511,23 +10510,21 @@ export default function Home() {
           ];
         }
         if (mod.id === "sesps") {
-          if (!canManage) return undefined;
           return [
             ...(sepsTemplate
               ? [{ id: "panel-seps", label: "Abrir SEPS", detail: "Ir al tabulador SEPS", badge: "SE", icon: "seps" }]
               : []),
             monitorChild("panel-monitor-seps"),
-            serviciosChild("SEPS Servicios"),
+            ...(canManage ? [serviciosChild("SEPS Servicios")] : []),
           ];
         }
         if (mod.id === "distribucion") {
-          if (!canManage) return undefined;
           return [
             ...(currentService
               ? [{ id: "panel-horas", label: "Abrir Dis/horas", detail: "Ir al tabulador de Horas", badge: "HO", icon: "horas" }]
               : []),
             monitorChild("panel-monitor-horas"),
-            serviciosChild("Horas Servicios"),
+            ...(canManage ? [serviciosChild("Horas Servicios")] : []),
           ];
         }
         return undefined;
@@ -14905,7 +14902,7 @@ export default function Home() {
             </div>
           ) : null}
 
-          {(isAdmin || isSupervisor) && showStatsModal
+          {showStatsModal
             ? (() => {
                 const statsLabel =
                   statsModule === "perc" ? "PERC" : statsModule === "sesps" ? "SEPS" : "Horas";
