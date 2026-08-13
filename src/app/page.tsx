@@ -7256,6 +7256,20 @@ export default function Home() {
     setMessage("");
 
     try {
+      // Al APROBAR, ademas de marcar la solicitud, abrimos el tablero (override "open")
+      // para ese periodo/servicio/modulo. Antes esto quedaba manual y no se habilitaba.
+      if (status === "approved") {
+        const overrideId = getCaptureOverrideId(request.periodId, request.serviceId, request.moduleId);
+        await setDoc(doc(db, "captureOverrides", overrideId), {
+          periodId: request.periodId,
+          serviceId: request.serviceId,
+          moduleId: request.moduleId,
+          state: "open",
+          updatedByName: serviceProfile.name,
+          updatedAt: serverTimestamp(),
+        });
+        setCaptureOverrides((current) => ({ ...current, [overrideId]: "open" }));
+      }
       await setDoc(
         doc(db, "captureRequests", request.id),
         { status, resolvedByName: serviceProfile.name, resolvedAt: serverTimestamp() },
@@ -7270,7 +7284,7 @@ export default function Home() {
       );
       setMessage(
         status === "approved"
-          ? `Solicitud aprobada. Recorda habilitar ${getModuleLabel(request.moduleId)} en "Habilitar tableros".`
+          ? `Solicitud aprobada. Se habilitó ${getModuleLabel(request.moduleId)} para ${request.periodLabel}.`
           : "Solicitud rechazada.",
       );
     } catch (resolveError) {
