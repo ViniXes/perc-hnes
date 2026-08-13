@@ -181,7 +181,7 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   // Jefatura de Division de Apoyo: SOLO Distribucion de Horas.
   "jefatura-division-apoyo": ["distribucion"],
   // UDP: SOLO Distribucion de Horas.
-  udp: ["distribucion"],
+  udp: ["perc", "distribucion"],
   // Cuidados Paliativos: por ahora SOLO Distribucion de Horas (SEPS pendiente).
   "cuidados-paliativos": ["distribucion", "sesps"],
   // Medicina Preventiva: por ahora SOLO Distribucion de Horas.
