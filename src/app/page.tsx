@@ -104,6 +104,7 @@ type ManagedUser = {
   // Para jefes de division: "medica" | "apoyo" | "administrativa" | "enfermeria" | "direccion".
   division: string | null;
   department: string | null;
+  isDirector: boolean;
   mustChangePassword: boolean;
   isActive: boolean;
 };
@@ -1512,7 +1513,7 @@ type SignupRequest = {
   serviceName: string;
   status: "pending" | "approved" | "rejected";
   createdUsername?: string;
-  requestType?: "service" | "division" | "department";
+  requestType?: "service" | "division" | "department" | "director";
   isChief?: boolean;
   captureModules?: ModuleId[];
   division?: string;
@@ -2885,6 +2886,7 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     isChief: data.isChief === true,
     division: typeof data.division === "string" ? data.division : null,
     department: typeof data.department === "string" ? data.department : null,
+    isDirector: data.isDirector === true,
     mustChangePassword: data.mustChangePassword !== false,
     isActive: data.isActive !== false,
   };
@@ -3827,6 +3829,74 @@ async function createDepartmentChiefAccount(
   return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
 }
 
+// Crea la cuenta de la DIRECTORA: ve TODO el hospital (todos los servicios y modulos,
+// monitoreo), pero SIN permisos de gestion (no edita, no habilita/reinicia tableros,
+// no gestiona usuarios, no aprueba solicitudes).
+async function createDirectorAccount(
+  creationAuth: Auth,
+  {
+    contactEmail,
+    firstName,
+    lastName,
+  }: {
+    contactEmail: string;
+    firstName: string;
+    lastName: string;
+  },
+) {
+  const directorLabel = "Directora";
+  const base = buildChiefUsername(firstName, lastName);
+  const displayName = buildFullName(firstName.trim(), lastName.trim(), directorLabel);
+  let username = base;
+  let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    username = attempt === 0 ? base : `${base}${attempt + 1}`;
+    if (isReservedUsername(username)) {
+      continue;
+    }
+    const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+    try {
+      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, CHIEF_TEMP_PASSWORD);
+      break;
+    } catch (err) {
+      if ((err as { code?: string })?.code === "auth/email-already-in-use") {
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (!credential) {
+    throw new Error("username-unavailable");
+  }
+  const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+  await updateProfile(credential.user, { displayName });
+  await setDoc(doc(db, "serviceUsers", credential.user.uid), {
+    serviceId: null,
+    serviceName: directorLabel,
+    email: contactEmail.trim(),
+    contactEmail: contactEmail.trim(),
+    loginEmail,
+    username,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    name: displayName,
+    role: "supervisor",
+    isActive: true,
+    mustChangePassword: true,
+    isChief: false,
+    isDirector: true,
+    captureModules: [],
+    division: null,
+    department: null,
+    supervisorModules: ["perc", "sesps", "distribucion"],
+    // SIN permisos de gestion: solo lectura de todo el hospital.
+    permissions: { canEdit: false, canManageUsers: false, canToggleCapture: false },
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+}
+
 // Resuelve el correo de ACCESO desde lo que el usuario escribe (usuario o correo).
 // Todo en memoria: ya NO consulta Firestore antes de autenticar (ese era el origen
 // de que las cuentas creadas no pudieran ingresar cuando las reglas bloquean la
@@ -4038,7 +4108,7 @@ export default function Home() {
     email: string;
     serviceId: string;
     acceptPrivacy: boolean;
-    accessType: "service" | "division" | "department";
+    accessType: "service" | "division" | "department" | "director";
     isChief: boolean;
     captureModules: ModuleId[];
     division: string;
@@ -4746,6 +4816,8 @@ export default function Home() {
   // + permiso de EDICION del SEPS de cualquier servicio y de dejar comentarios.
   const isSepsStaff = normalizeKey(user?.email || "") === normalizeKey("jcmiranda@perc-hnes.app");
   const isSupervisor = serviceProfile?.role === "supervisor" || isSepsStaff;
+  // Directora: usa la vista de supervisor (ve todo) pero SIN permisos de gestion.
+  const isDirector = serviceProfile?.isDirector === true;
   // Monitor de RRHH (userrhh): SOLO monitorea horas y descarga; no habilita tableros.
   const isHorasMonitor = normalizeKey(serviceProfile?.username || "") === normalizeKey("userrhh");
   // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
@@ -5601,7 +5673,9 @@ export default function Home() {
                 ? "division"
                 : d.requestType === "department"
                   ? "department"
-                  : "service",
+                  : d.requestType === "director"
+                    ? "director"
+                    : "service",
             isChief: d.isChief === true,
             captureModules: Array.isArray(d.captureModules)
               ? (d.captureModules.filter((v): v is ModuleId => MODULE_ORDER.includes(v as ModuleId)) as ModuleId[])
@@ -7471,6 +7545,7 @@ export default function Home() {
 
     const isDivision = signupForm.accessType === "division";
     const isDepartment = signupForm.accessType === "department";
+    const isDirector = signupForm.accessType === "director";
     const service = getServiceById(signupForm.serviceId);
     const DIVISION_LABELS: Record<string, string> = {
       medica: "Jefe de División Médica",
@@ -7491,7 +7566,7 @@ export default function Home() {
         setError("Elegí tu departamento.");
         return;
       }
-    } else {
+    } else if (!isDirector) {
       if (!service) {
         setError("Elegí tu servicio.");
         return;
@@ -7513,15 +7588,23 @@ export default function Home() {
         firstName: signupForm.firstName.trim(),
         lastName: signupForm.lastName.trim(),
         email: signupForm.email.trim(),
-        serviceId: isDivision || isDepartment ? "" : service!.id,
+        serviceId: isDivision || isDepartment || isDirector ? "" : service!.id,
         serviceName: isDivision
           ? DIVISION_LABELS[signupForm.division]
           : isDepartment
             ? DEPARTMENT_LABELS[signupForm.department]
-            : service!.name,
-        requestType: isDivision ? "division" : isDepartment ? "department" : "service",
-        isChief: isDivision || isDepartment ? false : signupForm.isChief,
-        captureModules: isDivision || isDepartment ? [] : signupForm.captureModules,
+            : isDirector
+              ? "Directora"
+              : service!.name,
+        requestType: isDivision
+          ? "division"
+          : isDepartment
+            ? "department"
+            : isDirector
+              ? "director"
+              : "service",
+        isChief: isDivision || isDepartment || isDirector ? false : signupForm.isChief,
+        captureModules: isDivision || isDepartment || isDirector ? [] : signupForm.captureModules,
         division: isDivision ? signupForm.division : "",
         department: isDepartment ? signupForm.department : "",
         status: "pending",
@@ -7598,6 +7681,41 @@ export default function Home() {
         }
         try {
           await secondaryDiv.dispose();
+        } catch {
+          // ignore
+        }
+        setSignupBusyId("");
+      }
+      return;
+    }
+
+    // --- Solicitud de DIRECTORA (ve todo el hospital, sin permisos de gestion) ---
+    if (req.requestType === "director") {
+      const secondaryDir = createSecondaryAuth();
+      try {
+        const { username } = await createDirectorAccount(secondaryDir.auth, {
+          contactEmail: req.email,
+          firstName: req.firstName,
+          lastName: req.lastName,
+        });
+        await setDoc(
+          doc(db, "signupRequests", req.id),
+          { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
+          { merge: true },
+        );
+        setMessage(
+          `Cuenta de Directora creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}".`,
+        );
+      } catch (approveError) {
+        setError(getAuthErrorMessage(approveError));
+      } finally {
+        try {
+          await signOut(secondaryDir.auth);
+        } catch {
+          // ignore
+        }
+        try {
+          await secondaryDir.dispose();
         } catch {
           // ignore
         }
@@ -8008,7 +8126,7 @@ export default function Home() {
 
   // ---- Comentarios de revision del SEPS (admin/supervisores/revisor) --------
   // Quien puede dejar comentarios en el SEPS de un servicio.
-  const canCommentSeps = isAdmin || isSupervisor || isSepsStaff;
+  const canCommentSeps = (isAdmin || isSupervisor || isSepsStaff) && !isDirector;
   // Para el SERVICIO (no revisor): cuantos comentarios de revision tiene su SEPS,
   // para destacarlos (badge en el menu + panel resaltado).
   const serviceSepsCommentCount = !canCommentSeps ? sepsComments.length : 0;
@@ -11836,7 +11954,7 @@ export default function Home() {
             },
           ]
         : []),
-      ...(isSupervisor || isAdmin
+      ...((isSupervisor || isAdmin) && !isDirector
         ? [
             {
               id: "panel-requests",
@@ -16873,7 +16991,9 @@ export default function Home() {
                             ? signupForm.department
                               ? `dept:${signupForm.department}`
                               : ""
-                            : signupForm.isChief && signupForm.serviceId
+                            : signupForm.accessType === "director"
+                              ? "director:main"
+                              : signupForm.isChief && signupForm.serviceId
                               ? `chief:${signupForm.serviceId}`
                               : signupForm.serviceId
                                 ? `svc:${signupForm.serviceId}`
@@ -16885,6 +17005,8 @@ export default function Home() {
                           setSignupForm((f) => ({ ...f, accessType: "division", division: v.slice(4), serviceId: "", isChief: false, department: "", captureModules: [] }));
                         } else if (v.startsWith("dept:")) {
                           setSignupForm((f) => ({ ...f, accessType: "department", department: v.slice(5), serviceId: "", isChief: false, division: "", captureModules: [] }));
+                        } else if (v.startsWith("director:")) {
+                          setSignupForm((f) => ({ ...f, accessType: "director", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
                         } else if (v.startsWith("chief:")) {
                           setSignupForm((f) => ({ ...f, accessType: "service", serviceId: v.slice(6), isChief: true, division: "", captureModules: [] }));
                         } else if (v.startsWith("svc:")) {
@@ -16906,6 +17028,11 @@ export default function Home() {
                             {d?.jefeLabel ? (
                               <option value={`div:${signupDivView}`} className="bg-[#1b2537] text-cyan-200">
                                 {d.jefeLabel}
+                              </option>
+                            ) : null}
+                            {signupDivView === "direccion" ? (
+                              <option value="director:main" className="bg-[#1b2537] text-amber-200">
+                                Directora (ve todo el hospital)
                               </option>
                             ) : null}
                             {Object.keys(DEPARTMENT_LABELS)
