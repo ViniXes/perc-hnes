@@ -221,7 +221,8 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
     password: DEFAULT_TEMP_PASSWORD,
     firstName: "Juan Carlos",
     lastName: "Miranda Marroquin",
-    modules: ["sesps"],
+    modules: ["perc", "sesps", "distribucion"],
+    admin: true,
   },
   {
     // Monitor de RRHH: SOLO ve el Monitoreo de Horas (quien completo) y descarga
