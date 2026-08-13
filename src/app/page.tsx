@@ -103,6 +103,7 @@ type ManagedUser = {
   isChief: boolean;
   // Para jefes de division: "medica" | "apoyo" | "administrativa" | "enfermeria" | "direccion".
   division: string | null;
+  department: string | null;
   mustChangePassword: boolean;
   isActive: boolean;
 };
@@ -681,6 +682,30 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "servicios-varios": "administrativa",
   tecnologia: "administrativa",
 };
+
+// --- DEPARTAMENTOS (jefaturas que agrupan un set fijo de servicios) --------------
+// Una jefa de departamento es un supervisor cuyo alcance son SOLO estos servicios
+// (no una división entera). Hoy: Laboratorios = Clínico + Banco de Sangre + Biología
+// Molecular, colgando de la División de Apoyo.
+const DEPARTMENT_SERVICES: Record<string, string[]> = {
+  laboratorios: ["laboratorio-clinico", "banco-de-sangre", "biologia-molecular"],
+};
+const DEPARTMENT_LABELS: Record<string, string> = {
+  laboratorios: "Jefa de Departamento de Laboratorios",
+};
+
+// ¿El servicio entra en el alcance del jefe/supervisor? Departamento manda sobre
+// división; sin ninguno de los dos (admin o supervisor sin alcance) ve todo.
+function isServiceInChiefScope(
+  profile: { division?: string | null; department?: string | null } | null,
+  serviceId: string,
+): boolean {
+  const dept = profile?.department || null;
+  if (dept) return (DEPARTMENT_SERVICES[dept] || []).includes(serviceId);
+  const div = profile?.division || null;
+  if (div) return (SERVICE_GROUP_BY_ID[serviceId] || "apoyo") === div;
+  return true;
+}
 
 const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   direccion: "dep.direccion",
@@ -1487,10 +1512,11 @@ type SignupRequest = {
   serviceName: string;
   status: "pending" | "approved" | "rejected";
   createdUsername?: string;
-  requestType?: "service" | "division";
+  requestType?: "service" | "division" | "department";
   isChief?: boolean;
   captureModules?: ModuleId[];
   division?: string;
+  department?: string;
 };
 
 function getModuleLabel(moduleId: ModuleId) {
@@ -2858,6 +2884,7 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
       : [],
     isChief: data.isChief === true,
     division: typeof data.division === "string" ? data.division : null,
+    department: typeof data.department === "string" ? data.department : null,
     mustChangePassword: data.mustChangePassword !== false,
     isActive: data.isActive !== false,
   };
@@ -3732,6 +3759,74 @@ async function createDivisionChiefAccount(
   return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
 }
 
+// Crea la cuenta de una JEFA DE DEPARTAMENTO (supervisor con alcance a un set fijo
+// de servicios; p.ej. Laboratorios). Ve el monitoreo de esos servicios en los 3 modulos.
+async function createDepartmentChiefAccount(
+  creationAuth: Auth,
+  {
+    department,
+    departmentLabel,
+    contactEmail,
+    firstName,
+    lastName,
+  }: {
+    department: string;
+    departmentLabel: string;
+    contactEmail: string;
+    firstName: string;
+    lastName: string;
+  },
+) {
+  const base = buildChiefUsername(firstName, lastName);
+  const displayName = buildFullName(firstName.trim(), lastName.trim(), departmentLabel);
+  let username = base;
+  let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    username = attempt === 0 ? base : `${base}${attempt + 1}`;
+    if (isReservedUsername(username)) {
+      continue;
+    }
+    const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+    try {
+      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, CHIEF_TEMP_PASSWORD);
+      break;
+    } catch (err) {
+      if ((err as { code?: string })?.code === "auth/email-already-in-use") {
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (!credential) {
+    throw new Error("username-unavailable");
+  }
+  const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+  await updateProfile(credential.user, { displayName });
+  await setDoc(doc(db, "serviceUsers", credential.user.uid), {
+    serviceId: null,
+    serviceName: departmentLabel,
+    email: contactEmail.trim(),
+    contactEmail: contactEmail.trim(),
+    loginEmail,
+    username,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    name: displayName,
+    role: "supervisor",
+    isActive: true,
+    mustChangePassword: true,
+    isChief: false,
+    captureModules: [],
+    division: null,
+    department,
+    supervisorModules: ["perc", "sesps", "distribucion"],
+    permissions: getDefaultPermissions("supervisor"),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+}
+
 // Resuelve el correo de ACCESO desde lo que el usuario escribe (usuario o correo).
 // Todo en memoria: ya NO consulta Firestore antes de autenticar (ese era el origen
 // de que las cuentas creadas no pudieran ingresar cuando las reglas bloquean la
@@ -3943,10 +4038,11 @@ export default function Home() {
     email: string;
     serviceId: string;
     acceptPrivacy: boolean;
-    accessType: "service" | "division";
+    accessType: "service" | "division" | "department";
     isChief: boolean;
     captureModules: ModuleId[];
     division: string;
+    department: string;
   }>({
     firstName: "",
     lastName: "",
@@ -3957,6 +4053,7 @@ export default function Home() {
     isChief: false,
     captureModules: [],
     division: "",
+    department: "",
   });
   // Division que se esta explorando en el registro (paso 1); filtra el 2do desplegable.
   const [signupDivView, setSignupDivView] = useState("");
@@ -3971,6 +4068,8 @@ export default function Home() {
   const [resetResult, setResetResult] = useState<string>("");
   const [resetModule, setResetModule] = useState<"all" | "perc" | "seps" | "horas">("all");
   const [signupBusyId, setSignupBusyId] = useState("");
+  const [signupSearch, setSignupSearch] = useState("");
+  const [deleteConfirmUid, setDeleteConfirmUid] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
@@ -4684,10 +4783,9 @@ export default function Home() {
   // Servicios disponibles en el dropdown "Elegir servicio" (admin = todos;
   // supervisor = solo los modulos que supervisa).
   const adminServiceOptions = useMemo(() => {
-    const scopeDiv = serviceProfile?.division || null;
     const base = SERVICE_DEFINITIONS.filter((service) => {
       // Jefe de division: SOLO ve los servicios de su division.
-      if (scopeDiv && (SERVICE_GROUP_BY_ID[service.id] || "apoyo") !== scopeDiv) return false;
+      if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
       return (
         isAdmin ||
         (getAreaById(service.id)?.modules.some((m) =>
@@ -4707,10 +4805,9 @@ export default function Home() {
   // Servicios visibles agrupados por division, para la navegacion en 2 niveles del
   // dropdown "Elegir servicio". Solo se incluyen las divisiones que tienen servicios.
   const adminServiceGroups = useMemo(() => {
-    const scopeDiv = serviceProfile?.division || null;
     const base = SERVICE_DEFINITIONS.filter((service) => {
       // Jefe de division: SOLO ve los servicios de su division.
-      if (scopeDiv && (SERVICE_GROUP_BY_ID[service.id] || "apoyo") !== scopeDiv) return false;
+      if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
       return (
         isAdmin ||
         (getAreaById(service.id)?.modules.some((m) =>
@@ -5499,6 +5596,18 @@ export default function Home() {
             status: (d.status as SignupRequest["status"]) ?? "pending",
             createdUsername:
               typeof d.createdUsername === "string" ? d.createdUsername : undefined,
+            requestType:
+              d.requestType === "division"
+                ? "division"
+                : d.requestType === "department"
+                  ? "department"
+                  : "service",
+            isChief: d.isChief === true,
+            captureModules: Array.isArray(d.captureModules)
+              ? (d.captureModules.filter((v): v is ModuleId => MODULE_ORDER.includes(v as ModuleId)) as ModuleId[])
+              : [],
+            division: typeof d.division === "string" ? d.division : "",
+            department: typeof d.department === "string" ? d.department : "",
           });
         });
         setSignupRequests(list);
@@ -7361,6 +7470,7 @@ export default function Home() {
     setMessage("");
 
     const isDivision = signupForm.accessType === "division";
+    const isDepartment = signupForm.accessType === "department";
     const service = getServiceById(signupForm.serviceId);
     const DIVISION_LABELS: Record<string, string> = {
       medica: "Jefe de División Médica",
@@ -7374,6 +7484,11 @@ export default function Home() {
     if (isDivision) {
       if (!signupForm.division || !DIVISION_LABELS[signupForm.division]) {
         setError("Elegí tu división.");
+        return;
+      }
+    } else if (isDepartment) {
+      if (!signupForm.department || !DEPARTMENT_LABELS[signupForm.department]) {
+        setError("Elegí tu departamento.");
         return;
       }
     } else {
@@ -7398,12 +7513,17 @@ export default function Home() {
         firstName: signupForm.firstName.trim(),
         lastName: signupForm.lastName.trim(),
         email: signupForm.email.trim(),
-        serviceId: isDivision ? "" : service!.id,
-        serviceName: isDivision ? DIVISION_LABELS[signupForm.division] : service!.name,
-        requestType: isDivision ? "division" : "service",
-        isChief: isDivision ? false : signupForm.isChief,
-        captureModules: isDivision ? [] : signupForm.captureModules,
+        serviceId: isDivision || isDepartment ? "" : service!.id,
+        serviceName: isDivision
+          ? DIVISION_LABELS[signupForm.division]
+          : isDepartment
+            ? DEPARTMENT_LABELS[signupForm.department]
+            : service!.name,
+        requestType: isDivision ? "division" : isDepartment ? "department" : "service",
+        isChief: isDivision || isDepartment ? false : signupForm.isChief,
+        captureModules: isDivision || isDepartment ? [] : signupForm.captureModules,
         division: isDivision ? signupForm.division : "",
+        department: isDepartment ? signupForm.department : "",
         status: "pending",
         acceptedPrivacy: true,
         createdAt: serverTimestamp(),
@@ -7419,6 +7539,7 @@ export default function Home() {
         isChief: false,
         captureModules: [],
         division: "",
+        department: "",
       });
       setSignupDivView("");
       setMessage(
@@ -7477,6 +7598,49 @@ export default function Home() {
         }
         try {
           await secondaryDiv.dispose();
+        } catch {
+          // ignore
+        }
+        setSignupBusyId("");
+      }
+      return;
+    }
+
+    // --- Solicitud de JEFE DE DEPARTAMENTO ---
+    if (req.requestType === "department") {
+      const depKey = req.department || "";
+      if (!DEPARTMENT_LABELS[depKey]) {
+        setError("El departamento de la solicitud no es válido.");
+        setSignupBusyId("");
+        return;
+      }
+      const secondaryDep = createSecondaryAuth();
+      try {
+        const { username } = await createDepartmentChiefAccount(secondaryDep.auth, {
+          department: depKey,
+          departmentLabel: DEPARTMENT_LABELS[depKey],
+          contactEmail: req.email,
+          firstName: req.firstName,
+          lastName: req.lastName,
+        });
+        await setDoc(
+          doc(db, "signupRequests", req.id),
+          { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
+          { merge: true },
+        );
+        setMessage(
+          `Cuenta de ${DEPARTMENT_LABELS[depKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}".`,
+        );
+      } catch (approveError) {
+        setError(getAuthErrorMessage(approveError));
+      } finally {
+        try {
+          await signOut(secondaryDep.auth);
+        } catch {
+          // ignore
+        }
+        try {
+          await secondaryDep.dispose();
         } catch {
           // ignore
         }
@@ -8813,33 +8977,34 @@ export default function Home() {
     }
   }
 
-  async function handleToggleActiveUser(uid: string, managedUser: ManagedUser, active: boolean) {
+  async function handleDeleteUser(uid: string, managedUser: ManagedUser) {
     setAdminBusyUserId(uid);
     setError("");
     setMessage("");
     try {
       const idToken = await auth.currentUser?.getIdToken();
       if (!idToken) {
-        setError("Volvé a iniciar sesión para gestionar usuarios.");
+        setError("Volvé a iniciar sesión para eliminar usuarios.");
         return;
       }
-      const res = await fetch("/api/admin/set-user-active", {
+      const res = await fetch("/api/admin/delete-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken, targetUid: uid, active }),
+        body: JSON.stringify({ idToken, targetUid: uid }),
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
-        setError(data.error || "No se pudo actualizar el usuario.");
+        setError(data.error || "No se pudo eliminar el usuario.");
         return;
       }
       const users = await fetchManagedUsers();
       applyAdminUsers(users);
+      setDeleteConfirmUid("");
       setMessage(
-        `${managedUser.name || managedUser.username || "Usuario"} ${active ? "activado" : "desactivado"}.`,
+        `${managedUser.name || managedUser.username || "Usuario"} eliminado por completo.`,
       );
-    } catch (toggleError) {
-      setError(getAuthErrorMessage(toggleError));
+    } catch (deleteError) {
+      setError(getAuthErrorMessage(deleteError));
     } finally {
       setAdminBusyUserId("");
     }
@@ -11589,6 +11754,16 @@ export default function Home() {
       </section>
     );
 
+    const signupSearchQ = signupSearch.trim().toLowerCase();
+    const matchSignupSearch = (r: SignupRequest) =>
+      !signupSearchQ ||
+      `${r.firstName} ${r.lastName}`.toLowerCase().includes(signupSearchQ) ||
+      (r.serviceName || "").toLowerCase().includes(signupSearchQ) ||
+      (r.email || "").toLowerCase().includes(signupSearchQ) ||
+      (r.createdUsername || "").toLowerCase().includes(signupSearchQ);
+    const pendingSignupList = signupRequests.filter((r) => r.status === "pending" && matchSignupSearch(r));
+    const historialSignupList = signupRequests.filter((r) => r.status !== "pending" && matchSignupSearch(r));
+
     const sidebarItems = [
       {
         id: "panel-overview",
@@ -13687,15 +13862,20 @@ export default function Home() {
                     </button>
                   </div>
 
-                  <div className="mt-4 max-h-[60vh] space-y-2.5 overflow-y-auto pr-1">
-                    {signupRequests.filter((r) => r.status === "pending").length === 0 ? (
+                  <input
+                    type="text"
+                    value={signupSearch}
+                    onChange={(e) => setSignupSearch(e.target.value)}
+                    placeholder="Buscar por nombre, servicio, usuario o correo…"
+                    className="mt-4 w-full rounded-xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none focus:border-emerald-400"
+                  />
+                  <div className="mt-3 max-h-[60vh] space-y-2.5 overflow-y-auto pr-1">
+                    {pendingSignupList.length === 0 ? (
                       <p className="rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-slate-400">
-                        No hay solicitudes pendientes.
+                        {signupSearchQ ? "No se encontraron solicitudes con ese texto." : "No hay solicitudes pendientes."}
                       </p>
                     ) : (
-                      signupRequests
-                        .filter((r) => r.status === "pending")
-                        .map((r) => (
+                      pendingSignupList.map((r) => (
                           <div
                             key={r.id}
                             className="rounded-2xl border border-white/10 bg-[#1b2537] p-3.5"
@@ -13727,15 +13907,13 @@ export default function Home() {
                         ))
                     )}
                   </div>
-                  {signupRequests.filter((r) => r.status !== "pending").length > 0 ? (
+                  {historialSignupList.length > 0 ? (
                     <div className="mt-5 border-t border-white/10 pt-4">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">
                         Historial (control)
                       </p>
                       <div className="mt-2 max-h-[26vh] space-y-2 overflow-y-auto pr-1">
-                        {signupRequests
-                          .filter((r) => r.status !== "pending")
-                          .map((r) => {
+                        {historialSignupList.map((r) => {
                             const uname =
                               r.status === "approved" ? (r.createdUsername || "") : "";
                             const mu = uname
@@ -13772,12 +13950,7 @@ export default function Home() {
                                 </span>
                               </div>
                               {mu ? (
-                                <div className="mt-2 flex items-center gap-2 border-t border-white/5 pt-2">
-                                  {!mu.isActive ? (
-                                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-                                      Desactivado
-                                    </span>
-                                  ) : null}
+                                <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
                                   <button
                                     type="button"
                                     disabled={busy}
@@ -13786,18 +13959,36 @@ export default function Home() {
                                   >
                                     {busy ? "…" : "Reiniciar clave"}
                                   </button>
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => void handleToggleActiveUser(mu.uid, mu, !mu.isActive)}
-                                    className={`ml-auto rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                                      mu.isActive
-                                        ? "border-rose-400/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20"
-                                        : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
-                                    }`}
-                                  >
-                                    {busy ? "…" : mu.isActive ? "Desactivar" : "Activar"}
-                                  </button>
+                                  {deleteConfirmUid === mu.uid ? (
+                                    <div className="ml-auto flex items-center gap-1.5">
+                                      <span className="text-[10px] font-semibold text-rose-300">¿Eliminar de verdad?</span>
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        onClick={() => void handleDeleteUser(mu.uid, mu)}
+                                        className="rounded-lg bg-rose-500 px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        {busy ? "…" : "Sí, eliminar"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        onClick={() => setDeleteConfirmUid("")}
+                                        className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+                                      >
+                                        No
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled={busy}
+                                      onClick={() => setDeleteConfirmUid(mu.uid)}
+                                      className="ml-auto rounded-lg border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      Eliminar
+                                    </button>
+                                  )}
                                 </div>
                               ) : null}
                             </div>
@@ -14718,11 +14909,10 @@ export default function Home() {
             ? (() => {
                 const statsLabel =
                   statsModule === "perc" ? "PERC" : statsModule === "sesps" ? "SEPS" : "Horas";
-                const statsScopeDiv = serviceProfile?.division || null;
                 const rawStats = dashboardGroups
                   .flatMap((g) => g.services)
                   .filter((s) => s.modules.some((m) => m.label === statsLabel))
-                  .filter((s) => !statsScopeDiv || (SERVICE_GROUP_BY_ID[s.id] || "apoyo") === statsScopeDiv);
+                  .filter((s) => isServiceInChiefScope(serviceProfile, s.id));
                 const isStatsDone = (s: (typeof rawStats)[number]) =>
                   !!s.modules.find((m) => m.label === statsLabel)?.completed;
                 // UCI/UCIN se muestran como 1 entrada agregada con % (subunidades llenas
@@ -16660,7 +16850,7 @@ export default function Home() {
                     value={signupDivView}
                     onChange={(e) => {
                       setSignupDivView(e.target.value);
-                      setSignupForm((f) => ({ ...f, accessType: "service", serviceId: "", isChief: false, division: "", captureModules: [] }));
+                      setSignupForm((f) => ({ ...f, accessType: "service", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
                     }}
                     className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
                   >
@@ -16682,22 +16872,28 @@ export default function Home() {
                           ? signupForm.division
                             ? `div:${signupForm.division}`
                             : ""
-                          : signupForm.isChief && signupForm.serviceId
-                            ? `chief:${signupForm.serviceId}`
-                            : signupForm.serviceId
-                              ? `svc:${signupForm.serviceId}`
+                          : signupForm.accessType === "department"
+                            ? signupForm.department
+                              ? `dept:${signupForm.department}`
                               : ""
+                            : signupForm.isChief && signupForm.serviceId
+                              ? `chief:${signupForm.serviceId}`
+                              : signupForm.serviceId
+                                ? `svc:${signupForm.serviceId}`
+                                : ""
                       }
                       onChange={(e) => {
                         const v = e.target.value;
                         if (v.startsWith("div:")) {
-                          setSignupForm((f) => ({ ...f, accessType: "division", division: v.slice(4), serviceId: "", isChief: false, captureModules: [] }));
+                          setSignupForm((f) => ({ ...f, accessType: "division", division: v.slice(4), serviceId: "", isChief: false, department: "", captureModules: [] }));
+                        } else if (v.startsWith("dept:")) {
+                          setSignupForm((f) => ({ ...f, accessType: "department", department: v.slice(5), serviceId: "", isChief: false, division: "", captureModules: [] }));
                         } else if (v.startsWith("chief:")) {
                           setSignupForm((f) => ({ ...f, accessType: "service", serviceId: v.slice(6), isChief: true, division: "", captureModules: [] }));
                         } else if (v.startsWith("svc:")) {
                           setSignupForm((f) => ({ ...f, accessType: "service", serviceId: v.slice(4), isChief: false, division: "", captureModules: [] }));
                         } else {
-                          setSignupForm((f) => ({ ...f, accessType: "service", serviceId: "", isChief: false, division: "", captureModules: [] }));
+                          setSignupForm((f) => ({ ...f, accessType: "service", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
                         }
                       }}
                       className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
@@ -16715,6 +16911,17 @@ export default function Home() {
                                 {d.jefeLabel}
                               </option>
                             ) : null}
+                            {Object.keys(DEPARTMENT_LABELS)
+                              .filter((dep) =>
+                                (DEPARTMENT_SERVICES[dep] || []).some(
+                                  (sid) => (SERVICE_GROUP_BY_ID[sid] || "apoyo") === signupDivView,
+                                ),
+                              )
+                              .map((dep) => (
+                                <option key={`dept:${dep}`} value={`dept:${dep}`} className="bg-[#1b2537] text-emerald-200">
+                                  {DEPARTMENT_LABELS[dep]}
+                                </option>
+                              ))}
                             {svcs.map((s) => (
                               <option key={`chief:${s.id}`} value={`chief:${s.id}`} className="bg-[#1b2537] text-white">
                                 Jefe — {s.name}
