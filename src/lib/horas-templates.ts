@@ -2141,7 +2141,7 @@ export const HORAS_TEMPLATES: Record<string, HorasTemplate> = {
   "servicio-farmaceutico": {
     serviceId: "servicio-farmaceutico",
     establishment: "HOSPITAL NACIONAL EL SALVADOR",
-    columns: ["SERVICIO FARMACEUTICO", "ADMINISTRACION"],
+    columns: ["SERVICIO FARMACEUTICO", "SERVICIO DE APOYO A RIISS", "ADMINISTRACION"],
     seedEmployees: [
       "Jesus Alberto Cardona Landaverde",
       { dui: "05042836-3", name: "Andrea Marcella Juarez Chiquillo" },
