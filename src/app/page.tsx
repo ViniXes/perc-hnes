@@ -116,6 +116,7 @@ type AdminDraft = {
   mustChangePassword: boolean;
   isActive: boolean;
   captureModules: ModuleId[];
+  department: string;
   email: string;
   username: string;
   name: string;
@@ -2927,6 +2928,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         mustChangePassword: managedUser.mustChangePassword,
         isActive: managedUser.isActive,
         captureModules: managedUser.captureModules,
+        department: managedUser.department || "",
         email: managedUser.email,
         username: managedUser.username,
         name: managedUser.name,
@@ -9106,10 +9108,15 @@ export default function Home() {
       return;
     }
 
-    const nextService = getServiceById(draft.serviceId || null);
-    const nextRole = draft.role;
+    const deptKey = draft.department || "";
+    const isDept = !!deptKey && !!DEPARTMENT_SERVICES[deptKey];
+    const effectiveServiceId = isDept ? "" : draft.serviceId || "";
+    const nextService = getServiceById(effectiveServiceId || null);
+    const nextRole: UserRole = isDept ? "supervisor" : draft.role;
     const nextUsername =
-      nextRole === "service" && nextService ? getServiceUsername(nextService.id) : draft.username;
+      !isDept && nextRole === "service" && nextService
+        ? getServiceUsername(nextService.id)
+        : draft.username;
     const nextPermissions = {
       canEdit: draft.canEdit,
       canManageUsers: nextRole === "admin" ? true : false,
@@ -9121,9 +9128,9 @@ export default function Home() {
     setMessage("");
 
     try {
-      if (draft.serviceId !== (current.serviceId || "")) {
-        if (draft.serviceId) {
-          const nextAssignmentRef = doc(db, "serviceAssignments", draft.serviceId);
+      if (effectiveServiceId !== (current.serviceId || "")) {
+        if (effectiveServiceId) {
+          const nextAssignmentRef = doc(db, "serviceAssignments", effectiveServiceId);
           const nextAssignmentSnapshot = await getDoc(nextAssignmentRef);
 
           if (
@@ -9139,9 +9146,9 @@ export default function Home() {
         }
       }
 
-      if (draft.serviceId && nextService) {
+      if (effectiveServiceId && nextService) {
         await setDoc(
-          doc(db, "serviceAssignments", draft.serviceId),
+          doc(db, "serviceAssignments", effectiveServiceId),
           {
             serviceId: nextService.id,
             serviceName: nextService.name,
@@ -9156,17 +9163,36 @@ export default function Home() {
 
       await setDoc(
         doc(db, "serviceUsers", uid),
-        {
-          serviceId: draft.serviceId || null,
-          serviceName: nextService?.name || null,
-          username: nextUsername,
-          role: nextRole,
-          isActive: draft.isActive,
-          mustChangePassword: draft.mustChangePassword,
-          captureModules: draft.captureModules,
-          permissions: nextPermissions,
-          updatedAt: serverTimestamp(),
-        },
+        isDept
+          ? {
+              // Grupo de areas: la persona cubre varios servicios y puede capturarlos.
+              serviceId: null,
+              serviceName: departmentEditorLabel(deptKey),
+              username: draft.username,
+              role: "supervisor",
+              isActive: draft.isActive,
+              mustChangePassword: draft.mustChangePassword,
+              isChief: false,
+              isDirector: false,
+              division: null,
+              department: deptKey,
+              captureModules: [],
+              supervisorModules: ["perc", "sesps", "distribucion"],
+              permissions: { canEdit: true, canManageUsers: false, canToggleCapture: false },
+              updatedAt: serverTimestamp(),
+            }
+          : {
+              serviceId: draft.serviceId || null,
+              serviceName: nextService?.name || null,
+              username: nextUsername,
+              role: nextRole,
+              isActive: draft.isActive,
+              mustChangePassword: draft.mustChangePassword,
+              department: null,
+              captureModules: draft.captureModules,
+              permissions: nextPermissions,
+              updatedAt: serverTimestamp(),
+            },
         { merge: true },
       );
 
@@ -14892,6 +14918,31 @@ export default function Home() {
                           </label>
                         </div>
 
+                        <label className="mt-3 block">
+                          <span className="text-xs font-medium text-slate-400">
+                            Grupo de áreas (para quien cubre varias unidades)
+                          </span>
+                          <select
+                            value={draft.department}
+                            onChange={(event) =>
+                              updateAdminDraft(selectedUser.uid, { department: event.target.value })
+                            }
+                            className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400"
+                          >
+                            <option value="">— Ninguno (un solo servicio) —</option>
+                            {Object.keys(DEPARTMENT_SERVICES).map((dep) => (
+                              <option key={dep} value={dep}>
+                                {departmentEditorLabel(dep)}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="mt-1 block text-[11px] text-slate-500">
+                            Si elegís un grupo, la persona cubre varias áreas y puede capturar sus
+                            tableros (ej. Ana Julia: Saneamiento + Servicios Varios + Transporte). En
+                            ese caso se ignora el servicio de arriba.
+                          </span>
+                        </label>
+
                         <div className="mt-4 flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -14932,7 +14983,7 @@ export default function Home() {
                           </button>
                         </div>
 
-                        {draft.role === "service" && draft.serviceId ? (
+                        {draft.role === "service" && draft.serviceId && !draft.department ? (
                           <div className="mt-4">
                             <p className="text-xs font-medium text-slate-400">Tableros de su unidad</p>
                             <p className="mt-0.5 text-[11px] text-slate-500">
