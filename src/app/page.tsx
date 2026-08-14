@@ -1493,6 +1493,7 @@ type CaptureRequest = {
   status: "pending" | "approved" | "rejected";
   note?: string;
   resolvedByName?: string;
+  resolvedByRole?: "admin" | "supervisor" | "jefe";
 };
 
 // Ticket del Centro de Soporte: reporte de error/duda/sugerencia que llega a la
@@ -4300,7 +4301,9 @@ export default function Home() {
     isSupervisor: boolean;
     modules: string[];
     uid: string;
-  }>({ isAdmin: false, isSupervisor: false, modules: [], uid: "" });
+    division: string | null;
+    department: string | null;
+  }>({ isAdmin: false, isSupervisor: false, modules: [], uid: "", division: null, department: null });
   const [showRequestsModal, setShowRequestsModal] = useState(false);
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [requestModuleId, setRequestModuleId] = useState<ModuleId>("perc");
@@ -4868,6 +4871,8 @@ export default function Home() {
     isSupervisor,
     modules: serviceProfile?.supervisorModules ?? [],
     uid: user?.uid ?? serviceProfile?.uid ?? "",
+    division: serviceProfile?.division ?? null,
+    department: serviceProfile?.department ?? null,
   };
   // Servicios disponibles en el dropdown "Elegir servicio" (admin = todos;
   // supervisor = solo los modulos que supervisa).
@@ -5510,6 +5515,12 @@ export default function Home() {
         note: typeof data.note === "string" ? data.note : undefined,
         resolvedByName:
           typeof data.resolvedByName === "string" ? data.resolvedByName : undefined,
+        resolvedByRole:
+          data.resolvedByRole === "admin" ||
+          data.resolvedByRole === "supervisor" ||
+          data.resolvedByRole === "jefe"
+            ? data.resolvedByRole
+            : undefined,
       };
     };
 
@@ -5547,7 +5558,10 @@ export default function Home() {
             if (req.status !== "pending") continue;
             if (req.requestedByUid && req.requestedByUid === cfg.uid) continue;
             const relevant =
-              cfg.isAdmin || (cfg.isSupervisor && cfg.modules.includes(req.moduleId));
+              cfg.isAdmin ||
+              (cfg.isSupervisor &&
+                cfg.modules.includes(req.moduleId) &&
+                isServiceInChiefScope(cfg, req.serviceId));
             if (!relevant) continue;
             pushNotif(
               req.id,
@@ -5556,6 +5570,19 @@ export default function Home() {
             );
             setCasitaTone("new");
           } else if (change.type === "modified") {
+            // Si un JEFE de division autorizo, avisar a admin/supervisores (queda registro).
+            if (
+              req.status === "approved" &&
+              req.resolvedByRole === "jefe" &&
+              (cfg.isAdmin || cfg.isSupervisor) &&
+              req.requestedByUid !== cfg.uid
+            ) {
+              pushNotif(
+                `${req.id}-jefeok`,
+                "El jefe autorizó",
+                `${req.resolvedByName || "El jefe"} autorizó habilitar ${modLabelOf(req.moduleId)} de ${req.serviceName} · ${req.periodLabel}.`,
+              );
+            }
             // Tu propia solicitud fue resuelta (para el servicio que la pidio).
             if (req.requestedByUid !== cfg.uid) continue;
             if (req.status !== "approved" && req.status !== "rejected") continue;
@@ -7266,7 +7293,15 @@ export default function Home() {
     if (!serviceProfile || firestoreUnavailable) {
       return;
     }
+    // La Directora ve las solicitudes pero NO autoriza (solo lectura).
+    if (isDirector) {
+      return;
+    }
     if (!isAdmin && !serviceProfile.supervisorModules.includes(request.moduleId)) {
+      return;
+    }
+    // Un jefe de division/departamento solo resuelve solicitudes de SU alcance.
+    if (!isAdmin && !isServiceInChiefScope(serviceProfile, request.serviceId)) {
       return;
     }
 
@@ -7289,15 +7324,25 @@ export default function Home() {
         });
         setCaptureOverrides((current) => ({ ...current, [overrideId]: "open" }));
       }
+      const resolverRole: "admin" | "jefe" | "supervisor" = isAdmin
+        ? "admin"
+        : serviceProfile.division || serviceProfile.department
+          ? "jefe"
+          : "supervisor";
       await setDoc(
         doc(db, "captureRequests", request.id),
-        { status, resolvedByName: serviceProfile.name, resolvedAt: serverTimestamp() },
+        {
+          status,
+          resolvedByName: serviceProfile.name,
+          resolvedByRole: resolverRole,
+          resolvedAt: serverTimestamp(),
+        },
         { merge: true },
       );
       setCaptureRequests((current) =>
         current.map((item) =>
           item.id === request.id
-            ? { ...item, status, resolvedByName: serviceProfile.name }
+            ? { ...item, status, resolvedByName: serviceProfile.name, resolvedByRole: resolverRole }
             : item,
         ),
       );
@@ -11212,7 +11257,11 @@ export default function Home() {
       : isAdmin
         ? captureRequests
         : isSupervisor
-          ? captureRequests.filter((req) => serviceProfile.supervisorModules.includes(req.moduleId))
+          ? captureRequests.filter(
+              (req) =>
+                serviceProfile.supervisorModules.includes(req.moduleId) &&
+                isServiceInChiefScope(serviceProfile, req.serviceId),
+            )
           : [];
     const pendingRequestCount = visibleRequests.filter((req) => req.status === "pending").length;
     const pendingSignupCount = signupRequests.filter((req) => req.status === "pending").length;
@@ -12037,7 +12086,7 @@ export default function Home() {
             },
           ]
         : []),
-      ...((isSupervisor || isAdmin) && !isDirector
+      ...(isSupervisor || isAdmin
         ? [
             {
               id: "panel-requests",
@@ -15567,7 +15616,10 @@ export default function Home() {
                           (item) => item.serviceId === req.serviceId,
                         ).length;
                         const canResolve =
-                          isAdmin || serviceProfile.supervisorModules.includes(req.moduleId);
+                          !isDirector &&
+                          (isAdmin ||
+                            (serviceProfile.supervisorModules.includes(req.moduleId) &&
+                              isServiceInChiefScope(serviceProfile, req.serviceId)));
                         return (
                           <div
                             key={req.id}
@@ -15626,6 +15678,21 @@ export default function Home() {
                                   {req.status === "approved" ? "Aprobada" : "Rechazada"}
                                 </span>
                               )}
+                              {req.status !== "pending" && req.resolvedByName ? (
+                                <p className="mt-1.5 text-[11px] text-slate-400">
+                                  {req.resolvedByRole === "jefe" ? (
+                                    <span className="font-semibold text-amber-300">
+                                      {req.status === "approved" ? "Autorizó el jefe" : "Rechazó el jefe"}
+                                    </span>
+                                  ) : (
+                                    <span>
+                                      {req.status === "approved" ? "Autorizó" : "Rechazó"}{" "}
+                                      {req.resolvedByRole === "admin" ? "admin" : "supervisor"}
+                                    </span>
+                                  )}{" "}
+                                  · {req.resolvedByName}
+                                </p>
+                              ) : null}
                             </div>
                           </div>
                         );
