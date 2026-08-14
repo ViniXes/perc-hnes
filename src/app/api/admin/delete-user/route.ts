@@ -79,6 +79,22 @@ export async function POST(req: NextRequest) {
     } catch {
       // La cuenta de Auth ya no existía; el doc igual se borró.
     }
+    // Limpiar los registros de solicitud (historial) asociados a este usuario,
+    // para que no quede ningún rastro que afecte.
+    const username = targetData && typeof targetData.username === "string" ? targetData.username : "";
+    if (username) {
+      try {
+        const reqSnap = await adminDb
+          .collection("signupRequests")
+          .where("createdUsername", "==", username)
+          .get();
+        for (const d of reqSnap.docs) {
+          await d.ref.delete();
+        }
+      } catch {
+        // Si falla la limpieza del historial, la cuenta igual quedó eliminada.
+      }
+    }
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ ok: false, error: "No se pudo eliminar la cuenta." }, { status: 500 });
