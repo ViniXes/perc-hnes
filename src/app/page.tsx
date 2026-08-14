@@ -691,9 +691,15 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
 // Molecular, colgando de la División de Apoyo.
 const DEPARTMENT_SERVICES: Record<string, string[]> = {
   laboratorios: ["laboratorio-clinico", "banco-de-sangre", "biologia-molecular"],
+  "uci-ucin": [
+    "ucin-aislados", "ucin-cronicos", "ucin", "ucin-consolidado",
+    "uci-aislados", "uci-cardiovascular", "uci-extracorporea", "uci-general-1",
+    "uci-general-2", "uci-neurocriticos", "uci-quirurgica", "uci-consolidado",
+  ],
 };
 const DEPARTMENT_LABELS: Record<string, string> = {
   laboratorios: "Jefa de Departamento de Laboratorios",
+  "uci-ucin": "Jefe General UCI/UCIN",
 };
 
 // ¿El servicio entra en el alcance del jefe/supervisor? Departamento manda sobre
@@ -1514,7 +1520,7 @@ type SignupRequest = {
   serviceName: string;
   status: "pending" | "approved" | "rejected";
   createdUsername?: string;
-  requestType?: "service" | "division" | "department" | "director";
+  requestType?: "service" | "division" | "department" | "department-editor" | "director";
   isChief?: boolean;
   captureModules?: ModuleId[];
   division?: string;
@@ -3772,12 +3778,14 @@ async function createDepartmentChiefAccount(
     contactEmail,
     firstName,
     lastName,
+    editor = false,
   }: {
     department: string;
     departmentLabel: string;
     contactEmail: string;
     firstName: string;
     lastName: string;
+    editor?: boolean;
   },
 ) {
   const base = buildChiefUsername(firstName, lastName);
@@ -3823,7 +3831,10 @@ async function createDepartmentChiefAccount(
     division: null,
     department,
     supervisorModules: ["perc", "sesps", "distribucion"],
-    permissions: getDefaultPermissions("supervisor"),
+    // Editor (asistencia): puede EDITAR los tabuladores de su alcance. Jefe general: solo ver.
+    permissions: editor
+      ? { canEdit: true, canManageUsers: false, canToggleCapture: false }
+      : getDefaultPermissions("supervisor"),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -4109,7 +4120,7 @@ export default function Home() {
     email: string;
     serviceId: string;
     acceptPrivacy: boolean;
-    accessType: "service" | "division" | "department" | "director";
+    accessType: "service" | "division" | "department" | "department-editor" | "director";
     isChief: boolean;
     captureModules: ModuleId[];
     division: string;
@@ -5674,9 +5685,11 @@ export default function Home() {
                 ? "division"
                 : d.requestType === "department"
                   ? "department"
-                  : d.requestType === "director"
-                    ? "director"
-                    : "service",
+                  : d.requestType === "department-editor"
+                    ? "department-editor"
+                    : d.requestType === "director"
+                      ? "director"
+                      : "service",
             isChief: d.isChief === true,
             captureModules: Array.isArray(d.captureModules)
               ? (d.captureModules.filter((v): v is ModuleId => MODULE_ORDER.includes(v as ModuleId)) as ModuleId[])
@@ -7561,6 +7574,7 @@ export default function Home() {
     const isDivision = signupForm.accessType === "division";
     const isDepartment = signupForm.accessType === "department";
     const isDirector = signupForm.accessType === "director";
+    const isDeptEditor = signupForm.accessType === "department-editor";
     const service = getServiceById(signupForm.serviceId);
     const DIVISION_LABELS: Record<string, string> = {
       medica: "Jefe de División Médica",
@@ -7576,7 +7590,7 @@ export default function Home() {
         setError("Elegí tu división.");
         return;
       }
-    } else if (isDepartment) {
+    } else if (isDepartment || isDeptEditor) {
       if (!signupForm.department || !DEPARTMENT_LABELS[signupForm.department]) {
         setError("Elegí tu departamento.");
         return;
@@ -7603,25 +7617,29 @@ export default function Home() {
         firstName: signupForm.firstName.trim(),
         lastName: signupForm.lastName.trim(),
         email: signupForm.email.trim(),
-        serviceId: isDivision || isDepartment || isDirector ? "" : service!.id,
+        serviceId: isDivision || isDepartment || isDeptEditor || isDirector ? "" : service!.id,
         serviceName: isDivision
           ? DIVISION_LABELS[signupForm.division]
           : isDepartment
             ? DEPARTMENT_LABELS[signupForm.department]
-            : isDirector
-              ? "Directora"
-              : service!.name,
+            : isDeptEditor
+              ? "Asistencia UCI/UCIN"
+              : isDirector
+                ? "Directora"
+                : service!.name,
         requestType: isDivision
           ? "division"
           : isDepartment
             ? "department"
-            : isDirector
-              ? "director"
-              : "service",
-        isChief: isDivision || isDepartment || isDirector ? false : signupForm.isChief,
-        captureModules: isDivision || isDepartment || isDirector ? [] : signupForm.captureModules,
+            : isDeptEditor
+              ? "department-editor"
+              : isDirector
+                ? "director"
+                : "service",
+        isChief: isDivision || isDepartment || isDeptEditor || isDirector ? false : signupForm.isChief,
+        captureModules: isDivision || isDepartment || isDeptEditor || isDirector ? [] : signupForm.captureModules,
         division: isDivision ? signupForm.division : "",
-        department: isDepartment ? signupForm.department : "",
+        department: isDepartment || isDeptEditor ? signupForm.department : "",
         status: "pending",
         acceptedPrivacy: true,
         createdAt: serverTimestamp(),
@@ -7731,6 +7749,50 @@ export default function Home() {
         }
         try {
           await secondaryDir.dispose();
+        } catch {
+          // ignore
+        }
+        setSignupBusyId("");
+      }
+      return;
+    }
+
+    // --- Solicitud de ASISTENCIA UCI/UCIN (ve todo UCI/UCIN y EDITA consolidados) ---
+    if (req.requestType === "department-editor") {
+      const depKey = req.department || "";
+      if (!DEPARTMENT_LABELS[depKey]) {
+        setError("El departamento de la solicitud no es válido.");
+        setSignupBusyId("");
+        return;
+      }
+      const secondaryDe = createSecondaryAuth();
+      try {
+        const { username } = await createDepartmentChiefAccount(secondaryDe.auth, {
+          department: depKey,
+          departmentLabel: "Asistencia UCI/UCIN",
+          contactEmail: req.email,
+          firstName: req.firstName,
+          lastName: req.lastName,
+          editor: true,
+        });
+        await setDoc(
+          doc(db, "signupRequests", req.id),
+          { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
+          { merge: true },
+        );
+        setMessage(
+          `Cuenta de Asistencia UCI/UCIN creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}".`,
+        );
+      } catch (approveError) {
+        setError(getAuthErrorMessage(approveError));
+      } finally {
+        try {
+          await signOut(secondaryDe.auth);
+        } catch {
+          // ignore
+        }
+        try {
+          await secondaryDe.dispose();
         } catch {
           // ignore
         }
@@ -17018,8 +17080,10 @@ export default function Home() {
                         const v = e.target.value;
                         if (v.startsWith("div:")) {
                           setSignupForm((f) => ({ ...f, accessType: "division", division: v.slice(4), serviceId: "", isChief: false, department: "", captureModules: [] }));
+                        } else if (v.startsWith("deptedit:")) {
+                          setSignupForm((f) => ({ ...f, accessType: "department-editor", department: v.slice(9).split("#")[0], serviceId: "", isChief: false, division: "", captureModules: [] }));
                         } else if (v.startsWith("dept:")) {
-                          setSignupForm((f) => ({ ...f, accessType: "department", department: v.slice(5), serviceId: "", isChief: false, division: "", captureModules: [] }));
+                          setSignupForm((f) => ({ ...f, accessType: "department", department: v.slice(5).split("#")[0], serviceId: "", isChief: false, division: "", captureModules: [] }));
                         } else if (v.startsWith("director:")) {
                           setSignupForm((f) => ({ ...f, accessType: "director", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
                         } else if (v.startsWith("asis:")) {
@@ -17047,6 +17111,22 @@ export default function Home() {
                                 {d.jefeLabel}
                               </option>
                             ) : null}
+                            {signupDivView === "medica" ? (
+                              <>
+                                <option value="dept:uci-ucin#1" className="bg-[#1b2537] text-emerald-200">
+                                  Jefe General UCI/UCIN 1 (ve todo UCI y UCIN)
+                                </option>
+                                <option value="dept:uci-ucin#2" className="bg-[#1b2537] text-emerald-200">
+                                  Jefe General UCI/UCIN 2 (ve todo UCI y UCIN)
+                                </option>
+                                <option value="dept:uci-ucin#3" className="bg-[#1b2537] text-emerald-200">
+                                  Jefe General UCI/UCIN 3 (ve todo UCI y UCIN)
+                                </option>
+                                <option value="deptedit:uci-ucin" className="bg-[#1b2537] text-purple-200">
+                                  Asistencia UCI/UCIN (ve todo y edita consolidados)
+                                </option>
+                              </>
+                            ) : null}
                             {signupDivView === "direccion" ? (
                               <option value="director:main" className="bg-[#1b2537] text-amber-200">
                                 Directora (ve todo el hospital)
@@ -17067,6 +17147,7 @@ export default function Home() {
                             ) : null}
                             {Object.keys(DEPARTMENT_LABELS)
                               .filter((dep) =>
+                                dep !== "uci-ucin" &&
                                 (DEPARTMENT_SERVICES[dep] || []).some(
                                   (sid) => (SERVICE_GROUP_BY_ID[sid] || "apoyo") === signupDivView,
                                 ),
