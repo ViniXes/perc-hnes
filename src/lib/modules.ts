@@ -70,8 +70,9 @@ export const MODULE_BY_ID: Record<ModuleId, ModuleDefinition> = Object.fromEntri
 // habiles del mes; Distribucion de Horas, los primeros 5. Siempre se descuentan
 // sabados, domingos y las fechas no habiles del calendario (captureCalendar).
 export const MODULE_CAPTURE_DAYS: Record<ModuleId, number> = {
+  // PERC cierra el 3er dia habil; SEPS y Horas cierran el 5to dia habil de cada mes.
   perc: 3,
-  sesps: 3,
+  sesps: 5,
   distribucion: 5,
 };
 
