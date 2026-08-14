@@ -14485,7 +14485,6 @@ export default function Home() {
               role="dialog"
               aria-modal="true"
               className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4"
-              onClick={() => setShowUsersModal(false)}
             >
               <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
               <section
