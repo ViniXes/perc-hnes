@@ -9100,6 +9100,65 @@ export default function Home() {
     }));
   }
 
+  // Descarga el consolidado de TODAS las cuentas creadas/registradas en PULSO (Excel).
+  function downloadUsersExcel() {
+    const esc = (v: unknown) =>
+      String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const tipoOf = (u: ManagedUser) =>
+      u.role === "admin"
+        ? "Administrador"
+        : u.isDirector
+          ? "Directora"
+          : u.department
+            ? "Jefatura de área (grupo)"
+            : u.division
+              ? "Jefe de división"
+              : u.role === "supervisor"
+                ? "Supervisor"
+                : u.isChief
+                  ? "Jefe de servicio"
+                  : "Servicio";
+    const areaOf = (u: ManagedUser) =>
+      u.serviceName || (u.department ? u.department : u.division ? u.division : "—");
+    const modsOf = (u: ManagedUser) => {
+      const mods = u.role === "service" ? u.captureModules : u.supervisorModules;
+      if (!mods || mods.length === 0) return u.role === "service" ? "Todos los de su área" : "—";
+      return mods.map((m) => getModuleLabel(m)).join(", ");
+    };
+    const rows = [...adminUsers].sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", "es", { sensitivity: "base" }),
+    );
+    const header = ["Nombre", "Usuario", "Correo", "Servicio / Área", "Tipo", "Rol", "Estado", "Tableros", "Debe cambiar clave"];
+    const body = rows
+      .map((u) => {
+        const cells = [
+          u.name,
+          u.username,
+          u.email,
+          areaOf(u),
+          tipoOf(u),
+          u.role,
+          u.isActive ? "Activo" : "Inactivo",
+          modsOf(u),
+          u.mustChangePassword ? "Sí" : "No",
+        ];
+        return `<tr>${cells.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+      })
+      .join("");
+    const documentHtml =
+      `<html><head><meta charset="utf-8"></head><body><table border="1" cellspacing="0">` +
+      `<thead><tr>${header
+        .map((h) => `<th style="background:#1F3864;color:#ffffff;font-weight:bold">${esc(h)}</th>`)
+        .join("")}</tr></thead><tbody>${body}</tbody></table></body></html>`;
+    const blob = new Blob(["\ufeff", documentHtml], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `usuarios-pulso-${rows.length}.xls`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
   async function handleAdminSave(uid: string) {
     const draft = adminDrafts[uid];
     const current = adminUsers.find((managedUser) => managedUser.uid === uid);
@@ -14555,6 +14614,13 @@ export default function Home() {
                       {adminBusyUserId === "__all__" ? "Reseteando…" : "Resetear TODOS los servicios a 123456"}
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => downloadUsersExcel()}
+                    className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25"
+                  >
+                    Descargar usuarios (Excel)
+                  </button>
                 </div>
               </div>
 
