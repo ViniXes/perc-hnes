@@ -700,11 +700,22 @@ const DEPARTMENT_SERVICES: Record<string, string[]> = {
     // (su tabulador de Horas tiene columnas UCI y UCIN).
     "medicina-critica",
   ],
+  // Ana Julia (jefa que llena varias areas): Saneamiento + Servicios Varios + Transporte.
+  "saneamiento-varios": ["saneamiento-ambiental", "servicios-varios", "transporte-general"],
 };
 const DEPARTMENT_LABELS: Record<string, string> = {
   laboratorios: "Jefa de Departamento de Laboratorios",
   "uci-ucin": "Jefe General UCI/UCIN",
+  "saneamiento-varios": "Jefatura de Servicios Varios y Saneamiento",
 };
+// Etiqueta que se usa cuando el departamento se registra como EDITOR (puede capturar).
+const DEPARTMENT_EDITOR_LABELS: Record<string, string> = {
+  "uci-ucin": "Asistencia UCI/UCIN",
+  "saneamiento-varios": "Jefa de Servicios Varios y Saneamiento",
+};
+function departmentEditorLabel(dep: string) {
+  return DEPARTMENT_EDITOR_LABELS[dep] || DEPARTMENT_LABELS[dep] || "Asistencia";
+}
 
 // ¿El servicio entra en el alcance del jefe/supervisor? Departamento manda sobre
 // división; sin ninguno de los dos (admin o supervisor sin alcance) ve todo.
@@ -7673,7 +7684,7 @@ export default function Home() {
           : isDepartment
             ? DEPARTMENT_LABELS[signupForm.department]
             : isDeptEditor
-              ? "Asistencia UCI/UCIN"
+              ? departmentEditorLabel(signupForm.department)
               : isDirector
                 ? "Directora"
                 : service!.name,
@@ -7819,7 +7830,7 @@ export default function Home() {
       try {
         const { username } = await createDepartmentChiefAccount(secondaryDe.auth, {
           department: depKey,
-          departmentLabel: "Asistencia UCI/UCIN",
+          departmentLabel: departmentEditorLabel(depKey),
           contactEmail: req.email,
           firstName: req.firstName,
           lastName: req.lastName,
@@ -17218,6 +17229,11 @@ export default function Home() {
                                 </option>
                               </>
                             ) : null}
+                            {signupDivView === "administrativa" ? (
+                              <option value="deptedit:saneamiento-varios" className="bg-[#1b2537] text-purple-200">
+                                Jefa de Servicios Varios y Saneamiento (llena PERC/SEPS/Horas de sus áreas)
+                              </option>
+                            ) : null}
                             {signupDivView === "direccion" ? (
                               <option value="director:main" className="bg-[#1b2537] text-amber-200">
                                 Directora (ve todo el hospital)
@@ -17239,6 +17255,7 @@ export default function Home() {
                             {Object.keys(DEPARTMENT_LABELS)
                               .filter((dep) =>
                                 dep !== "uci-ucin" &&
+                                dep !== "saneamiento-varios" &&
                                 (DEPARTMENT_SERVICES[dep] || []).some(
                                   (sid) => (SERVICE_GROUP_BY_ID[sid] || "apoyo") === signupDivView,
                                 ),
