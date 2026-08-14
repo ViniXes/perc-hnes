@@ -17060,6 +17060,9 @@ export default function Home() {
                                 <option value="asis:jefaturas-division-medica#2" className="bg-[#1b2537] text-purple-200">
                                   Asistencia 2 — Jefaturas División Médica (Horas)
                                 </option>
+                                <option value="asis:jefatura-division-apoyo#1" className="bg-[#1b2537] text-purple-200">
+                                  Asistente 1 — Jefatura División de Apoyo (Horas)
+                                </option>
                               </>
                             ) : null}
                             {Object.keys(DEPARTMENT_LABELS)
