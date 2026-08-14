@@ -695,6 +695,9 @@ const DEPARTMENT_SERVICES: Record<string, string[]> = {
     "ucin-aislados", "ucin-cronicos", "ucin", "ucin-consolidado",
     "uci-aislados", "uci-cardiovascular", "uci-extracorporea", "uci-general-1",
     "uci-general-2", "uci-neurocriticos", "uci-quirurgica", "uci-consolidado",
+    // Las Horas de los medicos de UCI/UCIN se digitan en Medicina Critica
+    // (su tabulador de Horas tiene columnas UCI y UCIN).
+    "medicina-critica",
   ],
 };
 const DEPARTMENT_LABELS: Record<string, string> = {
