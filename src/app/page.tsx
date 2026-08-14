@@ -115,6 +115,7 @@ type AdminDraft = {
   canManageUsers: boolean;
   mustChangePassword: boolean;
   isActive: boolean;
+  captureModules: ModuleId[];
   email: string;
   username: string;
   name: string;
@@ -2913,6 +2914,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         canManageUsers: managedUser.permissions.canManageUsers,
         mustChangePassword: managedUser.mustChangePassword,
         isActive: managedUser.isActive,
+        captureModules: managedUser.captureModules,
         email: managedUser.email,
         username: managedUser.username,
         name: managedUser.name,
@@ -9127,6 +9129,7 @@ export default function Home() {
           role: nextRole,
           isActive: draft.isActive,
           mustChangePassword: draft.mustChangePassword,
+          captureModules: draft.captureModules,
           permissions: nextPermissions,
           updatedAt: serverTimestamp(),
         },
@@ -14985,6 +14988,43 @@ export default function Home() {
                             {draft.mustChangePassword ? "✓ " : ""}Debe cambiar clave
                           </button>
                         </div>
+
+                        {draft.role === "service" && draft.serviceId ? (
+                          <div className="mt-4">
+                            <p className="text-xs font-medium text-slate-400">Tableros de su unidad</p>
+                            <p className="mt-0.5 text-[11px] text-slate-500">
+                              El sistema reconoce estos tableros para el servicio elegido. Activá los que debe llenar (uno, dos o los que correspondan).
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {(getAreaById(draft.serviceId)?.modules ?? []).length === 0 ? (
+                                <span className="text-[11px] text-slate-500">Este servicio no tiene tableros configurados.</span>
+                              ) : (
+                                (getAreaById(draft.serviceId)?.modules ?? []).map((m) => {
+                                  const on = draft.captureModules.includes(m);
+                                  return (
+                                    <button
+                                      key={m}
+                                      type="button"
+                                      onClick={() =>
+                                        updateAdminDraft(selectedUser.uid, {
+                                          captureModules: on
+                                            ? draft.captureModules.filter((x) => x !== m)
+                                            : [...draft.captureModules, m],
+                                        })
+                                      }
+                                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                        on ? "bg-cyan-500/20 text-cyan-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                                      }`}
+                                    >
+                                      {on ? "✓ " : ""}
+                                      {getModuleLabel(m)}
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
 
                         <div className="mt-5 flex gap-2 border-t border-white/10 pt-4">
                           <button
