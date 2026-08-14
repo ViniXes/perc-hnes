@@ -4155,6 +4155,7 @@ export default function Home() {
   const [signupBusyId, setSignupBusyId] = useState("");
   const [signupSearch, setSignupSearch] = useState("");
   const [deleteConfirmUid, setDeleteConfirmUid] = useState("");
+  const [confirmRemoveHist, setConfirmRemoveHist] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
@@ -7901,6 +7902,27 @@ export default function Home() {
       setSignupBusyId("");
     }
   }
+  // Quita SOLO el registro del historial (borra el doc de la solicitud). No toca la
+  // cuenta del usuario; sirve para limpiar registros viejos/duplicados.
+  async function handleRemoveSignupRecord(req: SignupRequest) {
+    if (!isAdmin) return;
+    setSignupBusyId(req.id);
+    setError("");
+    setMessage("");
+    try {
+      await deleteDoc(doc(db, "signupRequests", req.id));
+      setConfirmRemoveHist("");
+      setMessage("Registro quitado del historial.");
+    } catch (removeError) {
+      if (await handleFirestoreError(removeError)) {
+        return;
+      }
+      setError("No se pudo quitar el registro del historial.");
+    } finally {
+      setSignupBusyId("");
+    }
+  }
+
   async function handleRejectSignup(req: SignupRequest) {
     setSignupBusyId(req.id);
     try {
@@ -14144,8 +14166,8 @@ export default function Home() {
                                   {r.status === "approved" ? "Aprobado" : "Rechazado"}
                                 </span>
                               </div>
-                              {mu ? (
-                                <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
+                              <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
+                                {mu ? (
                                   <button
                                     type="button"
                                     disabled={busy}
@@ -14154,38 +14176,76 @@ export default function Home() {
                                   >
                                     {busy ? "…" : "Reiniciar clave"}
                                   </button>
-                                  {deleteConfirmUid === mu.uid ? (
-                                    <div className="ml-auto flex items-center gap-1.5">
-                                      <span className="text-[10px] font-semibold text-rose-300">¿Eliminar de verdad?</span>
+                                ) : (
+                                  <span className="rounded-full bg-slate-500/15 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
+                                    Cuenta ya eliminada
+                                  </span>
+                                )}
+                                <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                                  {mu ? (
+                                    deleteConfirmUid === r.id ? (
+                                      <>
+                                        <span className="text-[10px] font-semibold text-rose-300">¿Eliminar la cuenta?</span>
+                                        <button
+                                          type="button"
+                                          disabled={busy}
+                                          onClick={() => void handleDeleteUser(mu.uid, mu)}
+                                          className="rounded-lg bg-rose-500 px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                          {busy ? "…" : "Sí, eliminar cuenta"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={busy}
+                                          onClick={() => setDeleteConfirmUid("")}
+                                          className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+                                        >
+                                          No
+                                        </button>
+                                      </>
+                                    ) : (
                                       <button
                                         type="button"
                                         disabled={busy}
-                                        onClick={() => void handleDeleteUser(mu.uid, mu)}
-                                        className="rounded-lg bg-rose-500 px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                        onClick={() => { setConfirmRemoveHist(""); setDeleteConfirmUid(r.id); }}
+                                        className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                                       >
-                                        {busy ? "…" : "Sí, eliminar"}
+                                        Eliminar cuenta
+                                      </button>
+                                    )
+                                  ) : null}
+                                  {confirmRemoveHist === r.id ? (
+                                    <>
+                                      <span className="text-[10px] font-semibold text-amber-300">¿Quitar del historial?</span>
+                                      <button
+                                        type="button"
+                                        disabled={signupBusyId === r.id}
+                                        onClick={() => void handleRemoveSignupRecord(r)}
+                                        className="rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-bold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                      >
+                                        {signupBusyId === r.id ? "…" : "Sí, quitar"}
                                       </button>
                                       <button
                                         type="button"
-                                        disabled={busy}
-                                        onClick={() => setDeleteConfirmUid("")}
+                                        disabled={signupBusyId === r.id}
+                                        onClick={() => setConfirmRemoveHist("")}
                                         className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
                                       >
                                         No
                                       </button>
-                                    </div>
+                                    </>
                                   ) : (
                                     <button
                                       type="button"
-                                      disabled={busy}
-                                      onClick={() => setDeleteConfirmUid(mu.uid)}
-                                      className="ml-auto rounded-lg border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                      disabled={signupBusyId === r.id}
+                                      onClick={() => { setDeleteConfirmUid(""); setConfirmRemoveHist(r.id); }}
+                                      className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
-                                      Eliminar
+                                      Quitar del historial
                                     </button>
                                   )}
                                 </div>
-                              ) : null}
+                              </div>
                             </div>
                             );
                           })}
