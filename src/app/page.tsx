@@ -17022,6 +17022,8 @@ export default function Home() {
                           setSignupForm((f) => ({ ...f, accessType: "department", department: v.slice(5), serviceId: "", isChief: false, division: "", captureModules: [] }));
                         } else if (v.startsWith("director:")) {
                           setSignupForm((f) => ({ ...f, accessType: "director", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
+                        } else if (v.startsWith("asis:")) {
+                          setSignupForm((f) => ({ ...f, accessType: "service", serviceId: v.slice(5).split("#")[0], isChief: false, division: "", department: "", captureModules: ["distribucion"] }));
                         } else if (v.startsWith("chief:")) {
                           setSignupForm((f) => ({ ...f, accessType: "service", serviceId: v.slice(6), isChief: true, division: "", captureModules: [] }));
                         } else if (v.startsWith("svc:")) {
@@ -17049,6 +17051,16 @@ export default function Home() {
                               <option value="director:main" className="bg-[#1b2537] text-amber-200">
                                 Directora (ve todo el hospital)
                               </option>
+                            ) : null}
+                            {signupDivView === "direccion" ? (
+                              <>
+                                <option value="asis:jefaturas-division-medica#1" className="bg-[#1b2537] text-purple-200">
+                                  Asistencia 1 — Jefaturas División Médica (Horas)
+                                </option>
+                                <option value="asis:jefaturas-division-medica#2" className="bg-[#1b2537] text-purple-200">
+                                  Asistencia 2 — Jefaturas División Médica (Horas)
+                                </option>
+                              </>
                             ) : null}
                             {Object.keys(DEPARTMENT_LABELS)
                               .filter((dep) =>
