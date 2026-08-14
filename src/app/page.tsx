@@ -12123,7 +12123,7 @@ export default function Home() {
             },
           ]
         : []),
-      ...(isSupervisor || isAdmin
+      ...(isAdmin
         ? [
             {
               id: "panel-requests",
