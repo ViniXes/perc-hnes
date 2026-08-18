@@ -10769,6 +10769,9 @@ export default function Home() {
               // Jefe del servicio -> ve todos. Usuarios antiguos (sin seleccion) -> todos.
               const cm = serviceProfile.captureModules;
               const restrict = Array.isArray(cm) && cm.length > 0;
+              // El Depto. de Abastecimiento (almacen) siempre ve sus modulos (PERC + Horas),
+              // para poder llegar a "Insumos de Almacén" (que cuelga del menu PERC).
+              if (serviceProfile.serviceId === "almacen") return true;
               return serviceProfile.isChief || !restrict || cm.includes(mod.id);
             })
           : [];
