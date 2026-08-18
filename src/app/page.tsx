@@ -5518,6 +5518,37 @@ export default function Home() {
     };
   }, [currentService, firestoreUnavailable, user]);
 
+  // Escucha EN VIVO los overrides de habilitacion de tableros. Asi, en cuanto un
+  // admin/supervisor abre (o cierra) un tablero, TODOS los clientes conectados
+  // -incluido el usuario del servicio- lo ven al instante, sin recargar ni volver
+  // a iniciar sesion. Antes solo se leia una vez al cargar, por eso el cambio no
+  // aparecia hasta re-loguear. La coleccion es chica (solo tableros intervenidos).
+  useEffect(() => {
+    if (firestoreUnavailable || !user || !firestoreStatusReady) {
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      collection(db, "captureOverrides"),
+      (snap) => {
+        const next: CaptureOverridesMap = {};
+        snap.forEach((item) => {
+          const state = (item.data() as { state?: unknown }).state;
+          if (state === "open" || state === "closed") {
+            next[item.id] = state;
+          }
+        });
+        setCaptureOverrides(next);
+      },
+      () => {
+        // Si la lectura en vivo falla (p.ej. reglas aun no publicadas), no rompemos
+        // nada: el tablero sigue con la carga puntual del dashboard.
+      },
+    );
+
+    return () => unsubscribe();
+  }, [firestoreUnavailable, user, firestoreStatusReady]);
+
   // Carga las solicitudes de habilitacion (bandeja). La coleccion es chica.
   useEffect(() => {
     if (firestoreUnavailable || !user || !firestoreStatusReady) {
