@@ -30,6 +30,7 @@ import { UCI_AISLADOS_TEMPLATE, UCI_CARDIOVASCULAR_TEMPLATE, UCI_EXTRACORPOREA_T
 import { CARDIOLOGIA_TEMPLATE } from "@/lib/seps-cardiologia";
 import { ANESTESIOLOGIA_TEMPLATE } from "@/lib/seps-anestesiologia";
 import { NEFROLOGIA_TEMPLATE } from "@/lib/seps-nefrologia";
+import { CONVENIOS_TEMPLATE } from "@/lib/seps-convenios";
 
 export type SepsRow = {
   /** Id estable para guardar (no cambia aunque cambie la etiqueta). */
@@ -226,6 +227,8 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "anestesiologia": ANESTESIOLOGIA_TEMPLATE,
   // Nefrologia (parte de Medicina Interna, servicio aparte).
   "nefrologia": NEFROLOGIA_TEMPLATE,
+  // Unidad de Convenios (Direccion): SEPS diario (Bienestar Magisterial).
+  "unidad-de-convenios": CONVENIOS_TEMPLATE,
   // Hospitalizacion Medicina Interna: SEPS diario.
 };
 

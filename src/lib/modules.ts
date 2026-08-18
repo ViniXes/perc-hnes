@@ -175,8 +175,8 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "unidad-juridica": ["distribucion"],
   // Comunicaciones: SOLO Distribucion de Horas.
   comunicaciones: ["distribucion"],
-  // Unidad de Convenios: SOLO Distribucion de Horas.
-  "unidad-de-convenios": ["distribucion"],
+  // Unidad de Convenios: Distribucion de Horas + SEPS (Bienestar Magisterial).
+  "unidad-de-convenios": ["distribucion", "sesps"],
   // Jefaturas de Division Medica: SOLO Distribucion de Horas.
   "jefaturas-division-medica": ["distribucion"],
   // Jefatura de Division de Apoyo: SOLO Distribucion de Horas.
