@@ -15117,51 +15117,78 @@ export default function Home() {
                           </div>
                         ) : null}
 
-                        <div className="mt-4">
-                          <p className="text-xs font-medium text-slate-400">
-                            Accesos de menú (además de sus tableros)
-                          </p>
-                          <p className="mt-0.5 text-[11px] text-slate-500">
-                            Marcá los submenús a los que este usuario puede entrar (Censo, Insumos,
-                            Consolidados, ver servicios, etc.), sin tocar código.
-                          </p>
-                          {(["PERC", "SEPS", "Horas", "General"] as const).map((grp) => {
-                            const items = GRANTABLE_MENUS.filter((g) => g.group === grp);
-                            if (items.length === 0) return null;
-                            return (
-                              <div key={grp} className="mt-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                                  {grp}
-                                </p>
-                                <div className="mt-1 flex flex-wrap gap-2">
-                                  {items.map((g) => {
-                                    const on = draft.menuGrants.includes(g.id);
-                                    return (
-                                      <button
-                                        key={g.id}
-                                        type="button"
-                                        onClick={() =>
-                                          updateAdminDraft(selectedUser.uid, {
-                                            menuGrants: on
-                                              ? draft.menuGrants.filter((x) => x !== g.id)
-                                              : [...draft.menuGrants, g.id],
-                                          })
-                                        }
-                                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                                          on
-                                            ? "bg-indigo-500/20 text-indigo-200"
-                                            : "bg-white/5 text-slate-400 hover:bg-white/10"
-                                        }`}
-                                      >
-                                        {on ? "✓ " : ""}
-                                        {g.label}
-                                      </button>
-                                    );
-                                  })}
+                        <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <div className="flex items-center gap-2.5">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-300">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M4 6h16M4 12h16M4 18h10" />
+                              </svg>
+                            </span>
+                            <div>
+                              <p className="text-sm font-semibold text-white">Accesos de menú</p>
+                              <p className="text-[11px] text-slate-400">
+                                Submenús extra a los que puede entrar, además de sus tableros.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-3.5">
+                            {(
+                              [
+                                { grp: "PERC", chip: "border-cyan-400/30 bg-cyan-500/15 text-cyan-200" },
+                                { grp: "SEPS", chip: "border-violet-400/30 bg-violet-500/15 text-violet-200" },
+                                { grp: "Horas", chip: "border-amber-400/30 bg-amber-500/15 text-amber-200" },
+                                { grp: "General", chip: "border-slate-400/30 bg-slate-500/15 text-slate-200" },
+                              ] as const
+                            ).map(({ grp, chip }) => {
+                              const items = GRANTABLE_MENUS.filter((m) => m.group === grp);
+                              if (items.length === 0) return null;
+                              return (
+                                <div key={grp}>
+                                  <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${chip}`}>
+                                    {grp}
+                                  </span>
+                                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                    {items.map((m) => {
+                                      const on = draft.menuGrants.includes(m.id);
+                                      return (
+                                        <button
+                                          key={m.id}
+                                          type="button"
+                                          onClick={() =>
+                                            updateAdminDraft(selectedUser.uid, {
+                                              menuGrants: on
+                                                ? draft.menuGrants.filter((x) => x !== m.id)
+                                                : [...draft.menuGrants, m.id],
+                                            })
+                                          }
+                                          className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
+                                            on
+                                              ? "border-indigo-400/50 bg-indigo-500/15 shadow-[0_0_0_1px_rgba(129,140,248,0.25)]"
+                                              : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                                          }`}
+                                        >
+                                          <span
+                                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${
+                                              on
+                                                ? "border-indigo-400 bg-indigo-500 text-white"
+                                                : "border-white/25 text-transparent"
+                                            }`}
+                                          >
+                                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                              <path d="M20 6 9 17l-5-5" />
+                                            </svg>
+                                          </span>
+                                          <span className={`text-xs font-medium leading-tight ${on ? "text-white" : "text-slate-300"}`}>
+                                            {m.label}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
 
                         <div className="mt-5 flex gap-2 border-t border-white/10 pt-4">
