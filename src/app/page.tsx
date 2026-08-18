@@ -60,7 +60,7 @@ import {
 import { downloadSepsTemplate } from "@/lib/seps-download";
 import { getHorasTemplate, HORAS_TEMPLATES, type HorasTemplate } from "@/lib/horas-templates";
 import { INSUMOS_ALMACEN_TEMPLATE, INSUMOS_CONSOLIDADO_ORDER, type InsumoRow } from "@/lib/insumos-almacen";
-import { GASTOS_EXPENSES, GASTOS_COST_CENTERS } from "@/lib/gastos-perc";
+import { GASTOS_EXPENSES, GASTOS_COST_CENTERS, GASTOS_FIXED } from "@/lib/gastos-perc";
 import { DEPRECIACION_ROWS } from "@/lib/depreciacion-perc";
 import { LAB_SECTIONS, LAB_RESULTADO_ROWS, LAB_PROCEDENCIA_ROWS } from "@/lib/seps-laboratorio-lnr";
 const LAB_MONTHS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -6971,7 +6971,7 @@ export default function Home() {
       ...GASTOS_EXPENSES.map((_, c) => `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(gastosValues[`vg|${c}`] ?? "")}</td>`),
     ].join("");
     const ccRows = GASTOS_COST_CENTERS.map((cc, r) => {
-      const cells = GASTOS_EXPENSES.map((_, c) => `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(gastosValues[`${r}|${c}`] ?? "")}</td>`).join("");
+      const cells = GASTOS_EXPENSES.map((_, c) => `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(GASTOS_FIXED[`${r}|${c}`] ?? gastosValues[`${r}|${c}`] ?? "")}</td>`).join("");
       return `<tr><td style="border:1px solid #cbd5e1;padding:6px;font-weight:600;white-space:nowrap;">${escapeHtml(cc)}</td>${cells}</tr>`;
     }).join("");
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Distribucion Gasto General ${gastosPeriod}</title></head><body><table><thead><tr>${head}</tr></thead><tbody><tr>${rowTipo}</tr><tr>${rowVG}</tr>${ccRows}</tbody></table></body></html>`;
@@ -11835,11 +11835,22 @@ export default function Home() {
               {GASTOS_COST_CENTERS.map((cc, r) => (
                 <tr key={cc} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
                   <td className={`sticky left-0 z-10 whitespace-nowrap px-2 py-1.5 ${isLightPanelTheme ? "bg-slate-50 text-slate-800" : "bg-[#1b2537] text-slate-100"}`}>{cc}</td>
-                  {GASTOS_EXPENSES.map((_, c) => (
-                    <td key={c} className="px-1 py-1 text-center">
-                      <input inputMode="decimal" value={gastosValues[`${r}|${c}`] ?? ""} onChange={(e) => setGastosValues((v) => ({ ...v, [`${r}|${c}`]: e.target.value }))} className={`w-20 rounded border px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`} />
-                    </td>
-                  ))}
+                  {GASTOS_EXPENSES.map((_, c) => {
+                    const fx = GASTOS_FIXED[`${r}|${c}`];
+                    if (fx !== undefined) {
+                      // Celda FIJA (base): solo lectura, no se captura.
+                      return (
+                        <td key={c} className="px-1 py-1 text-center">
+                          <div title={`Valor fijo: ${fx}`} className={`mx-auto w-20 truncate rounded border px-1 py-1 text-center text-xs font-medium ${isLightPanelTheme ? "border-amber-200 bg-amber-50 text-slate-700" : "border-amber-400/20 bg-amber-500/10 text-amber-100"}`}>{fx}</div>
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={c} className="px-1 py-1 text-center">
+                        <input inputMode="decimal" value={gastosValues[`${r}|${c}`] ?? ""} onChange={(e) => setGastosValues((v) => ({ ...v, [`${r}|${c}`]: e.target.value }))} className={`w-20 rounded border px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`} />
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
