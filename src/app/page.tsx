@@ -3548,8 +3548,11 @@ function buildSupervisorProfile(uid: string, account: SupervisorAccount) {
       lastName: account.lastName,
       name: buildFullName(account.firstName, account.lastName, account.username),
       role: "service",
-      isChief: true,
-      captureModules: [],
+      // NO es jefe con acceso total: se limita a los modulos indicados en
+      // account.modules (p.ej. solo "distribucion"/Horas). Asi NO ve/captura SEPS,
+      // que lo llena otro usuario.
+      isChief: false,
+      captureModules: account.modules,
       isActive: true,
       mustChangePassword: true,
       permissions: getDefaultPermissions("service"),
