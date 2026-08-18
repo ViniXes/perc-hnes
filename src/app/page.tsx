@@ -4282,6 +4282,7 @@ export default function Home() {
   const [policyScrolledEnd, setPolicyScrolledEnd] = useState(false);
   const [showPasswordText, setShowPasswordText] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
+  const [usersModalTab, setUsersModalTab] = useState<"usuarios" | "servicios">("usuarios");
   const [showBoardModal, setShowBoardModal] = useState(false);
   // Menu lateral colapsable: en PC se contrae para dar espacio; en movil es cajon.
   const [menuOpen, setMenuOpen] = useState(true);
@@ -14622,7 +14623,7 @@ export default function Home() {
                     Administrador
                   </p>
                   <h2 className="mt-2 text-2xl font-semibold">
-                    Usuarios y permisos
+                    Usuarios y servicios
                     {isLoadingUsers ? (
                       <span className="ml-3 text-sm font-medium text-amber-300">Actualizando…</span>
                     ) : null}
@@ -14655,6 +14656,32 @@ export default function Home() {
                 </div>
               </div>
 
+              <div className="mb-5 inline-flex rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+                <button
+                  type="button"
+                  onClick={() => setUsersModalTab("usuarios")}
+                  className={`rounded-xl px-5 py-2 text-sm font-semibold transition ${
+                    usersModalTab === "usuarios"
+                      ? "bg-indigo-500/25 text-indigo-100 shadow-sm shadow-black/20"
+                      : "text-slate-300 hover:text-white"
+                  }`}
+                >
+                  Usuarios
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUsersModalTab("servicios")}
+                  className={`rounded-xl px-5 py-2 text-sm font-semibold transition ${
+                    usersModalTab === "servicios"
+                      ? "bg-emerald-500/25 text-emerald-100 shadow-sm shadow-black/20"
+                      : "text-slate-300 hover:text-white"
+                  }`}
+                >
+                  Servicios
+                </button>
+              </div>
+
+              {usersModalTab === "servicios" ? (
               <div className="mb-6 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
                 <form
                   className="rounded-[24px] border border-white/10 bg-[#1b2537] p-5"
@@ -14849,8 +14876,9 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+              ) : null}
 
-              {(() => {
+              {usersModalTab === "usuarios" ? (() => {
                 const q = adminUserQuery.trim().toLowerCase();
                 const listed = adminUsers.filter((u) => {
                   if (!q) return true;
@@ -15254,7 +15282,7 @@ export default function Home() {
                     )}
                   </div>
                 );
-              })()}
+              })() : null}
               </section>
             </div>
           ) : null}
