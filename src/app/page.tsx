@@ -194,6 +194,10 @@ type SupervisorAccount = {
   modules: ModuleId[];
   // Si es true, esta cuenta entra con permisos de administrador completo.
   admin?: boolean;
+  // Si se define, ademas de monitorear, esta cuenta CAPTURA este servicio propio
+  // (rol "service" con edicion). Se usa para la persona de RRHH, que digita su
+  // servicio y a la vez monitorea/descarga el consolidado de horas.
+  captureServiceId?: string;
 };
 
 const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
@@ -237,6 +241,9 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
     firstName: "Andrea Michelle",
     lastName: "Amaya Majano",
     modules: ["distribucion"],
+    // Ademas de monitorear/descargar el consolidado, DIGITA su propio servicio
+    // de Recursos Humanos (Horas + SEPS de "Salud Mental I").
+    captureServiceId: "rrhh",
   },
 ];
 // --- Censo Diario de Pacientes (submenu bajo PERC; SOLO supervision) -----------
@@ -3525,6 +3532,28 @@ async function ensureSupervisorProfile(currentUser: User, account: SupervisorAcc
 }
 
 function buildSupervisorProfile(uid: string, account: SupervisorAccount) {
+  // Cuenta que ADEMAS captura un servicio propio (rol "service" con edicion): la
+  // persona de RRHH digita su servicio y, por ser monitor de horas (isHorasMonitor
+  // por usuario), tambien ve el monitoreo y descarga el consolidado.
+  if (account.captureServiceId) {
+    const svc = getServiceById(account.captureServiceId);
+    return normalizeProfile(uid, getSupervisorLoginEmail(account.username), {
+      serviceId: account.captureServiceId,
+      serviceName: svc?.name ?? null,
+      email: getSupervisorLoginEmail(account.username),
+      username: account.username,
+      firstName: account.firstName,
+      lastName: account.lastName,
+      name: buildFullName(account.firstName, account.lastName, account.username),
+      role: "service",
+      isChief: true,
+      captureModules: [],
+      isActive: true,
+      mustChangePassword: true,
+      permissions: getDefaultPermissions("service"),
+      supervisorModules: account.modules,
+    });
+  }
   return normalizeProfile(uid, getSupervisorLoginEmail(account.username), {
     serviceId: null,
     serviceName: null,
