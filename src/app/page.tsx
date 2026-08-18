@@ -107,6 +107,8 @@ type ManagedUser = {
   isDirector: boolean;
   mustChangePassword: boolean;
   isActive: boolean;
+  // Submenus extra otorgados por el admin (ids de GRANTABLE_MENUS).
+  menuGrants: string[];
 };
 type AdminDraft = {
   serviceId: string;
@@ -117,6 +119,7 @@ type AdminDraft = {
   isActive: boolean;
   captureModules: ModuleId[];
   department: string;
+  menuGrants: string[];
   email: string;
   username: string;
   name: string;
@@ -241,6 +244,15 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
 // ningun servicio lo ve. Se guarda por MES en Firestore (coleccion "censoDiario").
 // No tiene cierre ni restriccion de dias habiles: siempre editable por el editor.
 const CENSO_EDITOR_USERNAME = "amontes";
+// Submenus que se pueden OTORGAR por-usuario desde el panel de Usuarios (sin tocar codigo).
+const GRANTABLE_MENUS: { id: string; label: string; group: "PERC" | "SEPS" | "Horas" | "General" }[] = [
+  { id: "panel-censo", label: "Censo diario de pacientes", group: "PERC" },
+  { id: "panel-insumos", label: "Insumos de Almacén", group: "PERC" },
+  { id: "panel-admin-export", label: "Consolidados PERC (descarga)", group: "PERC" },
+  { id: "panel-gastos-perc", label: "Gastos PERC", group: "PERC" },
+  { id: "panel-depreciacion-perc", label: "Depreciación Mensual PERC", group: "PERC" },
+  { id: "panel-services", label: "Ver tabuladores de todos los servicios (PERC/SEPS/Horas)", group: "General" },
+];
 type CensoRow = { key: string; label: string };
 const CENSO_BASE_ROWS: CensoRow[] = [
   { key: "uci", label: "UCI" },
@@ -2913,6 +2925,9 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     isDirector: data.isDirector === true,
     mustChangePassword: data.mustChangePassword !== false,
     isActive: data.isActive !== false,
+    menuGrants: Array.isArray(data.menuGrants)
+      ? (data.menuGrants.filter((x): x is string => typeof x === "string"))
+      : [],
   };
 }
 
@@ -2929,6 +2944,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         isActive: managedUser.isActive,
         captureModules: managedUser.captureModules,
         department: managedUser.department || "",
+        menuGrants: managedUser.menuGrants,
         email: managedUser.email,
         username: managedUser.username,
         name: managedUser.name,
@@ -4855,7 +4871,8 @@ export default function Home() {
   const isHorasMonitor = normalizeKey(serviceProfile?.username || "") === normalizeKey("userrhh");
   // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
   // y los administradores (por temas de calidad y control).
-  const canViewCenso = isAdmin || isSupervisor;
+  const hasGrant = (id: string) => (serviceProfile?.menuGrants ?? []).includes(id);
+  const canViewCenso = isAdmin || isSupervisor || hasGrant("panel-censo");
   const canEditCenso =
     isAdmin || normalizeKey(serviceProfile?.username || "") === CENSO_EDITOR_USERNAME;
   // Insumos de Almacen: el tabulador PERTENECE al Depto. de Abastecimiento (servicio
@@ -4863,7 +4880,7 @@ export default function Home() {
   // servicio "almacen". Lo VEN ademas los supervisores.
   const isAlmacenOwner = serviceProfile?.serviceId === "almacen";
   const canEditInsumos = isAdmin || isAlmacenOwner;
-  const canViewInsumos = isAdmin || isSupervisor || isAlmacenOwner;
+  const canViewInsumos = isAdmin || isSupervisor || isAlmacenOwner || hasGrant("panel-insumos");
   // Agregar/quitar/renombrar filas del tabulador de Insumos: SOLO admin y
   // supervisores. El servicio Almacen captura valores pero NO gestiona filas.
   // Nota: para PERSISTIR una fila hace falta permiso de escritura del doc; los
@@ -9249,6 +9266,7 @@ export default function Home() {
               mustChangePassword: draft.mustChangePassword,
               department: null,
               captureModules: draft.captureModules,
+              menuGrants: draft.menuGrants,
               permissions: nextPermissions,
               updatedAt: serverTimestamp(),
             },
@@ -10772,7 +10790,17 @@ export default function Home() {
               // El Depto. de Abastecimiento (almacen) siempre ve sus modulos (PERC + Horas),
               // para poder llegar a "Insumos de Almacén" (que cuelga del menu PERC).
               if (serviceProfile.serviceId === "almacen") return true;
-              return serviceProfile.isChief || !restrict || cm.includes(mod.id);
+              // Si el admin le otorgo submenus de un modulo (Accesos de menu), ese menu
+              // se muestra aunque no capture ese modulo, para que el submenu sea alcanzable.
+              const grants = serviceProfile.menuGrants ?? [];
+              const percGrants = [
+                "panel-censo", "panel-insumos", "panel-admin-export",
+                "panel-gastos-perc", "panel-depreciacion-perc", "panel-services",
+              ];
+              const grantVisible =
+                (mod.id === "perc" && grants.some((g) => percGrants.includes(g))) ||
+                (mod.id !== "perc" && grants.includes("panel-services"));
+              return serviceProfile.isChief || !restrict || cm.includes(mod.id) || grantVisible;
             })
           : [];
     // Si la seccion de un modulo debe mostrarse para este usuario/servicio.
@@ -10815,7 +10843,7 @@ export default function Home() {
       // SEPS -> Abrir SEPS/Monitoreo/SEPS Servicios. Horas -> igual con Horas.
       // "X Servicios" lleva a la ventana "ver tabuladores por servicio" (panel-services).
       children: (() => {
-        const canManage = isAdmin || isSupervisor;
+        const canManage = isAdmin || isSupervisor || hasGrant("panel-services");
         const serviciosChild = (label: string) => ({
           id: "panel-services",
           label,
@@ -10842,14 +10870,14 @@ export default function Home() {
             ...(canViewInsumos
               ? [{ id: "panel-insumos", label: "Insumos de Almacén", detail: "Costos de insumos", badge: "IA", icon: "insumos" }]
               : []),
-            ...(isAdmin
+            ...(isAdmin || hasGrant("panel-admin-export")
               ? [{ id: "panel-admin-export", label: "Consolidados PERC", detail: "Descarga consolidado", badge: "XL", icon: "consolidado" }]
               : []),
             ...(canManage ? [serviciosChild("PERC Servicios")] : []),
-            ...(isAdmin
+            ...(isAdmin || hasGrant("panel-gastos-perc")
               ? [{ id: "panel-gastos-perc", label: "Gastos PERC", detail: "Distribución de gasto general", badge: "GP", icon: "consolidado" }]
               : []),
-            ...(isAdmin
+            ...(isAdmin || hasGrant("panel-depreciacion-perc")
               ? [{ id: "panel-depreciacion-perc", label: "Depreciación Mensual PERC", detail: "Depreciación por centro", badge: "DP", icon: "consolidado" }]
               : []),
           ];
@@ -13520,7 +13548,7 @@ export default function Home() {
             </section>
           ) : null}
 
-          {isAdmin ? (
+          {isAdmin || hasGrant("panel-admin-export") ? (
             <section
               id="panel-admin-export"
               data-view="panel-admin-export"
@@ -14156,7 +14184,7 @@ export default function Home() {
           ) : null}
 
           {/* Gastos PERC: matriz mensual de distribucion de gasto general (solo admin). */}
-          {isAdmin &&
+          {(isAdmin || hasGrant("panel-gastos-perc")) &&
           (activeSidebarSection === "panel-gastos-perc" || mobileView === "panel-gastos-perc") ? (
             <>
             {renderSectionDivider("Gastos PERC", "Distribución de gasto general (mensual)", "amber", isLightPanelTheme)}
@@ -14165,7 +14193,7 @@ export default function Home() {
           ) : null}
 
           {/* Depreciación Mensual PERC (matriz mensual por centro; solo admin). */}
-          {isAdmin &&
+          {(isAdmin || hasGrant("panel-depreciacion-perc")) &&
           (activeSidebarSection === "panel-depreciacion-perc" || mobileView === "panel-depreciacion-perc") ? (
             <>
             {renderSectionDivider("Depreciación Mensual PERC", "Depreciación por centro de producción (mensual)", "teal", isLightPanelTheme)}
@@ -15088,6 +15116,53 @@ export default function Home() {
                             </div>
                           </div>
                         ) : null}
+
+                        <div className="mt-4">
+                          <p className="text-xs font-medium text-slate-400">
+                            Accesos de menú (además de sus tableros)
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-slate-500">
+                            Marcá los submenús a los que este usuario puede entrar (Censo, Insumos,
+                            Consolidados, ver servicios, etc.), sin tocar código.
+                          </p>
+                          {(["PERC", "SEPS", "Horas", "General"] as const).map((grp) => {
+                            const items = GRANTABLE_MENUS.filter((g) => g.group === grp);
+                            if (items.length === 0) return null;
+                            return (
+                              <div key={grp} className="mt-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                                  {grp}
+                                </p>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {items.map((g) => {
+                                    const on = draft.menuGrants.includes(g.id);
+                                    return (
+                                      <button
+                                        key={g.id}
+                                        type="button"
+                                        onClick={() =>
+                                          updateAdminDraft(selectedUser.uid, {
+                                            menuGrants: on
+                                              ? draft.menuGrants.filter((x) => x !== g.id)
+                                              : [...draft.menuGrants, g.id],
+                                          })
+                                        }
+                                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                          on
+                                            ? "bg-indigo-500/20 text-indigo-200"
+                                            : "bg-white/5 text-slate-400 hover:bg-white/10"
+                                        }`}
+                                      >
+                                        {on ? "✓ " : ""}
+                                        {g.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
 
                         <div className="mt-5 flex gap-2 border-t border-white/10 pt-4">
                           <button
