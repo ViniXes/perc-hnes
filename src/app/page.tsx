@@ -230,12 +230,12 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
     admin: true,
   },
   {
-    // Monitor de RRHH: SOLO ve el Monitoreo de Horas (quien completo) y descarga
+    // Monitor de RRHH (aamaya): SOLO ve el Monitoreo de Horas (quien completo) y descarga
     // el consolidado mensual de horas en Excel. No captura.
-    username: "userrhh",
+    username: "aamaya",
     password: DEFAULT_TEMP_PASSWORD,
-    firstName: "Monitor",
-    lastName: "RRHH",
+    firstName: "Andrea Michelle",
+    lastName: "Amaya Majano",
     modules: ["distribucion"],
   },
 ];
@@ -4868,8 +4868,8 @@ export default function Home() {
   const isSupervisor = serviceProfile?.role === "supervisor" || isSepsStaff;
   // Directora: usa la vista de supervisor (ve todo) pero SIN permisos de gestion.
   const isDirector = serviceProfile?.isDirector === true;
-  // Monitor de RRHH (userrhh): SOLO monitorea horas y descarga; no habilita tableros.
-  const isHorasMonitor = normalizeKey(serviceProfile?.username || "") === normalizeKey("userrhh");
+  // Monitor de RRHH (aamaya): SOLO monitorea horas y descarga; no habilita tableros.
+  const isHorasMonitor = normalizeKey(serviceProfile?.username || "") === normalizeKey("aamaya");
   // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
   // y los administradores (por temas de calidad y control).
   const hasGrant = (id: string) => (serviceProfile?.menuGrants ?? []).includes(id);
@@ -12146,7 +12146,7 @@ export default function Home() {
         detail: isAdmin ? "Resumen general" : "Estado del periodo",
         badge: "IN",
       },
-      // Monitor de RRHH (userrhh): acceso directo al Monitoreo de Horas, donde esta
+      // Monitor de RRHH (aamaya): acceso directo al Monitoreo de Horas, donde esta
       // el boton para descargar el consolidado mensual de horas de todos los servicios.
       ...(isHorasMonitor
         ? [
