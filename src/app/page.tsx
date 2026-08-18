@@ -2718,7 +2718,7 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
     // Sin conexion: se arma con la nomina de las plantillas.
   }
 
-  type EmpRow = { division: string; servicio: string; empleado: string; total: number; cc: Record<string, number> };
+  type EmpRow = { division: string; servicio: string; empleado: string; dui: string; total: number; cc: Record<string, number> };
   const rows: EmpRow[] = [];
   for (const sid of Object.keys(HORAS_TEMPLATES)) {
     const template = HORAS_TEMPLATES[sid];
@@ -2727,11 +2727,12 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
     const saved = savedByService[sid];
     const employees =
       saved && Array.isArray(saved.employees) && saved.employees.length > 0
-        ? saved.employees.map((e) => ({ name: String(e?.name || ""), hours: e?.hours ?? {} }))
-        : seedHorasEmployees(template).map((e) => ({ name: e.name, hours: e.hours }));
+        ? saved.employees.map((e) => ({ name: String(e?.name || ""), dui: String(e?.dui || ""), hours: e?.hours ?? {} }))
+        : seedHorasEmployees(template).map((e) => ({ name: e.name, dui: e.dui ?? "", hours: e.hours }));
     for (const emp of employees) {
       const empleado = String(emp.name).trim();
       if (!empleado) continue;
+      const dui = String(emp.dui || "").trim();
       const ccVals: Record<string, number> = {};
       let total = 0;
       for (const [appCol, val] of Object.entries(emp.hours || {})) {
@@ -2742,7 +2743,7 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
         ccVals[header] = (ccVals[header] || 0) + num;
         total += num;
       }
-      rows.push({ division, servicio, empleado, total, cc: ccVals });
+      rows.push({ division, servicio, empleado, dui, total, cc: ccVals });
     }
   }
   rows.sort(
@@ -2752,7 +2753,7 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
       a.empleado.localeCompare(b.empleado),
   );
 
-  const headers = ["Empleado", "Total Empleados", "Total Pagado", "Componente Salarial", ...HORAS_COST_CENTERS];
+  const headers = ["Empleado", "DUI", "Total Empleados", "Total Pagado", "Componente Salarial", ...HORAS_COST_CENTERS];
   const headerCells = headers
     .map(
       (h) =>
@@ -2765,6 +2766,7 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
           .map((r) => {
             const fixed = [
               escapeHtml(r.empleado),
+              escapeHtml(r.dui),
               "1",
               r.total > 0 ? String(r.total) : "",
               "",
