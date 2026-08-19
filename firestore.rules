@@ -18,7 +18,8 @@ service cloud.firestore {
       return isSignedIn()
         && (request.auth.token.email == 'hcardoza.admin@perc-hnes.app'
             || request.auth.token.email == 'ffuentes@perc-hnes.app'
-            || request.auth.token.email == 'amontes@perc-hnes.app');
+            || request.auth.token.email == 'amontes@perc-hnes.app'
+            || request.auth.token.email == 'jcmiranda@perc-hnes.app');
     }
     function userProfile() {
       return get(/databases/$(database)/documents/serviceUsers/$(request.auth.uid)).data;
@@ -134,6 +135,16 @@ service cloud.firestore {
         && request.resource.data.message.size() > 0;
       allow update: if isAdmin() || isSupervisor();
       allow delete: if isAdmin();
+    }
+    // Registro global de documentos de identidad (DUI/pasaporte/carne) para impedir
+    // que una misma persona se registre varias veces. El id del doc = documento
+    // normalizado. Cualquiera puede consultar UN documento puntual (get) y crear el
+    // suyo si no existe; solo el admin puede listar, sobrescribir o borrar.
+    match /documentRegistry/{docId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if true;
+      allow update, delete: if isAdmin();
     }
   }
 }

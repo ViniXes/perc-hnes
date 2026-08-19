@@ -109,6 +109,10 @@ type ManagedUser = {
   isActive: boolean;
   // Submenus extra otorgados por el admin (ids de GRANTABLE_MENUS).
   menuGrants: string[];
+  // Documento de identidad unico (evita registros duplicados): DUI (00000000-0),
+  // pasaporte o carne de residencia. docType = "dui" | "pasaporte" | "carne".
+  docType: string;
+  docNumber: string;
 };
 type AdminDraft = {
   serviceId: string;
@@ -1511,6 +1515,53 @@ function getCaptureOverrideId(periodId: string, serviceId: string, moduleId: Mod
   return `${periodId}__${serviceId}__${moduleId}`;
 }
 
+// --- Documento de identidad (llave unica anti-duplicados) --------------------
+const DOC_TYPE_LABELS: Record<string, string> = {
+  dui: "DUI",
+  pasaporte: "Pasaporte",
+  carne: "Carne de residencia",
+};
+// Llave normalizada del documento (mayusculas, solo alfanumerico) = id del doc en
+// la coleccion "documentRegistry".
+function normalizeDocKey(docNumber: string): string {
+  return (docNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+function isValidDuiFormat(v: string): boolean {
+  return /^\d{8}-\d$/.test((v || "").trim());
+}
+// Valida el documento segun su tipo. Devuelve mensaje de error, o "" si es valido.
+function validateDocument(docType: string, docNumber: string): string {
+  const n = (docNumber || "").trim();
+  if (!n) return "Ingresa tu numero de documento de identidad.";
+  if (docType === "dui" && !isValidDuiFormat(n)) {
+    return "El DUI debe tener el formato 00000000-0.";
+  }
+  if (normalizeDocKey(n).length < 4) return "El documento no es valido.";
+  return "";
+}
+// Reserva el documento en el registro global para impedir duplicados. Lanza
+// Error("doc-duplicado") si ese documento ya esta registrado por alguien mas.
+async function reserveDocument(
+  docType: string,
+  docNumber: string,
+  owner: { name?: string; email?: string },
+): Promise<void> {
+  const key = normalizeDocKey(docNumber);
+  if (!key) return;
+  const ref = doc(db, "documentRegistry", key);
+  const existing = await getDoc(ref).catch(() => null);
+  if (existing && existing.exists()) {
+    throw new Error("doc-duplicado");
+  }
+  await setDoc(ref, {
+    docType,
+    docNumber: docNumber.trim(),
+    name: owner.name || "",
+    email: owner.email || "",
+    createdAt: serverTimestamp(),
+  });
+}
+
 // Solicitud de un servicio para que le habiliten un tablero fuera de plazo.
 type CaptureRequest = {
   id: string;
@@ -1561,6 +1612,8 @@ type SignupRequest = {
   captureModules?: ModuleId[];
   division?: string;
   department?: string;
+  docType?: string;
+  docNumber?: string;
 };
 
 function getModuleLabel(moduleId: ModuleId) {
@@ -2937,6 +2990,8 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     menuGrants: Array.isArray(data.menuGrants)
       ? (data.menuGrants.filter((x): x is string => typeof x === "string"))
       : [],
+    docType: typeof data.docType === "string" ? data.docType : "",
+    docNumber: typeof data.docNumber === "string" ? data.docNumber : "",
   };
 }
 
@@ -3632,6 +3687,8 @@ async function createServiceUserAccount(
     lastName: normalizedLastName,
     name: displayName,
     dui: normalizedDui,
+    docType: "dui",
+    docNumber: normalizedDui,
     phone: normalizedPhone,
     role: "service",
     isActive: true,
@@ -4194,6 +4251,8 @@ export default function Home() {
     captureModules: ModuleId[];
     division: string;
     department: string;
+    docType: "dui" | "pasaporte" | "carne";
+    docNumber: string;
   }>({
     firstName: "",
     lastName: "",
@@ -4205,6 +4264,8 @@ export default function Home() {
     captureModules: [],
     division: "",
     department: "",
+    docType: "dui",
+    docNumber: "",
   });
   // Division que se esta explorando en el registro (paso 1); filtra el 2do desplegable.
   const [signupDivView, setSignupDivView] = useState("");
@@ -4313,6 +4374,11 @@ export default function Home() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [policyGateAcceptedSession, setPolicyGateAcceptedSession] = useState(false);
   const [policyGateSaving, setPolicyGateSaving] = useState(false);
+  // Puerta de documento: a quien se registro SIN documento se le pide al ingresar.
+  const [docGateType, setDocGateType] = useState<"dui" | "pasaporte" | "carne">("dui");
+  const [docGateNumber, setDocGateNumber] = useState("");
+  const [docGateSaving, setDocGateSaving] = useState(false);
+  const [docGateError, setDocGateError] = useState("");
   const [policyScrolledEnd, setPolicyScrolledEnd] = useState(false);
   const [showPasswordText, setShowPasswordText] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
@@ -5824,6 +5890,8 @@ export default function Home() {
               : [],
             division: typeof d.division === "string" ? d.division : "",
             department: typeof d.department === "string" ? d.department : "",
+            docType: typeof d.docType === "string" ? d.docType : "",
+            docNumber: typeof d.docNumber === "string" ? d.docNumber : "",
           });
         });
         setSignupRequests(list);
@@ -7755,9 +7823,26 @@ export default function Home() {
       setError("Tenés que aceptar las políticas de privacidad para continuar.");
       return;
     }
+    const docErr = validateDocument(signupForm.docType, signupForm.docNumber);
+    if (docErr) {
+      setError(docErr);
+      return;
+    }
 
     setIsSubmittingSignup(true);
     try {
+      // Reserva el documento (anti-duplicados). Si ya existe, no deja registrarse.
+      try {
+        await reserveDocument(signupForm.docType, signupForm.docNumber, {
+          name: `${signupForm.firstName.trim()} ${signupForm.lastName.trim()}`,
+          email: signupForm.email.trim(),
+        });
+      } catch {
+        setError(
+          `Ya existe un registro con ese ${DOC_TYPE_LABELS[signupForm.docType] || "documento"}. Cada persona se registra una sola vez.`,
+        );
+        return;
+      }
       const id = `signup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       await setDoc(doc(db, "signupRequests", id), {
         firstName: signupForm.firstName.trim(),
@@ -7786,6 +7871,8 @@ export default function Home() {
         captureModules: isDivision || isDepartment || isDeptEditor || isDirector ? [] : signupForm.captureModules,
         division: isDivision ? signupForm.division : "",
         department: isDepartment || isDeptEditor ? signupForm.department : "",
+        docType: signupForm.docType,
+        docNumber: signupForm.docNumber.trim(),
         status: "pending",
         acceptedPrivacy: true,
         createdAt: serverTimestamp(),
@@ -7802,6 +7889,8 @@ export default function Home() {
         captureModules: [],
         division: "",
         department: "",
+        docType: "dui",
+        docNumber: "",
       });
       setSignupDivView("");
       setMessage(
@@ -7835,13 +7924,20 @@ export default function Home() {
       }
       const secondaryDiv = createSecondaryAuth();
       try {
-        const { username } = await createDivisionChiefAccount(secondaryDiv.auth, {
+        const { username, credential } = await createDivisionChiefAccount(secondaryDiv.auth, {
           division: divKey,
           divisionLabel: DIVLBL[divKey],
           contactEmail: req.email,
           firstName: req.firstName,
           lastName: req.lastName,
         });
+        if (credential?.user?.uid) {
+          await setDoc(
+            doc(db, "serviceUsers", credential.user.uid),
+            { docType: req.docType ?? "", docNumber: (req.docNumber ?? "").trim() },
+            { merge: true },
+          ).catch(() => {});
+        }
         await setDoc(
           doc(db, "signupRequests", req.id),
           { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
@@ -7872,11 +7968,18 @@ export default function Home() {
     if (req.requestType === "director") {
       const secondaryDir = createSecondaryAuth();
       try {
-        const { username } = await createDirectorAccount(secondaryDir.auth, {
+        const { username, credential } = await createDirectorAccount(secondaryDir.auth, {
           contactEmail: req.email,
           firstName: req.firstName,
           lastName: req.lastName,
         });
+        if (credential?.user?.uid) {
+          await setDoc(
+            doc(db, "serviceUsers", credential.user.uid),
+            { docType: req.docType ?? "", docNumber: (req.docNumber ?? "").trim() },
+            { merge: true },
+          ).catch(() => {});
+        }
         await setDoc(
           doc(db, "signupRequests", req.id),
           { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
@@ -7913,7 +8016,7 @@ export default function Home() {
       }
       const secondaryDe = createSecondaryAuth();
       try {
-        const { username } = await createDepartmentChiefAccount(secondaryDe.auth, {
+        const { username, credential } = await createDepartmentChiefAccount(secondaryDe.auth, {
           department: depKey,
           departmentLabel: departmentEditorLabel(depKey),
           contactEmail: req.email,
@@ -7921,6 +8024,13 @@ export default function Home() {
           lastName: req.lastName,
           editor: true,
         });
+        if (credential?.user?.uid) {
+          await setDoc(
+            doc(db, "serviceUsers", credential.user.uid),
+            { docType: req.docType ?? "", docNumber: (req.docNumber ?? "").trim() },
+            { merge: true },
+          ).catch(() => {});
+        }
         await setDoc(
           doc(db, "signupRequests", req.id),
           { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
@@ -7957,13 +8067,20 @@ export default function Home() {
       }
       const secondaryDep = createSecondaryAuth();
       try {
-        const { username } = await createDepartmentChiefAccount(secondaryDep.auth, {
+        const { username, credential } = await createDepartmentChiefAccount(secondaryDep.auth, {
           department: depKey,
           departmentLabel: DEPARTMENT_LABELS[depKey],
           contactEmail: req.email,
           firstName: req.firstName,
           lastName: req.lastName,
         });
+        if (credential?.user?.uid) {
+          await setDoc(
+            doc(db, "serviceUsers", credential.user.uid),
+            { docType: req.docType ?? "", docNumber: (req.docNumber ?? "").trim() },
+            { merge: true },
+          ).catch(() => {});
+        }
         await setDoc(
           doc(db, "signupRequests", req.id),
           { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
@@ -8012,7 +8129,7 @@ export default function Home() {
     }
     const secondary = createSecondaryAuth();
     try {
-      const { username } = await createChiefUserAccount(secondary.auth, {
+      const { username, credential } = await createChiefUserAccount(secondary.auth, {
         service,
         contactEmail: req.email,
         firstName: req.firstName,
@@ -8020,6 +8137,13 @@ export default function Home() {
         isChief: req.isChief === true,
         captureModules: Array.isArray(req.captureModules) ? req.captureModules : [],
       });
+      if (credential?.user?.uid) {
+        await setDoc(
+          doc(db, "serviceUsers", credential.user.uid),
+          { docType: req.docType ?? "", docNumber: (req.docNumber ?? "").trim() },
+          { merge: true },
+        ).catch(() => {});
+      }
       await setDoc(
         doc(db, "signupRequests", req.id),
         { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
@@ -8052,6 +8176,12 @@ export default function Home() {
         { status: "rejected", updatedAt: serverTimestamp() },
         { merge: true },
       );
+      // Libera el documento reservado para que esa persona pueda volver a registrarse.
+      if (req.docNumber && normalizeDocKey(req.docNumber)) {
+        await deleteDoc(
+          doc(db, "documentRegistry", normalizeDocKey(req.docNumber)),
+        ).catch(() => {});
+      }
     } catch {
       // Ignore.
     } finally {
@@ -9123,6 +9253,44 @@ export default function Home() {
     } finally {
       setPolicyGateSaving(false);
       setPolicyGateAcceptedSession(true);
+    }
+  }
+
+  async function handleSaveDocGate() {
+    if (!serviceProfile) return;
+    const err = validateDocument(docGateType, docGateNumber);
+    if (err) {
+      setDocGateError(err);
+      return;
+    }
+    setDocGateSaving(true);
+    setDocGateError("");
+    try {
+      try {
+        await reserveDocument(docGateType, docGateNumber, {
+          name: serviceProfile.name,
+          email: serviceProfile.email,
+        });
+      } catch {
+        setDocGateError(
+          `Ese ${DOC_TYPE_LABELS[docGateType] || "documento"} ya está registrado por otra persona. Verificá que sea el tuyo.`,
+        );
+        setDocGateSaving(false);
+        return;
+      }
+      await setDoc(
+        doc(db, "serviceUsers", serviceProfile.uid),
+        { docType: docGateType, docNumber: docGateNumber.trim(), updatedAt: serverTimestamp() },
+        { merge: true },
+      );
+      setServiceProfile((p) =>
+        p ? { ...p, docType: docGateType, docNumber: docGateNumber.trim() } : p,
+      );
+      setDocGateNumber("");
+    } catch {
+      setDocGateError("No pudimos guardar tu documento. Revisá tu conexión e intentá de nuevo.");
+    } finally {
+      setDocGateSaving(false);
     }
   }
 
@@ -14517,6 +14685,64 @@ export default function Home() {
             </div>
           ) : null}
 
+          {serviceProfile && !isAdmin && !serviceProfile.docNumber
+            && !findSupervisorAccountByLoginEmail(user?.email)
+            && !(serviceProfile.mustChangePassword && !policyGateAcceptedSession) ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="doc-gate-title"
+              className="fixed inset-0 z-[140] flex items-start justify-center overflow-y-auto p-4"
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/85 backdrop-blur-sm" />
+              <div className="modal-pop-in relative my-10 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
+                <div className="h-1 w-full bg-gradient-to-r from-amber-400 to-orange-500" />
+                <div className="px-5 pb-6 pt-5 sm:px-6">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-300/90">Antes de continuar</p>
+                  <h3 id="doc-gate-title" className="mt-1 text-lg font-bold text-white">Registrá tu documento de identidad</h3>
+                  <p className="mt-2 text-xs text-slate-400">
+                    Para evitar registros duplicados, cada usuario debe tener su documento. Ingresá tu DUI, pasaporte o carné de residencia para continuar.
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    <label className="block">
+                      <span className="text-xs font-medium text-slate-300">Tipo de documento</span>
+                      <select
+                        value={docGateType}
+                        onChange={(e) => { setDocGateType(e.target.value as "dui" | "pasaporte" | "carne"); setDocGateNumber(""); setDocGateError(""); }}
+                        className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-amber-400"
+                      >
+                        <option value="dui" className="bg-[#1b2537] text-white">DUI</option>
+                        <option value="pasaporte" className="bg-[#1b2537] text-white">Pasaporte</option>
+                        <option value="carne" className="bg-[#1b2537] text-white">Carné de residencia</option>
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium text-slate-300">Número de documento</span>
+                      <input
+                        value={docGateNumber}
+                        onChange={(e) => { setDocGateNumber(e.target.value); setDocGateError(""); }}
+                        inputMode={docGateType === "dui" ? "numeric" : "text"}
+                        placeholder={docGateType === "dui" ? "00000000-0" : docGateType === "pasaporte" ? "N° de pasaporte" : "N° de carné"}
+                        className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-amber-400"
+                      />
+                    </label>
+                    {docGateError ? (
+                      <p className="text-xs font-medium text-rose-300">{docGateError}</p>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={docGateSaving}
+                      onClick={() => { void handleSaveDocGate(); }}
+                      className="w-full rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {docGateSaving ? "Guardando…" : "Guardar y continuar"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {serviceProfile && serviceProfile.mustChangePassword && !isAdmin && !policyGateAcceptedSession ? (
             <div
               role="dialog"
@@ -17463,6 +17689,32 @@ export default function Home() {
                     className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
                   />
                 </label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-300">Tipo de documento</span>
+                    <select
+                      value={signupForm.docType}
+                      onChange={(e) => setSignupForm((f) => ({ ...f, docType: e.target.value as "dui" | "pasaporte" | "carne", docNumber: "" }))}
+                      className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
+                    >
+                      <option value="dui" className="bg-[#1b2537] text-white">DUI</option>
+                      <option value="pasaporte" className="bg-[#1b2537] text-white">Pasaporte</option>
+                      <option value="carne" className="bg-[#1b2537] text-white">Carné de residencia</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-300">Número de documento</span>
+                    <input
+                      value={signupForm.docNumber}
+                      onChange={(e) => setSignupForm((f) => ({ ...f, docNumber: e.target.value }))}
+                      required
+                      inputMode={signupForm.docType === "dui" ? "numeric" : "text"}
+                      placeholder={signupForm.docType === "dui" ? "00000000-0" : signupForm.docType === "pasaporte" ? "N° de pasaporte" : "N° de carné"}
+                      className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                    />
+                  </label>
+                </div>
+                <p className="-mt-1 text-[11px] text-slate-500">Tu documento evita registros duplicados. El DUI debe llevar el formato 00000000-0.</p>
                 <label className="block">
                   <span className="text-xs font-medium text-slate-300">División</span>
                   <select
