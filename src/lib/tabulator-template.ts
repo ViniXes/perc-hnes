@@ -53,13 +53,13 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: ["398_1-Vacunacion | Actividad", "398_2-Vacunacion | Dosis aplicada"],
   },
   {
-    // Laboratorio clinico incluye tambien Biologia molecular (530_1).
+    // Laboratorio clinico. Biologia molecular (530_1) se captura en su propio
+    // servicio "biologia-molecular".
     id: "laboratorio-clinico",
     name: "Laboratorio clinico",
     rows: [
       "518_1-Laboratorio clinico | Examen",
       "518_2-Laboratorio clinico | Prueba",
-      "530_1-Laboratorio de biologia molecular | Examen",
     ],
   },
   {
@@ -480,10 +480,10 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: [],
   },
   {
-    // Biologia Molecular: por ahora SOLO Distribucion de Horas.
+    // Biologia Molecular: PERC (una fila de produccion) + Distribucion de Horas.
     id: "biologia-molecular",
     name: "Biologia Molecular",
-    rows: [],
+    rows: ["530_1-Laboratorio de biologia molecular | Examen"],
   },
   {
     // Recursos Humanos: por ahora SOLO Distribucion de Horas.
