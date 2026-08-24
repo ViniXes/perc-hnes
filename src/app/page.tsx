@@ -2806,7 +2806,7 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
       a.empleado.localeCompare(b.empleado),
   );
 
-  const headers = ["Empleado", "DUI", "Total Empleados", "Total Pagado", "Componente Salarial", ...HORAS_COST_CENTERS];
+  const headers = ["Empleado", "DUI / NIT", "Total Empleados", "Total Pagado", "Componente Salarial", ...HORAS_COST_CENTERS];
   const headerCells = headers
     .map(
       (h) =>
@@ -3237,12 +3237,13 @@ function hasAnySepsValue(values: SepsValues | undefined) {
 // Cuantas filas de Horas se renderizan por "pagina" (ver paginacion del tabulador).
 const HORAS_PAGE_SIZE = 60;
 
-type HorasEmployee = { name: string; dui: string; comment: string; hours: Record<string, string> };
+type HorasEmployee = { name: string; dui: string; docType: "dui" | "nit"; comment: string; hours: Record<string, string> };
 
-function buildEmptyHorasEmployee(template: HorasTemplate, name = "", dui = ""): HorasEmployee {
+function buildEmptyHorasEmployee(template: HorasTemplate, name = "", dui = "", docType: "dui" | "nit" = "dui"): HorasEmployee {
   return {
     name,
     dui,
+    docType,
     comment: "",
     hours: Object.fromEntries(template.columns.map((col) => [col, ""])),
   };
@@ -3281,6 +3282,7 @@ function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEm
       return {
         name,
         dui,
+        docType: row.docType === "nit" ? "nit" as const : "dui" as const,
         comment: typeof row.comment === "string" ? row.comment : "",
         hours: Object.fromEntries(
           template.columns.map((col) => [col, String(rawHours[col] ?? "")]),
@@ -9013,7 +9015,7 @@ export default function Home() {
         if (!hasData) {
           continue;
         }
-        imported.push({ name, dui, comment: "", hours });
+        imported.push({ name, dui, docType: "dui", comment: "", hours });
       }
       if (imported.length === 0) {
         throw new Error("No se encontraron empleados en el archivo");
@@ -11270,7 +11272,7 @@ export default function Home() {
                 <th className={`sticky left-0 z-20 min-w-[12rem] border-r px-2 py-2 text-left font-medium ${isLightPanelTheme ? "border-slate-200 bg-slate-100" : "border-white/10 bg-[#1a2334]"}`}>
                   Nombre del empleado
                 </th>
-                <th className="px-2 py-2 text-left font-medium">DUI</th>
+                <th className="px-2 py-2 text-left font-medium">DUI / NIT</th>
                 <th className="hidden px-2 py-2 text-left font-medium xl:table-cell">Comentario</th>
                 {horasTemplate.columns.map((col) => (
                   <th key={col} className="px-2 py-2 text-center font-medium">
@@ -11299,13 +11301,25 @@ export default function Home() {
                     </div>
                   </td>
                   <td className="px-1.5 py-1">
-                    <input
-                      value={emp.dui}
-                      onChange={(event) => handleHorasDui(index, event.target.value)}
-                      disabled={horasEditingBlocked}
-                      placeholder="DUI"
-                      className={`w-[6.75rem] rounded border px-2 py-1 text-xs outline-none focus:border-cyan-400 disabled:opacity-50 xl:w-28 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
-                    />
+                    <div className="flex items-center gap-1">
+                      <select
+                        value={emp.docType}
+                        onChange={(event) => updateHorasEmployee(index, { docType: event.target.value === "nit" ? "nit" : "dui" })}
+                        disabled={horasEditingBlocked}
+                        title="Tipo de documento"
+                        className={`shrink-0 rounded border px-1 py-1 text-[10px] font-semibold outline-none focus:border-cyan-400 disabled:opacity-50 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
+                      >
+                        <option value="dui">DUI</option>
+                        <option value="nit">NIT</option>
+                      </select>
+                      <input
+                        value={emp.dui}
+                        onChange={(event) => handleHorasDui(index, event.target.value)}
+                        disabled={horasEditingBlocked}
+                        placeholder={emp.docType === "nit" ? "0614-241287-102-5" : "00000000-0"}
+                        className={`w-[6.5rem] rounded border px-2 py-1 text-xs outline-none focus:border-cyan-400 disabled:opacity-50 xl:w-[7.5rem] ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
+                      />
+                    </div>
                   </td>
                   <td className="hidden px-1.5 py-1 xl:table-cell">
                     <input
