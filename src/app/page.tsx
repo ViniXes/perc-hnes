@@ -11316,7 +11316,7 @@ export default function Home() {
                         value={emp.dui}
                         onChange={(event) => handleHorasDui(index, event.target.value)}
                         disabled={horasEditingBlocked}
-                        placeholder={emp.docType === "nit" ? "0614-241287-102-5" : "00000000-0"}
+                        placeholder={emp.docType === "nit" ? "0000-000000-000-0" : "00000000-0"}
                         className={`w-[6.5rem] rounded border px-2 py-1 text-xs outline-none focus:border-cyan-400 disabled:opacity-50 xl:w-[7.5rem] ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
                       />
                     </div>
