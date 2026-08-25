@@ -13438,14 +13438,6 @@ export default function Home() {
             </div>
           ) : null}
 
-          {adminCalendarSection ? (
-            <div data-view="panel-calendar">{adminCalendarSection}</div>
-          ) : null}
-
-          {captureToggleSection ? (
-            <div data-view="panel-capture-toggle">{captureToggleSection}</div>
-          ) : null}
-
           {isAdmin || isSupervisor ? (
             <section id="panel-services" data-view="panel-services" className={`relative z-20 rounded-[24px] border border-amber-400/45 p-5 ring-1 ring-amber-400/10 ${
               isLightPanelTheme
@@ -13805,6 +13797,14 @@ export default function Home() {
                   : "Selecciona un servicio para ver lo que cargó en los tableros que supervisás (solo lectura)."}
               </p>
             </section>
+          ) : null}
+
+          {adminCalendarSection ? (
+            <div data-view="panel-calendar">{adminCalendarSection}</div>
+          ) : null}
+
+          {captureToggleSection ? (
+            <div data-view="panel-capture-toggle">{captureToggleSection}</div>
           ) : null}
 
           {isAdmin || hasGrant("panel-admin-export") ? (
