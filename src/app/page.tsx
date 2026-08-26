@@ -15640,60 +15640,65 @@ export default function Home() {
                           ) : null}
                         </div>
 
-                        <div className="mt-5 flex gap-2 border-t border-white/10 pt-4">
+                        <div className="mt-5 flex items-center gap-2 border-t border-white/10 pt-4">
                           <button
                             type="button"
                             onClick={() => void handleAdminSave(selectedUser.uid)}
                             disabled={busy}
-                            className="flex-1 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-500/25 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                           >
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
                             {busy ? "Guardando..." : "Guardar cambios"}
                           </button>
                           <button
                             type="button"
                             onClick={() => void handleAdminSendReset(selectedUser.uid, selectedUser)}
                             disabled={busy}
-                            className="rounded-xl border border-blue-400/40 bg-blue-500/15 px-4 py-2.5 text-sm font-semibold text-blue-200 transition hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Reset de clave a la temporal"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-blue-400/40 hover:bg-blue-500/10 hover:text-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            Reset clave
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
+                            <span className="hidden sm:inline">Reset clave</span>
                           </button>
-                        </div>
-
-                        {selectedUser.role !== "admin" ? (
-                          deleteConfirmUid === selectedUser.uid ? (
-                            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-rose-400/30 bg-rose-950/30 p-3">
-                              <span className="text-xs font-semibold text-rose-200">
-                                ¿Eliminar de raíz a {selectedUser.name}? Se borra la cuenta y todo su rastro (incluye los registros). No se puede deshacer.
-                              </span>
-                              <div className="ml-auto flex gap-2">
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => void handleDeleteUser(selectedUser.uid, selectedUser)}
-                                  className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  {busy ? "Eliminando…" : "Sí, eliminar de raíz"}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => setDeleteConfirmUid("")}
-                                  className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
-                                >
-                                  Cancelar
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
+                          {selectedUser.role !== "admin" && deleteConfirmUid !== selectedUser.uid ? (
                             <button
                               type="button"
                               disabled={busy}
                               onClick={() => setDeleteConfirmUid(selectedUser.uid)}
-                              className="mt-2 w-full rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-2.5 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Eliminar usuario de raíz"
+                              aria-label="Eliminar usuario de raíz"
+                              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm font-medium text-slate-400 transition hover:border-rose-400/40 hover:bg-rose-500/10 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              Eliminar usuario de raíz
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" /></svg>
+                              <span className="hidden sm:inline">Eliminar</span>
                             </button>
-                          )
+                          ) : null}
+                        </div>
+
+                        {selectedUser.role !== "admin" && deleteConfirmUid === selectedUser.uid ? (
+                          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-rose-400/30 bg-rose-950/30 p-3">
+                            <span className="flex-1 text-xs font-semibold text-rose-200">
+                              ¿Eliminar de raíz a {selectedUser.name}? Se borra la cuenta y todo su rastro (incluye los registros). No se puede deshacer.
+                            </span>
+                            <div className="ml-auto flex gap-2">
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => void handleDeleteUser(selectedUser.uid, selectedUser)}
+                                className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {busy ? "Eliminando…" : "Sí, eliminar"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => setDeleteConfirmUid("")}
+                                className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
                         ) : null}
                       </div>
                     ) : (
