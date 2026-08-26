@@ -262,7 +262,9 @@ const GRANTABLE_MENUS: { id: string; label: string; group: "PERC" | "SEPS" | "Ho
   { id: "panel-admin-export", label: "Consolidados PERC (descarga)", group: "PERC" },
   { id: "panel-gastos-perc", label: "Gastos PERC", group: "PERC" },
   { id: "panel-depreciacion-perc", label: "Depreciación Mensual PERC", group: "PERC" },
-  { id: "panel-services", label: "Ver tabuladores de todos los servicios (PERC/SEPS/Horas)", group: "General" },
+  { id: "panel-services-perc", label: "Ver tabuladores PERC de todos los servicios", group: "PERC" },
+  { id: "panel-services-seps", label: "Ver tabuladores SEPS de todos los servicios", group: "SEPS" },
+  { id: "panel-services-horas", label: "Ver tabuladores de Horas de todos los servicios", group: "Horas" },
 ];
 type CensoRow = { key: string; label: string };
 const CENSO_BASE_ROWS: CensoRow[] = [
@@ -5013,12 +5015,18 @@ export default function Home() {
     const base = SERVICE_DEFINITIONS.filter((service) => {
       // Jefe de division: SOLO ve los servicios de su division.
       if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
+      // Acceso "Ver tabuladores de todos los servicios" por modulo (por-usuario):
+      // incluye el servicio si tiene el modulo correspondiente al acceso otorgado.
+      const g = serviceProfile?.menuGrants ?? [];
+      const area = getAreaById(service.id);
+      const grantView =
+        (g.includes("panel-services-perc") && (area?.modules.includes("perc") ?? false)) ||
+        (g.includes("panel-services-seps") && !!getSepsTemplate(service.id)) ||
+        (g.includes("panel-services-horas") && !!getHorasTemplate(service.id));
       return (
         isAdmin ||
-        (getAreaById(service.id)?.modules.some((m) =>
-          serviceProfile?.supervisorModules.includes(m),
-        ) ??
-          false)
+        (area?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false) ||
+        grantView
       );
     });
     const q = adminServiceQuery.trim().toLowerCase();
@@ -5035,12 +5043,18 @@ export default function Home() {
     const base = SERVICE_DEFINITIONS.filter((service) => {
       // Jefe de division: SOLO ve los servicios de su division.
       if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
+      // Acceso "Ver tabuladores de todos los servicios" por modulo (por-usuario):
+      // incluye el servicio si tiene el modulo correspondiente al acceso otorgado.
+      const g = serviceProfile?.menuGrants ?? [];
+      const area = getAreaById(service.id);
+      const grantView =
+        (g.includes("panel-services-perc") && (area?.modules.includes("perc") ?? false)) ||
+        (g.includes("panel-services-seps") && !!getSepsTemplate(service.id)) ||
+        (g.includes("panel-services-horas") && !!getHorasTemplate(service.id));
       return (
         isAdmin ||
-        (getAreaById(service.id)?.modules.some((m) =>
-          serviceProfile?.supervisorModules.includes(m),
-        ) ??
-          false)
+        (area?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false) ||
+        grantView
       );
     });
     const byGroup = new Map<string, ServiceDefinition[]>();
@@ -11024,23 +11038,33 @@ export default function Home() {
             const grants = serviceProfile.menuGrants ?? [];
             const percGrants = [
               "panel-censo", "panel-insumos", "panel-admin-export",
-              "panel-gastos-perc", "panel-depreciacion-perc", "panel-services",
+              "panel-gastos-perc", "panel-depreciacion-perc", "panel-services-perc",
             ];
             const hasPercGrant = grants.some((g) => percGrants.includes(g));
-            // Base = modulos del area. Si le otorgaron un acceso de menu de PERC pero su
-            // area NO incluye PERC (p.ej. Unidad Financiera: solo Horas), agregamos PERC
-            // para que ese submenu otorgado (Gastos PERC, etc.) sea alcanzable.
+            const wantSeps = grants.includes("panel-services-seps");
+            const wantHoras = grants.includes("panel-services-horas");
+            // Base = modulos del area. Si le otorgaron un acceso de menu de un modulo
+            // pero su area NO lo incluye (p.ej. Unidad Financiera solo tiene Horas y le
+            // dan "Gastos PERC" o "Ver tabuladores PERC"), agregamos ese modulo para que
+            // el submenu otorgado sea alcanzable.
             let base = getAreaModules(currentArea);
-            if (hasPercGrant && !base.some((m) => m.id === "perc")) {
-              const percMod = MODULE_DEFINITIONS.find((m) => m.id === "perc");
-              if (percMod) base = [percMod, ...base];
-            }
+            const ensureMod = (id: ModuleId) => {
+              if (!base.some((m) => m.id === id)) {
+                const md = MODULE_DEFINITIONS.find((m) => m.id === id);
+                if (md) base = [...base, md];
+              }
+            };
+            if (hasPercGrant) ensureMod("perc");
+            if (wantSeps) ensureMod("sesps");
+            if (wantHoras) ensureMod("distribucion");
+            base = base.slice().sort((a, b) => MODULE_ORDER.indexOf(a.id) - MODULE_ORDER.indexOf(b.id));
             // Almacen siempre ve sus modulos completos (para llegar a Insumos).
             if (serviceProfile.serviceId === "almacen") return base;
             return base.filter((mod) => {
               const grantVisible =
                 (mod.id === "perc" && hasPercGrant) ||
-                (mod.id !== "perc" && grants.includes("panel-services"));
+                (mod.id === "sesps" && wantSeps) ||
+                (mod.id === "distribucion" && wantHoras);
               return serviceProfile.isChief || !restrict || cm.includes(mod.id) || grantVisible;
             });
           })();
@@ -11084,7 +11108,9 @@ export default function Home() {
       // SEPS -> Abrir SEPS/Monitoreo/SEPS Servicios. Horas -> igual con Horas.
       // "X Servicios" lleva a la ventana "ver tabuladores por servicio" (panel-services).
       children: (() => {
-        const canManage = isAdmin || isSupervisor || hasGrant("panel-services");
+        const canManagePerc = isAdmin || isSupervisor || hasGrant("panel-services-perc");
+        const canManageSeps = isAdmin || isSupervisor || hasGrant("panel-services-seps");
+        const canManageHoras = isAdmin || isSupervisor || hasGrant("panel-services-horas");
         const serviciosChild = (label: string) => ({
           id: "panel-services",
           label,
@@ -11120,7 +11146,7 @@ export default function Home() {
             ...(isAdmin || hasGrant("panel-admin-export")
               ? [{ id: "panel-admin-export", label: "Consolidados PERC", detail: "Descarga consolidado", badge: "XL", icon: "consolidado" }]
               : []),
-            ...(canManage ? [serviciosChild("PERC Servicios")] : []),
+            ...(canManagePerc ? [serviciosChild("PERC Servicios")] : []),
             ...(isAdmin || hasGrant("panel-gastos-perc")
               ? [{ id: "panel-gastos-perc", label: "Gastos PERC", detail: "Distribución de gasto general", badge: "GP", icon: "consolidado" }]
               : []),
@@ -11135,7 +11161,7 @@ export default function Home() {
               ? [{ id: "panel-seps", label: "Abrir SEPS", detail: "Ir al tabulador SEPS", badge: "SE", icon: "seps" }]
               : []),
             monitorChild("panel-monitor-seps"),
-            ...(canManage ? [serviciosChild("SEPS Servicios")] : []),
+            ...(canManageSeps ? [serviciosChild("SEPS Servicios")] : []),
           ];
         }
         if (mod.id === "distribucion") {
@@ -11144,7 +11170,7 @@ export default function Home() {
               ? [{ id: "panel-horas", label: "Abrir Dis/horas", detail: "Ir al tabulador de Horas", badge: "HO", icon: "horas" }]
               : []),
             monitorChild("panel-monitor-horas"),
-            ...(canManage ? [serviciosChild("Horas Servicios")] : []),
+            ...(canManageHoras ? [serviciosChild("Horas Servicios")] : []),
           ];
         }
         return undefined;
@@ -13460,7 +13486,7 @@ export default function Home() {
             </div>
           ) : null}
 
-          {isAdmin || isSupervisor ? (
+          {isAdmin || isSupervisor || hasGrant("panel-services-perc") || hasGrant("panel-services-seps") || hasGrant("panel-services-horas") ? (
             <section id="panel-services" data-view="panel-services" className={`relative z-20 rounded-[24px] border border-amber-400/45 p-5 ring-1 ring-amber-400/10 ${
               isLightPanelTheme
                 ? "bg-white text-slate-900 shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_18px_50px_rgba(15,23,42,0.10)]"
