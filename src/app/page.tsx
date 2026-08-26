@@ -4477,7 +4477,7 @@ export default function Home() {
   // Usuario seleccionado en la vista maestro-detalle de "Usuarios y permisos".
   const [adminSelectedUserUid, setAdminSelectedUserUid] = useState<string | null>(null);
   const [adminUserQuery, setAdminUserQuery] = useState("");
-  const [viewSvcQuery, setViewSvcQuery] = useState("");
+  const [viewQ, setViewQ] = useState<{ perc: string; seps: string; horas: string }>({ perc: "", seps: "", horas: "" });
   const [calendarOverrides, setCalendarOverrides] = useState<Record<string, string[]>>({});
   // El calendario anual se quito de la vista; conservamos el setter por compatibilidad.
   const [, setPublicDashboardMonths] = useState<PublicDashboardMonth[]>([]);
@@ -15627,67 +15627,94 @@ export default function Home() {
                             </span>
                             <div>
                               <p className="text-sm font-semibold text-white">Ver tabuladores de otros servicios</p>
-                              <p className="text-[11px] text-slate-400">Elegí por módulo qué servicios puede consultar (solo lectura). PERC, SEPS y Horas se asignan por separado.</p>
+                              <p className="text-[11px] text-slate-400">Buscá y elegí, por módulo, qué servicios puede consultar (solo lectura).</p>
                             </div>
                           </div>
-                          <input
-                            value={viewSvcQuery}
-                            onChange={(e) => setViewSvcQuery(e.target.value)}
-                            placeholder="Buscar servicio…"
-                            className="mt-3 w-full rounded-xl border border-white/10 bg-[#1b2537] px-3 py-2 text-xs text-white outline-none placeholder:text-slate-500 focus:border-amber-400"
-                          />
-                          <div className="mt-3 space-y-4">
-                            {[
-                              { key: "perc", label: "PERC", chip: "border-cyan-400/30 bg-cyan-500/15 text-cyan-200", box: "border-cyan-400/50 bg-cyan-500/12", chk: "border-cyan-400 bg-cyan-500", arr: draft.viewPerc },
-                              { key: "seps", label: "SEPS", chip: "border-violet-400/30 bg-violet-500/15 text-violet-200", box: "border-violet-400/50 bg-violet-500/12", chk: "border-violet-400 bg-violet-500", arr: draft.viewSeps },
-                              { key: "horas", label: "Horas", chip: "border-amber-400/30 bg-amber-500/15 text-amber-200", box: "border-amber-400/50 bg-amber-500/12", chk: "border-amber-400 bg-amber-500", arr: draft.viewHoras },
-                            ].map((mod) => {
-                              const q = viewSvcQuery.trim().toLowerCase();
-                              const list = SERVICE_DEFINITIONS.filter((svc) => {
-                                const has =
-                                  mod.key === "perc"
-                                    ? (getAreaById(svc.id)?.modules.includes("perc") ?? false)
-                                    : mod.key === "seps"
-                                      ? !!getSepsTemplate(svc.id)
-                                      : !!getHorasTemplate(svc.id);
-                                return has && (!q || svc.name.toLowerCase().includes(q));
-                              });
+                          <div className="mt-3 space-y-2.5">
+                            {([
+                              { key: "perc" as const, label: "PERC", chip: "border-cyan-400/30 bg-cyan-500/15 text-cyan-200", pill: "border-cyan-400/40 bg-cyan-500/15 text-cyan-100", focus: "focus:border-cyan-400", arr: draft.viewPerc },
+                              { key: "seps" as const, label: "SEPS", chip: "border-violet-400/30 bg-violet-500/15 text-violet-200", pill: "border-violet-400/40 bg-violet-500/15 text-violet-100", focus: "focus:border-violet-400", arr: draft.viewSeps },
+                              { key: "horas" as const, label: "Horas", chip: "border-amber-400/30 bg-amber-500/15 text-amber-200", pill: "border-amber-400/40 bg-amber-500/15 text-amber-100", focus: "focus:border-amber-400", arr: draft.viewHoras },
+                            ]).map((mod) => {
+                              const q = viewQ[mod.key].trim().toLowerCase();
+                              const selected = SERVICE_DEFINITIONS.filter((svc) => mod.arr.includes(svc.id));
+                              const results = q
+                                ? SERVICE_DEFINITIONS.filter((svc) => {
+                                    const has =
+                                      mod.key === "perc"
+                                        ? (getAreaById(svc.id)?.modules.includes("perc") ?? false)
+                                        : mod.key === "seps"
+                                          ? !!getSepsTemplate(svc.id)
+                                          : !!getHorasTemplate(svc.id);
+                                    return has && svc.name.toLowerCase().includes(q);
+                                  }).slice(0, 10)
+                                : [];
+                              const setArr = (next: string[]) =>
+                                updateAdminDraft(
+                                  selectedUser.uid,
+                                  mod.key === "perc" ? { viewPerc: next } : mod.key === "seps" ? { viewSeps: next } : { viewHoras: next },
+                                );
+                              const setQ = (val: string) =>
+                                setViewQ((p) =>
+                                  mod.key === "perc" ? { ...p, perc: val } : mod.key === "seps" ? { ...p, seps: val } : { ...p, horas: val },
+                                );
                               return (
-                                <div key={mod.key}>
+                                <div key={mod.key} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                                   <div className="flex items-center gap-2">
                                     <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${mod.chip}`}>{mod.label}</span>
-                                    {mod.arr.length > 0 ? <span className="text-[10px] font-medium text-slate-400">{mod.arr.length} elegido(s)</span> : null}
+                                    <span className="text-[11px] font-medium text-slate-400">{mod.arr.length} servicio(s)</span>
                                   </div>
-                                  <div className="mt-2 grid max-h-40 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2">
-                                    {list.length === 0 ? (
-                                      <p className="px-1 py-1.5 text-[11px] text-slate-500">Sin servicios que coincidan.</p>
-                                    ) : (
-                                      list.map((svc) => {
-                                        const on = mod.arr.includes(svc.id);
-                                        return (
+                                  {selected.length > 0 ? (
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {selected.map((svc) => (
+                                        <span key={svc.id} className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium ${mod.pill}`}>
+                                          {svc.name}
                                           <button
-                                            key={svc.id}
                                             type="button"
-                                            onClick={() => {
-                                              const next = on ? mod.arr.filter((x) => x !== svc.id) : [...mod.arr, svc.id];
-                                              updateAdminDraft(
-                                                selectedUser.uid,
-                                                mod.key === "perc" ? { viewPerc: next } : mod.key === "seps" ? { viewSeps: next } : { viewHoras: next },
-                                              );
-                                            }}
-                                            className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition ${
-                                              on ? mod.box : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
-                                            }`}
+                                            aria-label={`Quitar ${svc.name}`}
+                                            onClick={() => setArr(mod.arr.filter((x) => x !== svc.id))}
+                                            className="text-white/60 transition hover:text-white"
                                           >
-                                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${on ? `${mod.chk} text-white` : "border-white/25 text-transparent"}`}>
-                                              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-                                            </span>
-                                            <span className={`text-xs font-medium leading-tight ${on ? "text-white" : "text-slate-300"}`}>{svc.name}</span>
+                                            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
                                           </button>
-                                        );
-                                      })
-                                    )}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                  <div className="relative mt-2">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                                    <input
+                                      value={viewQ[mod.key]}
+                                      onChange={(e) => setQ(e.target.value)}
+                                      placeholder={`Buscar servicio de ${mod.label}…`}
+                                      className={`w-full rounded-lg border border-white/10 bg-[#1b2537] py-2 pl-8 pr-3 text-xs text-white outline-none placeholder:text-slate-500 ${mod.focus}`}
+                                    />
                                   </div>
+                                  {q ? (
+                                    <div className="mt-1.5 max-h-44 space-y-0.5 overflow-y-auto rounded-lg border border-white/5 bg-black/20 p-1">
+                                      {results.length === 0 ? (
+                                        <p className="px-2 py-1.5 text-[11px] text-slate-500">Sin servicios que coincidan.</p>
+                                      ) : (
+                                        results.map((svc) => {
+                                          const on = mod.arr.includes(svc.id);
+                                          return (
+                                            <button
+                                              key={svc.id}
+                                              type="button"
+                                              onClick={() => setArr(on ? mod.arr.filter((x) => x !== svc.id) : [...mod.arr, svc.id])}
+                                              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${on ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/5"}`}
+                                            >
+                                              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-emerald-400 bg-emerald-500 text-white" : "border-white/25 text-transparent"}`}>
+                                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                                              </span>
+                                              <span className="leading-tight">{svc.name}</span>
+                                              {on ? <span className="ml-auto text-[10px] font-semibold text-emerald-300">Agregado</span> : null}
+                                            </button>
+                                          );
+                                        })
+                                      )}
+                                    </div>
+                                  ) : null}
                                 </div>
                               );
                             })}
