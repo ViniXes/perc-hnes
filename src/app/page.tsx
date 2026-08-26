@@ -13335,31 +13335,42 @@ export default function Home() {
 
             <section
               id="panel-overview"
-              className={`hidden rounded-2xl px-5 py-3.5 shadow-[0_24px_80px_rgba(3,7,18,0.45)] xl:block ${
+              className={`relative hidden overflow-hidden rounded-[22px] px-5 py-4 shadow-[0_24px_80px_rgba(3,7,18,0.45)] xl:block ${
                 isLightPanelTheme
                   ? "border border-slate-200 bg-white text-slate-900"
-                  : "border border-white/10 bg-[#202c41]"
+                  : "border border-white/10 bg-gradient-to-br from-[#233152] via-[#1b2740] to-[#141d2f] text-white"
               }`}
             >
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="h-10 w-1.5 shrink-0 rounded-full bg-gradient-to-b from-cyan-400 to-blue-500" />
+            {/* Adornos: halo suave + linea de acento superior (solo tema oscuro). */}
+            {!isLightPanelTheme ? (
+              <>
+                <span aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-cyan-500/10 blur-3xl" />
+                <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
+              </>
+            ) : null}
+            <div className="relative flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex min-w-0 items-center gap-3.5">
+                <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg shadow-cyan-500/25 ring-1 ring-white/20">
+                  <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 12h4l2-6 4 12 2-6h6" />
+                  </svg>
+                </span>
                 <div className="min-w-0">
-                  <h1 className={`truncate text-lg font-bold tracking-tight sm:text-xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                  <p className={`text-[10px] font-semibold uppercase tracking-[0.24em] ${isLightPanelTheme ? "text-cyan-600/80" : "text-cyan-300/80"}`}>
+                    {currentService ? "Servicio" : isSupervisor ? "Panel de supervisión" : "Panel de administración"}
+                  </p>
+                  <h1 className={`mt-0.5 truncate text-lg font-bold tracking-tight sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
                     {currentService
                       ? currentService.name
                       : isSupervisor
                         ? "Panel de Supervisión"
                         : "Módulo de Administración"}
                   </h1>
-                  <p className={`mt-0.5 truncate text-sm font-semibold ${isLightPanelTheme ? "text-slate-700" : "text-cyan-200/90"}`}>
-                    Bienvenido/a {toTitleCase(welcomeName)}
+                  <p className={`mt-0.5 truncate text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                    Bienvenido/a{" "}
+                    <span className={isLightPanelTheme ? "font-semibold text-slate-900" : "font-semibold text-cyan-200"}>{toTitleCase(welcomeName)}</span>
+                    {currentService ? <span className="text-slate-400"> · Período de {periodLabel}</span> : null}
                   </p>
-                  {currentService ? (
-                    <p className="mt-0.5 truncate text-xs font-medium text-slate-400">
-                      Período de {periodLabel}
-                    </p>
-                  ) : null}
                 </div>
               </div>
 
@@ -13367,10 +13378,10 @@ export default function Home() {
                 {/* Fecha y hora en vivo, en una tarjeta con icono. */}
                 <div
                   className={`flex items-center gap-2.5 rounded-2xl px-3.5 py-2 ${
-                    isLightPanelTheme ? "bg-slate-100" : "bg-[#1b2537]"
+                    isLightPanelTheme ? "bg-slate-100" : "border border-white/10 bg-white/[0.04] backdrop-blur-sm"
                   }`}
                 >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm shadow-cyan-500/30">
                     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <rect x="3" y="4" width="18" height="18" rx="2" />
                       <path d="M16 2v4M8 2v4M3 10h18" />
