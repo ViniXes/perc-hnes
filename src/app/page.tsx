@@ -9536,6 +9536,10 @@ export default function Home() {
               captureModules: [],
               supervisorModules: ["perc", "sesps", "distribucion"],
               permissions: { canEdit: true, canManageUsers: false, canToggleCapture: false },
+              menuGrants: draft.menuGrants,
+              viewPerc: draft.viewPerc,
+              viewSeps: draft.viewSeps,
+              viewHoras: draft.viewHoras,
               updatedAt: serverTimestamp(),
             }
           : {
