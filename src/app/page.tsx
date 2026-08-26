@@ -109,6 +109,9 @@ type ManagedUser = {
   isActive: boolean;
   // Submenus extra otorgados por el admin (ids de GRANTABLE_MENUS).
   menuGrants: string[];
+  // Servicios que puede CONSULTAR (ver tabuladores, solo lectura), elegidos por el
+  // admin. No es "todos": solo los serviceIds seleccionados.
+  viewServices: string[];
   // Documento de identidad unico (evita registros duplicados): DUI (00000000-0),
   // pasaporte o carne de residencia. docType = "dui" | "pasaporte" | "carne".
   docType: string;
@@ -124,6 +127,7 @@ type AdminDraft = {
   captureModules: ModuleId[];
   department: string;
   menuGrants: string[];
+  viewServices: string[];
   email: string;
   username: string;
   name: string;
@@ -262,9 +266,6 @@ const GRANTABLE_MENUS: { id: string; label: string; group: "PERC" | "SEPS" | "Ho
   { id: "panel-admin-export", label: "Consolidados PERC (descarga)", group: "PERC" },
   { id: "panel-gastos-perc", label: "Gastos PERC", group: "PERC" },
   { id: "panel-depreciacion-perc", label: "Depreciación Mensual PERC", group: "PERC" },
-  { id: "panel-services-perc", label: "Ver tabuladores PERC de todos los servicios", group: "PERC" },
-  { id: "panel-services-seps", label: "Ver tabuladores SEPS de todos los servicios", group: "SEPS" },
-  { id: "panel-services-horas", label: "Ver tabuladores de Horas de todos los servicios", group: "Horas" },
 ];
 type CensoRow = { key: string; label: string };
 const CENSO_BASE_ROWS: CensoRow[] = [
@@ -2994,6 +2995,9 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
       : [],
     docType: typeof data.docType === "string" ? data.docType : "",
     docNumber: typeof data.docNumber === "string" ? data.docNumber : "",
+    viewServices: Array.isArray(data.viewServices)
+      ? (data.viewServices.filter((x): x is string => typeof x === "string"))
+      : [],
   };
 }
 
@@ -3011,6 +3015,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         captureModules: managedUser.captureModules,
         department: managedUser.department || "",
         menuGrants: managedUser.menuGrants,
+        viewServices: managedUser.viewServices,
         email: managedUser.email,
         username: managedUser.username,
         name: managedUser.name,
@@ -4460,6 +4465,7 @@ export default function Home() {
   // Usuario seleccionado en la vista maestro-detalle de "Usuarios y permisos".
   const [adminSelectedUserUid, setAdminSelectedUserUid] = useState<string | null>(null);
   const [adminUserQuery, setAdminUserQuery] = useState("");
+  const [viewSvcQuery, setViewSvcQuery] = useState("");
   const [calendarOverrides, setCalendarOverrides] = useState<Record<string, string[]>>({});
   // El calendario anual se quito de la vista; conservamos el setter por compatibilidad.
   const [, setPublicDashboardMonths] = useState<PublicDashboardMonth[]>([]);
@@ -4977,6 +4983,12 @@ export default function Home() {
   // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
   // y los administradores (por temas de calidad y control).
   const hasGrant = (id: string) => (serviceProfile?.menuGrants ?? []).includes(id);
+  // Servicios que este usuario puede CONSULTAR (ver tabuladores, solo lectura),
+  // elegidos por el admin. Determinan que modulos del visor se le habilitan.
+  const viewServiceIds = serviceProfile?.viewServices ?? [];
+  const viewHasPerc = viewServiceIds.some((id) => getAreaById(id)?.modules.includes("perc") ?? false);
+  const viewHasSeps = viewServiceIds.some((id) => !!getSepsTemplate(id));
+  const viewHasHoras = viewServiceIds.some((id) => !!getHorasTemplate(id));
   const canViewCenso = isAdmin || isSupervisor || hasGrant("panel-censo");
   const canEditCenso =
     isAdmin || normalizeKey(serviceProfile?.username || "") === CENSO_EDITOR_USERNAME;
@@ -5017,15 +5029,10 @@ export default function Home() {
       if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
       // Acceso "Ver tabuladores de todos los servicios" por modulo (por-usuario):
       // incluye el servicio si tiene el modulo correspondiente al acceso otorgado.
-      const g = serviceProfile?.menuGrants ?? [];
-      const area = getAreaById(service.id);
-      const grantView =
-        (g.includes("panel-services-perc") && (area?.modules.includes("perc") ?? false)) ||
-        (g.includes("panel-services-seps") && !!getSepsTemplate(service.id)) ||
-        (g.includes("panel-services-horas") && !!getHorasTemplate(service.id));
+      const grantView = (serviceProfile?.viewServices ?? []).includes(service.id);
       return (
         isAdmin ||
-        (area?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false) ||
+        (getAreaById(service.id)?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false) ||
         grantView
       );
     });
@@ -5045,15 +5052,10 @@ export default function Home() {
       if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
       // Acceso "Ver tabuladores de todos los servicios" por modulo (por-usuario):
       // incluye el servicio si tiene el modulo correspondiente al acceso otorgado.
-      const g = serviceProfile?.menuGrants ?? [];
-      const area = getAreaById(service.id);
-      const grantView =
-        (g.includes("panel-services-perc") && (area?.modules.includes("perc") ?? false)) ||
-        (g.includes("panel-services-seps") && !!getSepsTemplate(service.id)) ||
-        (g.includes("panel-services-horas") && !!getHorasTemplate(service.id));
+      const grantView = (serviceProfile?.viewServices ?? []).includes(service.id);
       return (
         isAdmin ||
-        (area?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false) ||
+        (getAreaById(service.id)?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false) ||
         grantView
       );
     });
@@ -9517,6 +9519,7 @@ export default function Home() {
               department: null,
               captureModules: draft.captureModules,
               menuGrants: draft.menuGrants,
+              viewServices: draft.viewServices,
               permissions: nextPermissions,
               updatedAt: serverTimestamp(),
             },
@@ -11038,11 +11041,11 @@ export default function Home() {
             const grants = serviceProfile.menuGrants ?? [];
             const percGrants = [
               "panel-censo", "panel-insumos", "panel-admin-export",
-              "panel-gastos-perc", "panel-depreciacion-perc", "panel-services-perc",
+              "panel-gastos-perc", "panel-depreciacion-perc",
             ];
-            const hasPercGrant = grants.some((g) => percGrants.includes(g));
-            const wantSeps = grants.includes("panel-services-seps");
-            const wantHoras = grants.includes("panel-services-horas");
+            const hasPercGrant = grants.some((g) => percGrants.includes(g)) || viewHasPerc;
+            const wantSeps = viewHasSeps;
+            const wantHoras = viewHasHoras;
             // Base = modulos del area. Si le otorgaron un acceso de menu de un modulo
             // pero su area NO lo incluye (p.ej. Unidad Financiera solo tiene Horas y le
             // dan "Gastos PERC" o "Ver tabuladores PERC"), agregamos ese modulo para que
@@ -11108,9 +11111,9 @@ export default function Home() {
       // SEPS -> Abrir SEPS/Monitoreo/SEPS Servicios. Horas -> igual con Horas.
       // "X Servicios" lleva a la ventana "ver tabuladores por servicio" (panel-services).
       children: (() => {
-        const canManagePerc = isAdmin || isSupervisor || hasGrant("panel-services-perc");
-        const canManageSeps = isAdmin || isSupervisor || hasGrant("panel-services-seps");
-        const canManageHoras = isAdmin || isSupervisor || hasGrant("panel-services-horas");
+        const canManagePerc = isAdmin || isSupervisor || viewHasPerc;
+        const canManageSeps = isAdmin || isSupervisor || viewHasSeps;
+        const canManageHoras = isAdmin || isSupervisor || viewHasHoras;
         const serviciosChild = (label: string) => ({
           id: "panel-services",
           label,
@@ -13486,7 +13489,7 @@ export default function Home() {
             </div>
           ) : null}
 
-          {isAdmin || isSupervisor || hasGrant("panel-services-perc") || hasGrant("panel-services-seps") || hasGrant("panel-services-horas") ? (
+          {isAdmin || isSupervisor || viewServiceIds.length > 0 ? (
             <section id="panel-services" data-view="panel-services" className={`relative z-20 rounded-[24px] border border-amber-400/45 p-5 ring-1 ring-amber-400/10 ${
               isLightPanelTheme
                 ? "bg-white text-slate-900 shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_18px_50px_rgba(15,23,42,0.10)]"
@@ -15581,6 +15584,60 @@ export default function Home() {
                               );
                             })}
                           </div>
+                        </div>
+
+                        <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <div className="flex items-center gap-2.5">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 text-amber-300">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9.5h18M9 9.5V20" />
+                              </svg>
+                            </span>
+                            <div>
+                              <p className="text-sm font-semibold text-white">Ver tabuladores de otros servicios</p>
+                              <p className="text-[11px] text-slate-400">Elegí los servicios que este usuario podrá consultar (solo lectura). Verá los tabuladores PERC/SEPS/Horas que cada servicio tenga.</p>
+                            </div>
+                          </div>
+                          <input
+                            value={viewSvcQuery}
+                            onChange={(e) => setViewSvcQuery(e.target.value)}
+                            placeholder="Buscar servicio…"
+                            className="mt-3 w-full rounded-xl border border-white/10 bg-[#1b2537] px-3 py-2 text-xs text-white outline-none placeholder:text-slate-500 focus:border-amber-400"
+                          />
+                          <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto pr-1">
+                            {SERVICE_DEFINITIONS.filter((svc) => {
+                              const q = viewSvcQuery.trim().toLowerCase();
+                              return !q || svc.name.toLowerCase().includes(q);
+                            }).map((svc) => {
+                              const on = draft.viewServices.includes(svc.id);
+                              return (
+                                <button
+                                  key={svc.id}
+                                  type="button"
+                                  onClick={() =>
+                                    updateAdminDraft(selectedUser.uid, {
+                                      viewServices: on
+                                        ? draft.viewServices.filter((x) => x !== svc.id)
+                                        : [...draft.viewServices, svc.id],
+                                    })
+                                  }
+                                  className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition ${
+                                    on
+                                      ? "border-amber-400/50 bg-amber-500/12 shadow-[0_0_0_1px_rgba(251,191,36,0.2)]"
+                                      : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                                  }`}
+                                >
+                                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${on ? "border-amber-400 bg-amber-500 text-white" : "border-white/25 text-transparent"}`}>
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                                  </span>
+                                  <span className={`text-xs font-medium leading-tight ${on ? "text-white" : "text-slate-300"}`}>{svc.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {draft.viewServices.length > 0 ? (
+                            <p className="mt-2 text-[11px] font-medium text-amber-200/80">{draft.viewServices.length} servicio(s) seleccionado(s).</p>
+                          ) : null}
                         </div>
 
                         <div className="mt-5 flex gap-2 border-t border-white/10 pt-4">
