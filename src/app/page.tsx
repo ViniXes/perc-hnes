@@ -15394,6 +15394,69 @@ export default function Home() {
                           </span>
                         </div>
 
+                        {(() => {
+                          const su = selectedUser;
+                          const roleLbl = su.role === "admin" ? "Administrador" : su.isDirector ? "Directora" : su.role === "supervisor" ? "Supervisor" : "Servicio";
+                          const svcLbl = getServiceById(su.serviceId)?.name || "Sin servicio";
+                          const grpLbl = su.department ? departmentEditorLabel(su.department) : "";
+                          const modLbl = (m: string) => (m === "perc" ? "PERC" : m === "sesps" ? "SEPS" : "Horas");
+                          const menuLbl = (id: string) => GRANTABLE_MENUS.find((g) => g.id === id)?.label || id;
+                          const svcName = (id: string) => getServiceById(id)?.name || id;
+                          const cap = su.captureModules ?? [];
+                          const grants = su.menuGrants ?? [];
+                          const vp = su.viewPerc ?? [];
+                          const vs = su.viewSeps ?? [];
+                          const vh = su.viewHoras ?? [];
+                          const chipCls = (tone: string) =>
+                            `inline-flex items-center rounded-lg border px-2 py-0.5 text-[11px] font-medium ${
+                              tone === "emerald" ? "border-emerald-400/30 bg-emerald-500/12 text-emerald-200"
+                              : tone === "cyan" ? "border-cyan-400/30 bg-cyan-500/12 text-cyan-200"
+                              : tone === "violet" ? "border-violet-400/30 bg-violet-500/12 text-violet-200"
+                              : tone === "amber" ? "border-amber-400/30 bg-amber-500/12 text-amber-200"
+                              : tone === "blue" ? "border-blue-400/30 bg-blue-500/12 text-blue-200"
+                              : "border-white/10 bg-white/[0.06] text-slate-200"
+                            }`;
+                          const none = <span className="text-[11px] text-slate-500">— ninguno —</span>;
+                          return (
+                            <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.04] p-3.5">
+                              <div className="flex items-center gap-2">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-emerald-300"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-200/90">Permisos guardados</p>
+                              </div>
+                              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                <span className={chipCls("blue")}>{roleLbl}</span>
+                                <span className={chipCls(su.isActive ? "emerald" : "slate")}>{su.isActive ? "Activo" : "Inactivo"}</span>
+                                {su.permissions.canEdit ? <span className={chipCls("emerald")}>Captura</span> : null}
+                                {su.permissions.canManageUsers ? <span className={chipCls("blue")}>Gestiona usuarios</span> : null}
+                              </div>
+                              <div className="mt-2 text-[11px] text-slate-300">
+                                <span className="text-slate-500">Servicio:</span> {svcLbl}
+                                {grpLbl ? <> · <span className="text-slate-500">Grupo:</span> {grpLbl}</> : null}
+                              </div>
+                              <div className="mt-2 space-y-1.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="text-[11px] text-slate-500">Tableros de captura:</span>
+                                  {cap.length ? cap.map((m) => <span key={m} className={chipCls("slate")}>{modLbl(m)}</span>) : none}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="text-[11px] text-slate-500">Accesos de menú:</span>
+                                  {grants.length ? grants.map((g) => <span key={g} className={chipCls("slate")}>{menuLbl(g)}</span>) : none}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="text-[11px] text-slate-500">Ver tabuladores:</span>
+                                  {(vp.length || vs.length || vh.length) ? (
+                                    <>
+                                      {vp.map((id) => <span key={"p" + id} className={chipCls("cyan")}>PERC · {svcName(id)}</span>)}
+                                      {vs.map((id) => <span key={"s" + id} className={chipCls("violet")}>SEPS · {svcName(id)}</span>)}
+                                      {vh.map((id) => <span key={"h" + id} className={chipCls("amber")}>Horas · {svcName(id)}</span>)}
+                                    </>
+                                  ) : none}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         <div className="mt-4 grid gap-3 sm:grid-cols-2">
                           <label className="block">
                             <span className="text-xs font-medium text-slate-400">Servicio</span>
