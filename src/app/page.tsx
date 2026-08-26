@@ -109,9 +109,11 @@ type ManagedUser = {
   isActive: boolean;
   // Submenus extra otorgados por el admin (ids de GRANTABLE_MENUS).
   menuGrants: string[];
-  // Servicios que puede CONSULTAR (ver tabuladores, solo lectura), elegidos por el
-  // admin. No es "todos": solo los serviceIds seleccionados.
-  viewServices: string[];
+  // Servicios que puede CONSULTAR (ver tabuladores, solo lectura), por modulo:
+  // el admin elige por separado que servicios ve en PERC, SEPS y Horas.
+  viewPerc: string[];
+  viewSeps: string[];
+  viewHoras: string[];
   // Documento de identidad unico (evita registros duplicados): DUI (00000000-0),
   // pasaporte o carne de residencia. docType = "dui" | "pasaporte" | "carne".
   docType: string;
@@ -127,7 +129,9 @@ type AdminDraft = {
   captureModules: ModuleId[];
   department: string;
   menuGrants: string[];
-  viewServices: string[];
+  viewPerc: string[];
+  viewSeps: string[];
+  viewHoras: string[];
   email: string;
   username: string;
   name: string;
@@ -2995,8 +2999,14 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
       : [],
     docType: typeof data.docType === "string" ? data.docType : "",
     docNumber: typeof data.docNumber === "string" ? data.docNumber : "",
-    viewServices: Array.isArray(data.viewServices)
-      ? (data.viewServices.filter((x): x is string => typeof x === "string"))
+    viewPerc: Array.isArray(data.viewPerc)
+      ? (data.viewPerc.filter((x): x is string => typeof x === "string"))
+      : [],
+    viewSeps: Array.isArray(data.viewSeps)
+      ? (data.viewSeps.filter((x): x is string => typeof x === "string"))
+      : [],
+    viewHoras: Array.isArray(data.viewHoras)
+      ? (data.viewHoras.filter((x): x is string => typeof x === "string"))
       : [],
   };
 }
@@ -3015,7 +3025,9 @@ function buildAdminDrafts(users: ManagedUser[]) {
         captureModules: managedUser.captureModules,
         department: managedUser.department || "",
         menuGrants: managedUser.menuGrants,
-        viewServices: managedUser.viewServices,
+        viewPerc: managedUser.viewPerc,
+        viewSeps: managedUser.viewSeps,
+        viewHoras: managedUser.viewHoras,
         email: managedUser.email,
         username: managedUser.username,
         name: managedUser.name,
@@ -4984,11 +4996,22 @@ export default function Home() {
   // y los administradores (por temas de calidad y control).
   const hasGrant = (id: string) => (serviceProfile?.menuGrants ?? []).includes(id);
   // Servicios que este usuario puede CONSULTAR (ver tabuladores, solo lectura),
-  // elegidos por el admin. Determinan que modulos del visor se le habilitan.
-  const viewServiceIds = serviceProfile?.viewServices ?? [];
-  const viewHasPerc = viewServiceIds.some((id) => getAreaById(id)?.modules.includes("perc") ?? false);
-  const viewHasSeps = viewServiceIds.some((id) => !!getSepsTemplate(id));
-  const viewHasHoras = viewServiceIds.some((id) => !!getHorasTemplate(id));
+  // elegidos por el admin POR MODULO. Determinan que se le habilita en el visor.
+  const viewPerc = serviceProfile?.viewPerc ?? [];
+  const viewSeps = serviceProfile?.viewSeps ?? [];
+  const viewHoras = serviceProfile?.viewHoras ?? [];
+  const viewHasPerc = viewPerc.length > 0;
+  const viewHasSeps = viewSeps.length > 0;
+  const viewHasHoras = viewHoras.length > 0;
+  const viewAnyServiceIds = Array.from(new Set([...viewPerc, ...viewSeps, ...viewHoras]));
+  // Filtro por SERVICIO + MODULO para el visor: al elegir un servicio, cada tablero
+  // (PERC/SEPS/Horas) se muestra solo si ese servicio esta en la lista del modulo.
+  // Admin/supervisores y el propio servicio del usuario no se filtran.
+  const _viewSvcId = currentService?.id ?? null;
+  const _viewBypass = isAdmin || isSupervisor || (!!_viewSvcId && _viewSvcId === (serviceProfile?.serviceId ?? null));
+  const allowViewPerc = _viewBypass || (!!_viewSvcId && viewPerc.includes(_viewSvcId));
+  const allowViewSeps = _viewBypass || (!!_viewSvcId && viewSeps.includes(_viewSvcId));
+  const allowViewHoras = _viewBypass || (!!_viewSvcId && viewHoras.includes(_viewSvcId));
   const canViewCenso = isAdmin || isSupervisor || hasGrant("panel-censo");
   const canEditCenso =
     isAdmin || normalizeKey(serviceProfile?.username || "") === CENSO_EDITOR_USERNAME;
@@ -5029,7 +5052,10 @@ export default function Home() {
       if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
       // Acceso "Ver tabuladores de todos los servicios" por modulo (por-usuario):
       // incluye el servicio si tiene el modulo correspondiente al acceso otorgado.
-      const grantView = (serviceProfile?.viewServices ?? []).includes(service.id);
+      const grantView =
+        (serviceProfile?.viewPerc ?? []).includes(service.id) ||
+        (serviceProfile?.viewSeps ?? []).includes(service.id) ||
+        (serviceProfile?.viewHoras ?? []).includes(service.id);
       return (
         isAdmin ||
         (getAreaById(service.id)?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false) ||
@@ -5052,7 +5078,10 @@ export default function Home() {
       if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
       // Acceso "Ver tabuladores de todos los servicios" por modulo (por-usuario):
       // incluye el servicio si tiene el modulo correspondiente al acceso otorgado.
-      const grantView = (serviceProfile?.viewServices ?? []).includes(service.id);
+      const grantView =
+        (serviceProfile?.viewPerc ?? []).includes(service.id) ||
+        (serviceProfile?.viewSeps ?? []).includes(service.id) ||
+        (serviceProfile?.viewHoras ?? []).includes(service.id);
       return (
         isAdmin ||
         (getAreaById(service.id)?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false) ||
@@ -9519,7 +9548,9 @@ export default function Home() {
               department: null,
               captureModules: draft.captureModules,
               menuGrants: draft.menuGrants,
-              viewServices: draft.viewServices,
+              viewPerc: draft.viewPerc,
+              viewSeps: draft.viewSeps,
+              viewHoras: draft.viewHoras,
               permissions: nextPermissions,
               updatedAt: serverTimestamp(),
             },
@@ -13336,12 +13367,12 @@ export default function Home() {
               mobileView === "panel-horas")
               ? (() => {
                   const hasPerc =
-                    showModule("perc") &&
+                    showModule("perc") && allowViewPerc &&
                     (currentService.rows.length > 0 ||
                       !!getPercServFields(currentService.id));
-                  const hasSeps = showModule("sesps") && !!sepsTemplate;
+                  const hasSeps = showModule("sesps") && allowViewSeps && !!sepsTemplate;
                   const hasHoras =
-                    showModule("distribucion") &&
+                    showModule("distribucion") && allowViewHoras &&
                     !!getHorasTemplate(currentService.id);
                   const tabs = [
                     hasPerc ? { id: "panel-tabulator", label: "PERC" } : null,
@@ -13489,7 +13520,7 @@ export default function Home() {
             </div>
           ) : null}
 
-          {isAdmin || isSupervisor || viewServiceIds.length > 0 ? (
+          {isAdmin || isSupervisor || viewAnyServiceIds.length > 0 ? (
             <section id="panel-services" data-view="panel-services" className={`relative z-20 rounded-[24px] border border-amber-400/45 p-5 ring-1 ring-amber-400/10 ${
               isLightPanelTheme
                 ? "bg-white text-slate-900 shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_18px_50px_rgba(15,23,42,0.10)]"
@@ -13954,6 +13985,7 @@ export default function Home() {
 
           {currentService &&
           showModule("perc") &&
+          allowViewPerc &&
           (currentService.rows.length > 0 || getPercServFields(currentService.id)) ? (
             <>
             {renderSectionDivider("PERC", "Productividad por centros de costo", "cyan", isLightPanelTheme)}
@@ -14458,14 +14490,14 @@ export default function Home() {
             </>
           ) : null}
 
-          {showModule("sesps") && sepsSection ? (
+          {showModule("sesps") && allowViewSeps && sepsSection ? (
             <>
             {renderSectionDivider("SEPS", "Captura estadística", "violet", isLightPanelTheme)}
             <div data-view="panel-seps">{sepsSection}</div>
             </>
           ) : null}
 
-          {showModule("distribucion") && horasSection ? (
+          {showModule("distribucion") && allowViewHoras && horasSection ? (
             <>
             {renderSectionDivider("Dis/horas", "Reparto de horas del personal", "amber", isLightPanelTheme)}
             <div data-view="panel-horas">{horasSection}</div>
@@ -15595,7 +15627,7 @@ export default function Home() {
                             </span>
                             <div>
                               <p className="text-sm font-semibold text-white">Ver tabuladores de otros servicios</p>
-                              <p className="text-[11px] text-slate-400">Elegí los servicios que este usuario podrá consultar (solo lectura). Verá los tabuladores PERC/SEPS/Horas que cada servicio tenga.</p>
+                              <p className="text-[11px] text-slate-400">Elegí por módulo qué servicios puede consultar (solo lectura). PERC, SEPS y Horas se asignan por separado.</p>
                             </div>
                           </div>
                           <input
@@ -15604,40 +15636,62 @@ export default function Home() {
                             placeholder="Buscar servicio…"
                             className="mt-3 w-full rounded-xl border border-white/10 bg-[#1b2537] px-3 py-2 text-xs text-white outline-none placeholder:text-slate-500 focus:border-amber-400"
                           />
-                          <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto pr-1">
-                            {SERVICE_DEFINITIONS.filter((svc) => {
+                          <div className="mt-3 space-y-4">
+                            {[
+                              { key: "perc", label: "PERC", chip: "border-cyan-400/30 bg-cyan-500/15 text-cyan-200", box: "border-cyan-400/50 bg-cyan-500/12", chk: "border-cyan-400 bg-cyan-500", arr: draft.viewPerc },
+                              { key: "seps", label: "SEPS", chip: "border-violet-400/30 bg-violet-500/15 text-violet-200", box: "border-violet-400/50 bg-violet-500/12", chk: "border-violet-400 bg-violet-500", arr: draft.viewSeps },
+                              { key: "horas", label: "Horas", chip: "border-amber-400/30 bg-amber-500/15 text-amber-200", box: "border-amber-400/50 bg-amber-500/12", chk: "border-amber-400 bg-amber-500", arr: draft.viewHoras },
+                            ].map((mod) => {
                               const q = viewSvcQuery.trim().toLowerCase();
-                              return !q || svc.name.toLowerCase().includes(q);
-                            }).map((svc) => {
-                              const on = draft.viewServices.includes(svc.id);
+                              const list = SERVICE_DEFINITIONS.filter((svc) => {
+                                const has =
+                                  mod.key === "perc"
+                                    ? (getAreaById(svc.id)?.modules.includes("perc") ?? false)
+                                    : mod.key === "seps"
+                                      ? !!getSepsTemplate(svc.id)
+                                      : !!getHorasTemplate(svc.id);
+                                return has && (!q || svc.name.toLowerCase().includes(q));
+                              });
                               return (
-                                <button
-                                  key={svc.id}
-                                  type="button"
-                                  onClick={() =>
-                                    updateAdminDraft(selectedUser.uid, {
-                                      viewServices: on
-                                        ? draft.viewServices.filter((x) => x !== svc.id)
-                                        : [...draft.viewServices, svc.id],
-                                    })
-                                  }
-                                  className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition ${
-                                    on
-                                      ? "border-amber-400/50 bg-amber-500/12 shadow-[0_0_0_1px_rgba(251,191,36,0.2)]"
-                                      : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
-                                  }`}
-                                >
-                                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${on ? "border-amber-400 bg-amber-500 text-white" : "border-white/25 text-transparent"}`}>
-                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-                                  </span>
-                                  <span className={`text-xs font-medium leading-tight ${on ? "text-white" : "text-slate-300"}`}>{svc.name}</span>
-                                </button>
+                                <div key={mod.key}>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${mod.chip}`}>{mod.label}</span>
+                                    {mod.arr.length > 0 ? <span className="text-[10px] font-medium text-slate-400">{mod.arr.length} elegido(s)</span> : null}
+                                  </div>
+                                  <div className="mt-2 grid max-h-40 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2">
+                                    {list.length === 0 ? (
+                                      <p className="px-1 py-1.5 text-[11px] text-slate-500">Sin servicios que coincidan.</p>
+                                    ) : (
+                                      list.map((svc) => {
+                                        const on = mod.arr.includes(svc.id);
+                                        return (
+                                          <button
+                                            key={svc.id}
+                                            type="button"
+                                            onClick={() => {
+                                              const next = on ? mod.arr.filter((x) => x !== svc.id) : [...mod.arr, svc.id];
+                                              updateAdminDraft(
+                                                selectedUser.uid,
+                                                mod.key === "perc" ? { viewPerc: next } : mod.key === "seps" ? { viewSeps: next } : { viewHoras: next },
+                                              );
+                                            }}
+                                            className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition ${
+                                              on ? mod.box : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                                            }`}
+                                          >
+                                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${on ? `${mod.chk} text-white` : "border-white/25 text-transparent"}`}>
+                                              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                                            </span>
+                                            <span className={`text-xs font-medium leading-tight ${on ? "text-white" : "text-slate-300"}`}>{svc.name}</span>
+                                          </button>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                </div>
                               );
                             })}
                           </div>
-                          {draft.viewServices.length > 0 ? (
-                            <p className="mt-2 text-[11px] font-medium text-amber-200/80">{draft.viewServices.length} servicio(s) seleccionado(s).</p>
-                          ) : null}
                         </div>
 
                         <div className="mt-5 flex items-center gap-2 border-t border-white/10 pt-4">
