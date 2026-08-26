@@ -11017,28 +11017,33 @@ export default function Home() {
               serviceProfile.supervisorModules.includes(mod.id),
             )
           : []
-        : currentArea
-          ? getAreaModules(currentArea).filter((mod) => {
-              // Restriccion por usuario: si eligio modulos al registrarse, solo esos.
-              // Jefe del servicio -> ve todos. Usuarios antiguos (sin seleccion) -> todos.
-              const cm = serviceProfile.captureModules;
-              const restrict = Array.isArray(cm) && cm.length > 0;
-              // El Depto. de Abastecimiento (almacen) siempre ve sus modulos (PERC + Horas),
-              // para poder llegar a "Insumos de Almacén" (que cuelga del menu PERC).
-              if (serviceProfile.serviceId === "almacen") return true;
-              // Si el admin le otorgo submenus de un modulo (Accesos de menu), ese menu
-              // se muestra aunque no capture ese modulo, para que el submenu sea alcanzable.
-              const grants = serviceProfile.menuGrants ?? [];
-              const percGrants = [
-                "panel-censo", "panel-insumos", "panel-admin-export",
-                "panel-gastos-perc", "panel-depreciacion-perc", "panel-services",
-              ];
+        : (() => {
+            if (!currentArea) return [] as ModuleDefinition[];
+            const cm = serviceProfile.captureModules;
+            const restrict = Array.isArray(cm) && cm.length > 0;
+            const grants = serviceProfile.menuGrants ?? [];
+            const percGrants = [
+              "panel-censo", "panel-insumos", "panel-admin-export",
+              "panel-gastos-perc", "panel-depreciacion-perc", "panel-services",
+            ];
+            const hasPercGrant = grants.some((g) => percGrants.includes(g));
+            // Base = modulos del area. Si le otorgaron un acceso de menu de PERC pero su
+            // area NO incluye PERC (p.ej. Unidad Financiera: solo Horas), agregamos PERC
+            // para que ese submenu otorgado (Gastos PERC, etc.) sea alcanzable.
+            let base = getAreaModules(currentArea);
+            if (hasPercGrant && !base.some((m) => m.id === "perc")) {
+              const percMod = MODULE_DEFINITIONS.find((m) => m.id === "perc");
+              if (percMod) base = [percMod, ...base];
+            }
+            // Almacen siempre ve sus modulos completos (para llegar a Insumos).
+            if (serviceProfile.serviceId === "almacen") return base;
+            return base.filter((mod) => {
               const grantVisible =
-                (mod.id === "perc" && grants.some((g) => percGrants.includes(g))) ||
+                (mod.id === "perc" && hasPercGrant) ||
                 (mod.id !== "perc" && grants.includes("panel-services"));
               return serviceProfile.isChief || !restrict || cm.includes(mod.id) || grantVisible;
-            })
-          : [];
+            });
+          })();
     // Si la seccion de un modulo debe mostrarse para este usuario/servicio.
     const showModule = (moduleId: ModuleId) => visibleModules.some((vm) => vm.id === moduleId);
     const getModuleUiStatus = (mod: ModuleDefinition): "completo" | "incompleto" => {
@@ -11095,11 +11100,17 @@ export default function Home() {
           icon: "monitor",
         });
         if (mod.id === "perc") {
+          // Usuario que ve PERC SOLO por un acceso de menu otorgado (su area no captura
+          // PERC): no le mostramos "Abrir PERC" (tabulador vacio) ni "Monitoreo", solo
+          // los submenus que se le otorgaron.
+          const percViaGrantOnly =
+            !isAdmin && !isSupervisor && !!currentService &&
+            !(getAreaById(currentService.id)?.modules.includes("perc") ?? false);
           return [
-            ...(currentService
+            ...(currentService && !percViaGrantOnly
               ? [{ id: "panel-tabulator", label: "Abrir PERC", detail: "Ir al tabulador PERC", badge: "PE", icon: "perc" }]
               : []),
-            monitorChild("panel-monitor-perc"),
+            ...(percViaGrantOnly ? [] : [monitorChild("panel-monitor-perc")]),
             ...(canViewCenso
               ? [{ id: "panel-censo", label: "Censo diario de pacientes", detail: "Solo supervisión", badge: "CD", icon: "censo" }]
               : []),
