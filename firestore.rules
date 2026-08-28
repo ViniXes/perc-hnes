@@ -82,6 +82,17 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+    // POA - Plan Anual Operativo por servicio y año.
+    // Ids: "<servicio>__<año>" para el documento y "<servicio>__<año>__media"
+    // para los graficos de produccion. Lo VE cualquier usuario autenticado; lo
+    // EDITAN los admins y las cuentas del servicio dueño del POA (hoy ESDOMED).
+    match /poaDocuments/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && (isAdmin()
+            || userProfile().role == 'admin'
+            || userProfile().serviceId == 'esdomed');
+    }
     // Censo Diario de Pacientes (id = "<periodo>", p.ej. "2026-06").
     // Lo VEN admin y supervisores (NINGUN servicio). Lo EDITAN los admins y
     // Alfonso Montes (amontes@perc-hnes.app). Sin cierre ni restricciones.

@@ -65,6 +65,7 @@ body {
   [data-mview="panel-capture-toggle"] > [data-view~="panel-capture-toggle"],
   [data-mview="panel-censo"] > [data-view~="panel-censo"],
   [data-mview="panel-insumos"] > [data-view~="panel-insumos"],
+  [data-mview="panel-poa"] > [data-view~="panel-poa"],
   [data-mview="panel-admin-export"] > [data-view~="panel-admin-export"] {
     display: block !important;
   }
@@ -546,4 +547,261 @@ body[data-panel-theme="light"] [class*="text-amber-3"] { color: #b45309 !importa
 .docs-close:hover {
   color: #fda4af;
   border-color: rgba(244, 63, 94, 0.45);
+}
+
+/* ===========================================================================
+   POA — Plan Anual Operativo. El panel se ve como el documento impreso: una
+   "hoja" con secciones, párrafos y las tablas incrustadas en su lugar. Los
+   campos editables son textareas sin bordes que solo se marcan al enfocarlos,
+   para que la lectura sea la de un documento y no la de un formulario.
+   =========================================================================== */
+.poa-sheet {
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 28px clamp(18px, 4vw, 44px) 40px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.poa-cover {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 26px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+.poa-cover .poa-input { text-align: center; }
+.poa-cover-hospital {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.poa-cover-title {
+  margin: 14px 0 10px;
+  font-size: clamp(22px, 3.4vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.poa-cover-service { font-size: 15px; font-weight: 600; }
+.poa-cover-place { font-size: 12px; color: var(--text-muted); }
+
+.poa-h1 {
+  margin: 30px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.poa-h2 {
+  margin: 22px 0 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.poa-label {
+  margin: 14px 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.poa-hint {
+  margin: 2px 0 10px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+/* Campo editable: se lee como texto del documento. */
+.poa-input {
+  display: block;
+  width: 100%;
+  resize: none;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.6;
+  text-align: justify;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.poa-input::placeholder { color: var(--text-faint); }
+.poa-input:hover:not(:read-only) { background: color-mix(in srgb, var(--surface-3) 55%, transparent); }
+.poa-input:focus {
+  outline: none;
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+.poa-cell {
+  padding: 3px 6px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: left;
+}
+.poa-cell.text-center { text-align: center; }
+
+.poa-para-row { display: flex; align-items: flex-start; gap: 6px; }
+.poa-bullet-num {
+  padding-top: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.poa-item { margin-bottom: 10px; }
+.poa-item-head { display: flex; align-items: flex-start; gap: 6px; }
+.poa-dot {
+  margin-top: 11px;
+  height: 5px;
+  width: 5px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: var(--text-faint);
+}
+.poa-block { margin: 16px 0 20px; }
+.poa-foda-item { margin-bottom: 10px; }
+
+/* Botón chico de acción (agregar / quitar). */
+.poa-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  transition: background-color 120ms ease, border-color 120ms ease;
+  flex-shrink: 0;
+}
+.poa-mini:hover { background: var(--surface-3); }
+
+/* Tablas del documento. */
+.poa-table-wrap {
+  margin: 10px 0 6px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.poa-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.poa-table-wide { min-width: 900px; }
+.poa-prog { min-width: 1400px; }
+.poa-table th,
+.poa-table td {
+  border: 1px solid var(--border);
+  padding: 2px 4px;
+  vertical-align: top;
+}
+.poa-th {
+  padding: 8px 6px;
+  background: var(--surface-3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  vertical-align: middle;
+}
+.poa-th-sub { font-size: 9.5px; letter-spacing: 0.04em; }
+.poa-num,
+.poa-calc {
+  padding: 6px 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+.poa-calc { font-weight: 700; }
+.poa-tri { width: 58px; }
+.poa-group-row > td { background: color-mix(in srgb, var(--surface-3) 75%, transparent); }
+.poa-group-label {
+  padding-top: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.poa-add-row { padding: 4px 8px !important; text-align: left; }
+.poa-foda td { padding: 8px 10px; }
+
+/* Gráficos de producción. */
+.poa-figure { margin: 10px 0; text-align: center; }
+.poa-figure-img {
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #ffffff;
+}
+.poa-figure-empty { font-size: 11.5px; color: var(--text-faint); }
+.poa-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.poa-upload:hover { background: var(--surface-3); border-color: var(--border-strong); }
+
+/* Exposición al riesgo (F x I) calculada. */
+.poa-exposicion {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 62px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.poa-exposicion-cat {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+/* Impresión: solo la hoja del POA, sin controles de edición. */
+@media print {
+  body * { visibility: hidden !important; }
+  .poa-sheet, .poa-sheet * { visibility: visible !important; }
+  .poa-sheet {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: 0;
+    background: #ffffff;
+    color: #111827;
+    padding: 0;
+  }
+  .poa-mini, .poa-upload, .poa-hint { display: none !important; }
+  .poa-input { border-color: transparent !important; background: transparent !important; }
+  .poa-table-wrap { overflow: visible !important; }
+  .poa-table-wide, .poa-prog { min-width: 0 !important; }
+  .poa-h1 { break-after: avoid; }
+  .poa-table { break-inside: auto; }
+  .poa-table tr { break-inside: avoid; }
 }
