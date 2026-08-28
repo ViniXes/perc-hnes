@@ -5299,6 +5299,14 @@ export default function Home() {
     }
   }, [panelTheme]);
 
+  // Etiqueta el <body> con el tema para poder ajustar colores globalmente en CSS
+  // (p.ej. oscurecer los verdes claros en modo claro para que se lea la letra).
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.body.dataset.panelTheme = panelTheme;
+    }
+  }, [panelTheme]);
+
   // El boton de menu queda fijo arriba; al bajar la pantalla se vuelve translucido.
   useEffect(() => {
     const onScroll = () => setMenuScrolled(window.scrollY > 24);
@@ -13510,13 +13518,17 @@ export default function Home() {
                 </div>
               ) : null}
               {message ? (
-                <div className="modal-pop-in pointer-events-auto flex items-start gap-2 rounded-xl border border-emerald-400/30 bg-[#0f1f1a]/95 px-4 py-3 text-sm text-emerald-100 shadow-xl backdrop-blur">
-                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                <div className={`modal-pop-in pointer-events-auto flex items-start gap-2 rounded-xl border px-4 py-3 text-sm shadow-xl backdrop-blur ${
+                  isLightPanelTheme
+                    ? "border-emerald-300 bg-white text-emerald-700"
+                    : "border-emerald-400/30 bg-[#0f1f1a]/95 text-emerald-100"
+                }`}>
+                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
                   <span className="flex-1">{message}</span>
                   <button
                     type="button"
                     onClick={() => setMessage("")}
-                    className="shrink-0 text-emerald-300/70 transition hover:text-emerald-100"
+                    className={`shrink-0 transition ${isLightPanelTheme ? "text-emerald-600/70 hover:text-emerald-800" : "text-emerald-300/70 hover:text-emerald-100"}`}
                   >
                     ✕
                   </button>

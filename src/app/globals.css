@@ -475,3 +475,17 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .hospital-shimmer { animation: none; }
 }
+
+/* ===========================================================================
+   Modo claro: los verdes/teal claros (100–300) y sus variantes con opacidad no
+   contrastan sobre fondos claros ("no se ve la letra"). Se oscurecen a un verde
+   legible SOLO en modo claro; el modo oscuro queda intacto. Los elementos con
+   fondo oscuro propio (toasts) se hacen sensibles al tema para no romperse.
+   =========================================================================== */
+body[data-panel-theme="light"] [class*="text-emerald-1"],
+body[data-panel-theme="light"] [class*="text-emerald-2"],
+body[data-panel-theme="light"] [class*="text-emerald-3"],
+body[data-panel-theme="light"] [class*="text-teal-2"],
+body[data-panel-theme="light"] [class*="text-teal-3"] {
+  color: #047857 !important; /* emerald-700 */
+}
