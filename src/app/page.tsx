@@ -10607,6 +10607,16 @@ export default function Home() {
     const sepsRowTotal = (row: { key: string; readOnly?: boolean; sumOf?: string[] }) =>
       sepsDayColumns.reduce((acc, day) => acc + sepsDayCell(row, day), 0);
     const sepsLocked = !sepsCaptureOpen || !serviceProfile.permissions.canEdit;
+    // Claves de las tablas/secciones que se pueden plegar (para el boton de
+    // "desplegar todas"). Laboratorio Clinico tiene un formato propio y no entra.
+    const sepsCollapsibleKeys: string[] =
+      !sepsTemplate || sepsTemplate.serviceId === "laboratorio-clinico"
+        ? []
+        : sepsTemplate.kind === "matrix"
+          ? (sepsTemplate.sections ?? []).map((section) => section.title)
+          : (sepsTemplate.tables ?? []).map((table) => table.id);
+    const sepsOpenCount = sepsCollapsibleKeys.filter((key) => openSepsTables.has(key)).length;
+    const sepsAllOpen = sepsCollapsibleKeys.length > 0 && sepsOpenCount === sepsCollapsibleKeys.length;
     // Historial SEPS: mes activo, modo lectura y bloqueo de edicion.
     const activeSepsPeriod = sepsViewPeriod ?? sepsPeriodId;
     const isSepsHistory = sepsViewPeriod !== null;
@@ -10760,6 +10770,36 @@ export default function Home() {
                 </button>
               </div>
             ) : null}
+          </div>
+        ) : null}
+
+        {/* Desplegar / colapsar TODAS las tablas de un solo toque (estas plantillas
+            llegan a tener 12 tablas y abrirlas una por una es tedioso). */}
+        {sepsCollapsibleKeys.length > 1 ? (
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--text-muted)" }}>
+              {sepsCollapsibleKeys.length} tablas · {sepsOpenCount} desplegada{sepsOpenCount === 1 ? "" : "s"}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setOpenSepsTables((prev) => {
+                  if (sepsAllOpen) {
+                    const next = new Set(prev);
+                    sepsCollapsibleKeys.forEach((key) => next.delete(key));
+                    return next;
+                  }
+                  return new Set([...prev, ...sepsCollapsibleKeys]);
+                })
+              }
+              className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:brightness-110"
+              style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" }}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {sepsAllOpen ? <path d="m7 15 5-5 5 5M7 9l5-5 5 5" /> : <path d="m7 9 5 5 5-5M7 15l5 5 5-5" />}
+              </svg>
+              {sepsAllOpen ? "Colapsar todas" : "Desplegar todas"}
+            </button>
           </div>
         ) : null}
 
