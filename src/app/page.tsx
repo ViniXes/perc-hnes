@@ -15019,8 +15019,8 @@ export default function Home() {
                     type="button"
                     onClick={() => setShowUsersModal(false)}
                     aria-label="Cerrar"
-                    className={`pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#202c41]/85 text-slate-300 shadow-lg shadow-black/40 backdrop-blur-md transition-all duration-300 hover:bg-rose-500/15 hover:text-rose-200 ${
-                      usersScrolled ? "opacity-30 hover:opacity-100" : "opacity-100"
+                    className={`pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-rose-400/25 bg-[#202c41]/85 text-rose-300/80 shadow-lg shadow-black/40 ring-1 ring-rose-400/10 backdrop-blur-md transition-all duration-300 hover:border-rose-400/50 hover:bg-rose-500/15 hover:text-rose-200 hover:ring-rose-400/25 ${
+                      usersScrolled ? "opacity-40 hover:opacity-100" : "opacity-100"
                     }`}
                   >
                     <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
