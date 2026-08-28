@@ -489,3 +489,31 @@ body[data-panel-theme="light"] [class*="text-teal-2"],
 body[data-panel-theme="light"] [class*="text-teal-3"] {
   color: #047857 !important; /* emerald-700 */
 }
+
+/* Mismo criterio para los demas tonos CLAROS (celeste/azul/indigo/cyan/violeta/
+   ambar) en modo claro: se oscurecen a su tono ~700 para que la letra se lea.
+   Se excluye rose a proposito (se usa como texto sobre fondos oscuros, p.ej. el
+   boton flotante de cerrar). */
+body[data-panel-theme="light"] [class*="text-blue-1"],
+body[data-panel-theme="light"] [class*="text-blue-2"],
+body[data-panel-theme="light"] [class*="text-blue-3"] { color: #1d4ed8 !important; } /* blue-700 */
+
+body[data-panel-theme="light"] [class*="text-indigo-1"],
+body[data-panel-theme="light"] [class*="text-indigo-2"],
+body[data-panel-theme="light"] [class*="text-indigo-3"] { color: #4338ca !important; } /* indigo-700 */
+
+body[data-panel-theme="light"] [class*="text-sky-1"],
+body[data-panel-theme="light"] [class*="text-sky-2"],
+body[data-panel-theme="light"] [class*="text-sky-3"] { color: #0369a1 !important; } /* sky-700 */
+
+body[data-panel-theme="light"] [class*="text-cyan-1"],
+body[data-panel-theme="light"] [class*="text-cyan-2"],
+body[data-panel-theme="light"] [class*="text-cyan-3"] { color: #0e7490 !important; } /* cyan-700 */
+
+body[data-panel-theme="light"] [class*="text-violet-1"],
+body[data-panel-theme="light"] [class*="text-violet-2"],
+body[data-panel-theme="light"] [class*="text-violet-3"] { color: #6d28d9 !important; } /* violet-700 */
+
+body[data-panel-theme="light"] [class*="text-amber-1"],
+body[data-panel-theme="light"] [class*="text-amber-2"],
+body[data-panel-theme="light"] [class*="text-amber-3"] { color: #b45309 !important; } /* amber-700 */
