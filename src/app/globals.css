@@ -517,3 +517,33 @@ body[data-panel-theme="light"] [class*="text-violet-3"] { color: #6d28d9 !import
 body[data-panel-theme="light"] [class*="text-amber-1"],
 body[data-panel-theme="light"] [class*="text-amber-2"],
 body[data-panel-theme="light"] [class*="text-amber-3"] { color: #b45309 !important; } /* amber-700 */
+
+/* ===========================================================================
+   Modal DOCS-POA/MOF: filas y celdas de estado.
+   Zebra muy sutil + realce al pasar el mouse, resueltos con variables de tema
+   para que se vean bien en claro y en oscuro.
+   =========================================================================== */
+.docs-row > td {
+  border-top: 1px solid var(--border);
+}
+.docs-row:nth-child(even) > td {
+  background-color: color-mix(in srgb, var(--surface-2) 45%, transparent);
+}
+.docs-row:hover > td {
+  background-color: color-mix(in srgb, var(--surface-3) 70%, transparent);
+}
+.docs-chip {
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+.docs-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+  filter: brightness(1.06);
+}
+.docs-chip:active {
+  transform: translateY(0);
+}
+.docs-close:hover {
+  color: #fda4af;
+  border-color: rgba(244, 63, 94, 0.45);
+}

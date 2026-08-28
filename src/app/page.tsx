@@ -1689,6 +1689,70 @@ const DOC_STATUS_LABEL: Record<DocStatus, string> = {
   pendiente: "Pendiente de entrega",
 };
 
+// Etiqueta corta para las celdas de la tabla (la larga queda para leyenda y
+// tooltip). Evita que "Pendiente de entrega" parta la celda en dos lineas.
+const DOC_STATUS_SHORT: Record<DocStatus, string> = {
+  "": "Sin definir",
+  entregado: "Entregado",
+  pendiente: "Pendiente",
+};
+
+// Paleta de cada estado. Se declara con valores literales (y no con clases
+// text-emerald-* / text-amber-*) para que las reglas globales de modo claro de
+// globals.css no la pisen: aqui ya se resuelven los dos temas.
+function getDocChipStyle(status: DocStatus, light: boolean): CSSProperties {
+  if (status === "entregado") {
+    return light
+      ? { background: "#ecfdf5", borderColor: "#a7f3d0", color: "#047857" }
+      : { background: "rgba(16,185,129,0.12)", borderColor: "rgba(16,185,129,0.32)", color: "#6ee7b7" };
+  }
+  if (status === "pendiente") {
+    return light
+      ? { background: "#fffbeb", borderColor: "#fde68a", color: "#b45309" }
+      : { background: "rgba(245,158,11,0.12)", borderColor: "rgba(245,158,11,0.32)", color: "#fcd34d" };
+  }
+  return {
+    background: "transparent",
+    borderColor: "var(--border)",
+    borderStyle: "dashed",
+    color: "var(--text-faint)",
+  };
+}
+
+// Icono sobrio por estado: check para entregado, reloj para pendiente y un
+// guion para "sin definir". Trazo fino, sin relleno ni emojis.
+function getDocStatusIcon(status: DocStatus) {
+  const props = {
+    viewBox: "0 0 24 24",
+    width: 13,
+    height: 13,
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+  if (status === "entregado") {
+    return (
+      <svg {...props} strokeWidth={2.6} aria-hidden="true">
+        <path d="M20 6.5 9.2 17.3 4 12.1" />
+      </svg>
+    );
+  }
+  if (status === "pendiente") {
+    return (
+      <svg {...props} strokeWidth={2} aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7.4V12l2.9 1.9" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...props} strokeWidth={2} aria-hidden="true">
+      <path d="M6 12h12" />
+    </svg>
+  );
+}
+
 const DOC_DEPENDENCIAS: string[] = [
   "Unidad Financiera Institucional",
   "Unidad de Auditoria Interna",
@@ -17211,16 +17275,28 @@ export default function Home() {
                 }}
                 className="modal-pop-in relative my-6 w-full max-w-6xl overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
               >
-                <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-blue-500" />
-                <div className="flex items-center justify-between gap-3 px-5 pt-5">
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
+                <div className="h-[3px] w-full bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-600" />
+
+                {/* Encabezado */}
+                <div className="flex items-start justify-between gap-3 px-6 pb-4 pt-5">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white"
+                      style={{
+                        background: "linear-gradient(135deg, #22d3ee, #2563eb)",
+                        boxShadow: "0 8px 20px rgba(37,99,235,0.35)",
+                      }}
+                    >
                       {IconFile}
                     </span>
-                    <div>
-                      <h3 className="text-base font-semibold text-white">DOCS-POA/MOF</h3>
-                      <p className="text-[11px] text-slate-400">
-                        Control de entregas a Calidad · {currentYear}
+                    <div className="min-w-0">
+                      <h3 className="text-[17px] font-semibold tracking-tight" style={{ color: "var(--text)" }}>
+                        DOCS-POA/MOF
+                      </h3>
+                      <p className="mt-0.5 text-[11.5px]" style={{ color: "var(--text-muted)" }}>
+                        Control de entregas a Calidad
+                        <span className="mx-1.5" style={{ color: "var(--text-faint)" }}>·</span>
+                        <span className="font-semibold tabular-nums">{currentYear}</span>
                       </p>
                     </div>
                   </div>
@@ -17228,41 +17304,59 @@ export default function Home() {
                     type="button"
                     onClick={() => setShowDocsModal(false)}
                     aria-label="Cerrar"
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                    className="docs-close flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition"
+                    style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" }}
                   >
-                    ✕
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                      <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
                   </button>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 px-5 pt-3 text-[11px]">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Entregado
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> Pendiente de entrega
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 font-semibold text-slate-400">
-                    — Sin definir
-                  </span>
-                  <span className="text-slate-400">
-                    {canEditDocs ? "· Tocá una celda para cambiar su estado" : "· Solo lectura"}
+                {/* Leyenda de estados */}
+                <div
+                  className="flex flex-wrap items-center gap-2 border-y px-6 py-2.5"
+                  style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+                >
+                  {(["entregado", "pendiente", ""] as DocStatus[]).map((status) => (
+                    <span
+                      key={status || "vacio"}
+                      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-[3px] text-[10.5px] font-semibold leading-none"
+                      style={getDocChipStyle(status, isLightPanelTheme)}
+                    >
+                      {getDocStatusIcon(status)}
+                      {DOC_STATUS_LABEL[status] === "—" ? "Sin definir" : DOC_STATUS_LABEL[status]}
+                    </span>
+                  ))}
+                  <span className="ml-auto text-[11px]" style={{ color: "var(--text-faint)" }}>
+                    {canEditDocs ? "Toque una celda para cambiar su estado" : "Solo lectura"}
                   </span>
                 </div>
 
-                <div className="max-h-[74vh] overflow-y-auto px-5 py-4">
+                {/* Tabla */}
+                <div className="max-h-[70vh] overflow-y-auto px-3 pb-2 sm:px-5">
                   {docsLoading ? (
-                    <p className="py-10 text-center text-sm text-slate-400">Cargando…</p>
+                    <div className="flex flex-col items-center justify-center gap-3 py-16">
+                      <span className="h-6 w-6 animate-spin rounded-full border-2 border-cyan-400/25 border-t-cyan-400" />
+                      <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                        Cargando control documental…
+                      </p>
+                    </div>
                   ) : (
-                    <table className="w-full border-collapse text-xs">
+                    <table className="w-full border-collapse">
                       <thead>
-                        <tr className="text-white">
-                          <th className="sticky top-0 z-10 border-b-2 border-cyan-400/40 bg-[#0e1626] px-2 py-3 text-left text-sm font-bold uppercase tracking-wide">
+                        <tr>
+                          <th
+                            className="sticky top-0 z-10 px-3 py-3 text-left text-[10.5px] font-semibold uppercase tracking-[0.14em]"
+                            style={{ background: "var(--surface)", color: "var(--text-muted)", boxShadow: "inset 0 -1px 0 var(--border)" }}
+                          >
                             Dependencia
                           </th>
                           {DOC_COLUMNS.map((col) => (
                             <th
                               key={col.key}
-                              className="sticky top-0 z-10 w-[150px] border-b-2 border-cyan-400/40 bg-[#0e1626] px-2 py-3 text-center text-sm font-bold uppercase tracking-wide"
+                              className="sticky top-0 z-10 w-[168px] px-2 py-3 text-center text-[10.5px] font-semibold uppercase tracking-[0.14em]"
+                              style={{ background: "var(--surface)", color: "var(--text-muted)", boxShadow: "inset 0 -1px 0 var(--border)" }}
                             >
                               {col.label}
                             </th>
@@ -17273,37 +17367,56 @@ export default function Home() {
                         {DOC_DEPENDENCIAS.map((dep, index) => {
                           const key = getDocKey(index);
                           return (
-                            <tr key={key} className="border-t border-white/5">
-                              <td className="py-2 pr-3 text-[13px] font-medium text-slate-100">
-                                <span className="flex items-center gap-2">
-                                  <span className="shrink-0 text-cyan-300/80">{getDepIcon(dep)}</span>
-                                  <span>{dep}</span>
+                            <tr key={key} className="docs-row">
+                              <td className="px-3 py-2">
+                                <span className="flex items-center gap-2.5">
+                                  <span
+                                    className="w-5 shrink-0 text-right text-[10.5px] tabular-nums"
+                                    style={{ color: "var(--text-faint)" }}
+                                  >
+                                    {index + 1}
+                                  </span>
+                                  <span
+                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                                    style={{
+                                      background: "var(--surface-3)",
+                                      border: "1px solid var(--border)",
+                                      color: isLightPanelTheme ? "#0e7490" : "#67e8f9",
+                                    }}
+                                  >
+                                    {getDepIcon(dep)}
+                                  </span>
+                                  <span className="text-[12.5px] font-medium leading-tight" style={{ color: "var(--text)" }}>
+                                    {dep}
+                                  </span>
                                 </span>
                               </td>
                               {DOC_COLUMNS.map((col) => {
                                 const status = (docsValues[key]?.[col.key] ?? "") as DocStatus;
-                                const tone =
-                                  status === "entregado"
-                                    ? "text-emerald-400"
-                                    : status === "pendiente"
-                                      ? "text-amber-400"
-                                      : "bg-white/5 text-slate-500";
-                                const label = DOC_STATUS_LABEL[status];
+                                const chipStyle = getDocChipStyle(status, isLightPanelTheme);
+                                const chipClass =
+                                  "inline-flex min-w-[124px] items-center justify-center gap-1.5 rounded-full border px-3 py-[6px] text-[11.5px] font-semibold leading-none";
+                                const chipInner = (
+                                  <>
+                                    {getDocStatusIcon(status)}
+                                    <span>{DOC_STATUS_SHORT[status]}</span>
+                                  </>
+                                );
                                 return (
-                                  <td key={col.key} className="px-1.5 py-1.5 text-center">
+                                  <td key={col.key} className="px-2 py-1.5 text-center">
                                     {canEditDocs ? (
                                       <button
                                         type="button"
                                         onClick={() => handleDocsCellCycle(key, col.key)}
-                                        className={`inline-flex w-full items-center justify-center rounded-full px-2 py-1 text-[13px] font-bold transition hover:brightness-110 ${tone}`}
+                                        title={`${dep} · ${col.label}: ${DOC_STATUS_LABEL[status] === "—" ? "Sin definir" : DOC_STATUS_LABEL[status]}`}
+                                        className={`docs-chip ${chipClass}`}
+                                        style={chipStyle}
                                       >
-                                        {label}
+                                        {chipInner}
                                       </button>
                                     ) : (
-                                      <span
-                                        className={`inline-flex w-full items-center justify-center rounded-full px-2 py-1 text-[13px] font-bold ${tone}`}
-                                      >
-                                        {label}
+                                      <span className={chipClass} style={chipStyle}>
+                                        {chipInner}
                                       </span>
                                     )}
                                   </td>
@@ -17317,24 +17430,40 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="flex items-center justify-end gap-2 border-t border-white/10 px-5 py-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowDocsModal(false)}
-                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/10"
-                  >
-                    Cerrar
-                  </button>
-                  {canEditDocs ? (
+                {/* Pie */}
+                <div
+                  className="flex items-center justify-between gap-3 border-t px-6 py-3.5"
+                  style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+                >
+                  <p className="hidden text-[11px] sm:block" style={{ color: "var(--text-faint)" }}>
+                    <span className="tabular-nums font-semibold">{DOC_DEPENDENCIAS.length}</span> dependencias
+                    <span className="mx-1.5">·</span>
+                    <span className="tabular-nums font-semibold">{DOC_COLUMNS.length}</span> documentos por dependencia
+                  </p>
+                  <div className="ml-auto flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => void handleSaveDocs()}
-                      disabled={docsSaving || docsLoading}
-                      className="rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() => setShowDocsModal(false)}
+                      className="rounded-xl border px-4 py-2 text-xs font-semibold transition hover:brightness-110"
+                      style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" }}
                     >
-                      {docsSaving ? "Guardando…" : "Guardar cambios"}
+                      Cerrar
                     </button>
-                  ) : null}
+                    {canEditDocs ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveDocs()}
+                        disabled={docsSaving || docsLoading}
+                        className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                          <path d="M17 21v-8H7v8M7 3v5h8" />
+                        </svg>
+                        {docsSaving ? "Guardando…" : "Guardar cambios"}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>
