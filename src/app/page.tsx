@@ -15010,7 +15010,7 @@ export default function Home() {
               <section
                 onClick={(event) => event.stopPropagation()}
                 id="panel-users"
-                className="modal-pop-in relative my-8 w-full max-w-6xl rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-2xl shadow-black/50"
+                className="modal-pop-in relative my-6 w-full max-w-[88rem] rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-2xl shadow-black/50 sm:p-6"
               >
                 <button
                   type="button"
@@ -15310,16 +15310,19 @@ export default function Home() {
                     .toUpperCase() || "?";
 
                 return (
-                  <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+                  <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
                     {/* Lista (maestro) */}
                     <div className="flex flex-col rounded-2xl border border-white/10 bg-[#1b2537]">
                       <div className="border-b border-white/10 p-2.5">
-                        <input
-                          value={adminUserQuery}
-                          onChange={(event) => setAdminUserQuery(event.target.value)}
-                          placeholder="Buscar usuario o servicio…"
-                          className="w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-amber-400"
-                        />
+                        <div className="relative">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                          <input
+                            value={adminUserQuery}
+                            onChange={(event) => setAdminUserQuery(event.target.value)}
+                            placeholder="Buscar usuario o servicio…"
+                            className="w-full rounded-xl border border-white/10 bg-[#2a3448] py-2.5 pl-9 pr-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-amber-400"
+                          />
+                        </div>
                       </div>
                       <div className="max-h-[55vh] overflow-y-auto p-1.5">
                         {listed.length === 0 ? (
@@ -15337,10 +15340,14 @@ export default function Home() {
                                 type="button"
                                 onClick={() => setAdminSelectedUserUid(u.uid)}
                                 className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${
-                                  isSel ? "bg-amber-500/15" : "hover:bg-white/5"
+                                  isSel
+                                    ? "bg-amber-500/[0.14] ring-1 ring-amber-400/30 shadow-sm shadow-black/20"
+                                    : "hover:bg-white/5"
                                 }`}
                               >
-                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[11px] font-bold text-slate-200">
+                                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold transition ${
+                                  isSel ? "bg-gradient-to-br from-amber-400 to-amber-600 text-slate-900 shadow-sm shadow-amber-500/30" : "bg-white/10 text-slate-200"
+                                }`}>
                                   {initials(d.name || d.username)}
                                 </span>
                                 <span className="min-w-0 flex-1">
