@@ -13952,10 +13952,10 @@ export default function Home() {
                               {stat.done} de {stat.total}
                             </span>
                           </div>
-                          <div className="mt-2 h-4 overflow-hidden rounded-full bg-white/10">
+                          <div className={`mt-2 h-4 overflow-hidden rounded-full ring-1 ${isLightPanelTheme ? "bg-slate-200 ring-slate-300/70" : "bg-white/10 ring-white/5"}`}>
                             <div
                               className={`h-full rounded-full bg-gradient-to-r ${m.bar}`}
-                              style={{ width: `${pct}%` }}
+                              style={{ width: pct > 0 ? `max(${pct}%, 0.75rem)` : "0%" }}
                             />
                           </div>
                         </div>
