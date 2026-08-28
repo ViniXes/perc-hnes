@@ -4404,6 +4404,7 @@ export default function Home() {
   const [showPasswordText, setShowPasswordText] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [usersModalTab, setUsersModalTab] = useState<"usuarios" | "servicios">("usuarios");
+  const [usersScrolled, setUsersScrolled] = useState(false);
   const [showBoardModal, setShowBoardModal] = useState(false);
   // Menu lateral colapsable: en PC se contrae para dar espacio; en movil es cajon.
   const [menuOpen, setMenuOpen] = useState(true);
@@ -15004,6 +15005,7 @@ export default function Home() {
             <div
               role="dialog"
               aria-modal="true"
+              onScroll={(event) => setUsersScrolled((event.currentTarget as HTMLDivElement).scrollTop > 24)}
               className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4"
             >
               <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
@@ -15012,49 +15014,58 @@ export default function Home() {
                 id="panel-users"
                 className="modal-pop-in relative my-6 w-full max-w-[88rem] rounded-[24px] border border-white/10 bg-[#202c41] p-5 shadow-2xl shadow-black/50 sm:p-6"
               >
-                <button
-                  type="button"
-                  onClick={() => setShowUsersModal(false)}
-                  aria-label="Cerrar"
-                  className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
-                >
-                  ✕
-                </button>
-              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-sm uppercase tracking-[0.2em] text-amber-200/80">
+                <div className="pointer-events-none sticky top-0 z-30 -mb-8 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowUsersModal(false)}
+                    aria-label="Cerrar"
+                    className={`pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#202c41]/85 text-slate-300 shadow-lg shadow-black/40 backdrop-blur-md transition-all duration-300 hover:bg-rose-500/15 hover:text-rose-200 ${
+                      usersScrolled ? "opacity-30 hover:opacity-100" : "opacity-100"
+                    }`}
+                  >
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                  </button>
+                </div>
+              <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 pr-10">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200/80">
                     Administrador
                   </p>
-                  <h2 className="mt-2 text-2xl font-semibold">
+                  <h2 className="mt-1.5 text-2xl font-bold tracking-tight">
                     Usuarios y servicios
                     {isLoadingUsers ? (
-                      <span className="ml-3 text-sm font-medium text-amber-300">Actualizando…</span>
+                      <span className="ml-3 align-middle text-xs font-medium text-amber-300">Actualizando…</span>
                     ) : null}
                   </h2>
-                  <p className="mt-2 max-w-3xl text-sm text-slate-300">
-                    Desde aqui puedes activar o bloquear cuentas, asignar servicios, cambiar roles,
-                    permitir o negar captura y resetear la clave a 123456 (el usuario la cambia al
-                    iniciar sesion).
+                  <p className="mt-1.5 max-w-2xl text-sm text-slate-400">
+                    Activá o bloqueá cuentas, asigná servicios y permisos, y reseteá claves cuando haga falta.
                   </p>
+                  <span className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-slate-400">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-amber-300/80"><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /></svg>
+                    Clave temporal inicial: <span className="font-semibold text-slate-200">{DEFAULT_TEMP_PASSWORD}</span>
+                  </span>
                 </div>
-                <div className="flex flex-col items-start gap-2 sm:items-end">
-                  <p className="text-sm text-slate-300">Clave temporal inicial: {DEFAULT_TEMP_PASSWORD}</p>
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                   {isAdmin ? (
                     <button
                       type="button"
                       onClick={() => void handleResetAllServices()}
                       disabled={adminBusyUserId === "__all__"}
-                      className="rounded-xl border border-amber-400/40 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                      title="Resetear la clave de TODOS los servicios a la temporal (123456)"
+                      className="inline-flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {adminBusyUserId === "__all__" ? "Reseteando…" : "Resetear TODOS los servicios a 123456"}
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
+                      {adminBusyUserId === "__all__" ? "Reseteando…" : "Resetear claves"}
                     </button>
                   ) : null}
                   <button
                     type="button"
                     onClick={() => downloadUsersExcel()}
-                    className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25"
+                    title="Descargar la lista de usuarios en Excel"
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/20"
                   >
-                    Descargar usuarios (Excel)
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4" /><path d="M4 21h16" /></svg>
+                    Descargar Excel
                   </button>
                 </div>
               </div>
