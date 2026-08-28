@@ -537,8 +537,8 @@ body[data-panel-theme="light"] [class*="text-amber-3"] { color: #b45309 !importa
 }
 .docs-chip:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
-  filter: brightness(1.06);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.16);
+  filter: brightness(1.04);
 }
 .docs-chip:active {
   transform: translateY(0);

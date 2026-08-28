@@ -1703,18 +1703,17 @@ const DOC_STATUS_SHORT: Record<DocStatus, string> = {
 function getDocChipStyle(status: DocStatus, light: boolean): CSSProperties {
   if (status === "entregado") {
     return light
-      ? { background: "#ecfdf5", borderColor: "#a7f3d0", color: "#047857" }
-      : { background: "rgba(16,185,129,0.12)", borderColor: "rgba(16,185,129,0.32)", color: "#6ee7b7" };
+      ? { background: "#eef4f0", borderColor: "#cbdcd2", color: "#3d6b55" }
+      : { background: "rgba(94,144,120,0.13)", borderColor: "rgba(94,144,120,0.28)", color: "#a7c8b6" };
   }
   if (status === "pendiente") {
     return light
-      ? { background: "#fffbeb", borderColor: "#fde68a", color: "#b45309" }
-      : { background: "rgba(245,158,11,0.12)", borderColor: "rgba(245,158,11,0.32)", color: "#fcd34d" };
+      ? { background: "#f8f3e9", borderColor: "#e4d5b8", color: "#836229" }
+      : { background: "rgba(168,134,74,0.13)", borderColor: "rgba(168,134,74,0.30)", color: "#cbae83" };
   }
   return {
     background: "transparent",
     borderColor: "var(--border)",
-    borderStyle: "dashed",
     color: "var(--text-faint)",
   };
 }
@@ -17273,9 +17272,12 @@ export default function Home() {
                   backgroundColor: "var(--surface, #0e1626)",
                   borderColor: "var(--border, rgba(255,255,255,0.08))",
                 }}
-                className="modal-pop-in relative my-6 w-full max-w-6xl overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+                className="modal-pop-in relative my-6 w-full max-w-[1500px] overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
               >
-                <div className="h-[3px] w-full bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-600" />
+                <div
+                  className="h-[2px] w-full"
+                  style={{ background: "linear-gradient(90deg, transparent, var(--border-strong), transparent)" }}
+                />
 
                 {/* Encabezado */}
                 <div className="flex items-start justify-between gap-3 px-6 pb-4 pt-5">
@@ -17283,8 +17285,10 @@ export default function Home() {
                     <span
                       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white"
                       style={{
-                        background: "linear-gradient(135deg, #22d3ee, #2563eb)",
-                        boxShadow: "0 8px 20px rgba(37,99,235,0.35)",
+                        background: isLightPanelTheme
+                          ? "linear-gradient(135deg, #5b7d99, #3f5f7a)"
+                          : "linear-gradient(135deg, #3d5a73, #2a3d52)",
+                        boxShadow: "0 6px 16px rgba(0,0,0,0.22)",
                       }}
                     >
                       {IconFile}
@@ -17337,7 +17341,10 @@ export default function Home() {
                 <div className="max-h-[70vh] overflow-y-auto px-3 pb-2 sm:px-5">
                   {docsLoading ? (
                     <div className="flex flex-col items-center justify-center gap-3 py-16">
-                      <span className="h-6 w-6 animate-spin rounded-full border-2 border-cyan-400/25 border-t-cyan-400" />
+                      <span
+                        className="h-6 w-6 animate-spin rounded-full border-2"
+                        style={{ borderColor: "var(--border)", borderTopColor: "var(--text-muted)" }}
+                      />
                       <p className="text-sm" style={{ color: "var(--text-muted)" }}>
                         Cargando control documental…
                       </p>
@@ -17381,7 +17388,7 @@ export default function Home() {
                                     style={{
                                       background: "var(--surface-3)",
                                       border: "1px solid var(--border)",
-                                      color: isLightPanelTheme ? "#0e7490" : "#67e8f9",
+                                      color: "var(--text-muted)",
                                     }}
                                   >
                                     {getDepIcon(dep)}
