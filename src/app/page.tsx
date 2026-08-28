@@ -10643,13 +10643,33 @@ export default function Home() {
             </p>
           </div>
           <div className="flex flex-col items-start gap-2 lg:items-end">
-            <span
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                sepsLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
-              }`}
-            >
-              {sepsLocked ? "BLOQUEADO" : "HABILITADO"}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* SEPS lleva un ciclo propio: en fase de captura se digita el mes EN CURSO
+                  y en cierre/transicion el mes anterior, por lo que puede no coincidir
+                  con el periodo que muestra el encabezado del panel (PERC). Se marca
+                  bien visible para que nadie capture creyendo que es otro mes. */}
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold"
+                style={
+                  isSepsHistory
+                    ? { borderColor: "rgba(168,134,74,0.35)", background: isLightPanelTheme ? "#f8f3e9" : "rgba(168,134,74,0.14)", color: isLightPanelTheme ? "#836229" : "#cbae83" }
+                    : { borderColor: "var(--border-strong)", background: isLightPanelTheme ? "#eef4fa" : "rgba(56,189,248,0.12)", color: isLightPanelTheme ? "#0e5a7a" : "#8ecbe4" }
+                }
+              >
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <path d="M16 2v4M8 2v4M3 10h18" />
+                </svg>
+                {isSepsHistory ? "Editando" : "Capturando"}: {getPeriodLabel(activeSepsPeriod)}
+              </span>
+              <span
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                  sepsLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
+                }`}
+              >
+                {sepsLocked ? "BLOQUEADO" : "HABILITADO"}
+              </span>
+            </div>
             {renderHistorySelector({
               options: sepsHistoryOptions,
               currentPeriod: sepsPeriodId,
@@ -11362,7 +11382,9 @@ export default function Home() {
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                   <path d="M17 21v-8H7v8M7 3v5h8" />
                 </svg>
-                {isSavingSeps ? "Guardando..." : isSepsHistory ? "Guardar cambios del mes" : "Guardar SEPS"}
+                {isSavingSeps
+                  ? "Guardando..."
+                  : `${isSepsHistory ? "Guardar cambios" : "Guardar SEPS"} · ${getShortPeriodLabel(activeSepsPeriod)}`}
               </button>
             </div>
           )}
