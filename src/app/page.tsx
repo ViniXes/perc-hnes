@@ -18858,7 +18858,7 @@ export default function Home() {
 
                 <form className="space-y-5 xl:space-y-3.5" onSubmit={handleSubmit}>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-300">Correo o usuario</span>
+                    <span className="text-sm font-medium text-slate-300">Usuario</span>
                     <div className="relative mt-2">
                       <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
@@ -18871,7 +18871,7 @@ export default function Home() {
                         onChange={(event) => setEmail(event.target.value)}
                         className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-3 pl-11 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
                         name="email"
-                        placeholder="Usuario o correo"
+                        placeholder="Ingresa tu usuario"
                         required
                         type="text"
                       />
