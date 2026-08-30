@@ -18605,7 +18605,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f4efe6] text-slate-950">
-      <section className="flex min-h-screen items-start justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-4 pb-10 pt-8 sm:pt-12 xl:items-center xl:px-10 xl:py-8">
+      <section className="flex min-h-screen items-start justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-4 pb-10 pt-8 sm:pt-12 xl:items-center xl:px-10 xl:py-6">
         {/* Panel de monitoreo OCULTO: la pantalla de inicio solo muestra el login. */}
         <div className="hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.22),transparent_28%),radial-gradient(circle_at_80%_15%,rgba(16,185,129,0.18),transparent_25%),linear-gradient(150deg,#020617_0%,#111827_55%,#172554_100%)]" />
@@ -18779,10 +18779,10 @@ export default function Home() {
         </div>
 
         <div className="relative flex w-full max-w-md items-start justify-center xl:max-w-[1120px] xl:overflow-hidden xl:rounded-[30px] xl:border xl:border-white/10 xl:bg-[#0e1626]/75 xl:shadow-[0_40px_120px_rgba(2,6,18,0.65)] xl:backdrop-blur-2xl">
-          <div className="w-full xl:w-[47%] xl:shrink-0 xl:px-11 xl:py-12">
+          <div className="w-full xl:w-[47%] xl:shrink-0 xl:px-10 xl:py-9">
             {/* Encabezado fuera del modal: Hospital Nacional · El Salvador. */}
-            <div className="mb-4 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl xl:mb-0 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:pb-7 xl:text-left xl:shadow-none xl:backdrop-blur-none">
-              <p className="text-xl font-light tracking-[0.22em] text-white sm:text-2xl">
+            <div className="mb-4 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl xl:mb-0 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:pb-6 xl:shadow-none xl:backdrop-blur-none">
+              <p className="text-xl font-light tracking-[0.22em] text-white sm:text-2xl xl:text-lg">
                 HOSPITAL NACIONAL
               </p>
               <div
@@ -18825,11 +18825,11 @@ export default function Home() {
                 <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-cyan-500/20 blur-3xl" />
                 <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-20 h-56 w-56 rounded-full bg-blue-600/20 blur-3xl" />
                 <div className="relative">
-                <div className="mb-7 flex flex-col items-center text-center xl:mb-4">
+                <div className="mb-7 flex flex-col items-center text-center xl:mb-5">
                   {/* Logo PULSO con resplandor */}
-                  <span className="relative flex h-16 w-16 items-center justify-center">
+                  <span className="relative flex h-16 w-16 items-center justify-center xl:h-12 xl:w-12">
                     <span aria-hidden className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 opacity-60 blur-lg" />
-                    <svg viewBox="0 0 48 48" className="relative h-16 w-16 drop-shadow-lg" aria-hidden="true">
+                    <svg viewBox="0 0 48 48" className="relative h-16 w-16 drop-shadow-lg xl:h-12 xl:w-12" aria-hidden="true">
                       <defs>
                         <linearGradient id="pulsoGradLogin" x1="0" y1="0" x2="1" y2="1">
                           <stop offset="0" stopColor="#22d3ee" />
@@ -18847,16 +18847,16 @@ export default function Home() {
                       />
                     </svg>
                   </span>
-                  <h2 className="mt-4 text-3xl font-bold tracking-tight text-white">
+                  <h2 className="mt-4 text-3xl font-bold tracking-tight text-white xl:mt-3 xl:text-2xl">
                     Bienvenido a PULSO
                   </h2>
-                  <p className="mt-1.5 text-[13px] font-medium leading-snug text-slate-300">
+                  <p className="mt-1.5 text-[13px] font-medium leading-snug text-slate-300 xl:text-[12px]">
                     Plataforma Única de Logística y Servicios Operativos
                   </p>
-                  <p className="mt-1.5 text-sm text-slate-400">Iniciá sesión para continuar</p>
+                  <p className="mt-1.5 text-sm text-slate-400 xl:mt-1 xl:text-[12.5px]">Iniciá sesión para continuar</p>
                 </div>
 
-                <form className="space-y-5 xl:space-y-4" onSubmit={handleSubmit}>
+                <form className="space-y-5 xl:space-y-3.5" onSubmit={handleSubmit}>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-300">Correo o usuario</span>
                     <div className="relative mt-2">
@@ -18871,7 +18871,7 @@ export default function Home() {
                         onChange={(event) => setEmail(event.target.value)}
                         className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-3 pl-11 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
                         name="email"
-                        placeholder="correo@hospital.com o Hcardoza"
+                        placeholder="Usuario o correo"
                         required
                         type="text"
                       />
@@ -18973,7 +18973,7 @@ export default function Home() {
             )}
 
             {/* Creditos del equipo desarrollador, debajo del modal de login. */}
-            <div className="mt-10 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl xl:mt-9 xl:rounded-none xl:border-0 xl:border-t xl:border-white/10 xl:bg-transparent xl:px-0 xl:pb-0 xl:pt-6 xl:text-left xl:shadow-none xl:backdrop-blur-none">
+            <div className="mt-10 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl xl:hidden">
               <p className="text-[10px] font-light uppercase tracking-[0.32em] text-slate-400">
                 Desarrollado por
               </p>
@@ -18990,58 +18990,40 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Mitad derecha de la tarjeta: panel de marca. SOLO escritorio (>= xl);
-              en movil y tablet no se renderiza y la pantalla queda como siempre. */}
-          <aside className="relative hidden xl:flex xl:w-[53%] xl:flex-col xl:justify-between xl:border-l xl:border-white/10 xl:bg-gradient-to-br xl:from-white/[0.035] xl:via-transparent xl:to-transparent xl:px-11 xl:py-12">
-            <div aria-hidden className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
-            <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-16 h-64 w-64 rounded-full bg-blue-600/10 blur-3xl" />
+          {/* Mitad derecha de la tarjeta. SOLO escritorio (>= xl): identidad de la
+              plataforma arriba y los creditos de ESDOMED al pie. El logo no se
+              repite aqui: vive unicamente en la tarjeta de inicio de sesion. */}
+          <aside className="relative hidden xl:flex xl:w-[53%] xl:flex-col xl:justify-between xl:border-l xl:border-white/10 xl:bg-gradient-to-br xl:from-white/[0.03] xl:via-transparent xl:to-transparent xl:px-11 xl:py-9">
+            <div aria-hidden className="pointer-events-none absolute -right-28 -top-32 h-72 w-72 rounded-full bg-cyan-500/[0.07] blur-3xl" />
 
             <div className="relative">
-              {/* Marca */}
-              <div className="flex items-center gap-4">
-                <span className="relative flex h-12 w-12 items-center justify-center">
-                  <span aria-hidden className="absolute inset-0 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 opacity-35 blur-lg" />
-                  <svg viewBox="0 0 48 48" className="relative h-12 w-12" aria-hidden="true">
-                    <defs>
-                      <linearGradient id="pulsoGradBrand" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0" stopColor="#22d3ee" />
-                        <stop offset="1" stopColor="#7c3aed" />
-                      </linearGradient>
-                    </defs>
-                    <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoGradBrand)" />
-                    <path d="M7 25 H16 L19.5 15 L25 35 L29 25 H41" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-                <div>
-                  <p className="text-[30px] font-light leading-none tracking-[0.18em] text-white">PULSO</p>
-                  <p className="mt-1.5 text-[9px] font-light uppercase tracking-[0.28em] text-cyan-200/60">
-                    Hospital Nacional El Salvador
-                  </p>
-                </div>
-              </div>
+              <p className="text-[34px] font-extralight leading-none tracking-[0.30em] text-white">
+                PULSO
+              </p>
+              <p className="mt-3 text-[9px] font-light uppercase tracking-[0.34em] text-cyan-200/55">
+                Hospital Nacional El Salvador
+              </p>
 
-              {/* Linea de pulso */}
-              <svg viewBox="0 0 600 44" className="mt-7 h-8 w-full" preserveAspectRatio="none" aria-hidden="true">
+              <svg viewBox="0 0 600 34" className="mt-7 h-6 w-full" preserveAspectRatio="none" aria-hidden="true">
                 <path
                   className="ekg-track"
-                  d="M0 22 H130 L148 22 L160 8 L174 36 L186 22 H320 L338 22 L350 10 L364 34 L376 22 H600"
+                  d="M0 17 H140 L156 17 L167 6 L180 28 L191 17 H330 L346 17 L357 8 L370 26 L381 17 H600"
                   fill="none"
-                  strokeWidth="1.2"
+                  strokeWidth="1"
                   pathLength={100}
                 />
                 <path
                   className="ekg-pulse-soft"
-                  d="M0 22 H130 L148 22 L160 8 L174 36 L186 22 H320 L338 22 L350 10 L364 34 L376 22 H600"
+                  d="M0 17 H140 L156 17 L167 6 L180 28 L191 17 H330 L346 17 L357 8 L370 26 L381 17 H600"
                   fill="none"
                   stroke="#67e8f9"
-                  strokeWidth="1.8"
+                  strokeWidth="1.6"
                   strokeLinecap="round"
                   pathLength={100}
                 />
               </svg>
 
-              {/* Significado de las siglas */}
-              <ul className="mt-8 space-y-2.5">
+              <ul className="mt-8 space-y-3">
                 {[
                   { letra: "P", palabra: "Plataforma" },
                   { letra: "U", palabra: "Única" },
@@ -19049,22 +19031,30 @@ export default function Home() {
                   { letra: "S", palabra: "Servicios" },
                   { letra: "O", palabra: "Operativos" },
                 ].map((item) => (
-                  <li key={item.letra} className="flex items-center gap-3.5">
-                    <span className="w-4 shrink-0 text-center text-[15px] font-light text-cyan-300/85">
-                      {item.letra}
-                    </span>
-                    <span aria-hidden className="h-px w-5 shrink-0 bg-white/12" />
-                    <span className="text-[13.5px] font-light tracking-wide text-slate-300">{item.palabra}</span>
+                  <li key={item.letra} className="flex items-center gap-4">
+                    <span className="w-3 shrink-0 text-[14px] font-light text-cyan-300/80">{item.letra}</span>
+                    <span aria-hidden className="h-px w-6 shrink-0 bg-white/[0.14]" />
+                    <span className="text-[13px] font-light tracking-[0.02em] text-slate-300">{item.palabra}</span>
                   </li>
                 ))}
               </ul>
-            </div>
 
-            {/* Cierre del panel */}
-            <div className="relative mt-9 border-t border-white/10 pt-6">
-              <p className="text-[11px] font-light leading-relaxed text-slate-400">
+              <p className="mt-8 max-w-[46ch] text-[11px] font-light leading-relaxed text-slate-400">
                 Captura de productividad, estadística y distribución de horas del personal,
                 para todas las dependencias del hospital.
+              </p>
+            </div>
+
+            {/* Creditos del equipo desarrollador. */}
+            <div className="relative mt-8 border-t border-white/10 pt-6">
+              <p className="text-[9px] font-light uppercase tracking-[0.32em] text-slate-500">
+                Desarrollado por
+              </p>
+              <p className="mt-1.5 bg-gradient-to-r from-cyan-300 to-blue-300 bg-clip-text text-xl font-light tracking-[0.24em] text-transparent">
+                ESDOMED
+              </p>
+              <p className="mt-2 text-[9px] font-light uppercase tracking-[0.34em] text-slate-600">
+                Versión 1.6.2.6
               </p>
             </div>
           </aside>
