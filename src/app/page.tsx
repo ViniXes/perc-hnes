@@ -18605,7 +18605,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f4efe6] text-slate-950">
-      <section className="flex min-h-screen items-start justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-4 pb-10 pt-8 sm:pt-12 xl:items-center xl:py-4">
+      <section className="flex min-h-screen items-start justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-4 pb-10 pt-8 sm:pt-12 xl:mx-auto xl:max-w-[1480px] xl:items-center xl:gap-14 xl:px-12 xl:py-4">
         {/* Panel de monitoreo OCULTO: la pantalla de inicio solo muestra el login. */}
         <div className="hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.22),transparent_28%),radial-gradient(circle_at_80%_15%,rgba(16,185,129,0.18),transparent_25%),linear-gradient(150deg,#020617_0%,#111827_55%,#172554_100%)]" />
@@ -18990,6 +18990,88 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {/* Panel de marca — SOLO escritorio (>= xl). Aprovecha el espacio que antes
+            quedaba vacio a los lados del formulario. En movil y tablet no se
+            renderiza, para no competir con el ingreso. */}
+        <aside className="relative hidden flex-1 xl:flex xl:max-w-[640px] xl:flex-col xl:justify-center">
+          <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[#0e1626]/55 px-10 py-11 shadow-2xl shadow-black/40 backdrop-blur-xl">
+            {/* Resplandores suaves, del mismo tono que el resto de la pantalla. */}
+            <div aria-hidden className="pointer-events-none absolute -left-24 -top-28 h-72 w-72 rounded-full bg-cyan-500/12 blur-3xl" />
+            <div aria-hidden className="pointer-events-none absolute -bottom-28 -right-24 h-72 w-72 rounded-full bg-blue-600/12 blur-3xl" />
+
+            <div className="relative">
+              {/* Marca */}
+              <div className="flex items-center gap-4">
+                <span className="relative flex h-14 w-14 items-center justify-center">
+                  <span aria-hidden className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 opacity-40 blur-lg" />
+                  <svg viewBox="0 0 48 48" className="relative h-14 w-14" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="pulsoGradBrand" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stopColor="#22d3ee" />
+                        <stop offset="1" stopColor="#7c3aed" />
+                      </linearGradient>
+                    </defs>
+                    <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoGradBrand)" />
+                    <path d="M7 25 H16 L19.5 15 L25 35 L29 25 H41" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <div>
+                  <p className="text-[44px] font-light leading-none tracking-[0.16em] text-white">PULSO</p>
+                  <p className="mt-2 text-[10.5px] font-light uppercase tracking-[0.3em] text-cyan-200/70">
+                    Hospital Nacional El Salvador
+                  </p>
+                </div>
+              </div>
+
+              {/* Linea de pulso (electro) que recorre el panel. */}
+              <svg viewBox="0 0 600 60" className="mt-8 h-12 w-full" preserveAspectRatio="none" aria-hidden="true">
+                <path
+                  className="ekg-track"
+                  d="M0 30 H120 L138 30 L150 12 L165 48 L178 30 H300 L318 30 L330 16 L344 44 L356 30 H600"
+                  fill="none"
+                  strokeWidth="1.5"
+                  pathLength={100}
+                />
+                <path
+                  className="ekg-pulse-soft"
+                  d="M0 30 H120 L138 30 L150 12 L165 48 L178 30 H300 L318 30 L330 16 L344 44 L356 30 H600"
+                  fill="none"
+                  stroke="#67e8f9"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  pathLength={100}
+                />
+              </svg>
+
+              {/* Que significan las siglas. */}
+              <ul className="mt-8 space-y-3.5">
+                {[
+                  { letra: "P", palabra: "Plataforma" },
+                  { letra: "U", palabra: "Única" },
+                  { letra: "L", palabra: "Logística" },
+                  { letra: "S", palabra: "Servicios" },
+                  { letra: "O", palabra: "Operativos" },
+                ].map((item) => (
+                  <li key={item.letra} className="flex items-center gap-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-400/25 bg-cyan-400/[0.07] text-base font-semibold text-cyan-200/90">
+                      {item.letra}
+                    </span>
+                    <span className="text-[15px] font-light tracking-wide text-slate-200">{item.palabra}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Pie del panel. */}
+              <div className="mt-9 border-t border-white/10 pt-5">
+                <p className="text-[11px] font-light leading-relaxed text-slate-400">
+                  Captura de productividad, estadística y distribución de horas del personal,
+                  para todas las dependencias del hospital.
+                </p>
+              </div>
+            </div>
+          </div>
+        </aside>
       </section>
 
       {/* Modal de REGISTRO publico (jefes de servicio). */}
