@@ -18778,8 +18778,8 @@ export default function Home() {
 
         </div>
 
-        <div className="relative flex w-full max-w-md items-start justify-center xl:max-w-[1120px] xl:overflow-hidden xl:rounded-[30px] xl:border xl:border-white/10 xl:bg-[#0e1626]/75 xl:shadow-[0_40px_120px_rgba(2,6,18,0.65)] xl:backdrop-blur-2xl">
-          <div className="w-full xl:w-[47%] xl:shrink-0 xl:px-10 xl:py-9">
+        <div className="relative flex w-full max-w-md items-start justify-center xl:min-h-[672px] xl:max-w-[1456px] xl:overflow-hidden xl:rounded-[30px] xl:border xl:border-white/[0.22] xl:bg-[#0e1626]/75 xl:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_40px_120px_rgba(2,6,18,0.7)] xl:backdrop-blur-2xl">
+          <div className="w-full xl:flex xl:w-[40%] xl:shrink-0 xl:flex-col xl:justify-center xl:px-14 xl:py-10">
             {/* Encabezado fuera del modal: Hospital Nacional · El Salvador. */}
             <div className="mb-4 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl xl:mb-0 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:pb-6 xl:shadow-none xl:backdrop-blur-none">
               <p className="text-xl font-light tracking-[0.22em] text-white sm:text-2xl xl:text-lg">
@@ -18993,14 +18993,14 @@ export default function Home() {
           {/* Mitad derecha de la tarjeta. SOLO escritorio (>= xl): identidad de la
               plataforma arriba y los creditos de ESDOMED al pie. El logo no se
               repite aqui: vive unicamente en la tarjeta de inicio de sesion. */}
-          <aside className="relative hidden xl:flex xl:w-[53%] xl:flex-col xl:justify-between xl:border-l xl:border-white/10 xl:bg-gradient-to-br xl:from-white/[0.03] xl:via-transparent xl:to-transparent xl:px-11 xl:py-9">
+          <aside className="relative hidden xl:flex xl:w-[60%] xl:flex-col xl:justify-between xl:border-l xl:border-white/10 xl:bg-gradient-to-br xl:from-white/[0.03] xl:via-transparent xl:to-transparent xl:px-14 xl:py-11">
             <div aria-hidden className="pointer-events-none absolute -right-28 -top-32 h-72 w-72 rounded-full bg-cyan-500/[0.07] blur-3xl" />
 
             <div className="relative">
-              <p className="text-[34px] font-extralight leading-none tracking-[0.30em] text-white">
+              <p className="text-[52px] font-extralight leading-none tracking-[0.32em] text-white">
                 PULSO
               </p>
-              <p className="mt-3 text-[9px] font-light uppercase tracking-[0.34em] text-cyan-200/55">
+              <p className="mt-4 text-[10px] font-light uppercase tracking-[0.36em] text-cyan-200/55">
                 Hospital Nacional El Salvador
               </p>
 
@@ -19023,7 +19023,7 @@ export default function Home() {
                 />
               </svg>
 
-              <ul className="mt-8 space-y-3">
+              <ul className="mt-9 space-y-3.5">
                 {[
                   { letra: "P", palabra: "Plataforma" },
                   { letra: "U", palabra: "Única" },
@@ -19032,14 +19032,14 @@ export default function Home() {
                   { letra: "O", palabra: "Operativos" },
                 ].map((item) => (
                   <li key={item.letra} className="flex items-center gap-4">
-                    <span className="w-3 shrink-0 text-[14px] font-light text-cyan-300/80">{item.letra}</span>
-                    <span aria-hidden className="h-px w-6 shrink-0 bg-white/[0.14]" />
-                    <span className="text-[13px] font-light tracking-[0.02em] text-slate-300">{item.palabra}</span>
+                    <span className="w-4 shrink-0 text-[17px] font-light text-cyan-300/80">{item.letra}</span>
+                    <span aria-hidden className="h-px w-7 shrink-0 bg-white/[0.14]" />
+                    <span className="text-[15px] font-light tracking-[0.02em] text-slate-300">{item.palabra}</span>
                   </li>
                 ))}
               </ul>
 
-              <p className="mt-8 max-w-[46ch] text-[11px] font-light leading-relaxed text-slate-400">
+              <p className="mt-9 max-w-[54ch] text-[12px] font-light leading-relaxed text-slate-400">
                 Captura de productividad, estadística y distribución de horas del personal,
                 para todas las dependencias del hospital.
               </p>
