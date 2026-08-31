@@ -809,7 +809,7 @@ body[data-panel-theme="light"] [class*="text-amber-3"] { color: #b45309 !importa
 /* ===========================================================================
    Estrella fugaz en el bloque de creditos del login (escritorio).
    Un destello diagonal cruza el bloque en poco menos de 2 s y vuelve a pasar
-   cada 20 s: presente pero discreto, sin distraer del ingreso.
+   cada 5 s: presente pero discreto, sin distraer del ingreso.
    =========================================================================== */
 .shooting-star::after {
   content: "";
@@ -828,13 +828,13 @@ body[data-panel-theme="light"] [class*="text-amber-3"] { color: #b45309 !importa
     rgba(186, 230, 253, 0.05) 62%,
     transparent 100%
   );
-  animation: shooting-star 20s linear infinite;
+  animation: shooting-star 5s linear infinite;
 }
 @keyframes shooting-star {
   0%   { left: -40%; opacity: 0; }
-  1.5% { opacity: 1; }
-  8%   { opacity: 1; }
-  9.5% { left: 108%; opacity: 0; }
+  6%   { opacity: 1; }
+  30%  { opacity: 1; }
+  36%  { left: 108%; opacity: 0; }
   100% { left: 108%; opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {

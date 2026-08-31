@@ -18781,7 +18781,7 @@ export default function Home() {
         <div className="relative flex w-full max-w-md items-start justify-center xl:min-h-[672px] xl:max-w-[1456px] xl:overflow-hidden xl:rounded-[30px] xl:border xl:border-white/[0.22] xl:bg-[#0e1626]/75 xl:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_40px_120px_rgba(2,6,18,0.7)] xl:backdrop-blur-2xl">
           <div className="w-full xl:flex xl:w-1/2 xl:shrink-0 xl:flex-col xl:justify-center xl:px-14 xl:py-10">
             {/* Encabezado fuera del modal: Hospital Nacional · El Salvador. */}
-            <div className="mb-4 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl xl:mb-0 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:pb-6 xl:shadow-none xl:backdrop-blur-none">
+            <div className="mb-4 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl xl:mx-auto xl:mb-0 xl:max-w-[400px] xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:pb-6 xl:shadow-none xl:backdrop-blur-none">
               <p className="text-xl font-light tracking-[0.22em] text-white sm:text-2xl xl:text-lg">
                 HOSPITAL NACIONAL
               </p>
@@ -18820,7 +18820,7 @@ export default function Home() {
                 </button>
               </section>
             ) : (
-              <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#0e1626]/80 p-6 shadow-2xl shadow-black/60 backdrop-blur-xl sm:p-9 xl:rounded-[22px] xl:border xl:border-white/[0.16] xl:bg-white/[0.02] xl:p-7 xl:shadow-none xl:backdrop-blur-none">
+              <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#0e1626]/80 p-6 shadow-2xl shadow-black/60 backdrop-blur-xl sm:p-9 xl:mx-auto xl:w-full xl:max-w-[400px] xl:rounded-[22px] xl:border xl:border-white/[0.16] xl:bg-white/[0.02] xl:p-7 xl:shadow-none xl:backdrop-blur-none">
                 {/* Resplandores de fondo */}
                 <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-cyan-500/20 blur-3xl" />
                 <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-20 h-56 w-56 rounded-full bg-blue-600/20 blur-3xl" />
