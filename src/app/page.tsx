@@ -3514,6 +3514,58 @@ async function fetchCaptureOverridesForPeriod(periodId: string): Promise<Capture
   return overrides;
 }
 
+// Primer mes que se puede consultar en "Avance por modulo": antes de esta fecha
+// no hay uso formal del sistema, asi que no tiene sentido ofrecerlo en el selector.
+const AVANCE_FIRST_PERIOD = "2026-07";
+
+// Meses disponibles para consultar: de AVANCE_FIRST_PERIOD hasta el mes en cierre,
+// sin meses futuros. La lista crece sola con el paso del tiempo.
+function buildAvancePeriods(currentPeriodId: string): string[] {
+  const [startYearText, startMonthText] = AVANCE_FIRST_PERIOD.split("-");
+  let year = Number.parseInt(startYearText, 10);
+  let month = Number.parseInt(startMonthText, 10);
+  const list: string[] = [];
+
+  for (let guard = 0; guard < 240; guard += 1) {
+    const id = `${year}-${String(month).padStart(2, "0")}`;
+    if (id > currentPeriodId) break;
+    list.push(id);
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+
+  if (list.length === 0) {
+    list.push(currentPeriodId);
+  }
+
+  // El mes mas reciente primero: es el que se consulta a diario.
+  return list.reverse();
+}
+
+// Cuenta, por modulo, cuantas dependencias completaron su captura en un tablero.
+function computeModuleStats(groups: PublicDashboardGroup[]) {
+  const base: Record<string, { done: number; total: number }> = {
+    PERC: { done: 0, total: 0 },
+    SEPS: { done: 0, total: 0 },
+    Horas: { done: 0, total: 0 },
+  };
+  for (const group of groups) {
+    for (const service of group.services) {
+      for (const mod of service.modules) {
+        const stat = base[mod.label];
+        if (stat) {
+          stat.total += 1;
+          if (mod.completed) stat.done += 1;
+        }
+      }
+    }
+  }
+  return base;
+}
+
 async function fetchPublicDashboard(year: number, currentPeriodId: string) {
   // Lecturas opcionales (SEPS/Horas pueden fallar si faltan reglas): no deben romper.
   const safeServiceIds = async (
@@ -4563,6 +4615,11 @@ export default function Home() {
   // El calendario anual se quito de la vista; conservamos el setter por compatibilidad.
   const [, setPublicDashboardMonths] = useState<PublicDashboardMonth[]>([]);
   const [publicDashboardGroups, setPublicDashboardGroups] = useState<PublicDashboardGroup[]>([]);
+  // "Avance por módulo": permite revisar el avance de CUALQUIER mes, no solo el
+  // que está en cierre. Vacío = el mes en cierre (el que ya trae el tablero).
+  const [avancePeriod, setAvancePeriod] = useState("");
+  const [avanceGroups, setAvanceGroups] = useState<PublicDashboardGroup[] | null>(null);
+  const [avanceLoading, setAvanceLoading] = useState(false);
   const [publicCompletedCount, setPublicCompletedCount] = useState(0);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
   const [calendarEditorPeriodId, setCalendarEditorPeriodId] = useState(() => getPeriodId(new Date()));
@@ -5056,25 +5113,38 @@ export default function Home() {
   const dashboardGroups =
     publicDashboardGroups.length > 0 ? publicDashboardGroups : fallbackDashboardGroups;
   // Estadistica general por modulo (cuantas dependencias completaron PERC/SEPS/Horas).
-  const moduleStats = useMemo(() => {
-    const base: Record<string, { done: number; total: number }> = {
-      PERC: { done: 0, total: 0 },
-      SEPS: { done: 0, total: 0 },
-      Horas: { done: 0, total: 0 },
-    };
-    for (const group of dashboardGroups) {
-      for (const service of group.services) {
-        for (const mod of service.modules) {
-          const stat = base[mod.label];
-          if (stat) {
-            stat.total += 1;
-            if (mod.completed) stat.done += 1;
-          }
-        }
-      }
+  const moduleStats = useMemo(() => computeModuleStats(dashboardGroups), [dashboardGroups]);
+  // Mes que se está mirando en "Avance por módulo" y su estadística. Si es el mes
+  // en cierre se reutiliza el tablero ya cargado; si es otro, se consulta aparte.
+  const avanceActivePeriod = avancePeriod || periodId;
+  const isAvanceHistory = !!avancePeriod && avancePeriod !== periodId;
+  const avanceStats = useMemo(
+    () => computeModuleStats(isAvanceHistory && avanceGroups ? avanceGroups : dashboardGroups),
+    [isAvanceHistory, avanceGroups, dashboardGroups],
+  );
+  useEffect(() => {
+    if (!isAvanceHistory || firestoreUnavailable) {
+      setAvanceGroups(null);
+      return;
     }
-    return base;
-  }, [dashboardGroups]);
+    let cancelled = false;
+    setAvanceLoading(true);
+    void (async () => {
+      try {
+        const year = Number.parseInt(avanceActivePeriod.slice(0, 4), 10) || currentYear;
+        const dashboard = await fetchPublicDashboard(year, avanceActivePeriod);
+        if (!cancelled) setAvanceGroups(dashboard.groups);
+      } catch {
+        if (!cancelled) setAvanceGroups([]);
+      } finally {
+        if (!cancelled) setAvanceLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAvanceHistory, avanceActivePeriod, firestoreUnavailable]);
   const welcomeName = useMemo(() => {
     return serviceProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Usuario";
   }, [serviceProfile?.name, user?.displayName, user?.email]);
@@ -14916,9 +14986,42 @@ export default function Home() {
 
               <div className="mt-5 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
                 <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">
-                    Avance por módulo
-                  </p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">
+                        Avance por módulo
+                      </p>
+                      {/* El mes que se esta viendo, siempre a la vista. */}
+                      <p className="mt-1 text-base font-semibold capitalize text-white">
+                        {getPeriodLabel(avanceActivePeriod)}
+                      </p>
+                    </div>
+                    {/* Revisar el avance de cualquier mes, no solo el que esta en cierre. */}
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={avancePeriod || periodId}
+                        onChange={(event) =>
+                          setAvancePeriod(event.target.value === periodId ? "" : event.target.value)
+                        }
+                        className="rounded-lg border border-white/10 bg-[#141d2e] px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none transition focus:border-cyan-400"
+                      >
+                        {buildAvancePeriods(periodId).map((option) => (
+                          <option key={option} value={option}>
+                            {getPeriodLabel(option)}
+                            {option === periodId ? " · en cierre" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      {avanceLoading ? (
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/15 border-t-cyan-400" />
+                      ) : null}
+                    </div>
+                  </div>
+                  {isAvanceHistory ? (
+                    <p className="mt-2 text-[11px] text-amber-200/80">
+                      Estás viendo {getPeriodLabel(avanceActivePeriod)}, un mes distinto al que está en cierre.
+                    </p>
+                  ) : null}
                   <div className="mt-4 space-y-5">
                     {(
                       [
@@ -14927,7 +15030,7 @@ export default function Home() {
                         { key: "Horas", label: "Distribución de Horas", color: "text-amber-300", bar: "from-amber-400 to-amber-500" },
                       ] as const
                     ).map((m) => {
-                      const stat = moduleStats[m.key];
+                      const stat = avanceStats[m.key];
                       const pct = stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0;
                       return (
                         <div key={m.key}>
