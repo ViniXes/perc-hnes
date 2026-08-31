@@ -60,6 +60,13 @@ import {
 import { downloadSepsTemplate } from "@/lib/seps-download";
 import { importSepsWorkbookByLabels } from "@/lib/seps-import";
 import {
+  applySepsLayout,
+  emptySepsLayout,
+  isSepsLayoutEmpty,
+  parseSepsLayout,
+  type SepsLayout,
+} from "@/lib/seps-layout";
+import {
   createPoaDoc,
   getPoaDocId,
   poaPercent,
@@ -4526,6 +4533,12 @@ export default function Home() {
   const [sepsValues, setSepsValues] = useState<SepsValues>({});
   // Filas agregadas a mano y filas ocultas del SEPS (admin/supervisores). Se
   // guardan POR MES junto con los valores del tabulador SEPS del servicio.
+  // Estructura editable del SEPS (permanente por servicio): tablas y filas
+  // agregadas, ocultas o renombradas por el administrador.
+  const [sepsLayout, setSepsLayout] = useState<SepsLayout | null>(null);
+  const [sepsLayoutDraft, setSepsLayoutDraft] = useState<SepsLayout | null>(null);
+  const [sepsEditingLayout, setSepsEditingLayout] = useState(false);
+  const [sepsSavingLayout, setSepsSavingLayout] = useState(false);
   const [sepsExtraRows, setSepsExtraRows] = useState<SepsExtraRow[]>([]);
   const [sepsHiddenKeys, setSepsHiddenKeys] = useState<string[]>([]);
   // Comentarios de revision del SEPS (los deja el revisor/admin; los ve el servicio).
@@ -5339,9 +5352,16 @@ export default function Home() {
     return effectiveCaptureOpen(captureWindow.isOpen, override);
   }, [captureOverrides, captureWindow.isOpen, currentService, periodId]);
   // SEPS: plantilla del servicio (si tiene), ventana de doble fase y estado efectivo.
-  const sepsTemplate = useMemo(
+  const sepsBaseTemplate = useMemo(
     () => getSepsTemplate(effectiveServiceId),
     [effectiveServiceId],
+  );
+  // Todo el sistema (captura, guardado, importación, consolidados) usa ESTA
+  // plantilla, así que basta aplicar la estructura aquí para que el ajuste del
+  // administrador se propague a todo el tabulador.
+  const sepsTemplate = useMemo(
+    () => applySepsLayout(sepsBaseTemplate, sepsEditingLayout ? sepsLayoutDraft : sepsLayout),
+    [sepsBaseTemplate, sepsLayout, sepsLayoutDraft, sepsEditingLayout],
   );
   const horasTemplate = useMemo(
     () => getHorasTemplate(effectiveServiceId),
@@ -8901,6 +8921,197 @@ export default function Home() {
     }
   }
 
+  // ---- Estructura del SEPS (permanente por servicio) ------------------------
+  // La ajustan los administradores y el revisor de SEPS. Se guarda una sola vez y
+  // rige para todos los meses siguientes; los datos ya capturados no se tocan.
+  const canEditSepsLayout = (isAdmin || isSepsStaff) && !isDirector;
+
+  useEffect(() => {
+    if (!sepsBaseTemplate || firestoreUnavailable || !user) {
+      setSepsLayout(null);
+      return;
+    }
+    const serviceId = sepsBaseTemplate.serviceId;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const snap = await getDoc(doc(db, "sepsLayouts", serviceId));
+        if (cancelled) return;
+        setSepsLayout(snap.exists() ? parseSepsLayout(serviceId, snap.data()) : null);
+      } catch {
+        if (!cancelled) setSepsLayout(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sepsBaseTemplate, firestoreUnavailable, user]);
+
+  /** Entra o sale del modo de edición de la matriz. */
+  function toggleSepsLayoutEditing() {
+    if (!canEditSepsLayout || !sepsBaseTemplate) return;
+    if (sepsEditingLayout) {
+      setSepsEditingLayout(false);
+      setSepsLayoutDraft(null);
+      return;
+    }
+    setSepsLayoutDraft(
+      sepsLayout
+        ? JSON.parse(JSON.stringify(sepsLayout))
+        : emptySepsLayout(sepsBaseTemplate.serviceId),
+    );
+    setSepsEditingLayout(true);
+    setMessage("Modo edición de la matriz. Los cambios se aplican al guardar la estructura.");
+  }
+
+  /** Aplica un cambio sobre el borrador de la estructura. */
+  function updateSepsLayoutDraft(mutate: (draft: SepsLayout) => void) {
+    setSepsLayoutDraft((current) => {
+      if (!current) return current;
+      const next = JSON.parse(JSON.stringify(current)) as SepsLayout;
+      mutate(next);
+      return next;
+    });
+  }
+
+  function handleLayoutRenameTable(tableId: string, currentTitle: string) {
+    if (typeof window === "undefined") return;
+    const title = window.prompt("Nuevo título de la tabla:", currentTitle);
+    if (title === null) return;
+    const clean = title.trim();
+    if (!clean) return;
+    updateSepsLayoutDraft((draft) => {
+      draft.tableTitles[tableId] = { ...(draft.tableTitles[tableId] || {}), title: clean };
+    });
+  }
+
+  function handleLayoutRenameSubtitle(tableId: string, currentSubtitle: string) {
+    if (typeof window === "undefined") return;
+    const subtitle = window.prompt("Subtítulo de la tabla (vacío para quitarlo):", currentSubtitle);
+    if (subtitle === null) return;
+    updateSepsLayoutDraft((draft) => {
+      draft.tableTitles[tableId] = {
+        ...(draft.tableTitles[tableId] || {}),
+        subtitle: subtitle.trim(),
+      };
+    });
+  }
+
+  function handleLayoutDeleteTable(tableId: string, title: string) {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `¿Eliminar del tabulador la tabla «${title}» con todas sus filas?\n\nNo se borran los datos ya capturados en meses anteriores: la tabla deja de pedirse de aquí en adelante.`,
+      )
+    ) {
+      return;
+    }
+    updateSepsLayoutDraft((draft) => {
+      if (!draft.hiddenTables.includes(tableId)) draft.hiddenTables.push(tableId);
+      draft.extraTables = draft.extraTables.filter((table) => table.id !== tableId);
+    });
+  }
+
+  function handleLayoutRenameRow(rowKey: string, currentLabel: string) {
+    if (typeof window === "undefined") return;
+    const label = window.prompt("Nuevo nombre de la fila:", currentLabel);
+    if (label === null) return;
+    const clean = label.trim();
+    if (!clean) return;
+    updateSepsLayoutDraft((draft) => {
+      draft.rowLabels[rowKey] = clean;
+    });
+  }
+
+  function handleLayoutHideRow(rowKey: string, label: string) {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(`¿Quitar del tabulador la fila «${label}»? Sus datos anteriores se conservan.`)
+    ) {
+      return;
+    }
+    updateSepsLayoutDraft((draft) => {
+      draft.extraRows = draft.extraRows.filter((row) => row.key !== rowKey);
+      if (!draft.hiddenRows.includes(rowKey)) draft.hiddenRows.push(rowKey);
+    });
+  }
+
+  function handleLayoutAddRow(tableId: string, afterKey: string) {
+    if (typeof window === "undefined") return;
+    const label = window.prompt("Nombre de la fila nueva:", "");
+    if (label === null) return;
+    const clean = label.trim();
+    if (!clean) return;
+    const key = `lx-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+    updateSepsLayoutDraft((draft) => {
+      draft.extraRows.push({ tableId, key, label: clean, afterKey });
+    });
+  }
+
+  function handleLayoutAddTable() {
+    if (typeof window === "undefined" || !sepsBaseTemplate) return;
+    const title = window.prompt("Título de la tabla nueva:", "");
+    if (title === null) return;
+    const clean = title.trim();
+    if (!clean) return;
+    const id = `lt-${Date.now().toString(36)}`;
+    updateSepsLayoutDraft((draft) => {
+      draft.extraTables.push({
+        id,
+        title: clean,
+        detailLabel: "Detalle",
+        rows: [{ key: `${id}-r1`, label: "Nueva fila" }],
+      });
+    });
+    setMessage("Tabla agregada. Renombrá su primera fila y agregá las que necesites.");
+  }
+
+  function handleLayoutRestoreAll() {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm("¿Devolver el tabulador a su estructura oficial? Se descartan todos los ajustes.")
+    ) {
+      return;
+    }
+    if (!sepsBaseTemplate) return;
+    setSepsLayoutDraft(emptySepsLayout(sepsBaseTemplate.serviceId));
+  }
+
+  /** Guarda la estructura: rige para todos los meses siguientes. */
+  async function handleSaveSepsLayout() {
+    if (!canEditSepsLayout || !sepsLayoutDraft || !sepsBaseTemplate || firestoreUnavailable) return;
+    const serviceName = sepsBaseTemplate.displayName ?? sepsBaseTemplate.serviceId;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `Vas a guardar la estructura del tabulador SEPS de ${serviceName}.\n\nEl cambio es PERMANENTE: rige para el mes en curso y para todos los meses siguientes. Los meses ya cerrados conservan sus datos.\n\n¿Confirmás?`,
+      )
+    ) {
+      return;
+    }
+    setSepsSavingLayout(true);
+    setError("");
+    setMessage("");
+    try {
+      await setDoc(doc(db, "sepsLayouts", sepsBaseTemplate.serviceId), {
+        ...sepsLayoutDraft,
+        serviceId: sepsBaseTemplate.serviceId,
+        updatedAt: serverTimestamp(),
+        updatedBy: user?.email || "",
+        updatedByName: serviceProfile?.name || "",
+      });
+      setSepsLayout(isSepsLayoutEmpty(sepsLayoutDraft) ? null : sepsLayoutDraft);
+      setSepsEditingLayout(false);
+      setSepsLayoutDraft(null);
+      setMessage("Estructura del tabulador guardada. Rige desde este mes en adelante.");
+    } catch (layoutError) {
+      if (await handleFirestoreError(layoutError)) return;
+      setError("No pudimos guardar la estructura del tabulador.");
+    } finally {
+      setSepsSavingLayout(false);
+    }
+  }
+
   // ---- Filas SEPS agregadas/ocultas (solo admin y supervisores) -------------
   function handleAddSepsRow(tableId: string, anchorKey: string) {
     if (!(isAdmin || isSupervisor)) {
@@ -10923,6 +11134,85 @@ export default function Home() {
 
         {/* Desplegar / colapsar TODAS las tablas de un solo toque (estas plantillas
             llegan a tener 12 tablas y abrirlas una por una es tedioso). */}
+        {/* Edición de la MATRIZ del tabulador: la usan los administradores y el
+            revisor de SEPS. Es permanente: rige para todos los meses siguientes. */}
+        {canEditSepsLayout && sepsTemplate.kind !== "matrix" ? (
+          <div
+            className={`mt-5 flex flex-wrap items-center gap-2 rounded-2xl border px-3.5 py-2.5 ${
+              sepsEditingLayout
+                ? "border-amber-400/40 bg-amber-400/[0.07]"
+                : isLightPanelTheme
+                  ? "border-slate-200 bg-slate-50"
+                  : "border-white/10 bg-white/[0.03]"
+            }`}
+          >
+            <span
+              className="text-[11px] font-semibold uppercase tracking-[0.16em]"
+              style={{ color: sepsEditingLayout ? "#d0b184" : "var(--text-muted)" }}
+            >
+              {sepsEditingLayout ? "Editando la matriz" : "Estructura del tabulador"}
+            </span>
+            {sepsEditingLayout ? (
+              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                Renombrá, agregá o eliminá tablas y filas. Se aplica al guardar.
+              </span>
+            ) : sepsLayout && !isSepsLayoutEmpty(sepsLayout) ? (
+              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                Este tabulador tiene ajustes de estructura guardados.
+              </span>
+            ) : null}
+
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {sepsEditingLayout ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleLayoutAddTable}
+                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
+                  >
+                    + Tabla nueva
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLayoutRestoreAll}
+                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-white/10"
+                  >
+                    Volver a la oficial
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleSepsLayoutEditing}
+                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-white/10"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveSepsLayout()}
+                    disabled={sepsSavingLayout}
+                    className="rounded-xl bg-amber-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50"
+                  >
+                    {sepsSavingLayout ? "Guardando…" : "Guardar estructura"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={toggleSepsLayoutEditing}
+                  className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:brightness-110"
+                  style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" }}
+                >
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
+                  Editar matriz
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
+
         {sepsCollapsibleKeys.length > 1 ? (
           <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
             <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--text-muted)" }}>
@@ -11259,7 +11549,7 @@ export default function Home() {
             // propia columna con celdas combinadas (rowspan).
             // Filas EFECTIVAS: plantilla + filas agregadas a mano - filas ocultas.
             const effRows = buildSepsEffectiveRows(table, sepsExtraRows, sepsHiddenKeys);
-            const canManageTabRows = isAdmin || isSupervisor;
+            const canManageTabRows = isAdmin || isSupervisor || sepsEditingLayout;
             const rowGroups = effRows.map((row) =>
               row.groups && row.groups.length > 0
                 ? row.groups
@@ -11329,6 +11619,44 @@ export default function Home() {
                     {tableOpen ? "−" : "+"}
                   </span>
                 </button>
+
+                {/* Edición de la estructura: renombrar o eliminar la tabla entera. */}
+                {sepsEditingLayout ? (
+                  <div
+                    className={`flex flex-wrap items-center gap-2 border-t px-4 py-2 text-[11px] ${
+                      isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-white/[0.03]"
+                    }`}
+                  >
+                    <span className="font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--text-faint)" }}>
+                      Tabla
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleLayoutRenameTable(table.id, table.title)}
+                      className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 font-semibold text-slate-200 transition hover:bg-white/10"
+                    >
+                      Renombrar título
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLayoutRenameSubtitle(table.id, table.subtitle ?? "")}
+                      className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 font-semibold text-slate-200 transition hover:bg-white/10"
+                    >
+                      Subtítulo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLayoutDeleteTable(table.id, table.title)}
+                      className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 font-semibold text-rose-200 transition hover:bg-rose-500/20"
+                    >
+                      Eliminar tabla
+                    </button>
+                    <span className="ml-auto" style={{ color: "var(--text-faint)" }}>
+                      {table.rows.length} fila(s)
+                    </span>
+                  </div>
+                ) : null}
+
                 <div className={`show-scrollbar overflow-x-auto ${tableOpen ? "" : "hidden"}`}>
                   <table className={`border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                     <thead>
@@ -11417,18 +11745,37 @@ export default function Home() {
                             <td className="whitespace-nowrap px-1 py-1 text-center">
                               <button
                                 type="button"
-                                onClick={() => handleAddSepsRow(table.id, row.key)}
+                                onClick={() =>
+                                  sepsEditingLayout
+                                    ? handleLayoutAddRow(table.id, row.key)
+                                    : handleAddSepsRow(table.id, row.key)
+                                }
                                 title="Agregar una fila debajo"
                                 aria-label="Agregar una fila debajo"
                                 className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-emerald-500/10 hover:text-emerald-300"
                               >
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
                               </button>
+                              {sepsEditingLayout ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleLayoutRenameRow(row.key, row.label)}
+                                  title="Renombrar esta fila"
+                                  aria-label="Renombrar esta fila"
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-amber-500/10 hover:text-amber-300"
+                                >
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
-                                onClick={() => handleRemoveSepsRow(row.key, !!row.isExtra, row.label)}
-                                title={row.isExtra ? "Quitar esta fila" : "Ocultar esta fila oficial"}
-                                aria-label={row.isExtra ? "Quitar esta fila" : "Ocultar esta fila oficial"}
+                                onClick={() =>
+                                  sepsEditingLayout
+                                    ? handleLayoutHideRow(row.key, row.label)
+                                    : handleRemoveSepsRow(row.key, !!row.isExtra, row.label)
+                                }
+                                title={row.isExtra ? "Quitar esta fila" : "Quitar esta fila del tabulador"}
+                                aria-label={row.isExtra ? "Quitar esta fila" : "Quitar esta fila del tabulador"}
                                 className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-300"
                               >
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>

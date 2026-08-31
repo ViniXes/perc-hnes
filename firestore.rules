@@ -82,6 +82,16 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+    // Estructura (matriz) de los tabuladores SEPS: un documento por servicio con
+    // las tablas y filas agregadas, ocultas o renombradas. La LEE cualquier usuario
+    // autenticado (todos necesitan ver el tabulador ya ajustado); la ESCRIBEN los
+    // administradores y el revisor de SEPS (Juan Carlos Miranda).
+    match /sepsLayouts/{serviceId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin()
+        || request.auth.token.email == 'jcmiranda@perc-hnes.app'
+        || (isSignedIn() && userProfile().role == 'admin');
+    }
     // POA - Plan Anual Operativo por servicio y año.
     // Ids: "<servicio>__<año>" para el documento y "<servicio>__<año>__media"
     // para los graficos de produccion. Lo VE cualquier usuario autenticado; lo
