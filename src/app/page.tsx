@@ -4539,6 +4539,20 @@ export default function Home() {
   const [sepsLayoutDraft, setSepsLayoutDraft] = useState<SepsLayout | null>(null);
   const [sepsEditingLayout, setSepsEditingLayout] = useState(false);
   const [sepsSavingLayout, setSepsSavingLayout] = useState(false);
+  /** Diálogo propio para editar la matriz (en vez de los prompts del navegador). */
+  const [layoutDialog, setLayoutDialog] = useState<{
+    kind: "text" | "confirm";
+    title: string;
+    description?: string;
+    label?: string;
+    value: string;
+    placeholder?: string;
+    allowEmpty?: boolean;
+    danger?: boolean;
+    confirmLabel: string;
+    onConfirm: (value: string) => void;
+  } | null>(null);
+  const [layoutDialogValue, setLayoutDialogValue] = useState("");
   const [sepsExtraRows, setSepsExtraRows] = useState<SepsExtraRow[]>([]);
   const [sepsHiddenKeys, setSepsHiddenKeys] = useState<string[]>([]);
   // Comentarios de revision del SEPS (los deja el revisor/admin; los ve el servicio).
@@ -8974,121 +8988,151 @@ export default function Home() {
     });
   }
 
+  /** Abre el diálogo de edición de la matriz. */
+  function openLayoutDialog(config: NonNullable<typeof layoutDialog>) {
+    setLayoutDialogValue(config.value);
+    setLayoutDialog(config);
+  }
+
   function handleLayoutRenameTable(tableId: string, currentTitle: string) {
-    if (typeof window === "undefined") return;
-    const title = window.prompt("Nuevo título de la tabla:", currentTitle);
-    if (title === null) return;
-    const clean = title.trim();
-    if (!clean) return;
-    updateSepsLayoutDraft((draft) => {
-      draft.tableTitles[tableId] = { ...(draft.tableTitles[tableId] || {}), title: clean };
+    openLayoutDialog({
+      kind: "text",
+      title: "Renombrar tabla",
+      description: "El nombre se usa en el tabulador, en la plantilla de Excel y en las descargas.",
+      label: "Título de la tabla",
+      value: currentTitle,
+      confirmLabel: "Renombrar",
+      onConfirm: (value) =>
+        updateSepsLayoutDraft((draft) => {
+          draft.tableTitles[tableId] = { ...(draft.tableTitles[tableId] || {}), title: value };
+        }),
     });
   }
 
   function handleLayoutRenameSubtitle(tableId: string, currentSubtitle: string) {
-    if (typeof window === "undefined") return;
-    const subtitle = window.prompt("Subtítulo de la tabla (vacío para quitarlo):", currentSubtitle);
-    if (subtitle === null) return;
-    updateSepsLayoutDraft((draft) => {
-      draft.tableTitles[tableId] = {
-        ...(draft.tableTitles[tableId] || {}),
-        subtitle: subtitle.trim(),
-      };
+    openLayoutDialog({
+      kind: "text",
+      title: "Subtítulo de la tabla",
+      description: "Texto secundario bajo el título. Dejalo vacío para quitarlo.",
+      label: "Subtítulo",
+      value: currentSubtitle,
+      placeholder: "Sin subtítulo",
+      allowEmpty: true,
+      confirmLabel: "Guardar",
+      onConfirm: (value) =>
+        updateSepsLayoutDraft((draft) => {
+          draft.tableTitles[tableId] = { ...(draft.tableTitles[tableId] || {}), subtitle: value };
+        }),
     });
   }
 
   function handleLayoutDeleteTable(tableId: string, title: string) {
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(
-        `¿Eliminar del tabulador la tabla «${title}» con todas sus filas?\n\nNo se borran los datos ya capturados en meses anteriores: la tabla deja de pedirse de aquí en adelante.`,
-      )
-    ) {
-      return;
-    }
-    updateSepsLayoutDraft((draft) => {
-      if (!draft.hiddenTables.includes(tableId)) draft.hiddenTables.push(tableId);
-      draft.extraTables = draft.extraTables.filter((table) => table.id !== tableId);
+    openLayoutDialog({
+      kind: "confirm",
+      title: "Eliminar tabla del tabulador",
+      description: `Se quitará «${title}» con todas sus filas. Los datos ya capturados en meses anteriores se conservan: la tabla simplemente deja de pedirse de aquí en adelante.`,
+      value: "",
+      danger: true,
+      confirmLabel: "Eliminar tabla",
+      onConfirm: () =>
+        updateSepsLayoutDraft((draft) => {
+          if (!draft.hiddenTables.includes(tableId)) draft.hiddenTables.push(tableId);
+          draft.extraTables = draft.extraTables.filter((table) => table.id !== tableId);
+        }),
     });
   }
 
   function handleLayoutRenameRow(rowKey: string, currentLabel: string) {
-    if (typeof window === "undefined") return;
-    const label = window.prompt("Nuevo nombre de la fila:", currentLabel);
-    if (label === null) return;
-    const clean = label.trim();
-    if (!clean) return;
-    updateSepsLayoutDraft((draft) => {
-      draft.rowLabels[rowKey] = clean;
+    openLayoutDialog({
+      kind: "text",
+      title: "Renombrar fila",
+      description: "Cambia solo el texto visible. Los datos ya capturados en esa fila se conservan.",
+      label: "Nombre de la fila",
+      value: currentLabel,
+      confirmLabel: "Renombrar",
+      onConfirm: (value) =>
+        updateSepsLayoutDraft((draft) => {
+          draft.rowLabels[rowKey] = value;
+        }),
     });
   }
 
   function handleLayoutHideRow(rowKey: string, label: string) {
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(`¿Quitar del tabulador la fila «${label}»? Sus datos anteriores se conservan.`)
-    ) {
-      return;
-    }
-    updateSepsLayoutDraft((draft) => {
-      draft.extraRows = draft.extraRows.filter((row) => row.key !== rowKey);
-      if (!draft.hiddenRows.includes(rowKey)) draft.hiddenRows.push(rowKey);
+    openLayoutDialog({
+      kind: "confirm",
+      title: "Quitar fila del tabulador",
+      description: `Se quitará «${label}». Sus datos anteriores se conservan y la fila puede restaurarse volviendo a la estructura oficial.`,
+      value: "",
+      danger: true,
+      confirmLabel: "Quitar fila",
+      onConfirm: () =>
+        updateSepsLayoutDraft((draft) => {
+          draft.extraRows = draft.extraRows.filter((row) => row.key !== rowKey);
+          if (!draft.hiddenRows.includes(rowKey)) draft.hiddenRows.push(rowKey);
+        }),
     });
   }
 
   function handleLayoutAddRow(tableId: string, afterKey: string) {
-    if (typeof window === "undefined") return;
-    const label = window.prompt("Nombre de la fila nueva:", "");
-    if (label === null) return;
-    const clean = label.trim();
-    if (!clean) return;
-    const key = `lx-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
-    updateSepsLayoutDraft((draft) => {
-      draft.extraRows.push({ tableId, key, label: clean, afterKey });
+    openLayoutDialog({
+      kind: "text",
+      title: "Agregar fila",
+      description: "Se insertará justo debajo de la fila seleccionada y heredará su grupo.",
+      label: "Nombre de la fila",
+      value: "",
+      placeholder: "Ej. No. de procedimientos",
+      confirmLabel: "Agregar",
+      onConfirm: (value) => {
+        const key = `lx-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+        updateSepsLayoutDraft((draft) => {
+          draft.extraRows.push({ tableId, key, label: value, afterKey });
+        });
+      },
     });
   }
 
   function handleLayoutAddTable() {
-    if (typeof window === "undefined" || !sepsBaseTemplate) return;
-    const title = window.prompt("Título de la tabla nueva:", "");
-    if (title === null) return;
-    const clean = title.trim();
-    if (!clean) return;
-    const id = `lt-${Date.now().toString(36)}`;
-    updateSepsLayoutDraft((draft) => {
-      draft.extraTables.push({
-        id,
-        title: clean,
-        detailLabel: "Detalle",
-        rows: [{ key: `${id}-r1`, label: "Nueva fila" }],
-      });
+    openLayoutDialog({
+      kind: "text",
+      title: "Agregar tabla",
+      description: "Se crea al final del tabulador con una primera fila que podés renombrar.",
+      label: "Título de la tabla",
+      value: "",
+      placeholder: "Ej. PROMOCIÓN DE LA SALUD · SALUD MENTAL",
+      confirmLabel: "Crear tabla",
+      onConfirm: (value) => {
+        const id = `lt-${Date.now().toString(36)}`;
+        updateSepsLayoutDraft((draft) => {
+          draft.extraTables.push({
+            id,
+            title: value,
+            detailLabel: "Detalle",
+            rows: [{ key: `${id}-r1`, label: "Nueva fila" }],
+          });
+        });
+        setMessage("Tabla agregada al final. Renombrá su fila y agregá las que necesites.");
+      },
     });
-    setMessage("Tabla agregada. Renombrá su primera fila y agregá las que necesites.");
   }
 
   function handleLayoutRestoreAll() {
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm("¿Devolver el tabulador a su estructura oficial? Se descartan todos los ajustes.")
-    ) {
-      return;
-    }
     if (!sepsBaseTemplate) return;
-    setSepsLayoutDraft(emptySepsLayout(sepsBaseTemplate.serviceId));
+    const serviceId = sepsBaseTemplate.serviceId;
+    openLayoutDialog({
+      kind: "confirm",
+      title: "Volver a la estructura oficial",
+      description:
+        "Se descartan todos los ajustes: tablas y filas eliminadas, renombradas y agregadas. El tabulador vuelve a como viene de fábrica.",
+      value: "",
+      danger: true,
+      confirmLabel: "Descartar ajustes",
+      onConfirm: () => setSepsLayoutDraft(emptySepsLayout(serviceId)),
+    });
   }
 
   /** Guarda la estructura: rige para todos los meses siguientes. */
-  async function handleSaveSepsLayout() {
+  async function doSaveSepsLayout() {
     if (!canEditSepsLayout || !sepsLayoutDraft || !sepsBaseTemplate || firestoreUnavailable) return;
-    const serviceName = sepsBaseTemplate.displayName ?? sepsBaseTemplate.serviceId;
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(
-        `Vas a guardar la estructura del tabulador SEPS de ${serviceName}.\n\nEl cambio es PERMANENTE: rige para el mes en curso y para todos los meses siguientes. Los meses ya cerrados conservan sus datos.\n\n¿Confirmás?`,
-      )
-    ) {
-      return;
-    }
     setSepsSavingLayout(true);
     setError("");
     setMessage("");
@@ -9106,10 +9150,34 @@ export default function Home() {
       setMessage("Estructura del tabulador guardada. Rige desde este mes en adelante.");
     } catch (layoutError) {
       if (await handleFirestoreError(layoutError)) return;
-      setError("No pudimos guardar la estructura del tabulador.");
+      setError(
+        "No pudimos guardar la estructura. Si el problema persiste, verifique que las reglas de Firestore incluyan la colección sepsLayouts.",
+      );
     } finally {
       setSepsSavingLayout(false);
     }
+  }
+
+  function handleSaveSepsLayout() {
+    if (!canEditSepsLayout || !sepsLayoutDraft || !sepsBaseTemplate) return;
+    const draft = sepsLayoutDraft;
+    const cambios = [
+      draft.hiddenTables.length ? `${draft.hiddenTables.length} tabla(s) eliminada(s)` : "",
+      draft.extraTables.length ? `${draft.extraTables.length} tabla(s) nueva(s)` : "",
+      draft.hiddenRows.length ? `${draft.hiddenRows.length} fila(s) quitada(s)` : "",
+      draft.extraRows.length ? `${draft.extraRows.length} fila(s) agregada(s)` : "",
+      Object.keys(draft.rowLabels).length ? `${Object.keys(draft.rowLabels).length} fila(s) renombrada(s)` : "",
+      Object.keys(draft.tableTitles).length ? `${Object.keys(draft.tableTitles).length} título(s) cambiado(s)` : "",
+    ].filter(Boolean);
+
+    openLayoutDialog({
+      kind: "confirm",
+      title: "Guardar la estructura del tabulador",
+      description: `${cambios.length > 0 ? `Cambios: ${cambios.join(", ")}. ` : ""}Este cambio es PERMANENTE: rige para el mes en curso y para todos los meses siguientes. Los meses ya cerrados conservan sus datos.`,
+      value: "",
+      confirmLabel: "Sí, guardar",
+      onConfirm: () => void doSaveSepsLayout(),
+    });
   }
 
   // ---- Filas SEPS agregadas/ocultas (solo admin y supervisores) -------------
@@ -16053,6 +16121,121 @@ export default function Home() {
             {renderSectionDivider("Insumos de Almacén", "Costos de insumos por centro de costo", "indigo", isLightPanelTheme)}
             <div data-view="panel-insumos">{insumosSection}</div>
             </>
+          ) : null}
+
+          {/* Diálogo de edición de la matriz SEPS: renombrar, agregar, eliminar. */}
+          {layoutDialog ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-[95] flex items-start justify-center overflow-y-auto p-4"
+              onClick={() => setLayoutDialog(null)}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                className="modal-pop-in relative my-16 w-full max-w-lg overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+              >
+                <div
+                  className="h-[2px] w-full"
+                  style={{
+                    background: layoutDialog.danger
+                      ? "linear-gradient(90deg, transparent, rgba(190,110,110,0.75), transparent)"
+                      : "linear-gradient(90deg, transparent, var(--border-strong), transparent)",
+                  }}
+                />
+
+                <div className="px-7 pb-6 pt-6">
+                  <div className="flex items-start gap-3.5">
+                    <span
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border"
+                      style={
+                        layoutDialog.danger
+                          ? { borderColor: "rgba(190,110,110,0.32)", background: isLightPanelTheme ? "#f9efef" : "rgba(150,70,70,0.16)", color: isLightPanelTheme ? "#8d2f2f" : "#e2a9a9" }
+                          : { borderColor: "rgba(168,134,74,0.32)", background: isLightPanelTheme ? "#f8f3e9" : "rgba(168,134,74,0.14)", color: isLightPanelTheme ? "#836229" : "#cbae83" }
+                      }
+                    >
+                      {layoutDialog.danger ? (
+                        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.24em]" style={{ color: "var(--text-faint)" }}>
+                        Estructura del tabulador
+                      </p>
+                      <h3 className="mt-1 text-[17px] font-semibold tracking-tight" style={{ color: "var(--text)" }}>
+                        {layoutDialog.title}
+                      </h3>
+                      {layoutDialog.description ? (
+                        <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                          {layoutDialog.description}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {layoutDialog.kind === "text" ? (
+                    <label className="mt-5 block">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--text-faint)" }}>
+                        {layoutDialog.label ?? "Texto"}
+                      </span>
+                      <textarea
+                        autoFocus
+                        rows={2}
+                        value={layoutDialogValue}
+                        placeholder={layoutDialog.placeholder}
+                        onChange={(event) => setLayoutDialogValue(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            const clean = layoutDialogValue.trim();
+                            if (!clean && !layoutDialog.allowEmpty) return;
+                            layoutDialog.onConfirm(clean);
+                            setLayoutDialog(null);
+                          }
+                        }}
+                        className="mt-2 w-full resize-none rounded-2xl border px-3.5 py-2.5 text-sm outline-none transition focus:border-cyan-400"
+                        style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text)" }}
+                      />
+                    </label>
+                  ) : null}
+
+                  <div className="mt-6 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setLayoutDialog(null)}
+                      className="rounded-xl border px-4 py-2 text-xs font-semibold transition hover:brightness-110"
+                      style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const clean = layoutDialogValue.trim();
+                        if (layoutDialog.kind === "text" && !clean && !layoutDialog.allowEmpty) return;
+                        layoutDialog.onConfirm(clean);
+                        setLayoutDialog(null);
+                      }}
+                      className="rounded-xl px-4 py-2 text-xs font-bold text-slate-950 transition hover:brightness-110"
+                      style={{
+                        background: layoutDialog.danger ? "#c98b8b" : "#cbae83",
+                      }}
+                    >
+                      {layoutDialog.confirmLabel}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : null}
 
           {/* POA: Plan Anual Operativo por año (ESDOMED, admins y accesos otorgados). */}

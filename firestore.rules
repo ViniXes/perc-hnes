@@ -19,7 +19,10 @@ service cloud.firestore {
         && (request.auth.token.email == 'hcardoza.admin@perc-hnes.app'
             || request.auth.token.email == 'ffuentes@perc-hnes.app'
             || request.auth.token.email == 'amontes@perc-hnes.app'
-            || request.auth.token.email == 'jcmiranda@perc-hnes.app');
+            || request.auth.token.email == 'jcmiranda@perc-hnes.app'
+            || request.auth.token.email == 'dalvarez@perc-hnes.app'
+            || request.auth.token.email == 'jhernandez@perc-hnes.app'
+            || request.auth.token.email == 'vhernandez@perc-hnes.app');
     }
     function userProfile() {
       return get(/databases/$(database)/documents/serviceUsers/$(request.auth.uid)).data;
