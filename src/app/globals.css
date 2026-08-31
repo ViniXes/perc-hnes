@@ -805,3 +805,38 @@ body[data-panel-theme="light"] [class*="text-amber-3"] { color: #b45309 !importa
   .poa-table { break-inside: auto; }
   .poa-table tr { break-inside: avoid; }
 }
+
+/* ===========================================================================
+   Estrella fugaz en el bloque de creditos del login (escritorio).
+   Un destello diagonal cruza el bloque en poco menos de 2 s y vuelve a pasar
+   cada 20 s: presente pero discreto, sin distraer del ingreso.
+   =========================================================================== */
+.shooting-star::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  left: -40%;
+  width: 38%;
+  height: 140%;
+  pointer-events: none;
+  transform: skewX(-20deg);
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(186, 230, 253, 0.05) 38%,
+    rgba(224, 246, 255, 0.42) 50%,
+    rgba(186, 230, 253, 0.05) 62%,
+    transparent 100%
+  );
+  animation: shooting-star 20s linear infinite;
+}
+@keyframes shooting-star {
+  0%   { left: -40%; opacity: 0; }
+  1.5% { opacity: 1; }
+  8%   { opacity: 1; }
+  9.5% { left: 108%; opacity: 0; }
+  100% { left: 108%; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shooting-star::after { animation: none; opacity: 0; }
+}
