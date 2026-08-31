@@ -1540,6 +1540,40 @@ function getCaptureOverrideId(periodId: string, serviceId: string, moduleId: Mod
   return `${periodId}__${serviceId}__${moduleId}`;
 }
 
+// Una REAPERTURA manual dura 24 horas desde que se concedió: pasado ese plazo el
+// tablero vuelve solo a su ventana natural, sin que nadie tenga que cerrarlo. El
+// cierre manual NO caduca (es una decisión que se mantiene hasta revertirla).
+const CAPTURE_OVERRIDE_HOURS = 24;
+
+/** Lee el `updatedAt` del override venga como Timestamp de Firestore o como fecha. */
+function readOverrideMillis(value: unknown): number | null {
+  if (!value) return null;
+  const asTimestamp = value as { toMillis?: () => number; seconds?: number };
+  if (typeof asTimestamp.toMillis === "function") {
+    return asTimestamp.toMillis();
+  }
+  if (typeof asTimestamp.seconds === "number") {
+    return asTimestamp.seconds * 1000;
+  }
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+/** ¿Sigue vigente este override? Solo caducan las reaperturas ("open"). */
+function isOverrideActive(state: unknown, updatedAt: unknown): boolean {
+  if (state === "closed") return true;
+  if (state !== "open") return false;
+  const millis = readOverrideMillis(updatedAt);
+  // Sin fecha (registros viejos) se considera vencido: son de habilitaciones
+  // anteriores a esta regla y no deben quedar abiertos para siempre.
+  if (millis === null) return false;
+  return Date.now() - millis < CAPTURE_OVERRIDE_HOURS * 60 * 60 * 1000;
+}
+
 // --- Documento de identidad (llave unica anti-duplicados) --------------------
 const DOC_TYPE_LABELS: Record<string, string> = {
   dui: "DUI",
@@ -3505,10 +3539,10 @@ async function fetchCaptureOverridesForPeriod(periodId: string): Promise<Capture
   const overrides: CaptureOverridesMap = {};
 
   for (const item of snapshot.docs) {
-    const state = (item.data() as { state?: unknown }).state;
+    const data = item.data() as { state?: unknown; updatedAt?: unknown };
 
-    if (state === "open" || state === "closed") {
-      overrides[item.id] = state;
+    if ((data.state === "open" || data.state === "closed") && isOverrideActive(data.state, data.updatedAt)) {
+      overrides[item.id] = data.state;
     }
   }
 
@@ -5859,9 +5893,12 @@ export default function Home() {
       (snap) => {
         const next: CaptureOverridesMap = {};
         snap.forEach((item) => {
-          const state = (item.data() as { state?: unknown }).state;
-          if (state === "open" || state === "closed") {
-            next[item.id] = state;
+          const data = item.data() as { state?: unknown; updatedAt?: unknown };
+          if (
+            (data.state === "open" || data.state === "closed") &&
+            isOverrideActive(data.state, data.updatedAt)
+          ) {
+            next[item.id] = data.state;
           }
         });
         setCaptureOverrides(next);
@@ -7811,7 +7848,7 @@ export default function Home() {
 
       setMessage(
         nextState === "open"
-          ? `Tablero habilitado para captura de ${getPeriodLabel(targetPeriod)}.`
+          ? `Tablero habilitado para captura de ${getPeriodLabel(targetPeriod)} por 24 horas.`
           : nextState === "closed"
             ? "Tablero deshabilitado."
             : "Tablero devuelto a su ventana normal.",
@@ -10511,7 +10548,8 @@ export default function Home() {
             <p className={`mt-1 max-w-3xl text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
               Tocá el estado de cada módulo para cambiarlo (Auto → Abrir → Cerrar).{" "}
               <strong>Automatico</strong> sigue la ventana normal de dias habiles;{" "}
-              <strong>Abrir</strong> reabre la captura tardia y <strong>Cerrar</strong> la bloquea.
+              <strong>Abrir</strong> reabre la captura tardia <strong>por 24 horas</strong> (luego
+              vuelve sola a Automatico) y <strong>Cerrar</strong> la bloquea.
             </p>
           </div>
           <label className="block shrink-0">
