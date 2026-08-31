@@ -58,6 +58,7 @@ import {
   type SepsTemplate,
 } from "@/lib/seps-templates";
 import { downloadSepsTemplate } from "@/lib/seps-download";
+import { importSepsWorkbookByLabels } from "@/lib/seps-import";
 import {
   createPoaDoc,
   getPoaDocId,
@@ -9210,6 +9211,45 @@ export default function Home() {
       const XLSX = await import("xlsx");
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
+
+      // Enfermería sube su PROPIO libro (tabulador diario + promoción de la salud +
+      // visita domiciliar), así que se lee completo y cada fila se ubica por su
+      // texto, no por su posición. Si no se reconoce nada, sigue el lector clásico.
+      if (sepsTemplate.serviceId === "enfermeria") {
+        const sheets = wb.SheetNames.map(
+          (name) =>
+            XLSX.utils.sheet_to_json(wb.Sheets[name], {
+              header: 1,
+              raw: true,
+              defval: null,
+              blankrows: true,
+            }) as unknown[][],
+        );
+        const result = importSepsWorkbookByLabels(
+          sepsTemplate,
+          sheets,
+          getDayColumns(sepsPeriodId),
+        );
+        if (result.filled > 0) {
+          setSepsValues(
+            mergeSepsWithTemplate(
+              sepsTemplate,
+              sepsPeriodId,
+              result.values,
+              sepsExtraRows.map((extra) => extra.key),
+            ),
+          );
+          const aviso =
+            result.unmatched.length > 0
+              ? ` ${result.unmatched.length} fila(s) del Excel no se reconocieron y quedaron fuera.`
+              : "";
+          setMessage(
+            `Excel cargado: ${result.filled} valores en ${wb.SheetNames.length} hoja(s). Revise y presione Guardar.${aviso}`,
+          );
+          setIsImportingSeps(false);
+          return;
+        }
+      }
 
       // Elegir hoja: primero el mes del periodo (p.ej. "JUNIO 2026"), luego "MES ACTUAL",
       // luego la primera hoja que no sea plantilla/historico, y por ultimo la primera.
