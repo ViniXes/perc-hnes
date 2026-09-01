@@ -683,6 +683,7 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "unidad-de-convenios": "direccion",
   "jefaturas-division-medica": "direccion",
   "jefatura-division-apoyo": "direccion",
+  "apoyo-riis": "direccion",
   udp: "direccion",
   ucp: "direccion",
   "gestion-documental": "direccion",

@@ -2247,6 +2247,14 @@ export const HORAS_TEMPLATES: Record<string, HorasTemplate> = {
       "JUAN JOSE MURCIA LOPEZ",
     ],
   },
+  // Apoyo a las RIIS (Direccion): SOLO Distribucion de Horas. El roster arranca
+  // vacio; el servicio agrega a su personal con el boton "+ Agregar empleado".
+  "apoyo-riis": {
+    serviceId: "apoyo-riis",
+    establishment: "HOSPITAL NACIONAL EL SALVADOR",
+    columns: ["ADMINISTRACION", "SERVICIO DE APOYO A RIISS"],
+    seedEmployees: [],
+  },
 };
 
 export function getHorasTemplate(serviceId: string | null | undefined): HorasTemplate | null {
