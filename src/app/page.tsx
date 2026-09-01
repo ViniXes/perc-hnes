@@ -2716,6 +2716,38 @@ function formatConsolidatedNumber(value: number) {
   return String(rounded);
 }
 
+// Suma por (fila, centro de costo) del consolidado de Produccion Distribuida.
+// Es EXACTAMENTE el mismo calculo que hace el Excel; se separa aparte para poder
+// mostrar la vista previa en pantalla sin descargar nada.
+function computeDistribuidaMatrix(overview: AdminOverviewEntry[]) {
+  const sumsByRow = new Map<string, Map<string, number>>();
+
+  for (const entry of overview) {
+    for (const row of entry.service.rows) {
+      const rowValues = entry.values[row];
+      if (!rowValues) continue;
+
+      let headerSums = sumsByRow.get(row);
+      if (!headerSums) {
+        headerSums = new Map<string, number>();
+        sumsByRow.set(row, headerSums);
+      }
+
+      for (const header of TABULATOR_HEADERS) {
+        const parsed = Number.parseFloat(rowValues[header] ?? "");
+        if (!Number.isFinite(parsed) || parsed === 0) continue;
+        headerSums.set(header, (headerSums.get(header) ?? 0) + parsed);
+      }
+    }
+  }
+
+  return CONSOLIDADO_ROW_ORDER.map((row) => {
+    const headerSums = sumsByRow.get(row);
+    const cells = TABULATOR_HEADERS.map((header) => headerSums?.get(header) ?? 0);
+    return { row, cells, total: cells.reduce((acc, n) => acc + n, 0) };
+  });
+}
+
 function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: string) {
   // El consolidado debe respetar la plantilla oficial TAL CUAL: una sola columna
   // de etiqueta (encabezado vacio) seguida de los centros de costo, y las filas en
@@ -4766,6 +4798,12 @@ export default function Home() {
   const [isCreatingManagedUser, setIsCreatingManagedUser] = useState(false);
   const [isExportingMonthlyReport, setIsExportingMonthlyReport] = useState(false);
   const [isExportingServiceProduction, setIsExportingServiceProduction] = useState(false);
+  /** Vista previa (en pantalla) del consolidado de Produccion Distribuida. */
+  const [showDistribuidaPreview, setShowDistribuidaPreview] = useState(false);
+  const [distribuidaPreview, setDistribuidaPreview] = useState<
+    { row: string; cells: number[]; total: number }[] | null
+  >(null);
+  const [isLoadingDistribuida, setIsLoadingDistribuida] = useState(false);
   // Previsualizacion (modal) del consolidado COMPLETO Produccion de Servicio antes
   // de descargar el Excel (incluye los datos del Censo ya integrados). El mes es
   // seleccionable y ESTRICTO: el consolidado muestra el censo de ESE mismo mes.
@@ -6843,6 +6881,30 @@ export default function Home() {
     }
   }
 
+  // Vista previa de Produccion Distribuida: arma la MISMA tabla del Excel y la
+  // muestra en pantalla. No descarga nada ni toca los datos capturados.
+  async function handlePreviewMonthlyReport() {
+    if (!isAdmin || firestoreUnavailable) {
+      return;
+    }
+
+    setShowDistribuidaPreview(true);
+    setIsLoadingDistribuida(true);
+    setError("");
+
+    try {
+      const overview = await fetchAdminOverviewForPeriod(periodId);
+      setDistribuidaPreview(computeDistribuidaMatrix(overview));
+    } catch (previewError) {
+      if (await handleFirestoreError(previewError)) {
+        return;
+      }
+      setError("No pudimos preparar la vista previa del consolidado.");
+    } finally {
+      setIsLoadingDistribuida(false);
+    }
+  }
+
   async function handleExportMonthlyReport() {
     if (!isAdmin || firestoreUnavailable) {
       return;
@@ -6900,6 +6962,34 @@ export default function Home() {
     }
     setShowCensoConsolidadoPreview(true);
     await loadConsolidadoPreview(censoPeriod || periodId);
+  }
+
+  // Descarga DIRECTA de Produccion de Servicio, sin abrir la vista previa.
+  async function downloadServiceProductionNow() {
+    if (!isAdmin || firestoreUnavailable) {
+      return;
+    }
+
+    const period = censoPeriod || periodId;
+    setIsExportingServiceProduction(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const [overview, censoInfo] = await Promise.all([
+        fetchAdminOverviewForPeriod(period),
+        fetchCensoInfoForPeriod(period),
+      ]);
+      downloadServiceProductionReport(overview, period, censoInfo);
+      setMessage(`Producción de Servicio generada para ${getPeriodLabel(period)}.`);
+    } catch (exportError) {
+      if (await handleFirestoreError(exportError)) {
+        return;
+      }
+      setError(getAuthErrorMessage(exportError));
+    } finally {
+      setIsExportingServiceProduction(false);
+    }
   }
 
   // Paso 2: descarga real del consolidado (con los datos del Censo integrados) del
@@ -16148,23 +16238,70 @@ export default function Home() {
                     Dos archivos separados: <strong>Producción Distribuida</strong> (centros de costo) y{" "}
                     <strong>Producción de Servicio</strong> (plantilla completa por centro de producción).
                   </p>
-                  <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => void handleExportMonthlyReport()}
-                      disabled={isExportingMonthlyReport}
-                      className="rounded-2xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-cyan-300"
-                    >
-                      {isExportingMonthlyReport ? "Generando..." : "Producción Distribuida"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleExportServiceProduction()}
-                      disabled={isExportingServiceProduction}
-                      className="rounded-2xl border border-cyan-400/40 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isExportingServiceProduction ? "Generando..." : "Producción de Servicio"}
-                    </button>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    {/* Cada consolidado ofrece las dos acciones: bajar el Excel tal
+                        cual, o mirar en pantalla como va quedando la tabla. */}
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-sm font-bold text-white">Producción Distribuida</p>
+                      <p className="mt-0.5 text-[11px] leading-5 text-slate-400">
+                        Matriz por centros de costo, sumando todos los servicios.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleExportMonthlyReport()}
+                          disabled={isExportingMonthlyReport}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-cyan-500 px-3.5 py-2 text-xs font-bold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M12 3v12" /><path d="m7 12 5 5 5-5" /><path d="M5 21h14" />
+                          </svg>
+                          {isExportingMonthlyReport ? "Generando…" : "Descargar Excel"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handlePreviewMonthlyReport()}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3.5 py-2 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                        >
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                          Vista previa
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-sm font-bold text-white">Producción de Servicio</p>
+                      <p className="mt-0.5 text-[11px] leading-5 text-slate-400">
+                        Plantilla completa por centro de producción, con el Censo integrado.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void downloadServiceProductionNow()}
+                          disabled={isExportingServiceProduction}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-cyan-500 px-3.5 py-2 text-xs font-bold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M12 3v12" /><path d="m7 12 5 5 5-5" /><path d="M5 21h14" />
+                          </svg>
+                          {isExportingServiceProduction ? "Generando…" : "Descargar Excel"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleExportServiceProduction()}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3.5 py-2 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                        >
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                          Vista previa
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   <p className="mt-3 text-xs text-slate-300">
                     Cada archivo sale con los datos disponibles al momento de la descarga.
@@ -18583,6 +18720,130 @@ export default function Home() {
                       </section>
                     );
                   })}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* VISTA PREVIA de Produccion Distribuida: la misma tabla que sale en el
+              Excel, para ir viendo como se va llenando. Solo lectura. */}
+          {isAdmin && showDistribuidaPreview ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5"
+              onClick={() => setShowDistribuidaPreview(false)}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/80 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                className="modal-pop-in relative flex max-h-[92dvh] w-full min-w-0 max-w-7xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60"
+              >
+                <div className="h-1 w-full shrink-0 bg-gradient-to-r from-cyan-400 to-violet-500" />
+
+                <div className="flex shrink-0 items-start justify-between gap-3 px-5 pb-4 pt-5 sm:px-7">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-300/90">
+                      Vista previa
+                    </p>
+                    <h3 className="mt-1 text-xl font-bold text-white sm:text-2xl">
+                      Producción Distribuida
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {periodLabel} · así va quedando el consolidado con lo capturado hasta ahora
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handlePreviewMonthlyReport()}
+                      aria-label="Actualizar"
+                      title="Actualizar"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-500/10 text-cyan-200 transition hover:bg-cyan-500/20"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-4 w-4">
+                        <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleExportMonthlyReport()}
+                      disabled={isExportingMonthlyReport}
+                      className="rounded-xl bg-cyan-500 px-3.5 py-2 text-xs font-bold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-60"
+                    >
+                      {isExportingMonthlyReport ? "Generando…" : "Descargar Excel"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowDistribuidaPreview(false)}
+                      aria-label="Cerrar"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-auto px-5 pb-5 sm:px-7 sm:pb-7">
+                  {isLoadingDistribuida ? (
+                    <p className="py-16 text-center text-sm text-slate-400">Preparando la tabla…</p>
+                  ) : !distribuidaPreview || distribuidaPreview.length === 0 ? (
+                    <p className="py-16 text-center text-sm text-slate-400">
+                      Todavía no hay datos capturados para este período.
+                    </p>
+                  ) : (
+                    <div className="overflow-auto rounded-2xl border border-white/10">
+                      <table className="w-full border-collapse text-[11px]">
+                        <thead className="sticky top-0 z-10">
+                          <tr>
+                            <th className="sticky left-0 z-20 min-w-[220px] border-b border-r border-white/10 bg-[#1b2537] px-3 py-2.5 text-left font-bold text-slate-200">
+                              Centro de costos
+                            </th>
+                            {TABULATOR_HEADERS.map((header) => (
+                              <th
+                                key={header}
+                                className="min-w-[110px] border-b border-white/10 bg-[#1b2537] px-2 py-2.5 text-center font-semibold text-slate-300"
+                              >
+                                {header}
+                              </th>
+                            ))}
+                            <th className="min-w-[90px] border-b border-l border-white/10 bg-[#1b2537] px-2 py-2.5 text-center font-bold text-cyan-200">
+                              Total
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {distribuidaPreview.map((fila, index) => (
+                            <tr
+                              key={fila.row}
+                              className={index % 2 === 0 ? "bg-white/[0.02]" : undefined}
+                            >
+                              <td className="sticky left-0 z-10 border-b border-r border-white/10 bg-[#141d2e] px-3 py-2 font-semibold text-slate-200">
+                                {fila.row}
+                              </td>
+                              {fila.cells.map((valor, i) => (
+                                <td
+                                  key={`${fila.row}-${i}`}
+                                  className={`border-b border-white/5 px-2 py-2 text-center ${
+                                    valor === 0 ? "text-slate-600" : "text-slate-100"
+                                  }`}
+                                >
+                                  {valor === 0 ? "0" : formatConsolidatedNumber(valor)}
+                                </td>
+                              ))}
+                              <td
+                                className={`border-b border-l border-white/10 px-2 py-2 text-center font-bold ${
+                                  fila.total === 0 ? "text-slate-600" : "text-cyan-200"
+                                }`}
+                              >
+                                {fila.total === 0 ? "0" : formatConsolidatedNumber(fila.total)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
