@@ -16491,6 +16491,57 @@ export default function Home() {
                     placeholder="Buscar por nombre, servicio, usuario o correo…"
                     className="mt-4 w-full rounded-xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none focus:border-emerald-400"
                   />
+
+                  {/* Avisos DENTRO del modal. Antes se pintaban en el panel de atras
+                      y habia que cerrar la ventana para poder leerlos (p. ej. el tope
+                      de 5 usuarios por servicio o el resultado del correo). */}
+                  {error || message ? (
+                    <div
+                      role="status"
+                      className={`mt-3 flex items-start gap-2.5 rounded-2xl border px-3.5 py-3 text-sm ${
+                        error
+                          ? "border-rose-400/40 bg-rose-500/10 text-rose-100"
+                          : "border-emerald-400/40 bg-emerald-500/10 text-emerald-100"
+                      }`}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="17"
+                        height="17"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                        className="mt-0.5 shrink-0"
+                      >
+                        {error ? (
+                          <>
+                            <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+                            <path d="M12 9v4M12 17h.01" />
+                          </>
+                        ) : (
+                          <>
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+                          </>
+                        )}
+                      </svg>
+                      <span className="min-w-0 flex-1 leading-6">{error || message}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError("");
+                          setMessage("");
+                        }}
+                        aria-label="Cerrar aviso"
+                        className="shrink-0 text-current opacity-60 transition hover:opacity-100"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : null}
                   <div className="mt-3 max-h-[60vh] space-y-2.5 overflow-y-auto pr-1">
                     {pendingSignupList.length === 0 ? (
                       <p className="rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-slate-400">
