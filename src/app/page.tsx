@@ -4754,6 +4754,11 @@ export default function Home() {
   const [renameUid, setRenameUid] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [renameBusy, setRenameBusy] = useState(false);
+  /** Correccion del DOCUMENTO de identidad de una cuenta (DUI/pasaporte/carne). */
+  const [docFixUid, setDocFixUid] = useState("");
+  const [docFixType, setDocFixType] = useState<"dui" | "pasaporte" | "carne">("dui");
+  const [docFixNumber, setDocFixNumber] = useState("");
+  const [docFixBusy, setDocFixBusy] = useState(false);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isCreatingManagedUser, setIsCreatingManagedUser] = useState(false);
   const [isExportingMonthlyReport, setIsExportingMonthlyReport] = useState(false);
@@ -10569,6 +10574,100 @@ export default function Home() {
       setError(getAuthErrorMessage(renameError));
     } finally {
       setRenameBusy(false);
+    }
+  }
+
+  // Corrige o LIBERA el documento de identidad de una cuenta. Cuando alguien pone su
+  // DUI en la cuenta equivocada, ese numero queda reservado ahi y la persona no puede
+  // usarlo en la suya. Desde aca el admin lo mueve o lo suelta.
+  async function handleFixUserDocument(managed: ManagedUser, liberar: boolean) {
+    setDocFixBusy(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const oldKey = normalizeDocKey(managed.docNumber || "");
+
+      if (liberar) {
+        if (oldKey) {
+          await deleteDoc(doc(db, "documentRegistry", oldKey)).catch(() => {});
+        }
+        await setDoc(
+          doc(db, "serviceUsers", managed.uid),
+          { docType: "", docNumber: "", updatedAt: serverTimestamp() },
+          { merge: true },
+        );
+        const users = await fetchManagedUsers();
+        applyAdminUsers(users);
+        setDocFixUid("");
+        setMessage(
+          `Documento liberado. ${managed.name || "La persona"} puede volver a registrarlo, y ese número queda disponible.`,
+        );
+        return;
+      }
+
+      const err = validateDocument(docFixType, docFixNumber);
+      if (err) {
+        setError(err);
+        return;
+      }
+
+      const key = normalizeDocKey(docFixNumber);
+
+      if (key !== oldKey) {
+        const ref = doc(db, "documentRegistry", key);
+        const snap = await getDoc(ref).catch(() => null);
+
+        if (snap && snap.exists()) {
+          const data = snap.data() as { uid?: unknown; email?: unknown; name?: unknown };
+          const savedUid = typeof data.uid === "string" ? data.uid : "";
+          const savedEmail = typeof data.email === "string" ? data.email.toLowerCase() : "";
+          const mismo =
+            (!!savedUid && savedUid === managed.uid) ||
+            (!savedUid && !!savedEmail && savedEmail === (managed.email || "").toLowerCase());
+
+          if (!mismo) {
+            setError(
+              `Ese documento ya está registrado en la cuenta de ${
+                typeof data.name === "string" && data.name ? data.name : "otra persona"
+              }. Liberalo primero desde esa ficha.`,
+            );
+            return;
+          }
+        }
+
+        await setDoc(
+          ref,
+          {
+            docType: docFixType,
+            docNumber: docFixNumber.trim(),
+            name: managed.name || "",
+            email: managed.email || "",
+            uid: managed.uid,
+            createdAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+
+        if (oldKey) {
+          await deleteDoc(doc(db, "documentRegistry", oldKey)).catch(() => {});
+        }
+      }
+
+      await setDoc(
+        doc(db, "serviceUsers", managed.uid),
+        { docType: docFixType, docNumber: docFixNumber.trim(), updatedAt: serverTimestamp() },
+        { merge: true },
+      );
+
+      const users = await fetchManagedUsers();
+      applyAdminUsers(users);
+      setDocFixUid("");
+      setMessage(`Documento actualizado a ${docFixNumber.trim()}.`);
+    } catch (docError) {
+      setError(getAuthErrorMessage(docError));
+    } finally {
+      setDocFixBusy(false);
     }
   }
 
@@ -17875,6 +17974,88 @@ export default function Home() {
                               {draft.isChief ? "✓ " : ""}Jefe del servicio
                             </button>
                           ) : null}
+                        </div>
+
+                        {/* DOCUMENTO DE IDENTIDAD: corregirlo o liberarlo. Sirve cuando
+                            alguien puso su DUI en la cuenta equivocada y ese numero le
+                            queda bloqueado en la suya. */}
+                        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <p className="text-xs font-medium text-slate-300">Documento de identidad</p>
+                          {docFixUid === selectedUser.uid ? (
+                            <div className="mt-2.5 space-y-2">
+                              <div className="flex flex-wrap gap-2">
+                                <select
+                                  value={docFixType}
+                                  onChange={(event) =>
+                                    setDocFixType(event.target.value as "dui" | "pasaporte" | "carne")
+                                  }
+                                  className="rounded-lg border border-white/10 bg-[#0e1626] px-2.5 py-1.5 text-xs text-white outline-none"
+                                >
+                                  <option value="dui">DUI</option>
+                                  <option value="pasaporte">Pasaporte</option>
+                                  <option value="carne">Carné de residencia</option>
+                                </select>
+                                <input
+                                  value={docFixNumber}
+                                  onChange={(event) => setDocFixNumber(event.target.value)}
+                                  placeholder={docFixType === "dui" ? "00000000-0" : "N° de documento"}
+                                  className="w-40 rounded-lg border border-white/10 bg-[#0e1626] px-2.5 py-1.5 font-mono text-xs text-white outline-none focus:border-cyan-400"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={docFixBusy}
+                                  onClick={() => void handleFixUserDocument(selectedUser, false)}
+                                  className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-bold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
+                                >
+                                  {docFixBusy ? "…" : "Guardar"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDocFixUid("")}
+                                  className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-400 transition hover:text-slate-200"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={docFixBusy}
+                                onClick={() => void handleFixUserDocument(selectedUser, true)}
+                                className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
+                              >
+                                Liberar documento
+                              </button>
+                              <p className="text-[11px] leading-5 text-slate-500">
+                                «Liberar» borra el documento de esta cuenta y deja el número
+                                disponible para que lo registre quien corresponda.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-xs text-slate-300">
+                                {selectedUser.docNumber
+                                  ? `${DOC_TYPE_LABELS[selectedUser.docType] || "Documento"}: ${selectedUser.docNumber}`
+                                  : "Sin documento registrado"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDocFixUid(selectedUser.uid);
+                                  setDocFixType(
+                                    selectedUser.docType === "pasaporte"
+                                      ? "pasaporte"
+                                      : selectedUser.docType === "carne"
+                                        ? "carne"
+                                        : "dui",
+                                  );
+                                  setDocFixNumber(selectedUser.docNumber || "");
+                                }}
+                                className="rounded-md border border-white/10 px-2 py-0.5 text-[10px] font-semibold text-slate-400 transition hover:bg-white/10 hover:text-slate-200"
+                              >
+                                Corregir o liberar
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         {draft.role === "service" && draft.serviceId && !draft.department ? (
