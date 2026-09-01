@@ -10750,7 +10750,11 @@ export default function Home() {
   // Logica compartida al tocar un item del menu (sidebar y barra inferior movil).
   // `requestable` se pasa desde el render porque vive dentro del bloque de sesion.
   function runSidebarItem(itemId: string, requestable: ModuleId[] = []) {
-    if (itemId.startsWith("panel-monitor-")) {
+    if (itemId === "panel-monitor-general") {
+      // Vista con los 3 monitoreos juntos. Va ANTES del startsWith de abajo,
+      // porque su id tambien empieza con "panel-monitor-".
+      setShowGeneralMonitorModal(true);
+    } else if (itemId.startsWith("panel-monitor-")) {
       // Submenu "Monitoreo" bajo cada modulo: abre el modal de servicios que
       // completaron. panel-monitor-perc/seps/horas -> perc/sesps/distribucion.
       const monitorModule: Record<string, ModuleId> = {
@@ -10766,8 +10770,6 @@ export default function Home() {
     } else if (itemId === "panel-users") {
       setShowUsersModal(true);
       void loadAdminUsers();
-    } else if (itemId === "panel-monitor-general") {
-      setShowGeneralMonitorModal(true);
     } else if (itemId === "panel-avance") {
       setShowBoardModal(true);
     } else if (itemId === "panel-requests") {
