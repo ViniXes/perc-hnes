@@ -1610,22 +1610,44 @@ function validateDocument(docType: string, docNumber: string): string {
 async function reserveDocument(
   docType: string,
   docNumber: string,
-  owner: { name?: string; email?: string },
+  owner: { name?: string; email?: string; uid?: string },
 ): Promise<void> {
   const key = normalizeDocKey(docNumber);
   if (!key) return;
   const ref = doc(db, "documentRegistry", key);
   const existing = await getDoc(ref).catch(() => null);
+
   if (existing && existing.exists()) {
-    throw new Error("doc-duplicado");
+    const data = existing.data() as { uid?: unknown; email?: unknown };
+    const savedUid = typeof data.uid === "string" ? data.uid.trim() : "";
+    const savedEmail = typeof data.email === "string" ? data.email.trim().toLowerCase() : "";
+    const ownUid = (owner.uid || "").trim();
+    const ownEmail = (owner.email || "").trim().toLowerCase();
+
+    // Si la reserva YA ES de esta misma persona no es un duplicado: se deja pasar
+    // (antes le decia "ya esta registrado por otra persona" a su propio dueño y lo
+    // dejaba trabado en la pantalla del documento).
+    const esMismaPersona =
+      (!!ownUid && !!savedUid && ownUid === savedUid) ||
+      (!!ownEmail && !!savedEmail && ownEmail === savedEmail);
+
+    if (!esMismaPersona) {
+      throw new Error("doc-duplicado");
+    }
   }
-  await setDoc(ref, {
-    docType,
-    docNumber: docNumber.trim(),
-    name: owner.name || "",
-    email: owner.email || "",
-    createdAt: serverTimestamp(),
-  });
+
+  await setDoc(
+    ref,
+    {
+      docType,
+      docNumber: docNumber.trim(),
+      name: owner.name || "",
+      email: owner.email || "",
+      uid: owner.uid || "",
+      createdAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 }
 
 // Solicitud de un servicio para que le habiliten un tablero fuera de plazo.
@@ -8574,6 +8596,9 @@ export default function Home() {
   }
 
   // Admin aprueba un registro: crea la cuenta del jefe (usuario por nombre, pass 123456).
+  // Ultimo motivo por el que no salio un correo (para mostrarlo en el panel).
+  const lastMailReasonRef = useRef("");
+
   // Aviso por correo a quien se registro. Al APROBAR le llega su usuario y la clave
   // generica; al RECHAZAR, un mensaje institucional. Nunca bloquea la decision: si
   // el correo falla, solo se avisa en pantalla para entregar los datos a mano.
@@ -8600,18 +8625,28 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken, ...args }),
       });
-      const data = (await res.json()) as { sent?: boolean };
+      const data = (await res.json()) as { sent?: boolean; reason?: string };
+      lastMailReasonRef.current = data.reason || "";
       return data.sent === true;
     } catch {
+      lastMailReasonRef.current = "no se pudo contactar al servidor";
       return false;
     }
   }
 
   /** Frase que se agrega al mensaje del panel segun si el correo salio o no. */
   function mailSuffix(sent: boolean, to: string): string {
-    return sent
-      ? `Se le enviaron los datos por correo a ${to}.`
-      : `No se pudo enviar el correo a ${to}: entregue los datos personalmente.`;
+    if (sent) {
+      return `Se le enviaron los datos por correo a ${to}.`;
+    }
+
+    const reason = lastMailReasonRef.current;
+    const detail =
+      reason === "correo no configurado"
+        ? "el envio de correos aun no esta configurado en Vercel"
+        : reason || "error desconocido";
+
+    return `No se pudo enviar el correo a ${to} (${detail}): entregue los datos personalmente.`;
   }
 
   async function handleApproveSignup(req: SignupRequest) {
@@ -10333,6 +10368,7 @@ export default function Home() {
         await reserveDocument(docGateType, docGateNumber, {
           name: serviceProfile.name,
           email: serviceProfile.email,
+          uid: serviceProfile.uid,
         });
       } catch {
         setDocGateError(

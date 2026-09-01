@@ -26,6 +26,7 @@ const DEFAULT_FROM_NAME = "PULSO · Hospital Nacional El Salvador";
 
 type Body = {
   idToken?: string;
+  check?: boolean;
   to?: string;
   name?: string;
   username?: string;
@@ -245,7 +246,8 @@ async function sendMail(
         }),
       });
       if (!res.ok) {
-        return { sent: false, error: `Brevo ${res.status}` };
+        const detail = (await res.text()).slice(0, 160);
+        return { sent: false, error: `Brevo ${res.status}: ${detail}` };
       }
       return { sent: true };
     }
@@ -265,7 +267,8 @@ async function sendMail(
       }),
     });
     if (!res.ok) {
-      return { sent: false, error: `Resend ${res.status}` };
+      const detail = (await res.text()).slice(0, 160);
+      return { sent: false, error: `Resend ${res.status}: ${detail}` };
     }
     return { sent: true };
   } catch {
@@ -303,6 +306,19 @@ export async function POST(req: NextRequest) {
   const callerRole = callerSnap.exists ? (callerSnap.data()?.role as string) : "";
   if (callerRole !== "admin" && callerRole !== "supervisor") {
     return NextResponse.json({ ok: false, error: "Sin permisos." }, { status: 403 });
+  }
+
+  // Modo diagnostico: dice si el envio esta configurado, SIN mandar ningun correo.
+  if (body.check === true) {
+    const fromEmail = (process.env.MAIL_FROM || "").trim();
+    const brevo = (process.env.BREVO_API_KEY || "").trim();
+    const resend = (process.env.RESEND_API_KEY || "").trim();
+    return NextResponse.json({
+      ok: true,
+      configurado: !!fromEmail && (!!brevo || !!resend),
+      proveedor: brevo ? "brevo" : resend ? "resend" : "ninguno",
+      remitente: fromEmail || "(sin MAIL_FROM)",
+    });
   }
 
   const to = (body.to || "").trim();
