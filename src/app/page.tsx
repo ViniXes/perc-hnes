@@ -4862,6 +4862,11 @@ export default function Home() {
   const [freeDocBusy, setFreeDocBusy] = useState(false);
   /** Visor de accesos (solo lectura): que tiene habilitado una cuenta. */
   const [accessViewUid, setAccessViewUid] = useState("");
+  /** MODO VERIFICACION ("fantasma"): el admin ve la app tal cual la ve otra cuenta.
+      Es 100% de solo lectura: se guarda su perfil real y se bloquea todo guardado. */
+  const [ghostUid, setGhostUid] = useState("");
+  const [ghostName, setGhostName] = useState("");
+  const realProfileRef = useRef<ManagedUser | null>(null);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isCreatingManagedUser, setIsCreatingManagedUser] = useState(false);
   const [isExportingMonthlyReport, setIsExportingMonthlyReport] = useState(false);
@@ -5480,7 +5485,9 @@ export default function Home() {
   const isAdmin = !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
   // Revisor de SEPS (Juan Carlos Miranda, usuario "jcmiranda"): nivel de supervisor
   // + permiso de EDICION del SEPS de cualquier servicio y de dejar comentarios.
-  const isSepsStaff = normalizeKey(user?.email || "") === normalizeKey("jcmiranda@perc-hnes.app");
+  // En modo verificacion nadie conserva sus privilegios propios: solo se mira.
+  const isSepsStaff =
+    !ghostUid && normalizeKey(user?.email || "") === normalizeKey("jcmiranda@perc-hnes.app");
   const isSupervisor = serviceProfile?.role === "supervisor" || isSepsStaff;
   // Directora: usa la vista de supervisor (ve todo) pero SIN permisos de gestion.
   const isDirector = serviceProfile?.isDirector === true;
@@ -7155,6 +7162,7 @@ export default function Home() {
   }
 
   async function handleSaveDocs() {
+    if (blockedByGhost()) return;
     if (!canEditDocs || firestoreUnavailable) {
       return;
     }
@@ -7277,6 +7285,7 @@ export default function Home() {
 
   /** Guarda documento y gráficos. */
   async function handleSavePoa() {
+    if (blockedByGhost()) return;
     if (!poaDoc || !canEditPoa || firestoreUnavailable) return;
     setPoaSaving(true);
     setError("");
@@ -7552,6 +7561,7 @@ export default function Home() {
   }
 
   async function handleSaveCenso() {
+    if (blockedByGhost()) return;
     if (!canEditCenso || firestoreUnavailable) {
       return;
     }
@@ -7838,6 +7848,7 @@ export default function Home() {
   }
 
   async function handleSaveDepre() {
+    if (blockedByGhost()) return;
     if (!user || firestoreUnavailable) return;
     setDepreSaving(true);
     setError("");
@@ -7886,6 +7897,7 @@ export default function Home() {
   }
 
   async function handleSaveGastos() {
+    if (blockedByGhost()) return;
     if (!user || firestoreUnavailable) return;
     setGastosSaving(true);
     setError("");
@@ -7942,6 +7954,7 @@ export default function Home() {
   }
 
   async function handleSaveInsumos() {
+    if (blockedByGhost()) return;
     // Guardan quienes editan celdas (admin/almacen) o gestionan filas (además
     // supervisores). La persistencia real la valida Firestore por sus reglas.
     if ((!canEditInsumos && !canManageInsumosRows) || firestoreUnavailable) {
@@ -8185,6 +8198,7 @@ export default function Home() {
   }
 
   async function handleSaveCalendarOverride() {
+    if (blockedByGhost()) return;
     if (!isAdmin || !calendarEditorPeriodId || firestoreUnavailable) {
       return;
     }
@@ -8225,6 +8239,7 @@ export default function Home() {
     nextState: CaptureOverrideState | null,
     period?: string,
   ) {
+    if (blockedByGhost()) return;
     if (!serviceProfile?.permissions.canToggleCapture || firestoreUnavailable) {
       return;
     }
@@ -8415,6 +8430,7 @@ export default function Home() {
   // Envia un ticket al Centro de Soporte (cualquier usuario logueado).
   async function sendSupportTicket(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (blockedByGhost()) return;
     if (firestoreUnavailable) {
       setError(FIRESTORE_SETUP_MESSAGE);
       return;
@@ -8598,6 +8614,7 @@ export default function Home() {
 
   async function handleAdminCreateUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (blockedByGhost()) return;
 
     if (firestoreUnavailable) {
       setError(FIRESTORE_SETUP_MESSAGE);
@@ -8845,6 +8862,7 @@ export default function Home() {
   }
 
   async function handleApproveSignup(req: SignupRequest) {
+    if (blockedByGhost()) return;
     setSignupBusyId(req.id);
     setError("");
     setMessage("");
@@ -9149,6 +9167,7 @@ export default function Home() {
     }
   }
   async function handleRejectSignup(req: SignupRequest) {
+    if (blockedByGhost()) return;
     setSignupBusyId(req.id);
     setError("");
     setMessage("");
@@ -9270,6 +9289,7 @@ export default function Home() {
   }
 
   async function handleSave() {
+    if (blockedByGhost()) return;
     if (!user || !currentService || !serviceProfile || firestoreUnavailable) {
       return;
     }
@@ -9624,6 +9644,7 @@ export default function Home() {
 
   /** Guarda la estructura: rige para todos los meses siguientes. */
   async function doSaveSepsLayout() {
+    if (blockedByGhost()) return;
     if (!canEditSepsLayout || !sepsLayoutDraft || !sepsBaseTemplate || firestoreUnavailable) return;
     setSepsSavingLayout(true);
     setError("");
@@ -9786,6 +9807,7 @@ export default function Home() {
   }
 
   async function handleSaveLabTest() {
+    if (blockedByGhost()) return;
     if (!user || firestoreUnavailable) return;
     if (!labMonth) { setLabError("Selecciona el mes antes de guardar."); setLabMsg(""); return; }
     if (!labSection || !labTest) { setLabError("Selecciona seccion y prueba."); setLabMsg(""); return; }
@@ -9846,6 +9868,7 @@ export default function Home() {
   }
 
   async function handleSaveSeps() {
+    if (blockedByGhost()) return;
     if (!user || !sepsTemplate || !serviceProfile || firestoreUnavailable) {
       return;
     }
@@ -10323,6 +10346,7 @@ export default function Home() {
   }
 
   async function handleSaveHoras() {
+    if (blockedByGhost()) return;
     if (!user || !horasTemplate || !serviceProfile || firestoreUnavailable) {
       return;
     }
@@ -10550,6 +10574,7 @@ export default function Home() {
   }
 
   async function handleSaveDocGate() {
+    if (blockedByGhost()) return;
     if (!serviceProfile) return;
     const err = validateDocument(docGateType, docGateNumber);
     if (err) {
@@ -10589,6 +10614,7 @@ export default function Home() {
   }
 
   async function handleResetBoard() {
+    if (blockedByGhost()) return;
     if (!isAdmin || !resetPeriod) {
       return;
     }
@@ -10708,6 +10734,7 @@ export default function Home() {
   // Va por el servidor porque hay que mover tambien el correo en Firebase Auth.
   // La contrasena NO se toca: entra con la misma clave, solo cambia el usuario.
   async function handleRenameUser(uid: string) {
+    if (blockedByGhost()) return;
     const nuevo = renameValue.trim();
     if (!nuevo) {
       setError("Escribí el nuevo nombre de usuario.");
@@ -10755,6 +10782,7 @@ export default function Home() {
   // DUI en la cuenta equivocada, ese numero queda reservado ahi y la persona no puede
   // usarlo en la suya. Desde aca el admin lo mueve o lo suelta.
   async function handleFixUserDocument(managed: ManagedUser, liberar: boolean) {
+    if (blockedByGhost()) return;
     setDocFixBusy(true);
     setError("");
     setMessage("");
@@ -10849,6 +10877,7 @@ export default function Home() {
   // Pasa cuando se elimino un usuario antes de que el sistema liberara su documento:
   // el numero queda apartado y nadie puede registrarlo.
   async function handleFreeDocumentByNumber() {
+    if (blockedByGhost()) return;
     const key = normalizeDocKey(freeDocNumber);
     if (!key || key.length < 4) {
       setError("Escribí el número de documento a liberar.");
@@ -10881,7 +10910,59 @@ export default function Home() {
     }
   }
 
+  /** Entra al MODO VERIFICACION: la app se dibuja como la ve esa cuenta. */
+  function enterGhostMode(target: ManagedUser) {
+    if (!serviceProfile) return;
+
+    realProfileRef.current = serviceProfile;
+    setGhostUid(target.uid);
+    setGhostName(target.name || target.username || "usuario");
+
+    // Cierra todo lo del panel de administracion para entrar limpio.
+    setAccessViewUid("");
+    setShowUsersModal(false);
+    setShowStatsModal(false);
+    setShowBoardModal(false);
+    setShowGeneralMonitorModal(false);
+    setShowRequestsModal(false);
+    setShowSignupRequestsModal(false);
+    setShowDistribuidaPreview(false);
+    setAdminSelectedServiceId("");
+    setMobileView("home");
+    setError("");
+    setMessage("");
+
+    // El perfil prestado va SIN permisos: aunque algo se escape, no puede editar.
+    setServiceProfile({
+      ...target,
+      permissions: { canEdit: false, canManageUsers: false, canToggleCapture: false },
+    });
+  }
+
+  /** Vuelve a la cuenta real del administrador. */
+  function exitGhostMode() {
+    const real = realProfileRef.current;
+    setGhostUid("");
+    setGhostName("");
+    setAdminSelectedServiceId("");
+    setMobileView("home");
+    setError("");
+    setMessage("");
+    if (real) {
+      setServiceProfile(real);
+    }
+    realProfileRef.current = null;
+  }
+
+  /** Candado: ningun guardado puede ejecutarse mientras se verifica a otra cuenta. */
+  function blockedByGhost(): boolean {
+    if (!ghostUid) return false;
+    setError("Estás en modo verificación: solo podés mirar. Salí del modo para hacer cambios.");
+    return true;
+  }
+
   async function handleAdminSave(uid: string) {
+    if (blockedByGhost()) return;
     const draft = adminDrafts[uid];
     const current = adminUsers.find((managedUser) => managedUser.uid === uid);
 
@@ -11022,6 +11103,7 @@ export default function Home() {
   }
 
   async function handleAdminSendReset(uid: string, managedUser: ManagedUser) {
+    if (blockedByGhost()) return;
     setAdminBusyUserId(uid);
     setError("");
     setMessage("");
@@ -11058,6 +11140,7 @@ export default function Home() {
   }
 
   async function handleDeleteUser(uid: string, managedUser: ManagedUser) {
+    if (blockedByGhost()) return;
     setAdminBusyUserId(uid);
     setError("");
     setMessage("");
@@ -14996,8 +15079,37 @@ export default function Home() {
         }
         className={`panel-shell ${
           isLightPanelTheme ? "theme-light" : "theme-dark"
-        } min-h-screen px-4 py-6 sm:px-7 lg:px-10`}
+        } min-h-screen px-4 py-6 sm:px-7 lg:px-10 ${ghostUid ? "pt-16 sm:pt-16" : ""}`}
       >
+        {/* MODO VERIFICACION: barra fija que recuerda que se esta mirando como otra
+            cuenta y permite volver. Mientras esta activa, nada se puede guardar. */}
+        {ghostUid ? (
+          <div className="fixed inset-x-0 top-0 z-[130] border-b border-violet-400/30 bg-gradient-to-r from-violet-600/95 to-indigo-600/95 px-4 py-2.5 shadow-lg backdrop-blur">
+            <div className="mx-auto flex max-w-[1850px] flex-wrap items-center justify-between gap-2">
+              <p className="flex min-w-0 items-center gap-2 text-xs font-semibold text-white sm:text-sm">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
+                  <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                <span className="truncate">
+                  Modo verificación · estás viendo PULSO como{" "}
+                  <strong className="font-bold">{ghostName}</strong>
+                </span>
+                <span className="hidden shrink-0 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide sm:inline">
+                  Solo lectura
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={exitGhostMode}
+                className="shrink-0 rounded-xl bg-white px-3.5 py-1.5 text-xs font-bold text-violet-700 transition hover:bg-violet-50"
+              >
+                Volver a mi cuenta
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div
           className={`mx-auto grid max-w-[1850px] grid-cols-1 gap-6 ${
             menuOpen ? "xl:grid-cols-[290px_minmax(0,1fr)]" : "xl:grid-cols-1"
@@ -18244,6 +18356,18 @@ export default function Home() {
                           >
                             Ver sus accesos
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => enterGhostMode(selectedUser)}
+                            title="Entrar a PULSO viéndolo como esta persona, sin poder modificar nada"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-500/20 px-3 py-1.5 text-xs font-bold text-violet-200 transition hover:bg-violet-500/30"
+                          >
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                            Verificar usuario
+                          </button>
                           {draft.role === "service" && draft.serviceId && !draft.department ? (
                             <button
                               type="button"
@@ -18973,6 +19097,14 @@ export default function Home() {
                           <p className="mt-2 font-mono text-xs text-slate-300">{a.documento}</p>
                           <p className="mt-1 text-xs text-slate-400">{u.email}</p>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={() => enterGhostMode(u)}
+                          className="w-full rounded-xl bg-violet-500/20 px-4 py-2.5 text-sm font-bold text-violet-200 transition hover:bg-violet-500/30"
+                        >
+                          Verificar usuario · ver PULSO como {u.name.split(" ")[0]}
+                        </button>
 
                         <p className="pt-1 text-[11px] leading-5 text-slate-500">
                           Esta ventana es solo de consulta: muestra lo que la persona ve al entrar,
