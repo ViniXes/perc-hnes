@@ -683,7 +683,6 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "unidad-de-convenios": "direccion",
   "jefaturas-division-medica": "direccion",
   "jefatura-division-apoyo": "direccion",
-  "apoyo-riis": "direccion",
   udp: "direccion",
   ucp: "direccion",
   "gestion-documental": "direccion",
@@ -5704,6 +5703,22 @@ export default function Home() {
     };
   }, [currentYear, firestoreStatusReady, firestoreUnavailable, periodId]);
 
+  // Al ABRIR "Monitoreo" o "Avance por modulo" se vuelve a leer el tablero general,
+  // para ver lo que otros servicios acaban de guardar sin recargar la pagina.
+  useEffect(() => {
+    if (!showStatsModal && !showBoardModal) {
+      return;
+    }
+
+    if (firestoreUnavailable || !firestoreStatusReady) {
+      return;
+    }
+
+    void refreshPublicDashboard(false);
+    // refreshPublicDashboard se declara mas abajo en el componente (hoisted).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showStatsModal, showBoardModal, firestoreUnavailable, firestoreStatusReady]);
+
   // Carga los overrides del periodo elegido en el panel "Habilitar tableros" cuando
   // el usuario tiene esa potestad y cambia de periodo.
   useEffect(() => {
@@ -9430,6 +9445,9 @@ export default function Home() {
 
       setSepsValues(normalizedValues);
       setSepsDataPeriods((prev) => new Set(prev).add(targetPeriod));
+      // Refresca el tablero general para que el Monitoreo marque el servicio como
+      // completado al instante, sin tener que recargar la pagina.
+      await refreshPublicDashboard(false);
       setMessage(`Tabulador SEPS guardado correctamente (${targetPeriodLabel}).`);
     } catch (saveError) {
       if (await handleFirestoreError(saveError)) {
@@ -9896,6 +9914,9 @@ export default function Home() {
 
       setHorasSaved(true);
       setHorasDataPeriods((prev) => new Set(prev).add(targetPeriod));
+      // Refresca el tablero general para que el Monitoreo marque el servicio como
+      // completado al instante, sin tener que recargar la pagina.
+      await refreshPublicDashboard(false);
       setMessage(`Distribucion de Horas guardada correctamente (${targetPeriodLabel}).`);
     } catch (saveError) {
       if (await handleFirestoreError(saveError)) {
@@ -17835,14 +17856,37 @@ export default function Home() {
                             {getPeriodLabel(statsModule === "sesps" ? sepsPeriodId : periodId)}
                           </h3>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowStatsModal(false)}
-                          aria-label="Cerrar"
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
-                        >
-                          ✕
-                        </button>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void refreshPublicDashboard(true)}
+                            aria-label="Actualizar"
+                            title="Actualizar"
+                            className="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-500/10 text-cyan-200 transition hover:bg-cyan-500/20"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                              className="h-4 w-4"
+                            >
+                              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                              <path d="M21 3v6h-6" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowStatsModal(false)}
+                            aria-label="Cerrar"
+                            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
 
                       {statsModule === "distribucion" ? (

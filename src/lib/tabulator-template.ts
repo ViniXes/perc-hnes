@@ -527,12 +527,6 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     name: "Direccion",
     rows: [],
   },
-  {
-    // Apoyo a las RIIS (Direccion): SOLO reporta Distribucion de Horas.
-    id: "apoyo-riis",
-    name: "Apoyo a las RIIS",
-    rows: [],
-  },
 ];
 
 export const SERVICE_COUNT = SERVICE_DEFINITIONS.length;

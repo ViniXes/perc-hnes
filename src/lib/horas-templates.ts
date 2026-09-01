@@ -21,7 +21,7 @@ export const HORAS_TEMPLATES: Record<string, HorasTemplate> = {
   direccion: {
     serviceId: "direccion",
     establishment: "HOSPITAL NACIONAL EL SALVADOR",
-    columns: ["ADMINISTRACION"],
+    columns: ["ADMINISTRACION", "SERVICIO DE APOYO A RIISS"],
     seedEmployees: [
       { dui: "01724114-6", name: "LAURA ESTELA MIRANDA IRAHETA" },
       { dui: "01724064-5", name: "RUDY ARMANDO BONILLA CARRANZA" },
@@ -2246,14 +2246,6 @@ export const HORAS_TEMPLATES: Record<string, HorasTemplate> = {
       "RANDAL GIOVANNI MARTINEZ RIVERA",
       "JUAN JOSE MURCIA LOPEZ",
     ],
-  },
-  // Apoyo a las RIIS (Direccion): SOLO Distribucion de Horas. El roster arranca
-  // vacio; el servicio agrega a su personal con el boton "+ Agregar empleado".
-  "apoyo-riis": {
-    serviceId: "apoyo-riis",
-    establishment: "HOSPITAL NACIONAL EL SALVADOR",
-    columns: ["ADMINISTRACION", "SERVICIO DE APOYO A RIISS"],
-    seedEmployees: [],
   },
 };
 
