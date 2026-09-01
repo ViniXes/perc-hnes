@@ -4655,6 +4655,8 @@ export default function Home() {
   const [requestModuleId, setRequestModuleId] = useState<ModuleId>("perc");
   const [isSendingRequest, setIsSendingRequest] = useState(false);
   const [requestBusyId, setRequestBusyId] = useState("");
+  /** Meses abiertos/cerrados en la bandeja de solicitudes (clave = periodo "YYYY-MM"). */
+  const [requestsMonthOpen, setRequestsMonthOpen] = useState<Record<string, boolean>>({});
   const [adminUsers, setAdminUsers] = useState<ManagedUser[]>([]);
   const [adminDrafts, setAdminDrafts] = useState<Record<string, AdminDraft>>({});
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
@@ -13260,6 +13262,27 @@ export default function Home() {
             )
           : [];
     const pendingRequestCount = visibleRequests.filter((req) => req.status === "pending").length;
+    // Solicitudes agrupadas por MES (mas reciente primero) para no dejar una lista larga.
+    const requestGroups = (() => {
+      const byPeriod = new Map<string, CaptureRequest[]>();
+
+      for (const req of visibleRequests) {
+        const list = byPeriod.get(req.periodId) || [];
+        list.push(req);
+        byPeriod.set(req.periodId, list);
+      }
+
+      return [...byPeriod.entries()]
+        .sort((left, right) => right[0].localeCompare(left[0]))
+        .map(([periodId, items]) => ({
+          periodId,
+          label: getShortPeriodLabel(periodId),
+          pending: items.filter((item) => item.status === "pending").length,
+          items: [...items].sort(
+            (a, b) => (a.status === "pending" ? -1 : 1) - (b.status === "pending" ? -1 : 1),
+          ),
+        }));
+    })();
     const pendingSignupCount = signupRequests.filter((req) => req.status === "pending").length;
     // Soporte: supervisores y admin ven todos los tickets; pendientes para el badge.
     const pendingSupportCount = supportTickets.filter((t) => t.status === "pendiente").length;
@@ -18177,10 +18200,59 @@ export default function Home() {
                     No hay solicitudes por ahora.
                   </p>
                 ) : (
-                  <div className="space-y-2">
-                    {[...visibleRequests]
-                      .sort((a, b) => (a.status === "pending" ? -1 : 1) - (b.status === "pending" ? -1 : 1))
-                      .map((req) => {
+                  <div className="max-h-[62vh] space-y-2.5 overflow-y-auto pr-1">
+                    {requestGroups.map((group, groupIndex) => {
+                      const isOpen =
+                        requestsMonthOpen[group.periodId] ?? (group.pending > 0 || groupIndex === 0);
+
+                      return (
+                        <div
+                          key={group.periodId}
+                          className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]"
+                        >
+                          <button
+                            type="button"
+                            aria-expanded={isOpen}
+                            onClick={() =>
+                              setRequestsMonthOpen((prev) => ({
+                                ...prev,
+                                [group.periodId]: !isOpen,
+                              }))
+                            }
+                            className="flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition hover:bg-white/[0.05]"
+                          >
+                            <span className="flex min-w-0 items-center gap-2.5">
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                                className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform duration-200 ${
+                                  isOpen ? "rotate-90" : ""
+                                }`}
+                              >
+                                <path d="M9 6l6 6-6 6" />
+                              </svg>
+                              <span className="truncate text-sm font-bold text-white">
+                                {group.label}
+                              </span>
+                              <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                                {group.items.length}
+                              </span>
+                            </span>
+                            {group.pending > 0 ? (
+                              <span className="shrink-0 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-bold text-amber-200">
+                                {group.pending} pendiente{group.pending === 1 ? "" : "s"}
+                              </span>
+                            ) : null}
+                          </button>
+
+                          {isOpen ? (
+                            <div className="space-y-2 px-2.5 pb-2.5">
+                              {group.items.map((req) => {
                         const lateMarks = captureRequests.filter(
                           (item) => item.serviceId === req.serviceId,
                         ).length;
@@ -18203,7 +18275,7 @@ export default function Home() {
                               </span>
                             </div>
                             <p className="mt-1 text-xs text-slate-400">
-                              {getShortPeriodLabel(req.periodId)} · solicitó{" "}
+                              Solicitó{" "}
                               <span className="text-slate-200">{req.requestedByName}</span>
                               {lateMarks > 1 ? (
                                 <span className="text-rose-300/90"> · {lateMarks} marcas</span>
@@ -18265,7 +18337,12 @@ export default function Home() {
                             </div>
                           </div>
                         );
-                      })}
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
