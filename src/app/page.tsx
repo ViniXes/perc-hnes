@@ -4759,6 +4759,9 @@ export default function Home() {
   const [docFixType, setDocFixType] = useState<"dui" | "pasaporte" | "carne">("dui");
   const [docFixNumber, setDocFixNumber] = useState("");
   const [docFixBusy, setDocFixBusy] = useState(false);
+  /** Liberar un documento por numero, aunque la cuenta ya no exista. */
+  const [freeDocNumber, setFreeDocNumber] = useState("");
+  const [freeDocBusy, setFreeDocBusy] = useState(false);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isCreatingManagedUser, setIsCreatingManagedUser] = useState(false);
   const [isExportingMonthlyReport, setIsExportingMonthlyReport] = useState(false);
@@ -10668,6 +10671,42 @@ export default function Home() {
       setError(getAuthErrorMessage(docError));
     } finally {
       setDocFixBusy(false);
+    }
+  }
+
+  // Suelta un documento por NUMERO, aunque ya no exista la cuenta que lo reservo.
+  // Pasa cuando se elimino un usuario antes de que el sistema liberara su documento:
+  // el numero queda apartado y nadie puede registrarlo.
+  async function handleFreeDocumentByNumber() {
+    const key = normalizeDocKey(freeDocNumber);
+    if (!key || key.length < 4) {
+      setError("Escribí el número de documento a liberar.");
+      return;
+    }
+
+    setFreeDocBusy(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const ref = doc(db, "documentRegistry", key);
+      const snap = await getDoc(ref).catch(() => null);
+
+      if (!snap || !snap.exists()) {
+        setMessage(`El documento ${freeDocNumber.trim()} ya está libre: nadie lo tiene reservado.`);
+        setFreeDocNumber("");
+        return;
+      }
+
+      const data = snap.data() as { name?: unknown };
+      const dueno = typeof data.name === "string" && data.name ? data.name : "una cuenta anterior";
+      await deleteDoc(ref);
+      setFreeDocNumber("");
+      setMessage(`Documento ${key} liberado (estaba a nombre de ${dueno}). Ya se puede registrar.`);
+    } catch (freeError) {
+      setError(getAuthErrorMessage(freeError));
+    } finally {
+      setFreeDocBusy(false);
     }
   }
 
@@ -17370,6 +17409,25 @@ export default function Home() {
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  {isAdmin ? (
+                    <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-2 py-1.5">
+                      <input
+                        value={freeDocNumber}
+                        onChange={(event) => setFreeDocNumber(event.target.value)}
+                        placeholder="00000000-0"
+                        title="Liberar un documento apartado por una cuenta que ya no existe"
+                        className="w-28 bg-transparent font-mono text-xs text-white outline-none placeholder:text-slate-600"
+                      />
+                      <button
+                        type="button"
+                        disabled={freeDocBusy}
+                        onClick={() => void handleFreeDocumentByNumber()}
+                        className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
+                      >
+                        {freeDocBusy ? "…" : "Liberar documento"}
+                      </button>
+                    </div>
+                  ) : null}
                   {isAdmin ? (
                     <button
                       type="button"
