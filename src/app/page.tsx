@@ -1703,7 +1703,7 @@ type SignupRequest = {
   serviceName: string;
   status: "pending" | "approved" | "rejected";
   createdUsername?: string;
-  requestType?: "service" | "division" | "department" | "department-editor" | "director";
+  requestType?: "service" | "division" | "department" | "department-editor" | "director" | "subdirector";
   isChief?: boolean;
   captureModules?: ModuleId[];
   division?: string;
@@ -4358,13 +4358,17 @@ async function createDirectorAccount(
     contactEmail,
     firstName,
     lastName,
+    label,
   }: {
     contactEmail: string;
     firstName: string;
     lastName: string;
+    // "Directora" o "Subdireccion Medica": mismo alcance (ve todo el hospital,
+    // no captura ni edita), solo cambia como se identifica la cuenta.
+    label?: string;
   },
 ) {
-  const directorLabel = "Directora";
+  const directorLabel = label && label.trim() ? label.trim() : "Directora";
   const base = buildChiefUsername(firstName, lastName);
   const displayName = buildFullName(firstName.trim(), lastName.trim(), directorLabel);
   let username = base;
@@ -4628,7 +4632,7 @@ export default function Home() {
     email: string;
     serviceId: string;
     acceptPrivacy: boolean;
-    accessType: "service" | "division" | "department" | "department-editor" | "director";
+    accessType: "service" | "division" | "department" | "department-editor" | "director" | "subdirector";
     isChief: boolean;
     captureModules: ModuleId[];
     division: string;
@@ -6470,7 +6474,9 @@ export default function Home() {
                     ? "department-editor"
                     : d.requestType === "director"
                       ? "director"
-                      : "service",
+                      : d.requestType === "subdirector"
+                        ? "subdirector"
+                        : "service",
             isChief: d.isChief === true,
             captureModules: Array.isArray(d.captureModules)
               ? (d.captureModules.filter((v): v is ModuleId => MODULE_ORDER.includes(v as ModuleId)) as ModuleId[])
@@ -8692,6 +8698,8 @@ export default function Home() {
     const isDivision = signupForm.accessType === "division";
     const isDepartment = signupForm.accessType === "department";
     const isDirector = signupForm.accessType === "director";
+    // Subdireccion Medica: mismos alcances que la Direccion (ve todo, no captura).
+    const isSubdirector = signupForm.accessType === "subdirector";
     const isDeptEditor = signupForm.accessType === "department-editor";
     const service = getServiceById(signupForm.serviceId);
     const DIVISION_LABELS: Record<string, string> = {
@@ -8713,7 +8721,7 @@ export default function Home() {
         setError("Elegí tu departamento.");
         return;
       }
-    } else if (!isDirector) {
+    } else if (!isDirector && !isSubdirector) {
       if (!service) {
         setError("Elegí tu servicio.");
         return;
@@ -8770,9 +8778,17 @@ export default function Home() {
               ? "department-editor"
               : isDirector
                 ? "director"
-                : "service",
-        isChief: isDivision || isDepartment || isDeptEditor || isDirector ? false : signupForm.isChief,
-        captureModules: isDivision || isDepartment || isDeptEditor || isDirector ? [] : signupForm.captureModules,
+                : isSubdirector
+                  ? "subdirector"
+                  : "service",
+        isChief:
+          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector
+            ? false
+            : signupForm.isChief,
+        captureModules:
+          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector
+            ? []
+            : signupForm.captureModules,
         division: isDivision ? signupForm.division : "",
         department: isDepartment || isDeptEditor ? signupForm.department : "",
         docType: signupForm.docType,
@@ -8930,14 +8946,17 @@ export default function Home() {
       return;
     }
 
-    // --- Solicitud de DIRECTORA (ve todo el hospital, sin permisos de gestion) ---
-    if (req.requestType === "director") {
+    // --- DIRECCION y SUBDIRECCION MEDICA (ven todo el hospital, sin gestion) ---
+    if (req.requestType === "director" || req.requestType === "subdirector") {
+      const cargoLabel =
+        req.requestType === "subdirector" ? "Subdirección Médica" : "Directora";
       const secondaryDir = createSecondaryAuth();
       try {
         const { username, credential } = await createDirectorAccount(secondaryDir.auth, {
           contactEmail: req.email,
           firstName: req.firstName,
           lastName: req.lastName,
+          label: cargoLabel,
         });
         if (credential?.user?.uid) {
           await setDoc(
@@ -8957,10 +8976,10 @@ export default function Home() {
           status: "approved",
           username,
           password: CHIEF_TEMP_PASSWORD,
-          roleLabel: "Directora",
+          roleLabel: cargoLabel,
         });
         setMessage(
-          `Cuenta de Directora creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
+          `Cuenta de ${cargoLabel} creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
         );
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
@@ -21694,6 +21713,8 @@ export default function Home() {
                               : ""
                             : signupForm.accessType === "director"
                               ? "director:main"
+                              : signupForm.accessType === "subdirector"
+                                ? "subdirector:medica"
                               : signupForm.isChief && signupForm.serviceId
                               ? `chief:${signupForm.serviceId}`
                               : signupForm.serviceId
@@ -21708,6 +21729,8 @@ export default function Home() {
                           setSignupForm((f) => ({ ...f, accessType: "department-editor", department: v.slice(9).split("#")[0], serviceId: "", isChief: false, division: "", captureModules: [] }));
                         } else if (v.startsWith("dept:")) {
                           setSignupForm((f) => ({ ...f, accessType: "department", department: v.slice(5).split("#")[0], serviceId: "", isChief: false, division: "", captureModules: [] }));
+                        } else if (v.startsWith("subdirector:")) {
+                          setSignupForm((f) => ({ ...f, accessType: "subdirector", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
                         } else if (v.startsWith("director:")) {
                           setSignupForm((f) => ({ ...f, accessType: "director", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
                         } else if (v.startsWith("asis:")) {
@@ -21757,9 +21780,14 @@ export default function Home() {
                               </option>
                             ) : null}
                             {signupDivView === "direccion" ? (
-                              <option value="director:main" className="bg-[#1b2537] text-amber-200">
-                                Directora (ve todo el hospital)
-                              </option>
+                              <>
+                                <option value="director:main" className="bg-[#1b2537] text-amber-200">
+                                  Directora (ve todo el hospital)
+                                </option>
+                                <option value="subdirector:medica" className="bg-[#1b2537] text-amber-200">
+                                  Subdirección Médica (ve todo el hospital)
+                                </option>
+                              </>
                             ) : null}
                             {signupDivView === "direccion" ? (
                               <>
