@@ -6591,6 +6591,48 @@ export default function Home() {
   }
 
   // El admin elige un servicio para ver/editar sus tabuladores e historial.
+  // Boton "Salir del servicio": solo lo ven admin y supervisores mientras tienen
+  // un servicio abierto. Los devuelve al panel sin tener que entrar a "Ver
+  // tabuladores por servicio" y elegir "Sin servicio".
+  function renderExitServiceButton() {
+    if (!(isAdminLike || isSupervisorLike) || !adminSelectedServiceId) {
+      return null;
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          void handleAdminSelectService("");
+          setMobileView("home");
+        }}
+        title="Salir del servicio y volver al panel"
+        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${
+          panelTheme === "light"
+            ? "border-amber-300/70 bg-amber-50 text-amber-700 hover:bg-amber-100"
+            : "border-amber-300/30 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20"
+        }`}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="13"
+          height="13"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <path d="m16 17 5-5-5-5" />
+          <path d="M21 12H9" />
+        </svg>
+        Salir del servicio
+      </button>
+    );
+  }
+
   async function handleAdminSelectService(serviceId: string) {
     setAdminSelectedServiceId(serviceId);
     setPercViewPeriod(null);
@@ -11105,6 +11147,7 @@ export default function Home() {
           </div>
           <div className="flex flex-col items-start gap-2 lg:items-end">
             <div className="flex flex-wrap items-center gap-2">
+              {renderExitServiceButton()}
               {/* SEPS lleva un ciclo propio: en fase de captura se digita el mes EN CURSO
                   y en cierre/transicion el mes anterior, por lo que puede no coincidir
                   con el periodo que muestra el encabezado del panel (PERC). Se marca
@@ -12814,7 +12857,8 @@ export default function Home() {
               {horasTemplate?.displayName ?? currentService?.name} · Cierre de {periodLabel}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {renderExitServiceButton()}
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                 horasLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
@@ -15670,6 +15714,7 @@ export default function Home() {
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {renderExitServiceButton()}
                   <span
                     className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                       isFormLocked
