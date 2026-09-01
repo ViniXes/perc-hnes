@@ -23,6 +23,10 @@ export type SepsLayoutExtraRow = {
   /** Fila tras la cual se inserta (hereda su grupo). Vacío = al final. */
   afterKey?: string;
   group?: string;
+  /** Niveles de grupo PROPIOS (externo -> interno), p.ej. ["Chagas","Resultado"].
+   * Si viene, manda sobre lo que herede del ancla: sirve para abrir un título
+   * nuevo dentro de una tabla (Chagas) y colgarle sus filas (Reactiva, etc.). */
+  groups?: string[];
 };
 
 /** Tabla creada desde cero. */
@@ -145,8 +149,11 @@ export function applySepsLayout(
       const label = layout.rowLabels[extra.key] ?? extra.label;
       const index = extra.afterKey ? rows.findIndex((row) => row.key === extra.afterKey) : -1;
       const anchor = index >= 0 ? rows[index] : undefined;
-      const groups = anchor?.groups;
-      const group = extra.group ?? anchor?.group;
+      const propios = Array.isArray(extra.groups)
+        ? extra.groups.filter((g) => typeof g === "string" && g.trim() !== "")
+        : [];
+      const groups = propios.length > 0 ? propios : anchor?.groups;
+      const group = propios.length > 0 ? undefined : extra.group ?? anchor?.group;
       const newRow: SepsRow = {
         key: extra.key,
         label,
@@ -180,7 +187,14 @@ export function applySepsLayout(
       }));
     const extraRows = layout.extraRows.filter((row) => row.tableId === extra.id);
     for (const row of extraRows) {
-      rows.push({ key: row.key, label: layout.rowLabels[row.key] ?? row.label });
+      const propios = Array.isArray(row.groups)
+        ? row.groups.filter((g) => typeof g === "string" && g.trim() !== "")
+        : [];
+      rows.push({
+        key: row.key,
+        label: layout.rowLabels[row.key] ?? row.label,
+        ...(propios.length > 0 ? { groups: propios } : {}),
+      });
     }
     tables.push({
       id: extra.id,

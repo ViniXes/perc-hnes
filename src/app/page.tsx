@@ -9604,20 +9604,47 @@ export default function Home() {
     });
   }
 
+  /** Parte "Chagas > Resultado > Reactiva" en grupos + etiqueta de la fila. */
+  function parseRowPath(value: string): { groups: string[]; label: string } {
+    const partes = value
+      .split(">")
+      .map((parte) => parte.trim())
+      .filter((parte) => parte !== "");
+
+    if (partes.length <= 1) {
+      return { groups: [], label: value.trim() };
+    }
+
+    return { groups: partes.slice(0, -1), label: partes[partes.length - 1] };
+  }
+
   function handleLayoutAddRow(tableId: string, afterKey: string) {
     openLayoutDialog({
       kind: "text",
       title: "Agregar fila",
-      description: "Se insertará justo debajo de la fila seleccionada y heredará su grupo.",
+      description:
+        "Se inserta debajo de la fila seleccionada y hereda su grupo. Para abrir un título nuevo dentro de la tabla, escribí los niveles separados por «>». Ej.: Chagas > Resultado > Reactiva",
       label: "Nombre de la fila",
       value: "",
-      placeholder: "Ej. No. de procedimientos",
+      placeholder: "Ej. Chagas > Resultado > Reactiva",
       confirmLabel: "Agregar",
       onConfirm: (value) => {
+        const { groups, label } = parseRowPath(value);
         const key = `lx-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
         updateSepsLayoutDraft((draft) => {
-          draft.extraRows.push({ tableId, key, label: value, afterKey });
+          draft.extraRows.push({
+            tableId,
+            key,
+            label,
+            afterKey,
+            ...(groups.length > 0 ? { groups } : {}),
+          });
         });
+        if (groups.length > 0) {
+          setMessage(
+            `Fila agregada bajo ${groups.join(" › ")}. Las filas que agregues debajo de ella heredan ese mismo título.`,
+          );
+        }
       },
     });
   }
@@ -14878,9 +14905,10 @@ export default function Home() {
         detail: isAdmin ? "Resumen general" : "Estado del periodo",
         badge: "IN",
       },
-      // Monitoreo General (solo admin): PERC + SEPS + Horas en una sola pantalla.
-      // Los monitoreos por modulo siguen existiendo aparte, sin cambios.
-      ...(isAdmin
+      // Monitoreo General: PERC + SEPS + Horas en una sola pantalla. Lo ven los
+      // administradores y tambien Direccion y Subdireccion Medica, que monitorean
+      // todo el hospital sin capturar nada.
+      ...(isAdmin || isDirector
         ? [
             {
               id: "panel-monitor-general",
@@ -19336,7 +19364,7 @@ export default function Home() {
 
           {/* MONITOREO GENERAL (solo admin): PERC + SEPS + Horas en una sola vista.
               Los monitoreos por modulo siguen funcionando por separado. */}
-          {isAdmin && showGeneralMonitorModal
+          {(isAdmin || isDirector) && showGeneralMonitorModal
             ? (() => {
                 const columnas = [
                   { key: "PERC" as const, titulo: "PERC", periodo: periodId, color: "#38bdf8" },
