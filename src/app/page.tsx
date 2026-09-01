@@ -8466,6 +8466,46 @@ export default function Home() {
   }
 
   // Admin aprueba un registro: crea la cuenta del jefe (usuario por nombre, pass 123456).
+  // Aviso por correo a quien se registro. Al APROBAR le llega su usuario y la clave
+  // generica; al RECHAZAR, un mensaje institucional. Nunca bloquea la decision: si
+  // el correo falla, solo se avisa en pantalla para entregar los datos a mano.
+  async function notifySignupDecision(args: {
+    to: string;
+    name: string;
+    status: "approved" | "rejected";
+    username?: string;
+    password?: string;
+    roleLabel?: string;
+  }): Promise<boolean> {
+    if (!args.to || !args.to.includes("@")) {
+      return false;
+    }
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        return false;
+      }
+
+      const res = await fetch("/api/admin/send-account-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, ...args }),
+      });
+      const data = (await res.json()) as { sent?: boolean };
+      return data.sent === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Frase que se agrega al mensaje del panel segun si el correo salio o no. */
+  function mailSuffix(sent: boolean, to: string): string {
+    return sent
+      ? `Se le enviaron los datos por correo a ${to}.`
+      : `No se pudo enviar el correo a ${to}: entregue los datos personalmente.`;
+  }
+
   async function handleApproveSignup(req: SignupRequest) {
     setSignupBusyId(req.id);
     setError("");
@@ -8505,8 +8545,16 @@ export default function Home() {
           { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
           { merge: true },
         );
+        const mailed = await notifySignupDecision({
+          to: req.email,
+          name: `${req.firstName} ${req.lastName}`.trim(),
+          status: "approved",
+          username,
+          password: CHIEF_TEMP_PASSWORD,
+          roleLabel: DIVLBL[divKey],
+        });
         setMessage(
-          `Cuenta de ${DIVLBL[divKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}".`,
+          `Cuenta de ${DIVLBL[divKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
         );
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
@@ -8547,8 +8595,16 @@ export default function Home() {
           { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
           { merge: true },
         );
+        const mailed = await notifySignupDecision({
+          to: req.email,
+          name: `${req.firstName} ${req.lastName}`.trim(),
+          status: "approved",
+          username,
+          password: CHIEF_TEMP_PASSWORD,
+          roleLabel: "Directora",
+        });
         setMessage(
-          `Cuenta de Directora creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}".`,
+          `Cuenta de Directora creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
         );
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
@@ -8598,8 +8654,16 @@ export default function Home() {
           { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
           { merge: true },
         );
+        const mailed = await notifySignupDecision({
+          to: req.email,
+          name: `${req.firstName} ${req.lastName}`.trim(),
+          status: "approved",
+          username,
+          password: CHIEF_TEMP_PASSWORD,
+          roleLabel: departmentEditorLabel(depKey),
+        });
         setMessage(
-          `Cuenta de Asistencia UCI/UCIN creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}".`,
+          `Cuenta de Asistencia UCI/UCIN creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
         );
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
@@ -8648,8 +8712,16 @@ export default function Home() {
           { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
           { merge: true },
         );
+        const mailed = await notifySignupDecision({
+          to: req.email,
+          name: `${req.firstName} ${req.lastName}`.trim(),
+          status: "approved",
+          username,
+          password: CHIEF_TEMP_PASSWORD,
+          roleLabel: DEPARTMENT_LABELS[depKey],
+        });
         setMessage(
-          `Cuenta de ${DEPARTMENT_LABELS[depKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}".`,
+          `Cuenta de ${DEPARTMENT_LABELS[depKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
         );
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
@@ -8711,8 +8783,16 @@ export default function Home() {
         { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
         { merge: true },
       );
+      const mailed = await notifySignupDecision({
+        to: req.email,
+        name: `${req.firstName} ${req.lastName}`.trim(),
+        status: "approved",
+        username,
+        password: CHIEF_TEMP_PASSWORD,
+        roleLabel: service.name,
+      });
       setMessage(
-        `Cuenta creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}".`,
+        `Cuenta creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
       );
     } catch (approveError) {
       setError(getAuthErrorMessage(approveError));
@@ -8732,11 +8812,25 @@ export default function Home() {
   }
   async function handleRejectSignup(req: SignupRequest) {
     setSignupBusyId(req.id);
+    setError("");
+    setMessage("");
     try {
       await setDoc(
         doc(db, "signupRequests", req.id),
         { status: "rejected", updatedAt: serverTimestamp() },
         { merge: true },
+      );
+      const mailed = await notifySignupDecision({
+        to: req.email,
+        name: `${req.firstName} ${req.lastName}`.trim(),
+        status: "rejected",
+      });
+      setMessage(
+        `Solicitud de ${req.firstName} ${req.lastName} rechazada. ${
+          mailed
+            ? `Se le avisó por correo a ${req.email}.`
+            : "No se pudo enviar el correo de aviso."
+        }`,
       );
       // Libera el documento reservado para que esa persona pueda volver a registrarse.
       if (req.docNumber && normalizeDocKey(req.docNumber)) {
