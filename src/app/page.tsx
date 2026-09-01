@@ -3224,6 +3224,72 @@ function buildAdminDrafts(users: ManagedUser[]) {
   ) as Record<string, AdminDraft>;
 }
 
+// =============================================================================
+// Visor de accesos: reconstruye TODO lo que una cuenta tiene habilitado, con las
+// mismas reglas que usa la app al armarle el menu. Es solo lectura: no modifica
+// nada, solo permite al admin verificar que ve cada persona.
+// =============================================================================
+type UserAccessView = {
+  servicio: string;
+  rol: string;
+  esJefe: boolean;
+  soloAccesos: boolean;
+  capturaModulos: { id: ModuleId; label: string; tabulador: string }[];
+  submenus: string[];
+  consultaPerc: string[];
+  consultaSeps: string[];
+  consultaHoras: string[];
+  activa: boolean;
+  debeCambiarClave: boolean;
+  documento: string;
+};
+
+function buildUserAccessView(u: ManagedUser): UserAccessView {
+  const area = getAreaById(u.serviceId);
+  const areaModules = area ? area.modules : [];
+  const restrict = Array.isArray(u.captureModules) && u.captureModules.length > 0;
+
+  const capturaModulos = u.noCapture
+    ? []
+    : areaModules
+        .filter((m) => u.isChief || !restrict || u.captureModules.includes(m))
+        .map((m) => ({
+          id: m,
+          label: getModuleLabel(m),
+          tabulador: (() => {
+            const sid = u.serviceId || "";
+            if (m === "sesps") {
+              const tpl = getSepsTemplate(sid);
+              return tpl ? `${(tpl.tables ?? []).length} tablas` : "sin plantilla";
+            }
+            if (m === "distribucion") {
+              const tpl = getHorasTemplate(sid);
+              return tpl ? `${tpl.columns.length} centros de costo` : "sin plantilla";
+            }
+            return `${getServiceById(sid)?.rows.length ?? 0} filas`;
+          })(),
+        }));
+
+  const nombreServicio = (id: string) => getServiceById(id)?.name || id;
+
+  return {
+    servicio: u.serviceName || getServiceById(u.serviceId || "")?.name || "Sin servicio",
+    rol: u.role === "admin" ? "Administrador" : u.role === "supervisor" ? "Supervisor" : "Servicio",
+    esJefe: u.isChief === true,
+    soloAccesos: u.noCapture === true,
+    capturaModulos,
+    submenus: (u.menuGrants || []).map(
+      (id) => GRANTABLE_MENUS.find((g) => g.id === id)?.label || id,
+    ),
+    consultaPerc: (u.viewPerc || []).map(nombreServicio),
+    consultaSeps: (u.viewSeps || []).map(nombreServicio),
+    consultaHoras: (u.viewHoras || []).map(nombreServicio),
+    activa: u.isActive !== false,
+    debeCambiarClave: u.mustChangePassword === true,
+    documento: u.docNumber ? `${DOC_TYPE_LABELS[u.docType] || "Documento"}: ${u.docNumber}` : "Sin documento",
+  };
+}
+
 function sortManagedUsers(users: ManagedUser[]) {
   return [...users].sort((left, right) => {
     const leftLabel = left.serviceName || left.name || left.email;
@@ -4794,6 +4860,8 @@ export default function Home() {
   /** Liberar un documento por numero, aunque la cuenta ya no exista. */
   const [freeDocNumber, setFreeDocNumber] = useState("");
   const [freeDocBusy, setFreeDocBusy] = useState(false);
+  /** Visor de accesos (solo lectura): que tiene habilitado una cuenta. */
+  const [accessViewUid, setAccessViewUid] = useState("");
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isCreatingManagedUser, setIsCreatingManagedUser] = useState(false);
   const [isExportingMonthlyReport, setIsExportingMonthlyReport] = useState(false);
@@ -18168,6 +18236,14 @@ export default function Home() {
                           >
                             {draft.mustChangePassword ? "✓ " : ""}Debe cambiar clave
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => setAccessViewUid(selectedUser.uid)}
+                            title="Ver, sin poder modificar, todo lo que esta cuenta tiene habilitado"
+                            className="rounded-lg bg-indigo-500/15 px-3 py-1.5 text-xs font-semibold text-indigo-200 transition hover:bg-indigo-500/25"
+                          >
+                            Ver sus accesos
+                          </button>
                           {draft.role === "service" && draft.serviceId && !draft.department ? (
                             <button
                               type="button"
@@ -18737,6 +18813,177 @@ export default function Home() {
               </div>
             </div>
           ) : null}
+
+          {/* VISOR DE ACCESOS (solo admin, SOLO LECTURA): muestra exactamente que tiene
+              habilitado una cuenta. No permite modificar nada desde aca. */}
+          {isAdmin && accessViewUid
+            ? (() => {
+                const u = adminUsers.find((x) => x.uid === accessViewUid);
+                if (!u) return null;
+                const a = buildUserAccessView(u);
+
+                const Bloque = ({
+                  titulo,
+                  items,
+                  vacio,
+                }: {
+                  titulo: string;
+                  items: string[];
+                  vacio: string;
+                }) => (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      {titulo}
+                    </p>
+                    {items.length === 0 ? (
+                      <p className="mt-2 text-xs text-slate-500">{vacio}</p>
+                    ) : (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {items.map((it) => (
+                          <span
+                            key={it}
+                            className="rounded-lg bg-white/[0.06] px-2.5 py-1 text-xs text-slate-200"
+                          >
+                            {it}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+
+                return (
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-5"
+                    onClick={() => setAccessViewUid("")}
+                  >
+                    <div className="modal-fade-in fixed inset-0 bg-slate-950/80 backdrop-blur-sm" />
+                    <div
+                      onClick={(event) => event.stopPropagation()}
+                      className="modal-pop-in relative flex max-h-[92dvh] w-full min-w-0 max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60"
+                    >
+                      <div className="h-1 w-full shrink-0 bg-gradient-to-r from-indigo-400 to-cyan-400" />
+
+                      <div className="flex shrink-0 items-start justify-between gap-3 px-5 pb-4 pt-5 sm:px-6">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-indigo-300/90">
+                            Visor de accesos · solo lectura
+                          </p>
+                          <h3 className="mt-1 truncate text-xl font-bold text-white">{u.name}</h3>
+                          <p className="mt-0.5 truncate font-mono text-xs text-cyan-200">
+                            {u.username}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAccessViewUid("")}
+                          aria-label="Cerrar"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pb-5 sm:px-6 sm:pb-6">
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-slate-200">
+                            {a.rol}
+                          </span>
+                          <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-200">
+                            {a.servicio}
+                          </span>
+                          {a.esJefe ? (
+                            <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-200">
+                              Jefe del servicio
+                            </span>
+                          ) : null}
+                          {a.soloAccesos ? (
+                            <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-200">
+                              No llena tabuladores
+                            </span>
+                          ) : null}
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                              a.activa
+                                ? "bg-emerald-500/15 text-emerald-200"
+                                : "bg-rose-500/15 text-rose-200"
+                            }`}
+                          >
+                            {a.activa ? "Activa" : "Bloqueada"}
+                          </span>
+                          {a.debeCambiarClave ? (
+                            <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-slate-300">
+                              Debe cambiar clave
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            Tabuladores que llena
+                          </p>
+                          {a.capturaModulos.length === 0 ? (
+                            <p className="mt-2 text-xs text-slate-500">
+                              Ninguno. Solo entra a los accesos otorgados.
+                            </p>
+                          ) : (
+                            <div className="mt-2 space-y-1.5">
+                              {a.capturaModulos.map((m) => (
+                                <div
+                                  key={m.id}
+                                  className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.04] px-3 py-2"
+                                >
+                                  <span className="text-sm font-semibold text-white">{m.label}</span>
+                                  <span className="shrink-0 text-[11px] text-slate-400">
+                                    {m.tabulador}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <Bloque
+                          titulo="Accesos otorgados (submenús)"
+                          items={a.submenus}
+                          vacio="Ninguno."
+                        />
+                        <Bloque
+                          titulo="Puede consultar · PERC"
+                          items={a.consultaPerc}
+                          vacio="Ningún servicio."
+                        />
+                        <Bloque
+                          titulo="Puede consultar · SEPS"
+                          items={a.consultaSeps}
+                          vacio="Ningún servicio."
+                        />
+                        <Bloque
+                          titulo="Puede consultar · Horas"
+                          items={a.consultaHoras}
+                          vacio="Ningún servicio."
+                        />
+
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            Identificación
+                          </p>
+                          <p className="mt-2 font-mono text-xs text-slate-300">{a.documento}</p>
+                          <p className="mt-1 text-xs text-slate-400">{u.email}</p>
+                        </div>
+
+                        <p className="pt-1 text-[11px] leading-5 text-slate-500">
+                          Esta ventana es solo de consulta: muestra lo que la persona ve al entrar,
+                          sin permitir cambiarlo. Para modificar algo, cerrá y usá su ficha.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
+            : null}
 
           {/* VISTA PREVIA de Produccion Distribuida: la misma tabla que sale en el
               Excel, para ir viendo como se va llenando. Solo lectura. */}
