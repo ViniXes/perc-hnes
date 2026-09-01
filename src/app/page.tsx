@@ -4655,6 +4655,8 @@ export default function Home() {
   const [usersModalTab, setUsersModalTab] = useState<"usuarios" | "servicios">("usuarios");
   const [usersScrolled, setUsersScrolled] = useState(false);
   const [showBoardModal, setShowBoardModal] = useState(false);
+  /** Monitoreo General (solo admin): los 3 monitoreos juntos en una sola vista. */
+  const [showGeneralMonitorModal, setShowGeneralMonitorModal] = useState(false);
   // Menu lateral colapsable: en PC se contrae para dar espacio; en movil es cajon.
   const [menuOpen, setMenuOpen] = useState(true);
   // Al bajar la pantalla, el boton de menu se vuelve translucido (menos invasivo).
@@ -5233,6 +5235,57 @@ export default function Home() {
     publicDashboardGroups.length > 0 ? publicDashboardGroups : fallbackDashboardGroups;
   // Estadistica general por modulo (cuantas dependencias completaron PERC/SEPS/Horas).
   const moduleStats = useMemo(() => computeModuleStats(dashboardGroups), [dashboardGroups]);
+
+  // Lista de servicios completos/pendientes de UN modulo, con las familias UCI/UCIN
+  // agrupadas. Es la misma logica del modal de Monitoreo; la usa el Monitoreo General
+  // para mostrar los tres modulos juntos.
+  function computeMonitorStats(statsLabel: "PERC" | "SEPS" | "Horas") {
+    const rawStats = dashboardGroups
+      .flatMap((group) => group.services)
+      .filter((service) => service.modules.some((m) => m.label === statsLabel))
+      .filter((service) => isServiceInChiefScope(serviceProfile, service.id));
+
+    const isDone = (service: (typeof rawStats)[number]) =>
+      !!service.modules.find((m) => m.label === statsLabel)?.completed;
+
+    const items: { id: string; name: string; done: boolean; family?: { done: number; total: number; pct: number } }[] = [];
+    const seenFamilies = new Set<string>();
+
+    for (const service of rawStats) {
+      const familyId = SERVICE_FAMILY_BY_ID[service.id];
+
+      if (familyId) {
+        if (seenFamilies.has(familyId)) continue;
+        seenFamilies.add(familyId);
+        const familyDef = SERVICE_FAMILIES.find((f) => f.id === familyId);
+        const members = rawStats.filter(
+          (x) => SERVICE_FAMILY_BY_ID[x.id] === familyId && !getSepsTemplate(x.id)?.consolidatesFrom,
+        );
+        const done = members.filter(isDone).length;
+        const total = members.length;
+        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+        items.push({
+          id: familyId,
+          name: familyDef?.title ?? familyId,
+          done: pct === 100,
+          family: { done, total, pct },
+        });
+      } else {
+        items.push({ id: service.id, name: service.name, done: isDone(service) });
+      }
+    }
+
+    const total = items.length;
+    const completos = items.filter((item) => item.done).length;
+
+    return {
+      items: [...items].sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" })),
+      total,
+      completos,
+      pendientes: total - completos,
+      pct: total > 0 ? Math.round((completos / total) * 100) : 0,
+    };
+  }
   // Mes que se está mirando en "Avance por módulo" y su estadística. Si es el mes
   // en cierre se reutiliza el tablero ya cargado; si es otro, se consulta aparte.
   const avanceActivePeriod = avancePeriod || periodId;
@@ -5761,7 +5814,7 @@ export default function Home() {
   // Al ABRIR "Monitoreo" o "Avance por modulo" se vuelve a leer el tablero general,
   // para ver lo que otros servicios acaban de guardar sin recargar la pagina.
   useEffect(() => {
-    if (!showStatsModal && !showBoardModal) {
+    if (!showStatsModal && !showBoardModal && !showGeneralMonitorModal) {
       return;
     }
 
@@ -5772,7 +5825,7 @@ export default function Home() {
     void refreshPublicDashboard(false);
     // refreshPublicDashboard se declara mas abajo en el componente (hoisted).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showStatsModal, showBoardModal, firestoreUnavailable, firestoreStatusReady]);
+  }, [showStatsModal, showBoardModal, showGeneralMonitorModal, firestoreUnavailable, firestoreStatusReady]);
 
   // Carga los overrides del periodo elegido en el panel "Habilitar tableros" cuando
   // el usuario tiene esa potestad y cambia de periodo.
@@ -10713,6 +10766,8 @@ export default function Home() {
     } else if (itemId === "panel-users") {
       setShowUsersModal(true);
       void loadAdminUsers();
+    } else if (itemId === "panel-monitor-general") {
+      setShowGeneralMonitorModal(true);
     } else if (itemId === "panel-avance") {
       setShowBoardModal(true);
     } else if (itemId === "panel-requests") {
@@ -14272,6 +14327,18 @@ export default function Home() {
         detail: isAdmin ? "Resumen general" : "Estado del periodo",
         badge: "IN",
       },
+      // Monitoreo General (solo admin): PERC + SEPS + Horas en una sola pantalla.
+      // Los monitoreos por modulo siguen existiendo aparte, sin cambios.
+      ...(isAdmin
+        ? [
+            {
+              id: "panel-monitor-general",
+              label: "Monitoreo general",
+              detail: "PERC, SEPS y Horas en una vista",
+              badge: "MG",
+            },
+          ]
+        : []),
       // Monitor de RRHH (aamaya): acceso directo al Monitoreo de Horas, donde esta
       // el boton para descargar el consolidado mensual de horas de todos los servicios.
       ...(isHorasMonitor
@@ -18037,6 +18104,149 @@ export default function Home() {
               </div>
             </div>
           ) : null}
+
+          {/* MONITOREO GENERAL (solo admin): PERC + SEPS + Horas en una sola vista.
+              Los monitoreos por modulo siguen funcionando por separado. */}
+          {isAdmin && showGeneralMonitorModal
+            ? (() => {
+                const columnas = [
+                  { key: "PERC" as const, titulo: "PERC", periodo: periodId, color: "#38bdf8" },
+                  { key: "SEPS" as const, titulo: "SEPS", periodo: sepsPeriodId, color: "#a78bfa" },
+                  { key: "Horas" as const, titulo: "Distribución de Horas", periodo: periodId, color: "#34d399" },
+                ].map((col) => ({ ...col, stats: computeMonitorStats(col.key) }));
+
+                return (
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden p-3 sm:p-5"
+                    onClick={() => setShowGeneralMonitorModal(false)}
+                  >
+                    <div className="modal-fade-in fixed inset-0 bg-slate-950/75 backdrop-blur-sm" />
+                    <div
+                      onClick={(event) => event.stopPropagation()}
+                      className="modal-pop-in relative flex max-h-[92dvh] w-full min-w-0 max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60"
+                    >
+                      <div className="h-1 w-full shrink-0 bg-gradient-to-r from-cyan-400 via-violet-500 to-emerald-400" />
+
+                      <div className="flex shrink-0 items-start justify-between gap-3 px-5 pb-4 pt-5 sm:px-7">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-300/90">
+                            Vista general
+                          </p>
+                          <h3 className="mt-1 text-xl font-bold text-white sm:text-2xl">
+                            Monitoreo general
+                          </h3>
+                          <p className="mt-1 text-xs text-slate-400">
+                            Quién completó cada tabulador · cierre de {getPeriodLabel(periodId)}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void refreshPublicDashboard(true)}
+                            aria-label="Actualizar"
+                            title="Actualizar"
+                            className="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-500/10 text-cyan-200 transition hover:bg-cyan-500/20"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-4 w-4">
+                              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                              <path d="M21 3v6h-6" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowGeneralMonitorModal(false)}
+                            aria-label="Cerrar"
+                            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto px-5 pb-5 sm:px-7 sm:pb-7 lg:grid-cols-3">
+                        {columnas.map((col) => (
+                          <div
+                            key={col.key}
+                            className="flex min-h-0 flex-col rounded-2xl border border-white/10 bg-white/[0.03]"
+                          >
+                            <div className="shrink-0 border-b border-white/10 px-4 py-3.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-sm font-bold text-white">{col.titulo}</p>
+                                <span
+                                  className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold"
+                                  style={{ background: `${col.color}22`, color: col.color }}
+                                >
+                                  {col.stats.pct}%
+                                </span>
+                              </div>
+                              <p className="mt-0.5 text-[11px] text-slate-400">
+                                {getPeriodLabel(col.periodo)}
+                              </p>
+
+                              <div className="mt-3 flex items-end justify-between">
+                                <p className="text-2xl font-bold leading-none text-white">
+                                  {col.stats.completos}
+                                  <span className="text-sm font-medium text-slate-400">
+                                    {" "}
+                                    / {col.stats.total}
+                                  </span>
+                                </p>
+                                <p className="text-[11px] text-slate-400">
+                                  {col.stats.pendientes} pendiente{col.stats.pendientes === 1 ? "" : "s"}
+                                </p>
+                              </div>
+
+                              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                                <div
+                                  className="h-full rounded-full transition-all"
+                                  style={{ width: `${col.stats.pct}%`, background: col.color }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2 lg:max-h-[52vh]">
+                              {col.stats.items.length === 0 ? (
+                                <p className="px-2 py-6 text-center text-xs text-slate-500">
+                                  Sin servicios en este módulo.
+                                </p>
+                              ) : (
+                                col.stats.items.map((item) => (
+                                  <div
+                                    key={item.id}
+                                    className="flex items-center gap-2.5 rounded-xl px-2.5 py-2 transition hover:bg-white/5"
+                                  >
+                                    <span
+                                      className={`h-2 w-2 shrink-0 rounded-full ${
+                                        item.done ? "bg-emerald-400" : "bg-rose-400/70"
+                                      }`}
+                                    />
+                                    <span
+                                      className={`min-w-0 flex-1 truncate text-[13px] ${
+                                        item.done ? "text-slate-200" : "text-slate-400"
+                                      }`}
+                                      title={item.name}
+                                    >
+                                      {item.name}
+                                    </span>
+                                    {item.family ? (
+                                      <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                                        {item.family.done}/{item.family.total}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
+            : null}
 
           {showStatsModal
             ? (() => {
