@@ -92,6 +92,28 @@ export async function POST(req: NextRequest) {
         // Si no se pudo liberar, la cuenta igual quedó eliminada.
       }
     }
+
+    // Respaldo: hay cuentas viejas sin docNumber guardado. La reserva tambien
+    // guarda el correo de acceso, asi que se barre por correo para no dejar
+    // NINGUNA reserva colgada al eliminar una cuenta.
+    const mails = new Set<string>();
+    for (const field of ["loginEmail", "email", "contactEmail"]) {
+      const value = targetData && typeof targetData[field] === "string" ? (targetData[field] as string) : "";
+      if (value.trim()) mails.add(value.trim());
+    }
+    for (const mail of mails) {
+      try {
+        const byMail = await adminDb
+          .collection("documentRegistry")
+          .where("email", "==", mail)
+          .get();
+        for (const d of byMail.docs) {
+          await d.ref.delete();
+        }
+      } catch {
+        // Sin indice o sin permisos: la cuenta igual quedó eliminada.
+      }
+    }
     // Limpiar los registros de solicitud (historial) asociados a este usuario,
     // para que no quede ningún rastro que afecte.
     const username = targetData && typeof targetData.username === "string" ? targetData.username : "";
