@@ -3441,6 +3441,57 @@ function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEm
   return list.length > 0 ? list : seedHorasEmployees(template);
 }
 
+// Trae el PERSONAL del ultimo mes guardado de ese servicio (nombres, DUI/NIT y tipo
+// de documento) con las HORAS VACIAS. Sirve para que el DUI se digite una sola vez:
+// al abrir un mes nuevo, la lista de personas ya viene puesta como quedo el mes
+// anterior, y solo se digitan las horas. Devuelve null si no hay ningun mes previo.
+async function fetchHorasRosterFromPreviousPeriod(
+  template: HorasTemplate,
+  periodId: string,
+  lookBackMonths = 6,
+): Promise<HorasEmployee[] | null> {
+  const [yearText, monthText] = periodId.split("-");
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month)) {
+    return null;
+  }
+
+  for (let back = 1; back <= lookBackMonths; back += 1) {
+    const previous = new Date(year, month - 1 - back, 1);
+    const previousId = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
+
+    try {
+      const snap = await getDoc(
+        doc(db, "horasTabulators", `${previousId}__${template.serviceId}`),
+      );
+      if (!snap.exists()) {
+        continue;
+      }
+
+      const data = snap.data() as { employees?: unknown };
+      const roster = normalizeHorasEmployees(template, data.employees)
+        .filter((emp) => emp.name.trim() !== "" || emp.dui.trim() !== "")
+        .map((emp) => ({
+          name: emp.name,
+          dui: emp.dui,
+          docType: emp.docType,
+          comment: "",
+          hours: Object.fromEntries(template.columns.map((col) => [col, ""])),
+        }));
+
+      if (roster.length > 0) {
+        return roster;
+      }
+    } catch {
+      // Si un mes no se puede leer, seguimos buscando hacia atras.
+    }
+  }
+
+  return null;
+}
+
 async function fetchHorasForPeriod(
   template: HorasTemplate,
   periodId: string,
@@ -3448,7 +3499,11 @@ async function fetchHorasForPeriod(
   const snapshot = await getDoc(doc(db, "horasTabulators", `${periodId}__${template.serviceId}`));
 
   if (!snapshot.exists()) {
-    return { employees: seedHorasEmployees(template), saved: false };
+    // Mes sin datos: se arrastra el personal del ultimo mes guardado (con su
+    // DUI/NIT) y solo quedan las horas en blanco. Si no hay historial, se usa la
+    // plantilla original del servicio.
+    const carried = await fetchHorasRosterFromPreviousPeriod(template, periodId);
+    return { employees: carried ?? seedHorasEmployees(template), saved: false };
   }
 
   const data = snapshot.data() as { employees?: unknown };
@@ -9956,7 +10011,16 @@ export default function Home() {
         if (!hasData) {
           continue;
         }
-        imported.push({ name, dui, docType: "dui", comment: "", hours });
+        // El numero puede ser DUI (9 digitos) o NIT (14). Se detecta por la
+        // cantidad de digitos para no marcar todo como DUI.
+        const digits = dui.replace(/\D/g, "");
+        imported.push({
+          name,
+          dui,
+          docType: digits.length === 14 ? "nit" : "dui",
+          comment: "",
+          hours,
+        });
       }
       if (imported.length === 0) {
         throw new Error("No se encontraron empleados en el archivo");
