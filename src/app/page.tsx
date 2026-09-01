@@ -18784,7 +18784,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-auto px-5 pb-5 sm:px-7 sm:pb-7">
+                <div className="flex min-h-0 flex-1 flex-col px-5 pb-5 sm:px-7 sm:pb-7">
                   {isLoadingDistribuida ? (
                     <p className="py-16 text-center text-sm text-slate-400">Preparando la tabla…</p>
                   ) : !distribuidaPreview || distribuidaPreview.length === 0 ? (
@@ -18792,8 +18792,8 @@ export default function Home() {
                       Todavía no hay datos capturados para este período.
                     </p>
                   ) : (
-                    <div className="overflow-auto rounded-2xl border border-white/10">
-                      <table className="w-full border-collapse text-[11px]">
+                    <div className="show-scrollbar min-h-0 flex-1 overflow-auto rounded-2xl border border-white/10">
+                      <table className="w-max min-w-full border-collapse text-[11px]">
                         <thead className="sticky top-0 z-10">
                           <tr>
                             <th className="sticky left-0 z-20 min-w-[220px] border-b border-r border-white/10 bg-[#1b2537] px-3 py-2.5 text-left font-bold text-slate-200">
@@ -18813,19 +18813,43 @@ export default function Home() {
                           </tr>
                         </thead>
                         <tbody>
-                          {distribuidaPreview.map((fila, index) => (
+                          {distribuidaPreview.map((fila, index) => {
+                            // Verde sutil = ese centro de costos ya tiene produccion
+                            // capturada este mes. Gris = sigue en cero.
+                            const conDatos = fila.total > 0;
+
+                            return (
                             <tr
                               key={fila.row}
-                              className={index % 2 === 0 ? "bg-white/[0.02]" : undefined}
+                              className={
+                                conDatos
+                                  ? "bg-emerald-500/[0.07]"
+                                  : index % 2 === 0
+                                    ? "bg-white/[0.02]"
+                                    : undefined
+                              }
                             >
-                              <td className="sticky left-0 z-10 border-b border-r border-white/10 bg-[#141d2e] px-3 py-2 font-semibold text-slate-200">
-                                {fila.row}
+                              <td
+                                className={`sticky left-0 z-10 border-b border-r px-3 py-2 font-semibold ${
+                                  conDatos
+                                    ? "border-emerald-400/20 bg-[#152a26] text-emerald-100"
+                                    : "border-white/10 bg-[#141d2e] text-slate-300"
+                                }`}
+                              >
+                                <span className="flex items-center gap-2">
+                                  <span
+                                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                      conDatos ? "bg-emerald-400" : "bg-slate-600"
+                                    }`}
+                                  />
+                                  {fila.row}
+                                </span>
                               </td>
                               {fila.cells.map((valor, i) => (
                                 <td
                                   key={`${fila.row}-${i}`}
                                   className={`border-b border-white/5 px-2 py-2 text-center ${
-                                    valor === 0 ? "text-slate-600" : "text-slate-100"
+                                    valor === 0 ? "text-slate-600" : "font-semibold text-emerald-200"
                                   }`}
                                 >
                                   {valor === 0 ? "0" : formatConsolidatedNumber(valor)}
@@ -18839,7 +18863,8 @@ export default function Home() {
                                 {fila.total === 0 ? "0" : formatConsolidatedNumber(fila.total)}
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
