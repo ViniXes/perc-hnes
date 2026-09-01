@@ -79,6 +79,19 @@ export async function POST(req: NextRequest) {
     } catch {
       // La cuenta de Auth ya no existía; el doc igual se borró.
     }
+    // Liberar el DUI / documento reservado: al eliminar la cuenta, esa persona
+    // debe poder volver a registrarse. Si no se borra, el formulario responde
+    // "Ya existe un registro con ese DUI" aunque el usuario ya no exista.
+    const docNumber =
+      targetData && typeof targetData.docNumber === "string" ? targetData.docNumber : "";
+    const docKey = docNumber.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (docKey) {
+      try {
+        await adminDb.collection("documentRegistry").doc(docKey).delete();
+      } catch {
+        // Si no se pudo liberar, la cuenta igual quedó eliminada.
+      }
+    }
     // Limpiar los registros de solicitud (historial) asociados a este usuario,
     // para que no quede ningún rastro que afecte.
     const username = targetData && typeof targetData.username === "string" ? targetData.username : "";
@@ -89,6 +102,12 @@ export async function POST(req: NextRequest) {
           .where("createdUsername", "==", username)
           .get();
         for (const d of reqSnap.docs) {
+          const reqDoc = String(d.data()?.docNumber || "")
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, "");
+          if (reqDoc && reqDoc !== docKey) {
+            await adminDb.collection("documentRegistry").doc(reqDoc).delete().catch(() => {});
+          }
           await d.ref.delete();
         }
       } catch {
