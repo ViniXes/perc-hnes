@@ -18216,7 +18216,31 @@ export default function Home() {
                               <div className="mt-2 space-y-1.5">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <span className="text-[11px] text-slate-500">Tableros de captura:</span>
-                                  {cap.length ? cap.map((m) => <span key={m} className={chipCls("slate")}>{modLbl(m)}</span>) : none}
+                                  {/* OJO: la lista vacia NO significa "ninguno", significa
+                                      TODOS los del servicio. Solo la casilla "No llena
+                                      ningun tabulador" deja a la cuenta sin captura. */}
+                                  {su.noCapture ? (
+                                    <span className="text-[11px] font-semibold text-amber-300">
+                                      — ninguno (solo accesos otorgados) —
+                                    </span>
+                                  ) : cap.length ? (
+                                    cap.map((m) => (
+                                      <span key={m} className={chipCls("slate")}>
+                                        {modLbl(m)}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <>
+                                      <span className="text-[11px] text-emerald-300">
+                                        Todos los de su servicio:
+                                      </span>
+                                      {(getAreaById(su.serviceId)?.modules ?? []).map((m) => (
+                                        <span key={m} className={chipCls("emerald")}>
+                                          {modLbl(m)}
+                                        </span>
+                                      ))}
+                                    </>
+                                  )}
                                 </div>
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <span className="text-[11px] text-slate-500">Accesos de menú:</span>
@@ -18471,6 +18495,10 @@ export default function Home() {
                             <p className="text-xs font-medium text-slate-400">Tableros de su unidad</p>
                             <p className="mt-0.5 text-[11px] text-slate-500">
                               El sistema reconoce estos tableros para el servicio elegido. Activá los que debe llenar (uno, dos o los que correspondan).
+                            </p>
+                            <p className="mt-1 text-[11px] font-semibold leading-5 text-amber-300/90">
+                              Si no marcás ninguno, la persona llena TODOS los de su servicio. Para
+                              que no llene nada, usá la casilla de abajo.
                             </p>
 
                             {/* Cuenta que NO llena tabuladores: solo entra a los accesos
