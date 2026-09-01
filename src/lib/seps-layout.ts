@@ -50,6 +50,9 @@ export type SepsLayout = {
   rowLabels: Record<string, string>;
   extraRows: SepsLayoutExtraRow[];
   extraTables: SepsLayoutExtraTable[];
+  /** tableId -> orden de las filas (por key). Lo que no esté listado queda al final,
+   * en su orden original. Permite subir y bajar filas como en Excel. */
+  rowOrder: Record<string, string[]>;
 };
 
 export function emptySepsLayout(serviceId: string): SepsLayout {
@@ -61,6 +64,7 @@ export function emptySepsLayout(serviceId: string): SepsLayout {
     rowLabels: {},
     extraRows: [],
     extraTables: [],
+    rowOrder: {},
   };
 }
 
@@ -73,7 +77,8 @@ export function isSepsLayoutEmpty(layout: SepsLayout | null | undefined): boolea
     layout.extraRows.length === 0 &&
     layout.extraTables.length === 0 &&
     Object.keys(layout.tableTitles).length === 0 &&
-    Object.keys(layout.rowLabels).length === 0
+    Object.keys(layout.rowLabels).length === 0 &&
+    Object.keys(layout.rowOrder ?? {}).length === 0
   );
 }
 
@@ -108,7 +113,28 @@ export function parseSepsLayout(serviceId: string, data: unknown): SepsLayout {
             table && typeof table === "object" && typeof (table as SepsLayoutExtraTable).id === "string",
         ) as SepsLayoutExtraTable[])
       : [],
+    rowOrder:
+      raw.rowOrder && typeof raw.rowOrder === "object"
+        ? (raw.rowOrder as SepsLayout["rowOrder"])
+        : {},
   };
+}
+
+/** Reordena las filas de una tabla segun el orden guardado. */
+function ordenarFilas(rows: SepsRow[], orden: string[] | undefined): SepsRow[] {
+  if (!orden || orden.length === 0) return rows;
+  const posicion = new Map(orden.map((key, index) => [key, index]));
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const pa = posicion.get(a.row.key);
+      const pb = posicion.get(b.row.key);
+      if (pa === undefined && pb === undefined) return a.index - b.index;
+      if (pa === undefined) return 1;
+      if (pb === undefined) return -1;
+      return pa - pb;
+    })
+    .map((item) => item.row);
 }
 
 /**
@@ -168,9 +194,9 @@ export function applySepsLayout(
 
     tables.push({
       ...table,
+      rows: ordenarFilas(rows, layout.rowOrder?.[table.id]),
       title: rename?.title ?? table.title,
       subtitle: rename?.subtitle ?? table.subtitle,
-      rows,
     });
   }
 
@@ -201,7 +227,7 @@ export function applySepsLayout(
       title: rename?.title ?? extra.title,
       subtitle: rename?.subtitle ?? extra.subtitle,
       detailLabel: extra.detailLabel || "Detalle",
-      rows,
+      rows: ordenarFilas(rows, layout.rowOrder?.[extra.id]),
     });
   }
 

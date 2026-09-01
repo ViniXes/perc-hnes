@@ -9619,13 +9619,20 @@ export default function Home() {
   }
 
   function handleLayoutAddRow(tableId: string, afterKey: string) {
+    // Precarga el titulo de la fila de arriba ("EJEMPLO 1 > ") para que solo haya
+    // que escribir el nombre de la fila nueva y quede dentro del mismo bloque.
+    const tablaActual = (sepsTemplate?.tables ?? []).find((t) => t.id === tableId);
+    const filaAncla = tablaActual?.rows.find((r) => r.key === afterKey);
+    const nivelesAncla = filaAncla?.groups ?? (filaAncla?.group ? [filaAncla.group] : []);
+    const prefijo = nivelesAncla.length > 0 ? `${nivelesAncla.join(" > ")} > ` : "";
+
     openLayoutDialog({
       kind: "text",
       title: "Agregar fila",
       description:
         "Se inserta debajo de la fila seleccionada y hereda su grupo. Para abrir un título nuevo dentro de la tabla, escribí los niveles separados por «>». Ej.: Chagas > Resultado > Reactiva",
       label: "Nombre de la fila",
-      value: "",
+      value: prefijo,
       placeholder: "Ej. Chagas > Resultado > Reactiva",
       confirmLabel: "Agregar",
       onConfirm: (value) => {
@@ -9646,6 +9653,22 @@ export default function Home() {
           );
         }
       },
+    });
+  }
+
+  /** Sube o baja una fila dentro de su tabla (como arrastrar filas en Excel). */
+  function handleLayoutMoveRow(tableId: string, rowKey: string, delta: -1 | 1) {
+    const tabla = (sepsTemplate?.tables ?? []).find((t) => t.id === tableId);
+    if (!tabla) return;
+
+    const orden = tabla.rows.map((row) => row.key);
+    const desde = orden.indexOf(rowKey);
+    const hasta = desde + delta;
+    if (desde < 0 || hasta < 0 || hasta >= orden.length) return;
+
+    orden.splice(hasta, 0, orden.splice(desde, 1)[0]);
+    updateSepsLayoutDraft((draft) => {
+      draft.rowOrder = { ...(draft.rowOrder ?? {}), [tableId]: orden };
     });
   }
 
@@ -12651,6 +12674,28 @@ export default function Home() {
                               >
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
                               </button>
+                              {sepsEditingLayout ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleLayoutMoveRow(table.id, row.key, -1)}
+                                  title="Subir esta fila"
+                                  aria-label="Subir esta fila"
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-cyan-500/10 hover:text-cyan-300"
+                                >
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6" /></svg>
+                                </button>
+                              ) : null}
+                              {sepsEditingLayout ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleLayoutMoveRow(table.id, row.key, 1)}
+                                  title="Bajar esta fila"
+                                  aria-label="Bajar esta fila"
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-cyan-500/10 hover:text-cyan-300"
+                                >
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                                </button>
+                              ) : null}
                               {sepsEditingLayout ? (
                                 <button
                                   type="button"
