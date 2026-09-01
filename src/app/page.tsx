@@ -131,8 +131,14 @@ type ManagedUser = {
   isDirector: boolean;
   mustChangePassword: boolean;
   isActive: boolean;
+  // Correo de ACCESO real de la cuenta (usuario@perc-hnes.app). Es la identidad con
+  // la que entra; el campo "username" es solo la etiqueta que se muestra.
+  loginEmail: string;
   // Submenus extra otorgados por el admin (ids de GRANTABLE_MENUS).
   menuGrants: string[];
+  // true = la cuenta NO captura ningun tabulador: solo entra a los submenus que se
+  // le otorgaron (p. ej. solo "Depreciacion Mensual PERC").
+  noCapture: boolean;
   // Servicios que puede CONSULTAR (ver tabuladores, solo lectura), por modulo:
   // el admin elige por separado que servicios ve en PERC, SEPS y Horas.
   viewPerc: string[];
@@ -153,6 +159,8 @@ type AdminDraft = {
   captureModules: ModuleId[];
   department: string;
   menuGrants: string[];
+  noCapture: boolean;
+  isChief: boolean;
   viewPerc: string[];
   viewSeps: string[];
   viewHoras: string[];
@@ -3141,6 +3149,8 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     menuGrants: Array.isArray(data.menuGrants)
       ? (data.menuGrants.filter((x): x is string => typeof x === "string"))
       : [],
+    noCapture: data.noCapture === true,
+    loginEmail: typeof data.loginEmail === "string" ? data.loginEmail : "",
     docType: typeof data.docType === "string" ? data.docType : "",
     docNumber: typeof data.docNumber === "string" ? data.docNumber : "",
     viewPerc: Array.isArray(data.viewPerc)
@@ -3169,6 +3179,8 @@ function buildAdminDrafts(users: ManagedUser[]) {
         captureModules: managedUser.captureModules,
         department: managedUser.department || "",
         menuGrants: managedUser.menuGrants,
+        noCapture: managedUser.noCapture,
+        isChief: managedUser.isChief,
         viewPerc: managedUser.viewPerc,
         viewSeps: managedUser.viewSeps,
         viewHoras: managedUser.viewHoras,
@@ -10522,8 +10534,14 @@ export default function Home() {
     const effectiveServiceId = isDept ? "" : draft.serviceId || "";
     const nextService = getServiceById(effectiveServiceId || null);
     const nextRole: UserRole = isDept ? "supervisor" : draft.role;
-    const nextUsername =
-      !isDept && nextRole === "service" && nextService
+    // El nombre de usuario que se muestra debe coincidir SIEMPRE con el correo de
+    // acceso real (nvarela@perc-hnes.app -> "nvarela"). Antes se pisaba con el
+    // nombre generico del servicio ("dep.unidad-de-convenios") y la persona veia un
+    // usuario que no era el suyo.
+    const personalUsername = (current.loginEmail || "").split("@")[0].trim();
+    const nextUsername = personalUsername
+      ? personalUsername
+      : !isDept && nextRole === "service" && nextService
         ? getServiceUsername(nextService.id)
         : draft.username;
     const nextPermissions = {
@@ -10604,6 +10622,8 @@ export default function Home() {
               department: null,
               captureModules: draft.captureModules,
               menuGrants: draft.menuGrants,
+              noCapture: draft.noCapture,
+              isChief: draft.isChief,
               viewPerc: draft.viewPerc,
               viewSeps: draft.viewSeps,
               viewHoras: draft.viewHoras,
@@ -12967,11 +12987,33 @@ export default function Home() {
                 (mod.id === "perc" && hasPercGrant) ||
                 (mod.id === "sesps" && wantSeps) ||
                 (mod.id === "distribucion" && wantHoras);
+              // Cuenta "solo accesos otorgados": el modulo aparece unicamente si es
+              // la puerta de entrada de un submenu que se le concedio.
+              if (serviceProfile.noCapture) return grantVisible;
               return serviceProfile.isChief || !restrict || cm.includes(mod.id) || grantVisible;
             });
           })();
     // Si la seccion de un modulo debe mostrarse para este usuario/servicio.
     const showModule = (moduleId: ModuleId) => visibleModules.some((vm) => vm.id === moduleId);
+    // Si el usuario CAPTURA ese tabulador. Distinto de verlo en el menu: una cuenta
+    // puede llegar a "Depreciacion Mensual PERC" sin tener que llenar el PERC. En ese
+    // caso el modulo sale en el menu (para alcanzar el submenu) pero NO su tabulador.
+    const capturesModule = (moduleId: ModuleId) => {
+      if (isAdmin || isSupervisor) return true;
+      if (serviceProfile.noCapture) return false;
+      if (!currentService) return false;
+      if (!(getAreaById(currentService.id)?.modules.includes(moduleId) ?? false)) return false;
+      if (serviceProfile.isChief) return true;
+      const cm = serviceProfile.captureModules;
+      const restrict = Array.isArray(cm) && cm.length > 0;
+      return !restrict || cm.includes(moduleId);
+    };
+    // Primer submenu de PERC otorgado: es a donde lleva el menu "PERC" cuando la
+    // cuenta no captura el tabulador.
+    const firstPercGrantTarget = () =>
+      ["panel-depreciacion-perc", "panel-gastos-perc", "panel-insumos", "panel-censo", "panel-admin-export"].find(
+        (id) => hasGrant(id),
+      ) || "panel-module-perc";
     const getModuleUiStatus = (mod: ModuleDefinition): "completo" | "incompleto" => {
       // El grid de centros de costo (tableValues) es el tabulador PERC.
       if (mod.id === "perc") {
@@ -12994,9 +13036,18 @@ export default function Home() {
     // "distribucion") es, para el hospital, el tabulador PERC -> el menu "PERC" lleva
     // a panel-tabulator. El menu "Distribucion de Horas" lleva a su seccion (pendiente).
     const moduleSectionTarget = (modId: ModuleId): string => {
-      if (modId === "perc") return currentService ? "panel-tabulator" : `panel-module-${modId}`;
-      if (modId === "sesps") return sepsTemplate ? "panel-seps" : `panel-module-${modId}`;
-      if (modId === "distribucion") return currentService ? "panel-horas" : `panel-module-${modId}`;
+      if (modId === "perc") {
+        if (!capturesModule("perc")) return firstPercGrantTarget();
+        return currentService ? "panel-tabulator" : `panel-module-${modId}`;
+      }
+      if (modId === "sesps") {
+        return sepsTemplate && capturesModule("sesps") ? "panel-seps" : `panel-module-${modId}`;
+      }
+      if (modId === "distribucion") {
+        return currentService && capturesModule("distribucion")
+          ? "panel-horas"
+          : `panel-module-${modId}`;
+      }
       return `panel-module-${modId}`;
     };
     const moduleSidebarItems = visibleModules.map((mod) => ({
@@ -13032,8 +13083,7 @@ export default function Home() {
           // PERC): no le mostramos "Abrir PERC" (tabulador vacio) ni "Monitoreo", solo
           // los submenus que se le otorgaron.
           const percViaGrantOnly =
-            !isAdmin && !isSupervisor && !!currentService &&
-            !(getAreaById(currentService.id)?.modules.includes("perc") ?? false);
+            !isAdmin && !isSupervisor && !!currentService && !capturesModule("perc");
           return [
             ...(currentService && !percViaGrantOnly
               ? [{ id: "panel-tabulator", label: "Abrir PERC", detail: "Ir al tabulador PERC", badge: "PE", icon: "perc" }]
@@ -13620,9 +13670,10 @@ export default function Home() {
       isAdmin,
       isSupervisor,
       hasService: !!currentService,
-      hasPerc: !!currentService && showModule("perc"),
-      hasSeps: !!sepsTemplate && showModule("sesps"),
-      hasHoras: !!currentService && !!horasTemplate && showModule("distribucion"),
+      hasPerc: !!currentService && showModule("perc") && capturesModule("perc"),
+      hasSeps: !!sepsTemplate && showModule("sesps") && capturesModule("sesps"),
+      hasHoras:
+        !!currentService && !!horasTemplate && showModule("distribucion") && capturesModule("distribucion"),
       canRequestEnable,
       hasPercData: hasAnyCapturedValue(tableValues),
       hasSepsData: !!sepsTemplate && hasAnySepsValue(sepsValues),
@@ -15280,12 +15331,13 @@ export default function Home() {
               mobileView === "panel-horas")
               ? (() => {
                   const hasPerc =
-                    showModule("perc") && allowViewPerc &&
+                    showModule("perc") && capturesModule("perc") && allowViewPerc &&
                     (currentService.rows.length > 0 ||
                       !!getPercServFields(currentService.id));
-                  const hasSeps = showModule("sesps") && allowViewSeps && !!sepsTemplate;
+                  const hasSeps =
+                    showModule("sesps") && capturesModule("sesps") && allowViewSeps && !!sepsTemplate;
                   const hasHoras =
-                    showModule("distribucion") && allowViewHoras &&
+                    showModule("distribucion") && capturesModule("distribucion") && allowViewHoras &&
                     !!getHorasTemplate(currentService.id);
                   const tabs = [
                     hasPerc ? { id: "panel-tabulator", label: "PERC" } : null,
@@ -15935,6 +15987,7 @@ export default function Home() {
 
           {currentService &&
           showModule("perc") &&
+          capturesModule("perc") &&
           allowViewPerc &&
           (currentService.rows.length > 0 || getPercServFields(currentService.id)) ? (
             <>
@@ -16441,14 +16494,14 @@ export default function Home() {
             </>
           ) : null}
 
-          {showModule("sesps") && allowViewSeps && sepsSection ? (
+          {showModule("sesps") && capturesModule("sesps") && allowViewSeps && sepsSection ? (
             <>
             {renderSectionDivider("SEPS", "Captura estadística", "violet", isLightPanelTheme)}
             <div data-view="panel-seps">{sepsSection}</div>
             </>
           ) : null}
 
-          {showModule("distribucion") && allowViewHoras && horasSection ? (
+          {showModule("distribucion") && capturesModule("distribucion") && allowViewHoras && horasSection ? (
             <>
             {renderSectionDivider("Dis/horas", "Reparto de horas del personal", "amber", isLightPanelTheme)}
             <div data-view="panel-horas">{horasSection}</div>
@@ -17711,6 +17764,20 @@ export default function Home() {
                           >
                             {draft.mustChangePassword ? "✓ " : ""}Debe cambiar clave
                           </button>
+                          {draft.role === "service" && draft.serviceId && !draft.department ? (
+                            <button
+                              type="button"
+                              onClick={() => updateAdminDraft(selectedUser.uid, { isChief: !draft.isChief })}
+                              title="El jefe del servicio ve y llena todos los tableros de su unidad."
+                              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                draft.isChief
+                                  ? "bg-emerald-500/15 text-emerald-300"
+                                  : "bg-white/5 text-slate-400 hover:bg-white/10"
+                              }`}
+                            >
+                              {draft.isChief ? "✓ " : ""}Jefe del servicio
+                            </button>
+                          ) : null}
                         </div>
 
                         {draft.role === "service" && draft.serviceId && !draft.department ? (
@@ -17719,7 +17786,49 @@ export default function Home() {
                             <p className="mt-0.5 text-[11px] text-slate-500">
                               El sistema reconoce estos tableros para el servicio elegido. Activá los que debe llenar (uno, dos o los que correspondan).
                             </p>
-                            <div className="mt-2 flex flex-wrap gap-2">
+
+                            {/* Cuenta que NO llena tabuladores: solo entra a los accesos
+                                otorgados mas abajo (p. ej. Depreciacion Mensual PERC). */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateAdminDraft(selectedUser.uid, { noCapture: !draft.noCapture })
+                              }
+                              className={`mt-2.5 flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
+                                draft.noCapture
+                                  ? "border-amber-400/40 bg-amber-500/10"
+                                  : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+                              }`}
+                            >
+                              <span
+                                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] font-bold ${
+                                  draft.noCapture
+                                    ? "border-amber-400 bg-amber-400 text-slate-900"
+                                    : "border-white/25 text-transparent"
+                                }`}
+                              >
+                                ✓
+                              </span>
+                              <span className="min-w-0">
+                                <span
+                                  className={`block text-xs font-semibold ${
+                                    draft.noCapture ? "text-amber-200" : "text-slate-300"
+                                  }`}
+                                >
+                                  No llena ningún tabulador
+                                </span>
+                                <span className="mt-0.5 block text-[11px] leading-5 text-slate-500">
+                                  Solo entra a los accesos que le otorgués abajo. No le aparece PERC,
+                                  SEPS ni Horas para capturar.
+                                </span>
+                              </span>
+                            </button>
+
+                            <div
+                              className={`mt-2 flex flex-wrap gap-2 ${
+                                draft.noCapture ? "pointer-events-none opacity-40" : ""
+                              }`}
+                            >
                               {(getAreaById(draft.serviceId)?.modules ?? []).length === 0 ? (
                                 <span className="text-[11px] text-slate-500">Este servicio no tiene tableros configurados.</span>
                               ) : (
