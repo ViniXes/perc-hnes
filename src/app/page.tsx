@@ -4750,6 +4750,10 @@ export default function Home() {
   const [requestsMonthOpen, setRequestsMonthOpen] = useState<Record<string, boolean>>({});
   const [adminUsers, setAdminUsers] = useState<ManagedUser[]>([]);
   const [adminDrafts, setAdminDrafts] = useState<Record<string, AdminDraft>>({});
+  /** Cambio de NOMBRE DE USUARIO (identidad de acceso) desde el panel de Usuarios. */
+  const [renameUid, setRenameUid] = useState("");
+  const [renameValue, setRenameValue] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isCreatingManagedUser, setIsCreatingManagedUser] = useState(false);
   const [isExportingMonthlyReport, setIsExportingMonthlyReport] = useState(false);
@@ -10519,6 +10523,53 @@ export default function Home() {
     link.download = `usuarios-pulso-${rows.length}.xls`;
     link.click();
     window.URL.revokeObjectURL(url);
+  }
+
+  // Cambia el usuario con el que la persona INICIA SESION (nvarela -> nvarela@perc-hnes.app).
+  // Va por el servidor porque hay que mover tambien el correo en Firebase Auth.
+  // La contrasena NO se toca: entra con la misma clave, solo cambia el usuario.
+  async function handleRenameUser(uid: string) {
+    const nuevo = renameValue.trim();
+    if (!nuevo) {
+      setError("Escribí el nuevo nombre de usuario.");
+      return;
+    }
+
+    setRenameBusy(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setError("Volvé a iniciar sesión para cambiar el usuario.");
+        return;
+      }
+
+      const res = await fetch("/api/admin/rename-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, targetUid: uid, username: nuevo }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string; username?: string };
+
+      if (!res.ok || !data.ok) {
+        setError(data.error || "No se pudo cambiar el nombre de usuario.");
+        return;
+      }
+
+      const users = await fetchManagedUsers();
+      applyAdminUsers(users);
+      setRenameUid("");
+      setRenameValue("");
+      setMessage(
+        `Usuario cambiado a "${data.username}". Ahora inicia sesión con ese nombre y su misma contraseña.`,
+      );
+    } catch (renameError) {
+      setError(getAuthErrorMessage(renameError));
+    } finally {
+      setRenameBusy(false);
+    }
   }
 
   async function handleAdminSave(uid: string) {
@@ -17576,7 +17627,53 @@ export default function Home() {
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-lg font-semibold text-white">{draft.name}</p>
-                            <p className="truncate font-mono text-xs text-cyan-200">{draft.username}</p>
+                            {renameUid === selectedUser.uid ? (
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <input
+                                  autoFocus
+                                  value={renameValue}
+                                  onChange={(event) => setRenameValue(event.target.value)}
+                                  placeholder="nvarela"
+                                  className="w-40 rounded-lg border border-cyan-400/40 bg-[#0e1626] px-2 py-1 font-mono text-xs text-white outline-none"
+                                />
+                                <span className="font-mono text-[11px] text-slate-500">@perc-hnes.app</span>
+                                <button
+                                  type="button"
+                                  disabled={renameBusy}
+                                  onClick={() => void handleRenameUser(selectedUser.uid)}
+                                  className="rounded-lg bg-cyan-500 px-2.5 py-1 text-[11px] font-bold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
+                                >
+                                  {renameBusy ? "…" : "Guardar"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRenameUid("");
+                                    setRenameValue("");
+                                  }}
+                                  className="rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-400 transition hover:text-slate-200"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="flex items-center gap-2">
+                                <span className="truncate font-mono text-xs text-cyan-200">
+                                  {draft.username}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRenameUid(selectedUser.uid);
+                                    setRenameValue(draft.username);
+                                  }}
+                                  title="Cambiar el usuario con el que inicia sesión"
+                                  className="shrink-0 rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 transition hover:bg-white/10 hover:text-slate-200"
+                                >
+                                  Cambiar
+                                </button>
+                              </p>
+                            )}
                             <p className="truncate text-xs text-slate-400">{draft.email}</p>
                           </div>
                           <span
