@@ -4804,6 +4804,11 @@ export default function Home() {
     { row: string; cells: number[]; total: number }[] | null
   >(null);
   const [isLoadingDistribuida, setIsLoadingDistribuida] = useState(false);
+  const [distribuidaStats, setDistribuidaStats] = useState<{
+    total: number;
+    completos: number;
+    pendientes: number;
+  } | null>(null);
   // Previsualizacion (modal) del consolidado COMPLETO Produccion de Servicio antes
   // de descargar el Excel (incluye los datos del Censo ya integrados). El mes es
   // seleccionable y ESTRICTO: el consolidado muestra el censo de ESE mismo mes.
@@ -6895,6 +6900,14 @@ export default function Home() {
     try {
       const overview = await fetchAdminOverviewForPeriod(periodId);
       setDistribuidaPreview(computeDistribuidaMatrix(overview));
+      // Cuantos servicios alimentan este consolidado y cuantos ya guardaron.
+      const conPerc = overview.filter((entry) => entry.service.rows.length > 0);
+      const completos = conPerc.filter((entry) => entry.hasSavedData).length;
+      setDistribuidaStats({
+        total: conPerc.length,
+        completos,
+        pendientes: conPerc.length - completos,
+      });
     } catch (previewError) {
       if (await handleFirestoreError(previewError)) {
         return;
@@ -18785,6 +18798,37 @@ export default function Home() {
                 </div>
 
                 <div className="flex min-h-0 flex-1 flex-col px-5 pb-5 sm:px-7 sm:pb-7">
+                  {/* Solo numeros: cuantos servicios alimentan el consolidado, cuantos
+                      ya guardaron y cuantos faltan. */}
+                  {distribuidaStats ? (
+                    <div className="mb-3 grid shrink-0 grid-cols-3 gap-2 sm:max-w-md">
+                      <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-center">
+                        <p className="text-2xl font-bold leading-none text-white">
+                          {distribuidaStats.total}
+                        </p>
+                        <p className="mt-1 text-[10px] uppercase tracking-wider text-slate-400">
+                          Servicios
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-3 py-2.5 text-center">
+                        <p className="text-2xl font-bold leading-none text-emerald-300">
+                          {distribuidaStats.completos}
+                        </p>
+                        <p className="mt-1 text-[10px] uppercase tracking-wider text-emerald-200/70">
+                          Completos
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2.5 text-center">
+                        <p className="text-2xl font-bold leading-none text-amber-300">
+                          {distribuidaStats.pendientes}
+                        </p>
+                        <p className="mt-1 text-[10px] uppercase tracking-wider text-amber-200/70">
+                          Pendientes
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
+
                   {isLoadingDistribuida ? (
                     <p className="py-16 text-center text-sm text-slate-400">Preparando la tabla…</p>
                   ) : !distribuidaPreview || distribuidaPreview.length === 0 ? (
@@ -18807,9 +18851,6 @@ export default function Home() {
                                 {header}
                               </th>
                             ))}
-                            <th className="min-w-[90px] border-b border-l border-white/10 bg-[#1b2537] px-2 py-2.5 text-center font-bold text-cyan-200">
-                              Total
-                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -18855,13 +18896,6 @@ export default function Home() {
                                   {valor === 0 ? "0" : formatConsolidatedNumber(valor)}
                                 </td>
                               ))}
-                              <td
-                                className={`border-b border-l border-white/10 px-2 py-2 text-center font-bold ${
-                                  fila.total === 0 ? "text-slate-600" : "text-cyan-200"
-                                }`}
-                              >
-                                {fila.total === 0 ? "0" : formatConsolidatedNumber(fila.total)}
-                              </td>
                             </tr>
                             );
                           })}
