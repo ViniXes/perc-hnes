@@ -5631,7 +5631,7 @@ export default function Home() {
   }, [isAdmin, serviceProfile]);
   // Modulos que el usuario puede habilitar/deshabilitar: el admin todos; el supervisor
   // solo los suyos. Determina las columnas del panel "Habilitar tableros".
-  const toggleableModules: ModuleId[] = !serviceProfile?.permissions.canToggleCapture || isHorasMonitor
+  const toggleableModules: ModuleId[] = !(serviceProfile?.permissions.canToggleCapture || serviceProfile?.isDirector) || isHorasMonitor
     ? []
     : isAdmin
       ? [...MODULE_ORDER]
@@ -6000,7 +6000,10 @@ export default function Home() {
   // Carga los overrides del periodo elegido en el panel "Habilitar tableros" cuando
   // el usuario tiene esa potestad y cambia de periodo.
   useEffect(() => {
-    if (!serviceProfile?.permissions.canToggleCapture || firestoreUnavailable) {
+    if (
+      !(serviceProfile?.permissions.canToggleCapture || serviceProfile?.isDirector) ||
+      firestoreUnavailable
+    ) {
       return;
     }
 
@@ -8248,7 +8251,10 @@ export default function Home() {
     period?: string,
   ) {
     if (blockedByGhost()) return;
-    if (!serviceProfile?.permissions.canToggleCapture || firestoreUnavailable) {
+    if (
+      !(serviceProfile?.permissions.canToggleCapture || serviceProfile?.isDirector) ||
+      firestoreUnavailable
+    ) {
       return;
     }
 
@@ -11679,7 +11685,11 @@ export default function Home() {
       );
     };
 
-    const captureToggleSection = serviceProfile.permissions.canToggleCapture && !isHorasMonitor ? (
+    // Direccion y Subdireccion Medica siempre tienen esta potestad, aunque su cuenta
+    // se haya creado antes de que se les asignara el permiso.
+    const puedeHabilitarTableros =
+      (serviceProfile.permissions.canToggleCapture || isDirector) && !isHorasMonitor;
+    const captureToggleSection = puedeHabilitarTableros ? (
       <section
         id="panel-capture-toggle"
         className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
@@ -15052,7 +15062,7 @@ export default function Home() {
             },
           ]
         : []),
-      ...(serviceProfile.permissions.canToggleCapture && !isHorasMonitor
+      ...(puedeHabilitarTableros
         ? [
             {
               id: "panel-capture-toggle",
@@ -15194,6 +15204,31 @@ export default function Home() {
           isLightPanelTheme ? "theme-light" : "theme-dark"
         } min-h-screen px-4 py-6 sm:px-7 lg:px-10 ${ghostUid ? "pt-16 sm:pt-16" : ""}`}
       >
+        {/* Boton FLOTANTE para salir del servicio que el admin esta viendo. Antes
+            habia que volver a "Ver tabuladores por servicio" y elegir "Sin
+            servicio"; ahora esta siempre a la vista, en cualquier pantalla. */}
+        {(isAdminLike || isSupervisorLike) && adminSelectedServiceId && !ghostUid ? (
+          <button
+            type="button"
+            onClick={() => {
+              void handleAdminSelectService("");
+              setMobileView("home");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            title="Salir del servicio y volver al panel"
+            className="fixed bottom-24 right-4 z-[120] inline-flex items-center gap-2 rounded-full border border-amber-300/40 bg-[#1b2537] px-4 py-3 text-xs font-bold text-amber-200 shadow-[0_10px_30px_rgba(3,7,18,0.55)] transition hover:bg-[#243049] xl:bottom-6 xl:right-6 xl:text-sm"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="m16 17 5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+            <span className="max-w-[9rem] truncate">
+              Salir de {currentService?.name ?? "el servicio"}
+            </span>
+          </button>
+        ) : null}
+
         {/* MODO VERIFICACION: barra fija que recuerda que se esta mirando como otra
             cuenta y permite volver. Mientras esta activa, nada se puede guardar. */}
         {ghostUid ? (
@@ -20093,7 +20128,7 @@ export default function Home() {
                         // capturar en los dias estipulados.
                         const canResolve =
                           isAdmin ||
-                          (serviceProfile.permissions.canToggleCapture &&
+                          ((serviceProfile.permissions.canToggleCapture || isDirector) &&
                             serviceProfile.supervisorModules.includes(req.moduleId) &&
                             isServiceInChiefScope(serviceProfile, req.serviceId));
                         return (
