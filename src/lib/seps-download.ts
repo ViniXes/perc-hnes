@@ -22,6 +22,9 @@ export async function downloadSepsTemplate(
   const totalCells: { row: number; col: number; first: number; last: number }[] = [];
 
   for (const table of template.tables) {
+    // Las tablas MENSUALES (columnas propias) no entran en la plantilla diaria:
+    // se digitan dentro de PULSO, no tienen columnas de dia que exportar.
+    if (table.monthly) continue;
     aoa.push([template.establishment]);
     aoa.push([table.title]);
     if (table.subtitle) {

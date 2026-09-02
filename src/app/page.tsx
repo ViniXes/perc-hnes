@@ -47,6 +47,7 @@ import {
   type ModuleDefinition,
   type ModuleId,
 } from "@/lib/modules";
+import { calcularMatriz, indiceALetra } from "@/lib/seps-formula";
 import {
   getDayColumns,
   getSepsRows,
@@ -4821,6 +4822,8 @@ export default function Home() {
     allowEmpty?: boolean;
     /** Varias líneas: Enter agrega renglón en vez de confirmar. */
     multiline?: boolean;
+    /** Qué vista previa mostrar debajo del texto: bloque de filas o tabla mensual. */
+    preview?: "bloque" | "tabla";
     danger?: boolean;
     confirmLabel: string;
     onConfirm: (value: string) => void;
@@ -9975,6 +9978,7 @@ export default function Home() {
         "Resultado > Indeterminada",
       ].join("\n"),
       multiline: true,
+      preview: "bloque",
       placeholder:
         "Anticuerpo Hepatitis B Core (AntiHBc)\n= Tamizada\nResultado > Reactiva\nResultado > No reactiva\nResultado > Indeterminada",
       confirmLabel: "Crear bloque",
@@ -10180,6 +10184,264 @@ export default function Home() {
           });
         });
         setMessage("Tabla agregada al final. Renombrá su fila y agregá las que necesites.");
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // TABLAS MENSUALES: columnas propias + formulas tipo Excel.
+  // ---------------------------------------------------------------------------
+
+  /** Lee el texto del constructor y devuelve titulo, columnas y filas. */
+  function parseEspecificacionTabla(texto: string) {
+    const lineas = texto.split("\n").map((l) => l.trim());
+    let titulo = "";
+    let seccion: "cols" | "filas" | null = null;
+    const columnas: { label: string; group?: string; formula?: string }[] = [];
+    const filas: { label: string; groups: string[] }[] = [];
+
+    for (const linea of lineas) {
+      if (!linea) continue;
+      const plano = linea.replace(/^=+|=+$/g, "").trim().toUpperCase();
+      if (plano === "COLUMNAS") {
+        seccion = "cols";
+        continue;
+      }
+      if (plano === "FILAS") {
+        seccion = "filas";
+        continue;
+      }
+      if (!titulo) {
+        titulo = linea;
+        continue;
+      }
+      if (seccion === "cols") {
+        let resto = linea;
+        let formula: string | undefined;
+        const corte = resto.indexOf(" = ");
+        if (corte >= 0) {
+          formula = "=" + resto.slice(corte + 3).trim().replace(/^=/, "");
+          resto = resto.slice(0, corte).trim();
+        }
+        const partes = resto.split(">").map((x) => x.trim()).filter(Boolean);
+        const label = partes[partes.length - 1] || "Columna";
+        columnas.push({ label, ...(partes.length > 1 ? { group: partes[0] } : {}), ...(formula ? { formula } : {}) });
+      } else if (seccion === "filas") {
+        const partes = linea.split(">").map((x) => x.trim()).filter(Boolean);
+        const label = partes[partes.length - 1] || "Fila";
+        filas.push({ label, groups: partes.slice(0, -1) });
+      }
+    }
+    return { titulo, columnas, filas };
+  }
+
+  const PLANTILLA_TABLA_MENSUAL = [
+    "TABULADOR MENSUAL DE SEROLOGÍA",
+    "== COLUMNAS ==",
+    "Resultado > 1. Normal",
+    "Resultado > 2. Negativo",
+    "Resultado > 3. Anormal",
+    "Resultado > 4. Positivo",
+    "Resultado > 5. Muestra Inadecuada",
+    "Resultado > 6. Otros",
+    "Resultado > 7. Reactivo",
+    "Resultado > 8. Indeterminado",
+    "Resultado > 9. No Reactivo",
+    "Total Resultado = SUMA(A:I)",
+    "Servicio de Procedencia > 1. Consulta Externa",
+    "Servicio de Procedencia > 2. Hospitalización",
+    "Servicio de Procedencia > 3. Emergencia",
+    "Servicio de Procedencia > 4. Referido",
+    "Servicio de Procedencia > 5. Otros",
+    "Total Servicio de Procedencia = SUMA(K:O)",
+    "== FILAS ==",
+    "S- Banco de Sangre > S1-Clasificación del grupo Sanguíneo y Rh",
+    "S- Banco de Sangre > S4-Coombs Directo",
+    "S- Banco de Sangre > S5-Coombs indirecto",
+    "S- Banco de Sangre > S6-Prueba Cruzada",
+    "S- Banco de Sangre > S33-Identificación de Anticuerpos Irregulares",
+    "S- Banco de Sangre > S34-Fenotipo a Glóbulos Rojos",
+  ].join("\n");
+
+  /** Constructor de TABLA MENSUAL: columnas propias, grupos y formulas. */
+  function handleLayoutAddMonthlyTable() {
+    openLayoutDialog({
+      kind: "text",
+      title: "Nueva tabla mensual",
+      description:
+        "Se digita una vez al mes y las columnas son las que vos definas. Reglas: 1ª línea = título · «Grupo > Columna» junta columnas bajo un encabezado · «Columna = SUMA(A:I)» la vuelve calculada (las letras son las columnas, en orden). Abajo ves cómo va a quedar.",
+      label: "Estructura de la tabla",
+      value: PLANTILLA_TABLA_MENSUAL,
+      multiline: true,
+      preview: "tabla",
+      confirmLabel: "Crear tabla",
+      onConfirm: (value) => {
+        const { titulo, columnas, filas } = parseEspecificacionTabla(value);
+        if (!titulo || columnas.length === 0 || filas.length === 0) {
+          setError("La tabla necesita un título, al menos una columna y al menos una fila.");
+          return;
+        }
+        const base = Date.now().toString(36);
+        const id = `lm-${base}`;
+        updateSepsLayoutDraft((draft) => {
+          draft.extraTables.push({
+            id,
+            title: titulo,
+            detailLabel: "Detalle",
+            monthly: true,
+            columns: columnas.map((columna, indice) => ({
+              key: `${id}-c${indice}`,
+              label: columna.label,
+              ...(columna.group ? { group: columna.group } : {}),
+              ...(columna.formula ? { formula: columna.formula } : {}),
+            })),
+            rows: filas.map((fila, indice) => ({
+              key: `${id}-r${indice}`,
+              label: fila.label,
+              ...(fila.groups.length > 0 ? { groups: fila.groups } : {}),
+            })),
+          });
+        });
+        setMessage(
+          `Tabla "${titulo}" creada con ${columnas.length} columna(s) y ${filas.length} fila(s). No olvides «Guardar estructura».`,
+        );
+      },
+    });
+  }
+
+  /** Devuelve la tabla mensual del borrador (para editar sus columnas). */
+  function tablaMensualDelDraft(draft: SepsLayout, tableId: string) {
+    return draft.extraTables.find((t) => t.id === tableId);
+  }
+
+  function handleLayoutAddColumn(tableId: string) {
+    openLayoutDialog({
+      kind: "text",
+      title: "Agregar columna",
+      description:
+        "Se agrega al final. Podés usar «Grupo > Columna» para colgarla de un encabezado, y «Columna = SUMA(A:I)» para que se calcule sola.",
+      label: "Columna",
+      value: "",
+      placeholder: "Ej. Total general = SUMA(A:I)",
+      confirmLabel: "Agregar",
+      onConfirm: (value) => {
+        let resto = value.trim();
+        if (!resto) return;
+        let formula: string | undefined;
+        const corte = resto.indexOf(" = ");
+        if (corte >= 0) {
+          formula = "=" + resto.slice(corte + 3).trim().replace(/^=/, "");
+          resto = resto.slice(0, corte).trim();
+        }
+        const partes = resto.split(">").map((x) => x.trim()).filter(Boolean);
+        const label = partes[partes.length - 1] || "Columna";
+        updateSepsLayoutDraft((draft) => {
+          const tabla = tablaMensualDelDraft(draft, tableId);
+          if (!tabla) return;
+          tabla.columns = tabla.columns ?? [];
+          tabla.columns.push({
+            key: `${tableId}-c${Date.now().toString(36)}`,
+            label,
+            ...(partes.length > 1 ? { group: partes[0] } : {}),
+            ...(formula ? { formula } : {}),
+          });
+        });
+        setMessage(`Columna "${label}" agregada.`);
+      },
+    });
+  }
+
+  function handleLayoutRenameColumn(tableId: string, colKey: string, actual: string) {
+    openLayoutDialog({
+      kind: "text",
+      title: "Renombrar columna",
+      description: "Cambia solo el encabezado. Lo ya digitado en esa columna no se toca.",
+      label: "Nuevo encabezado",
+      value: actual,
+      confirmLabel: "Guardar",
+      onConfirm: (value) => {
+        const limpio = value.trim();
+        if (!limpio) return;
+        updateSepsLayoutDraft((draft) => {
+          const tabla = tablaMensualDelDraft(draft, tableId);
+          const columna = tabla?.columns?.find((c) => c.key === colKey);
+          if (columna) columna.label = limpio;
+          draft.rowLabels[colKey] = limpio;
+        });
+      },
+    });
+  }
+
+  function handleLayoutColumnFormula(tableId: string, colKey: string, actual: string) {
+    openLayoutDialog({
+      kind: "text",
+      title: "Fórmula de la columna",
+      description:
+        "Se aplica a TODAS las filas de esta columna. Las letras son las columnas en orden: =SUMA(A:I) suma de la A a la I en la misma fila. También sirven =A+B, =A-B, =A/B*100. Dejala vacía para volver a digitarla a mano.",
+      label: "Fórmula",
+      value: actual,
+      placeholder: "=SUMA(A:I)",
+      allowEmpty: true,
+      confirmLabel: "Guardar",
+      onConfirm: (value) => {
+        const limpio = value.trim();
+        updateSepsLayoutDraft((draft) => {
+          const tabla = tablaMensualDelDraft(draft, tableId);
+          const columna = tabla?.columns?.find((c) => c.key === colKey);
+          if (!columna) return;
+          if (limpio) columna.formula = limpio.startsWith("=") ? limpio : `=${limpio}`;
+          else delete columna.formula;
+        });
+        setMessage(limpio ? "Fórmula guardada." : "La columna vuelve a digitarse a mano.");
+      },
+    });
+  }
+
+  function handleLayoutDeleteColumn(tableId: string, colKey: string, label: string) {
+    openLayoutDialog({
+      kind: "confirm",
+      title: "Eliminar columna",
+      description: `Se quita "${label}" de la tabla. Lo digitado en esa columna deja de pedirse (no se borra el histórico).`,
+      value: "",
+      confirmLabel: "Eliminar",
+      danger: true,
+      onConfirm: () => {
+        updateSepsLayoutDraft((draft) => {
+          const tabla = tablaMensualDelDraft(draft, tableId);
+          if (!tabla?.columns) return;
+          tabla.columns = tabla.columns.filter((c) => c.key !== colKey);
+        });
+      },
+    });
+  }
+
+  function handleLayoutCellFormula(
+    tableId: string,
+    rowKey: string,
+    colKey: string,
+    etiqueta: string,
+    actual: string,
+  ) {
+    openLayoutDialog({
+      kind: "text",
+      title: `Fórmula de la celda ${etiqueta}`,
+      description:
+        "Manda sobre la fórmula de la columna, solo para esta celda. Referencias completas: =A1+B1, =SUMA(A1:I1), =SUMA(A1:A6). Vacía = se digita a mano.",
+      label: "Fórmula",
+      value: actual,
+      placeholder: "=SUMA(A1:I1)",
+      allowEmpty: true,
+      confirmLabel: "Guardar",
+      onConfirm: (value) => {
+        const limpio = value.trim();
+        updateSepsLayoutDraft((draft) => {
+          const tabla = tablaMensualDelDraft(draft, tableId);
+          if (!tabla) return;
+          tabla.cellFormulas = { ...(tabla.cellFormulas ?? {}) };
+          const id = `${rowKey}|${colKey}`;
+          if (limpio) tabla.cellFormulas[id] = limpio.startsWith("=") ? limpio : `=${limpio}`;
+          else delete tabla.cellFormulas[id];
+        });
       },
     });
   }
@@ -12627,9 +12889,18 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={handleLayoutAddTable}
+                    title="Tabla diaria: una columna por cada día del mes, como el resto del SEPS"
                     className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
                   >
-                    + Tabla nueva
+                    + Tabla diaria
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLayoutAddMonthlyTable}
+                    title="Tabla mensual: columnas propias y fórmulas tipo Excel"
+                    className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                  >
+                    + Tabla mensual (columnas propias)
                   </button>
                   <button
                     type="button"
@@ -13115,13 +13386,266 @@ export default function Home() {
                     >
                       Eliminar tabla
                     </button>
+                    {table.monthly ? (
+                      <button
+                        type="button"
+                        onClick={() => handleLayoutAddColumn(table.id)}
+                        className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                      >
+                        + Columna
+                      </button>
+                    ) : null}
                     <span className="ml-auto" style={{ color: "var(--text-faint)" }}>
                       {table.rows.length} fila(s)
+                      {table.monthly ? ` · ${(table.columns ?? []).length} columna(s)` : ""}
                     </span>
                   </div>
                 ) : null}
 
-                <div className={`show-scrollbar overflow-x-auto ${tableOpen ? "" : "hidden"}`}>
+                {/* TABLA MENSUAL: columnas propias y fórmulas tipo Excel. Se digita
+                    una vez al mes; las celdas calculadas salen en ámbar. */}
+                {table.monthly ? (
+                  (() => {
+                    const columnas = table.columns ?? [];
+                    const filaKeys = effRows.map((row) => row.key);
+                    const colKeys = columnas.map((columna) => columna.key);
+                    const porColumna: Record<string, string | undefined> = {};
+                    for (const columna of columnas) porColumna[columna.key] = columna.formula;
+                    const porCelda = table.cellFormulas ?? {};
+                    const calculadas = calcularMatriz({
+                      filas: filaKeys,
+                      columnas: colKeys,
+                      crudo: sepsValues,
+                      porColumna,
+                      porCelda,
+                    });
+                    // Encabezados agrupadores: tramos de columnas seguidas con el mismo grupo.
+                    const tramos: { group: string | null; span: number }[] = [];
+                    for (const columna of columnas) {
+                      const grupo = columna.group || null;
+                      const ultimo = tramos[tramos.length - 1];
+                      if (ultimo && ultimo.group === grupo && grupo !== null) ultimo.span += 1;
+                      else tramos.push({ group: grupo, span: 1 });
+                    }
+                    const hayGrupos = tramos.some((tramo) => tramo.group !== null);
+                    const th = `border px-2 py-1.5 text-center font-medium ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`;
+                    const td = `border px-1 py-1 text-center ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`;
+                    return (
+                      <div className={`show-scrollbar overflow-x-auto ${tableOpen ? "" : "hidden"}`}>
+                        <table className={`border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+                          <thead>
+                            {sepsEditingLayout ? (
+                              <tr className={isLightPanelTheme ? "bg-slate-50 text-slate-500" : "bg-white/[0.03] text-slate-400"}>
+                                <th className={th} colSpan={maxDepth + 1} />
+                                {columnas.map((columna, indice) => (
+                                  <th key={`letra-${columna.key}`} className={`${th} text-[10px] font-bold`}>
+                                    {indiceALetra(indice)}
+                                  </th>
+                                ))}
+                              </tr>
+                            ) : null}
+                            {hayGrupos ? (
+                              <tr className={isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}>
+                                <th className={th} colSpan={maxDepth + 1} />
+                                {tramos.map((tramo, indice) => (
+                                  <th key={`tramo-${indice}`} className={`${th} font-semibold`} colSpan={tramo.span}>
+                                    {tramo.group ?? ""}
+                                  </th>
+                                ))}
+                              </tr>
+                            ) : null}
+                            <tr className={isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}>
+                              {Array.from({ length: maxDepth }).map((_, L) => (
+                                <th key={`mg-${L}`} className={th} />
+                              ))}
+                              <th className={`${th} min-w-[240px] text-left`}>{table.detailLabel || "Detalle"}</th>
+                              {columnas.map((columna) => (
+                                <th key={columna.key} className={`${th} min-w-[92px]`}>
+                                  <span className="block whitespace-normal leading-tight">{columna.label}</span>
+                                  {columna.formula ? (
+                                    <span className="mt-0.5 block font-mono text-[9px] text-amber-300">{columna.formula}</span>
+                                  ) : null}
+                                  {sepsEditingLayout ? (
+                                    <span className="mt-1 flex items-center justify-center gap-1">
+                                      <button
+                                        type="button"
+                                        title="Renombrar columna"
+                                        onClick={() => handleLayoutRenameColumn(table.id, columna.key, columna.label)}
+                                        className="rounded px-1 text-[10px] text-slate-400 transition hover:text-amber-300"
+                                      >
+                                        ✎
+                                      </button>
+                                      <button
+                                        type="button"
+                                        title="Fórmula de la columna"
+                                        onClick={() => handleLayoutColumnFormula(table.id, columna.key, columna.formula ?? "")}
+                                        className={`rounded px-1 text-[11px] font-bold transition hover:text-cyan-300 ${columna.formula ? "text-cyan-300" : "text-slate-400"}`}
+                                      >
+                                        ƒ
+                                      </button>
+                                      <button
+                                        type="button"
+                                        title="Eliminar columna"
+                                        onClick={() => handleLayoutDeleteColumn(table.id, columna.key, columna.label)}
+                                        className="rounded px-1 text-[10px] text-slate-400 transition hover:text-rose-300"
+                                      >
+                                        ✕
+                                      </button>
+                                    </span>
+                                  ) : null}
+                                </th>
+                              ))}
+                              {sepsEditingLayout ? <th className={`${th} w-24`}>Fila</th> : null}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {effRows.map((row, indiceFila) => (
+                              <tr key={row.key} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                                {Array.from({ length: maxDepth }).map((_, L) =>
+                                  groupSpans[L][indiceFila] > 0 ? (
+                                    <th
+                                      key={`mgc-${L}-${row.key}`}
+                                      rowSpan={groupSpans[L][indiceFila]}
+                                      className={`border px-2 py-1 text-left align-middle text-[11px] font-semibold ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#26314a] text-slate-200"}`}
+                                    >
+                                      {rowGroups[indiceFila][L]}
+                                    </th>
+                                  ) : null,
+                                )}
+                                <th
+                                  className={`border px-2 py-1 text-left text-[11px] font-medium ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-800" : "border-white/10 bg-[#3a465d] text-slate-100"}`}
+                                >
+                                  {sepsEditingLayout ? (
+                                    <span className="mr-1 font-bold text-slate-400">{indiceFila + 1}</span>
+                                  ) : null}
+                                  {row.label}
+                                </th>
+                                {columnas.map((columna) => {
+                                  const idCelda = `${row.key}|${columna.key}`;
+                                  const calculada = calculadas.get(idCelda);
+                                  const formulaPropia = porCelda[idCelda];
+                                  if (sepsEditingLayout) {
+                                    return (
+                                      <td key={columna.key} className={td}>
+                                        <button
+                                          type="button"
+                                          title={
+                                            formulaPropia
+                                              ? `Fórmula de esta celda: ${formulaPropia}`
+                                              : columna.formula
+                                                ? `Hereda la fórmula de la columna: ${columna.formula}`
+                                                : "Sin fórmula: se digita a mano. Clic para ponerle una."
+                                          }
+                                          onClick={() =>
+                                            handleLayoutCellFormula(
+                                              table.id,
+                                              row.key,
+                                              columna.key,
+                                              `${indiceALetra(columnas.indexOf(columna))}${indiceFila + 1}`,
+                                              formulaPropia ?? "",
+                                            )
+                                          }
+                                          className={`w-full rounded px-1 py-1 font-mono text-[10px] transition ${
+                                            formulaPropia
+                                              ? "bg-cyan-500/15 text-cyan-200"
+                                              : columna.formula
+                                                ? "bg-amber-500/10 text-amber-200/70"
+                                                : "text-slate-500 hover:bg-white/5"
+                                          }`}
+                                        >
+                                          {formulaPropia || (columna.formula ? "ƒ" : "·")}
+                                        </button>
+                                      </td>
+                                    );
+                                  }
+                                  if (calculada) {
+                                    return (
+                                      <td key={columna.key} className={td}>
+                                        <span
+                                          title={calculada.error ? calculada.error : calculada.formula}
+                                          className={`block text-center font-semibold ${calculada.error ? "text-rose-300" : "text-amber-200"}`}
+                                        >
+                                          {calculada.texto}
+                                        </span>
+                                      </td>
+                                    );
+                                  }
+                                  return (
+                                    <td key={columna.key} className={td}>
+                                      <input
+                                        value={sepsValues[row.key]?.[columna.key] ?? ""}
+                                        onChange={(event) =>
+                                          handleSepsCellChange(row.key, columna.key, event.target.value)
+                                        }
+                                        disabled={sepsEditingBlocked}
+                                        inputMode="numeric"
+                                        className={`w-16 rounded border px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 disabled:opacity-50 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
+                                      />
+                                    </td>
+                                  );
+                                })}
+                                {sepsEditingLayout ? (
+                                  <td className={`${td} whitespace-nowrap`}>
+                                    <button
+                                      type="button"
+                                      title="Subir esta fila"
+                                      onClick={() => handleLayoutMoveRow(table.id, row.key, -1)}
+                                      className="px-1 text-slate-400 transition hover:text-cyan-300"
+                                    >
+                                      ∧
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Bajar esta fila"
+                                      onClick={() => handleLayoutMoveRow(table.id, row.key, 1)}
+                                      className="px-1 text-slate-400 transition hover:text-cyan-300"
+                                    >
+                                      ∨
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Renombrar esta fila"
+                                      onClick={() => handleLayoutRenameRow(row.key, row.label)}
+                                      className="px-1 text-slate-400 transition hover:text-amber-300"
+                                    >
+                                      ✎
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Agregar una fila debajo"
+                                      onClick={() => handleLayoutAddRow(table.id, row.key)}
+                                      className="px-1 text-slate-400 transition hover:text-emerald-300"
+                                    >
+                                      +
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Quitar esta fila"
+                                      onClick={() => handleLayoutHideRow(row.key, row.label)}
+                                      className="px-1 text-slate-400 transition hover:text-rose-300"
+                                    >
+                                      ✕
+                                    </button>
+                                  </td>
+                                ) : null}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {sepsEditingLayout ? (
+                          <p className="px-3 py-2 text-[11px]" style={{ color: "var(--text-faint)" }}>
+                            Las letras de arriba (A, B, C…) y los números de la izquierda son las
+                            coordenadas para escribir fórmulas. Tocá <span className="font-bold text-cyan-300">ƒ</span> en
+                            un encabezado para una fórmula que aplique a toda la columna, o una celda
+                            para una fórmula solo de esa celda.
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })()
+                ) : null}
+
+                <div className={`show-scrollbar overflow-x-auto ${tableOpen && !table.monthly ? "" : "hidden"}`}>
                   <table className={`border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                     <thead>
                       <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
@@ -17903,7 +18427,7 @@ export default function Home() {
                   {/* VISTA PREVIA del bloque: muestra exactamente como va a quedar antes
                       de crearlo, para no tener que borrarlo y volver a empezar. Las filas
                       en ambar son TOTALES (llevan "=" adelante): no se digitan, se suman. */}
-                  {layoutDialog.kind === "text" && layoutDialog.multiline
+                  {layoutDialog.kind === "text" && layoutDialog.multiline && layoutDialog.preview !== "tabla"
                     ? (() => {
                         const lineas = layoutDialogValue
                           .split("\n")
@@ -17974,6 +18498,110 @@ export default function Home() {
                                     </span>
                                   </div>
                                 ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()
+                    : null}
+
+                  {/* VISTA PREVIA de una tabla mensual: muestra la cuadrícula con las
+                      letras de columna, para poder escribir las fórmulas mirándola. */}
+                  {layoutDialog.kind === "text" && layoutDialog.preview === "tabla"
+                    ? (() => {
+                        const spec = parseEspecificacionTabla(layoutDialogValue);
+                        if (!spec.titulo) return null;
+                        return (
+                          <div
+                            className="mt-4 rounded-2xl border p-3"
+                            style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+                          >
+                            <p
+                              className="text-[10px] font-semibold uppercase tracking-[0.2em]"
+                              style={{ color: "var(--text-faint)" }}
+                            >
+                              Así va a quedar · {spec.columnas.length} columnas · {spec.filas.length} filas
+                            </p>
+                            <p className="mt-2 text-[13px] font-bold" style={{ color: "var(--text)" }}>
+                              {spec.titulo}
+                            </p>
+                            {spec.columnas.length === 0 ? (
+                              <p className="mt-1 text-[11.5px]" style={{ color: "var(--text-muted)" }}>
+                                Agregá columnas debajo de «== COLUMNAS ==».
+                              </p>
+                            ) : (
+                              <div className="show-scrollbar mt-2 overflow-x-auto">
+                                <table className="border-collapse text-[11px]">
+                                  <thead>
+                                    <tr>
+                                      <th
+                                        className="border px-2 py-1 text-left font-semibold"
+                                        style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+                                      >
+                                        Detalle
+                                      </th>
+                                      {spec.columnas.map((columna, indice) => (
+                                        <th
+                                          key={`pc-${indice}`}
+                                          className="border px-2 py-1 text-center font-semibold"
+                                          style={{
+                                            borderColor: "var(--border)",
+                                            color: columna.formula ? "#cbae83" : "var(--text-muted)",
+                                          }}
+                                        >
+                                          <span className="block text-[9px] font-bold" style={{ color: "var(--text-faint)" }}>
+                                            {indiceALetra(indice)}
+                                          </span>
+                                          {columna.group ? (
+                                            <span className="block text-[9px]" style={{ color: "var(--text-faint)" }}>
+                                              {columna.group}
+                                            </span>
+                                          ) : null}
+                                          <span className="block whitespace-nowrap">{columna.label}</span>
+                                          {columna.formula ? (
+                                            <span className="block text-[9px] font-mono">{columna.formula}</span>
+                                          ) : null}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {spec.filas.slice(0, 8).map((fila, indice) => (
+                                      <tr key={`pf-${indice}`}>
+                                        <th
+                                          className="whitespace-nowrap border px-2 py-1 text-left font-normal"
+                                          style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+                                        >
+                                          <span className="mr-1 font-bold" style={{ color: "var(--text-faint)" }}>
+                                            {indice + 1}
+                                          </span>
+                                          {fila.groups.length > 0 ? (
+                                            <span style={{ color: "var(--text-faint)" }}>{fila.groups.join(" · ")} › </span>
+                                          ) : null}
+                                          {fila.label}
+                                        </th>
+                                        {spec.columnas.map((columna, ci) => (
+                                          <td
+                                            key={`pfc-${indice}-${ci}`}
+                                            className="border px-2 py-1 text-center"
+                                            style={{
+                                              borderColor: "var(--border)",
+                                              background: columna.formula ? "rgba(203,174,131,0.12)" : "transparent",
+                                              color: "var(--text-faint)",
+                                            }}
+                                          >
+                                            {columna.formula ? "ƒ" : "·"}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                                {spec.filas.length > 8 ? (
+                                  <p className="mt-1 text-[10px]" style={{ color: "var(--text-faint)" }}>
+                                    …y {spec.filas.length - 8} fila(s) más.
+                                  </p>
+                                ) : null}
                               </div>
                             )}
                           </div>

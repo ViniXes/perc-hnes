@@ -33,13 +33,29 @@ export type SepsLayoutExtraRow = {
   sumOf?: string[];
 };
 
+/** Columna propia de una tabla mensual creada por el administrador. */
+export type SepsLayoutColumn = {
+  key: string;
+  label: string;
+  /** Encabezado agrupador (se combina arriba, como "Resultado" en el Excel). */
+  group?: string;
+  /** Formula tipo Excel aplicada a todas las filas ("=SUMA(A:I)"). */
+  formula?: string;
+};
+
 /** Tabla creada desde cero. */
 export type SepsLayoutExtraTable = {
   id: string;
   title: string;
   subtitle?: string;
   detailLabel?: string;
-  rows: { key: string; label: string; group?: string }[];
+  rows: { key: string; label: string; group?: string; groups?: string[] }[];
+  /** true = tabla MENSUAL con columnas propias; ausente = tabla diaria. */
+  monthly?: boolean;
+  /** Columnas propias (solo si monthly). */
+  columns?: SepsLayoutColumn[];
+  /** Formula de una celda: "filaKey|columnaKey" -> "=A1+B1". */
+  cellFormulas?: Record<string, string>;
 };
 
 export type SepsLayout = {
@@ -236,6 +252,18 @@ export function applySepsLayout(
       subtitle: rename?.subtitle ?? extra.subtitle,
       detailLabel: extra.detailLabel || "Detalle",
       rows: ordenarFilas(rows, layout.rowOrder?.[extra.id]),
+      ...(extra.monthly
+        ? {
+            monthly: true,
+            columns: (extra.columns ?? []).map((columna) => ({
+              key: columna.key,
+              label: layout.rowLabels[columna.key] ?? columna.label,
+              ...(columna.group ? { group: columna.group } : {}),
+              ...(columna.formula ? { formula: columna.formula } : {}),
+            })),
+            ...(extra.cellFormulas ? { cellFormulas: extra.cellFormulas } : {}),
+          }
+        : {}),
     });
   }
 

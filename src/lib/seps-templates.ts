@@ -60,6 +60,20 @@ export function getRowGroups(row: SepsRow): string[] {
   return row.group ? [row.group] : [];
 }
 
+/** Columna propia de una tabla MENSUAL (las diarias usan los dias del mes). */
+export type SepsColumn = {
+  /** Id estable para guardar. */
+  key: string;
+  /** Encabezado visible. */
+  label: string;
+  /** Encabezado agrupador que se dibuja arriba y abarca varias columnas
+   * (p. ej. "Resultado" sobre las columnas 1..9). */
+  group?: string;
+  /** Formula tipo Excel que se aplica a TODAS las filas de esta columna
+   * (p. ej. "=SUMA(A:I)" para un Total). Si viene, la columna no se digita. */
+  formula?: string;
+};
+
 export type SepsTable = {
   id: string;
   title: string;
@@ -69,6 +83,14 @@ export type SepsTable = {
   /** Si true, dibuja una fila de totales por columna (por dia + total general). */
   showColumnTotals?: boolean;
   rows: SepsRow[];
+  /** Tabla MENSUAL: se digita una vez al mes y sus columnas son propias, no los
+   * dias. La arma el administrador desde "Estructura". */
+  monthly?: boolean;
+  /** Columnas propias (solo tablas mensuales). */
+  columns?: SepsColumn[];
+  /** Formula de una celda concreta: clave "filaKey|columnaKey". Manda sobre la
+   * formula de la columna. Es lo que da la libertad tipo Excel. */
+  cellFormulas?: Record<string, string>;
 };
 
 // --- Formato MATRICIAL (Laboratorio): filas = examenes; columnas fijas de

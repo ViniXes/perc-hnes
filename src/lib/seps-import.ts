@@ -57,6 +57,8 @@ function tableHintsOf(title: string): string[] {
 function buildTargets(template: SepsTemplate): TargetRow[] {
   const targets: TargetRow[] = [];
   for (const table of template.tables ?? []) {
+    // Las tablas mensuales no vienen en el Excel diario.
+    if (table.monthly) continue;
     const hints = tableHintsOf(table.title);
     for (const row of table.rows) {
       if (row.readOnly) continue;
