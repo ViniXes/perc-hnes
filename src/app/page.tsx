@@ -9715,15 +9715,14 @@ export default function Home() {
       // Viene con la estructura ya armada: solo hay que cambiarle los nombres.
       value: [
         "NUEVO TÍTULO",
-        "Tamizada",
+        "= Tamizada",
         "Resultado > Reactiva",
         "Resultado > No reactiva",
         "Resultado > Indeterminada",
-        "= Resultado > Total",
       ].join("\n"),
       multiline: true,
       placeholder:
-        "Anticuerpo Hepatitis B Core (AntiHBc)\nTamizada\nResultado > Reactiva\nResultado > No reactiva\nResultado > Indeterminada\n= Resultado > Total",
+        "Anticuerpo Hepatitis B Core (AntiHBc)\n= Tamizada\nResultado > Reactiva\nResultado > No reactiva\nResultado > Indeterminada",
       confirmLabel: "Crear bloque",
       onConfirm: (value) => {
         const lineas = value
@@ -9799,6 +9798,109 @@ export default function Home() {
 
         setMessage(
           `Bloque "${titulo}" creado con ${Math.max(filas.length, 1)} fila(s). Revisá el orden con las flechas.`,
+        );
+      },
+    });
+  }
+
+  /** Convierte una fila agregada en fila de TOTAL (o la devuelve a fila normal).
+   *  El total suma las filas del mismo bloque que cuelgan de su misma ruta. */
+  function handleLayoutToggleTotal(tableId: string, rowKey: string) {
+    const tabla = (sepsTemplate?.tables ?? []).find((t) => t.id === tableId);
+    const fila = tabla?.rows.find((r) => r.key === rowKey);
+    if (!tabla || !fila) return;
+
+    const ruta = fila.groups ?? (fila.group ? [fila.group] : []);
+    const sumables = tabla.rows
+      .filter((otra) => {
+        if (otra.key === rowKey || otra.readOnly) return false;
+        const rutaOtra = otra.groups ?? (otra.group ? [otra.group] : []);
+        return rutaOtra.slice(0, ruta.length).join("§") === ruta.join("§");
+      })
+      .map((otra) => otra.key);
+
+    updateSepsLayoutDraft((draft) => {
+      const extra = draft.extraRows.find((r) => r.key === rowKey);
+      if (!extra) return;
+      if (extra.readOnly) {
+        delete extra.readOnly;
+        delete extra.sumOf;
+      } else {
+        extra.readOnly = true;
+        extra.sumOf = sumables;
+      }
+    });
+
+    setMessage(
+      `"${fila.label}" ${fila.readOnly ? "vuelve a ser una fila normal" : `ahora suma ${sumables.length} fila(s) sola`}.`,
+    );
+  }
+
+  /** Duplica un BLOQUE completo (el título de la izquierda con todas sus filas,
+   *  subtítulos y filas de total incluidas) y le pone un título nuevo. Es la forma
+   *  rápida de agregar otro insumo con la misma estructura. */
+  function handleLayoutDuplicateBlock(tableId: string, rowKey: string) {
+    const tabla = (sepsTemplate?.tables ?? []).find((t) => t.id === tableId);
+    const fila = tabla?.rows.find((r) => r.key === rowKey);
+    if (!tabla || !fila) return;
+
+    const rutaFila = fila.groups ?? (fila.group ? [fila.group] : []);
+    const titulo = rutaFila[0];
+
+    if (!titulo) {
+      setError("Esa fila no pertenece a ningún bloque con título. Copiá una fila que esté dentro de un título.");
+      return;
+    }
+
+    // Todas las filas del bloque, en su orden actual.
+    const delBloque = tabla.rows.filter((otra) => {
+      const ruta = otra.groups ?? (otra.group ? [otra.group] : []);
+      return ruta[0] === titulo;
+    });
+
+    openLayoutDialog({
+      kind: "text",
+      title: "Copiar bloque",
+      description: `Se copia «${titulo}» con sus ${delBloque.length} fila(s), subtítulos y totales tal cual. Solo escribí el título del bloque nuevo.`,
+      label: "Título del bloque nuevo",
+      value: titulo,
+      placeholder: "Ej. Anticuerpos HTLV I y II",
+      confirmLabel: "Copiar bloque",
+      onConfirm: (value) => {
+        const nuevoTitulo = value.trim();
+        if (!nuevoTitulo) return;
+
+        const base = Date.now().toString(36);
+        const mapa = new Map<string, string>();
+        delBloque.forEach((otra, indice) => {
+          mapa.set(otra.key, `lc-${base}-${indice}`);
+        });
+
+        const ultima = delBloque[delBloque.length - 1];
+
+        updateSepsLayoutDraft((draft) => {
+          let ancla = ultima.key;
+          for (const otra of delBloque) {
+            const ruta = otra.groups ?? (otra.group ? [otra.group] : []);
+            const nuevaKey = mapa.get(otra.key)!;
+            const sumaCopiada = (otra.sumOf ?? [])
+              .map((k) => mapa.get(k))
+              .filter((k): k is string => !!k);
+
+            draft.extraRows.push({
+              tableId,
+              key: nuevaKey,
+              label: otra.label,
+              afterKey: ancla,
+              groups: [nuevoTitulo, ...ruta.slice(1)],
+              ...(otra.readOnly ? { readOnly: true, sumOf: sumaCopiada } : {}),
+            });
+            ancla = nuevaKey;
+          }
+        });
+
+        setMessage(
+          `Bloque copiado como "${nuevoTitulo}" con ${delBloque.length} fila(s). Renombrá las filas que necesites con el lápiz.`,
         );
       },
     });
@@ -12796,6 +12898,18 @@ export default function Home() {
                               </button>
                               <button
                                 type="button"
+                                onClick={() => handleLayoutDuplicateBlock(table.id, row.key)}
+                                title="Copiar este bloque completo con otro título"
+                                aria-label="Copiar este bloque completo con otro título"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-sky-500/10 hover:text-sky-300"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <rect x="9" y="9" width="11" height="11" rx="2" />
+                                  <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => handleLayoutAddTitle(table.id, row.key)}
                                 title="Construir un bloque nuevo: título + sus filas"
                                 aria-label="Construir un bloque nuevo: título y sus filas"
@@ -12821,6 +12935,23 @@ export default function Home() {
                               >
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                               </button>
+                              {row.isExtra ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleLayoutToggleTotal(table.id, row.key)}
+                                  title={
+                                    row.readOnly
+                                      ? "Volver a fila normal (que se digite)"
+                                      : "Convertir en fila de TOTAL (se calcula sola)"
+                                  }
+                                  aria-label="Convertir en fila de total"
+                                  className={`inline-flex h-6 w-6 items-center justify-center rounded-lg font-bold transition hover:bg-cyan-500/10 ${
+                                    row.readOnly ? "text-cyan-300" : "text-slate-400 hover:text-cyan-300"
+                                  }`}
+                                >
+                                  <span className="text-[13px] leading-none">Σ</span>
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 onClick={() => handleLayoutHideRow(row.key, row.label)}
