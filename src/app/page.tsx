@@ -2830,15 +2830,36 @@ function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: stri
 type ConsolidadoUnit = {
   label: string;
   qty: string;
-  source: "servicio" | "censo" | "none";
+  source: "servicio" | "censo" | "camas" | "none";
   // Solo para source "censo": si el mes del Censo esta completo (verde) o no (amarillo).
   complete?: boolean;
 };
 type ConsolidadoRow = { centro: string; units: ConsolidadoUnit[] };
 
+// =============================================================================
+// NUMERO DE CAMAS por centro de produccion. Es un dato FIJO del hospital: no se
+// captura mes a mes, se define una vez y se repite en cada consolidado. Estos son
+// los valores oficiales; el administrador puede corregirlos desde la vista previa
+// de "Produccion de Servicio" y quedan guardados para los meses siguientes.
+// =============================================================================
+const CAMAS_OFICIALES: Record<string, number> = {
+  "66__01101 - Hospitalizacion medicina interna": 347,
+  "95__01206 - Hospitalizacion cirugia general": 20,
+  "745__02014 - Hospitalizacion servicios por convenios": 2,
+  "166__05001 - Unidad de cuidados intensivos": 66,
+  "179__05101 - Unidad de cuidados intermedios": 56,
+  "767__5014 - Unidad de cuidados especiales": 10,
+};
+
+/** ¿Esta unidad es la del numero de camas? */
+function esUnidadCamas(label: string): boolean {
+  return label.toUpperCase().includes("CAMAS");
+}
+
 function computeConsolidado(
   overview: AdminOverviewEntry[],
   censoInfo: Record<string, CensoRowInfo>,
+  camas: Record<string, number> = {},
 ): ConsolidadoRow[] {
   const valuesByService = new Map<string, Record<string, Record<string, unknown>>>();
   for (const entry of overview) {
@@ -2859,6 +2880,11 @@ function computeConsolidado(
           const parsed = Number.parseFloat(String(servValues[unit.key] ?? ""));
           qty = Number.isFinite(parsed) ? formatConsolidatedNumber(parsed) : "0";
           source = "servicio";
+        } else if (esUnidadCamas(unit.label)) {
+          // Camas: dato fijo del hospital (no se captura cada mes).
+          const fijo = camas[svc.centro] ?? CAMAS_OFICIALES[svc.centro];
+          qty = Number.isFinite(fijo) ? formatConsolidatedNumber(Number(fijo)) : "0";
+          source = "camas";
         } else if (unit.censoRow) {
           // Dias-cama-ocupados (Dco): total mensual de la fila del Censo Diario.
           const ci = censoInfo[unit.censoRow];
@@ -3046,6 +3072,7 @@ function downloadServiceProductionReport(
   overview: AdminOverviewEntry[],
   periodId: string,
   censoInfo: Record<string, CensoRowInfo> = {},
+  camas: Record<string, number> = {},
 ) {
   const headerCells = ["Centro de Producción", "Unidades de Producción", "Cantidad"]
     .map(
@@ -3054,7 +3081,7 @@ function downloadServiceProductionReport(
     )
     .join("");
 
-  const bodyRows = computeConsolidado(overview, censoInfo)
+  const bodyRows = computeConsolidado(overview, censoInfo, camas)
     .map((svc) =>
       svc.units
         .map((unit, index) => {
@@ -3064,11 +3091,13 @@ function downloadServiceProductionReport(
               : "";
           // Celdas del Censo: verde = mes completo, amarillo = aun incompleto.
           const qtyStyle =
-            unit.source === "censo"
-              ? unit.complete
-                ? "background:#dcfce7;color:#166534;font-weight:700;"
-                : "background:#fef9c3;color:#854d0e;font-weight:700;"
-              : "";
+            unit.source === "camas"
+              ? "background:#ffff00;color:#111827;font-weight:700;"
+              : unit.source === "censo"
+                ? unit.complete
+                  ? "background:#dcfce7;color:#166534;font-weight:700;"
+                  : "background:#fef9c3;color:#854d0e;font-weight:700;"
+                : "";
           return `<tr>${centroCell}<td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(unit.label)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:center;${qtyStyle}">${escapeHtml(unit.qty)}</td></tr>`;
         })
         .join(""),
@@ -4885,6 +4914,9 @@ export default function Home() {
     { row: string; cells: number[]; total: number }[] | null
   >(null);
   const [isLoadingDistribuida, setIsLoadingDistribuida] = useState(false);
+  /** Numero de camas por centro (dato fijo, editable por el admin). */
+  const [camasFijas, setCamasFijas] = useState<Record<string, number>>({});
+  const [camasBusy, setCamasBusy] = useState(false);
   const [distribuidaStats, setDistribuidaStats] = useState<{
     total: number;
     completos: number;
@@ -7031,6 +7063,66 @@ export default function Home() {
     }
   }
 
+  // Camas: se guardan en documentControl/camas (lo lee cualquier usuario con sesion
+  // y solo lo escribe el admin, igual que el resto del control documental).
+  async function loadCamasFijas(): Promise<Record<string, number>> {
+    if (firestoreUnavailable || !user) return {};
+    try {
+      const snap = await getDoc(doc(db, "documentControl", "camas"));
+      if (!snap.exists()) {
+        setCamasFijas({});
+        return {};
+      }
+      const data = snap.data() as Record<string, unknown>;
+      const limpio: Record<string, number> = {};
+      for (const [centro, valor] of Object.entries(data)) {
+        const numero = Number(valor);
+        if (Number.isFinite(numero)) limpio[centro] = numero;
+      }
+      setCamasFijas(limpio);
+      return limpio;
+    } catch {
+      setCamasFijas({});
+      return {};
+    }
+  }
+
+  async function saveCamaFija(centro: string, valor: string) {
+    if (blockedByGhost()) return;
+    if (!isAdmin || firestoreUnavailable) return;
+
+    const numero = Number.parseInt(valor.replace(/[^0-9]/g, ""), 10);
+    const siguiente = Number.isFinite(numero) ? numero : 0;
+
+    setCamasBusy(true);
+    setError("");
+    try {
+      await setDoc(doc(db, "documentControl", "camas"), { [centro]: siguiente }, { merge: true });
+      setCamasFijas((prev) => ({ ...prev, [centro]: siguiente }));
+      if (consolidadoPeriod) {
+        setConsolidadoPreview((prev) =>
+          prev
+            ? prev.map((fila) =>
+                fila.centro === centro
+                  ? {
+                      ...fila,
+                      units: fila.units.map((u) =>
+                        esUnidadCamas(u.label) ? { ...u, qty: String(siguiente) } : u,
+                      ),
+                    }
+                  : fila,
+              )
+            : prev,
+        );
+      }
+      setMessage(`Camas actualizadas: ${centro.split(" - ")[1] ?? centro} = ${siguiente}.`);
+    } catch {
+      setError("No pudimos guardar el número de camas.");
+    } finally {
+      setCamasBusy(false);
+    }
+  }
+
   // Carga (o recarga) la previsualizacion del consolidado para un mes exacto: lee
   // la produccion de los servicios y el Censo de ESE mismo mes.
   async function loadConsolidadoPreview(period: string) {
@@ -7045,7 +7137,8 @@ export default function Home() {
         fetchAdminOverviewForPeriod(period),
         fetchCensoInfoForPeriod(period),
       ]);
-      setConsolidadoPreview(computeConsolidado(overview, censoInfo));
+      const camas = await loadCamasFijas();
+      setConsolidadoPreview(computeConsolidado(overview, censoInfo, camas));
     } catch (previewError) {
       if (await handleFirestoreError(previewError)) {
         return;
@@ -7082,7 +7175,8 @@ export default function Home() {
         fetchAdminOverviewForPeriod(period),
         fetchCensoInfoForPeriod(period),
       ]);
-      downloadServiceProductionReport(overview, period, censoInfo);
+      const camas = await loadCamasFijas();
+      downloadServiceProductionReport(overview, period, censoInfo, camas);
       setMessage(`Producción de Servicio generada para ${getPeriodLabel(period)}.`);
     } catch (exportError) {
       if (await handleFirestoreError(exportError)) {
@@ -7108,7 +7202,8 @@ export default function Home() {
         fetchAdminOverviewForPeriod(consolidadoPeriod),
         fetchCensoInfoForPeriod(consolidadoPeriod),
       ]);
-      downloadServiceProductionReport(overview, consolidadoPeriod, censoInfo);
+      const camas = await loadCamasFijas();
+      downloadServiceProductionReport(overview, consolidadoPeriod, censoInfo, camas);
       setShowCensoConsolidadoPreview(false);
       setMessage(
         `Producción de Servicio generada para ${getPeriodLabel(consolidadoPeriod)}.`,
@@ -20193,9 +20288,28 @@ export default function Home() {
                               ) : null}
                               <td className="px-3 py-2 text-slate-300">{unit.label}</td>
                               <td className="px-3 py-2 text-center">
+                                {unit.source === "camas" && isAdmin ? (
+                                  // Camas: dato fijo, editable aqui mismo por el admin.
+                                  <input
+                                    defaultValue={unit.qty}
+                                    disabled={camasBusy}
+                                    inputMode="numeric"
+                                    onBlur={(event) => {
+                                      if (event.target.value.trim() === unit.qty) return;
+                                      void saveCamaFija(svc.centro, event.target.value);
+                                    }}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") event.currentTarget.blur();
+                                    }}
+                                    title="Número de camas (dato fijo). Escribí y salí del campo para guardarlo."
+                                    className="w-16 rounded-lg border border-amber-300/40 bg-amber-400/10 px-2 py-1 text-center font-bold text-amber-100 outline-none focus:border-amber-300 disabled:opacity-50"
+                                  />
+                                ) : (
                                 <span
                                   className={`inline-flex min-w-[2.75rem] items-center justify-center gap-1 rounded-full px-2 py-0.5 font-bold ${
-                                    unit.source === "censo"
+                                    unit.source === "camas"
+                                      ? "bg-amber-400/20 text-amber-100 ring-1 ring-amber-300/40"
+                                      : unit.source === "censo"
                                       ? unit.complete
                                         ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40"
                                         : "bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40"
@@ -20216,6 +20330,7 @@ export default function Home() {
                                   ) : null}
                                   {unit.qty}
                                 </span>
+                                )}
                               </td>
                             </tr>
                           ))}
