@@ -6157,11 +6157,12 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [insumosPeriod, canViewInsumos, firestoreUnavailable, user]);
 
-  // Al cargar la plantilla SEPS, todas las tablas/secciones arrancan COLAPSADAS
-  // (apiladas, ninguna desplegada). El usuario abre la que necesite.
+  // Al cambiar de SERVICIO o de MES, las tablas arrancan colapsadas. OJO: NO se
+  // depende de `sepsTemplate`, porque esa plantilla se recalcula con cada ajuste de
+  // la matriz y cerraba la tabla justo cuando se estaba editando.
   useEffect(() => {
     setOpenSepsTables(new Set());
-  }, [sepsTemplate]);
+  }, [sepsBaseTemplate?.serviceId, sepsPeriodId]);
 
   // Meses con datos guardados por modulo (para colorear el selector de historial).
   useEffect(() => {
@@ -9699,6 +9700,35 @@ export default function Home() {
     });
   }
 
+  /** Crea un TÍTULO nuevo dentro de la tabla, con su primera fila. */
+  function handleLayoutAddTitle(tableId: string, afterKey: string) {
+    openLayoutDialog({
+      kind: "text",
+      title: "Agregar título",
+      description:
+        "Crea un bloque nuevo dentro de la tabla (la celda combinada de la izquierda) con su primera fila. Después le agregás las filas que necesite con el botón +.",
+      label: "Nombre del título",
+      value: "",
+      placeholder: "Ej. EJEMPLO 1",
+      confirmLabel: "Crear título",
+      onConfirm: (value) => {
+        const titulo = value.trim();
+        if (!titulo) return;
+        const key = `lt-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+        updateSepsLayoutDraft((draft) => {
+          draft.extraRows.push({
+            tableId,
+            key,
+            label: "Nueva fila",
+            afterKey,
+            groups: [titulo],
+          });
+        });
+        setMessage(`Título "${titulo}" creado. Renombrá su fila y agregá las que falten con +.`);
+      },
+    });
+  }
+
   function handleLayoutAddTable() {
     openLayoutDialog({
       kind: "text",
@@ -12623,13 +12653,18 @@ export default function Home() {
                         >
                           {table.detailLabel || "Detalle"}
                         </th>
+                        {sepsEditingLayout ? (
+                          <th className="whitespace-nowrap px-2 py-2 text-center font-medium">
+                            Editar
+                          </th>
+                        ) : null}
                         {sepsDayColumns.map((day) => (
                           <th key={day} className="w-10 px-1 py-2 text-center font-medium">
                             {day}
                           </th>
                         ))}
                         <th className={`px-3 py-2 text-center font-semibold ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>Total</th>
-                        {canManageTabRows ? <th className="px-1 py-2" /> : null}
+                        {canManageTabRows && !sepsEditingLayout ? <th className="px-1 py-2" /> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -12664,6 +12699,64 @@ export default function Home() {
                               row.label
                             )}
                           </td>
+                          {sepsEditingLayout ? (
+                            <td className="whitespace-nowrap px-1 py-1 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleLayoutMoveRow(table.id, row.key, -1)}
+                                title="Subir esta fila"
+                                aria-label="Subir esta fila"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-cyan-500/10 hover:text-cyan-300"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6" /></svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleLayoutMoveRow(table.id, row.key, 1)}
+                                title="Bajar esta fila"
+                                aria-label="Bajar esta fila"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-cyan-500/10 hover:text-cyan-300"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleLayoutAddTitle(table.id, row.key)}
+                                title="Agregar un título nuevo debajo"
+                                aria-label="Agregar un título nuevo debajo"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-lg font-bold text-slate-400 transition hover:bg-violet-500/10 hover:text-violet-300"
+                              >
+                                <span className="text-[13px] leading-none">T</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleLayoutAddRow(table.id, row.key)}
+                                title="Agregar una fila debajo"
+                                aria-label="Agregar una fila debajo"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-emerald-500/10 hover:text-emerald-300"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleLayoutRenameRow(row.key, row.label)}
+                                title="Renombrar esta fila"
+                                aria-label="Renombrar esta fila"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-amber-500/10 hover:text-amber-300"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleLayoutHideRow(row.key, row.label)}
+                                title="Quitar esta fila"
+                                aria-label="Quitar esta fila"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-300"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>
+                              </button>
+                            </td>
+                          ) : null}
                           {sepsDayColumns.map((day) => (
                             <td key={day} className="px-0.5 py-1 text-center">
                               {row.readOnly ? (
@@ -12690,7 +12783,7 @@ export default function Home() {
                           <td className={`px-3 py-1.5 text-center font-semibold text-cyan-100 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>
                             {row.hideTotal ? "" : sepsRowTotal(row)}
                           </td>
-                          {canManageTabRows ? (
+                          {canManageTabRows && !sepsEditingLayout ? (
                             <td className="whitespace-nowrap px-1 py-1 text-center">
                               <button
                                 type="button"
@@ -12760,7 +12853,7 @@ export default function Home() {
                       <tfoot>
                         <tr className={`border-t-2 font-semibold ${isLightPanelTheme ? "border-slate-300 bg-slate-100 text-slate-800" : "border-white/20 bg-[#243049] text-white"}`}>
                           <td
-                            colSpan={maxDepth + 1}
+                            colSpan={maxDepth + 1 + (sepsEditingLayout ? 1 : 0)}
                             className={`sticky left-0 z-10 px-3 py-2 text-left uppercase tracking-wide ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}
                           >
                             Total
