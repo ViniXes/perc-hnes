@@ -11918,11 +11918,24 @@ export default function Home() {
     // periodo elegido. "Automatico" = sin override: manda la ventana de dias habiles.
     // Vista ordenada: agrupada por division, con buscador y resumen de estado.
     const overrideQuery = overrideServiceQuery.trim().toLowerCase();
+    // Solicitudes PENDIENTES del mes que se esta viendo: sirven para resaltar en el
+    // panel que servicio pidio abrir y que tablero exactamente.
+    const pedidosPendientes = captureRequests.filter(
+      (req) => req.status === "pending" && req.periodId === overridePanelPeriodId,
+    );
+    const servicioConPedido = new Set(pedidosPendientes.map((req) => req.serviceId));
+    const pedidoDe = (serviceId: string, moduleId: ModuleId) =>
+      pedidosPendientes.find((req) => req.serviceId === serviceId && req.moduleId === moduleId);
+
+    // Cada quien ve SOLO lo suyo: el admin y la Direccion, todo el hospital; un jefe
+    // de division, unicamente los servicios de su division (o de su departamento).
     const overrideGroups = buildServiceGroups()
       .map((group) => ({
         ...group,
         services: group.services.filter(
-          (service) => !overrideQuery || service.name.toLowerCase().includes(overrideQuery),
+          (service) =>
+            (!overrideQuery || service.name.toLowerCase().includes(overrideQuery)) &&
+            (isAdmin || isDirector || isServiceInChiefScope(serviceProfile, service.id)),
         ),
       }))
       .filter((group) => group.services.length > 0);
@@ -11931,6 +11944,7 @@ export default function Home() {
     let overrideClosedCount = 0;
     let overrideTotalCells = 0;
     for (const service of SERVICE_DEFINITIONS) {
+      if (!(isAdmin || isDirector || isServiceInChiefScope(serviceProfile, service.id))) continue;
       const svcModuleIds = getAreaById(service.id)?.modules ?? [];
       for (const moduleId of toggleableModules) {
         if (!svcModuleIds.includes(moduleId)) continue;
@@ -12158,11 +12172,18 @@ export default function Home() {
                       <div
                         key={service.id}
                         className={`group rounded-2xl border p-3 text-center transition ${
-                          isLightPanelTheme
-                            ? "border-slate-200 bg-white shadow-sm hover:border-cyan-300 hover:shadow-md"
-                            : "border-white/10 bg-gradient-to-b from-[#212d45] to-[#1a2334] hover:border-cyan-400/30"
+                          servicioConPedido.has(service.id)
+                            ? "border-rose-400/70 bg-rose-500/10 ring-2 ring-rose-400/40"
+                            : isLightPanelTheme
+                              ? "border-slate-200 bg-white shadow-sm hover:border-cyan-300 hover:shadow-md"
+                              : "border-white/10 bg-gradient-to-b from-[#212d45] to-[#1a2334] hover:border-cyan-400/30"
                         }`}
                       >
+                        {servicioConPedido.has(service.id) ? (
+                          <p className="mb-1.5 rounded-full bg-rose-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rose-200">
+                            Solicitó habilitación
+                          </p>
+                        ) : null}
                         <span className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm ring-1 ring-white/15 transition group-hover:scale-105">
                           <ServiceIcon serviceId={service.id} className="h-[18px] w-[18px]" />
                         </span>
@@ -12171,23 +12192,41 @@ export default function Home() {
                         </p>
                         <div className={`my-2.5 h-px ${isLightPanelTheme ? "bg-slate-100" : "bg-white/10"}`} />
                         <div className="flex flex-col gap-1">
-                          {svcModules.map((moduleId) => (
+                          {svcModules.map((moduleId) => {
+                            const pedido = pedidoDe(service.id, moduleId);
+
+                            return (
                             <div
                               key={moduleId}
+                              title={
+                                pedido
+                                  ? `${pedido.requestedByName} pidió habilitar este tablero: no alcanzó a capturarlo en los días hábiles.`
+                                  : undefined
+                              }
                               className={`flex items-center justify-between gap-1.5 rounded-lg px-2 py-1 ${
-                                isLightPanelTheme ? "bg-slate-50" : "bg-white/5"
+                                pedido
+                                  ? "bg-emerald-500/15 ring-1 ring-emerald-400/50"
+                                  : isLightPanelTheme
+                                    ? "bg-slate-50"
+                                    : "bg-white/5"
                               }`}
                             >
                               <span
-                                className={`text-[9px] font-semibold uppercase tracking-wide ${
-                                  isLightPanelTheme ? "text-slate-500" : "text-slate-400"
+                                className={`flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide ${
+                                  pedido
+                                    ? "text-emerald-200"
+                                    : isLightPanelTheme
+                                      ? "text-slate-500"
+                                      : "text-slate-400"
                                 }`}
                               >
+                                {pedido ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> : null}
                                 {MODULE_BY_ID[moduleId].shortName}
                               </span>
                               {overrideStateChip(service, moduleId)}
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                       );
@@ -15378,7 +15417,7 @@ export default function Home() {
       // Monitoreo General: PERC + SEPS + Horas en una sola pantalla. Lo ven los
       // administradores y tambien Direccion y Subdireccion Medica, que monitorean
       // todo el hospital sin capturar nada.
-      ...(isAdmin || isDirector
+      ...(isAdmin || isDirector || isSupervisor
         ? [
             {
               id: "panel-monitor-general",
@@ -19862,7 +19901,7 @@ export default function Home() {
 
           {/* MONITOREO GENERAL (solo admin): PERC + SEPS + Horas en una sola vista.
               Los monitoreos por modulo siguen funcionando por separado. */}
-          {(isAdmin || isDirector) && showGeneralMonitorModal
+          {(isAdmin || isDirector || isSupervisor) && showGeneralMonitorModal
             ? (() => {
                 const columnas = [
                   { key: "PERC" as const, titulo: "PERC", periodo: periodId, color: "#38bdf8" },
