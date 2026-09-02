@@ -11330,14 +11330,11 @@ export default function Home() {
     setError("");
     setMessage("");
 
-    // Se conservan sus permisos de GESTION (habilitar tableros, usuarios) para que la
-    // vista sea fiel: si no, desaparecian menus que la persona si tiene. Lo unico que
-    // se apaga es la EDICION de datos, y ademas ningun guardado se ejecuta en este
-    // modo (blockedByGhost corta todas las escrituras).
-    setServiceProfile({
-      ...target,
-      permissions: { ...target.permissions, canEdit: false },
-    });
+    // El perfil se presta TAL CUAL, con todos sus permisos: la idea es ver exactamente
+    // lo que esa persona ve, incluido si su tablero figura habilitado o bloqueado. La
+    // seguridad no viene de recortarle permisos sino de dos candados aparte: los campos
+    // quedan de solo lectura y ningun guardado se ejecuta (blockedByGhost).
+    setServiceProfile({ ...target });
   }
 
   /** Vuelve a la cuenta real del administrador. */
@@ -11713,7 +11710,13 @@ export default function Home() {
     const isPercHistory = percViewPeriod !== null;
     const percReadOnly = isPercHistory && !isAdmin;
     // El admin nunca queda bloqueado; el servicio: historial = solo lectura, mes actual = ventana.
-    const percEditingBlocked = isAdmin ? false : isPercHistory ? true : isFormLocked;
+    const percEditingBlocked = ghostUid
+      ? true
+      : isAdmin
+        ? false
+        : isPercHistory
+          ? true
+          : isFormLocked;
     const percHistoryOptions = buildRecentPeriods(periodId, 12);
     // Gestion de filas del tabulador PERC (agregar/quitar): solo admin/supervisores.
     const canManagePercRows = isAdmin || isSupervisor;
@@ -12272,7 +12275,9 @@ export default function Home() {
     const activeSepsPeriod = sepsViewPeriod ?? sepsPeriodId;
     const isSepsHistory = sepsViewPeriod !== null;
     const sepsHistReadOnly = isSepsHistory && !isAdmin;
-    const sepsEditingBlocked = sepsTemplate?.consolidatesFrom
+    const sepsEditingBlocked = ghostUid
+      ? true
+      : sepsTemplate?.consolidatesFrom
       ? true
       : isAdmin || isSepsStaff
         ? false
@@ -14137,7 +14142,13 @@ export default function Home() {
     const activeHorasPeriod = horasViewPeriod ?? periodId;
     const isHorasHistory = horasViewPeriod !== null;
     const horasHistReadOnly = isHorasHistory && !isAdmin;
-    const horasEditingBlocked = isAdmin ? false : isHorasHistory ? true : horasLocked;
+    const horasEditingBlocked = ghostUid
+      ? true
+      : isAdmin
+        ? false
+        : isHorasHistory
+          ? true
+          : horasLocked;
     const horasHistoryOptions = buildRecentPeriods(periodId, 12);
     const horasNum = (emp: HorasEmployee, col: string) => {
       const n = Number.parseInt(emp.hours[col] ?? "", 10);
