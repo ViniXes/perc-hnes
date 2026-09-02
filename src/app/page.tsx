@@ -4413,8 +4413,10 @@ async function createDirectorAccount(
     division: null,
     department: null,
     supervisorModules: ["perc", "sesps", "distribucion"],
-    // SIN permisos de gestion: solo lectura de todo el hospital.
-    permissions: { canEdit: false, canManageUsers: false, canToggleCapture: false },
+    // No captura ni edita datos, y no gestiona usuarios. SI puede habilitar un
+    // tablero cuando un servicio lo solicita fuera de plazo (esa es su potestad
+    // como Direccion / Subdireccion Medica).
+    permissions: { canEdit: false, canManageUsers: false, canToggleCapture: true },
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -20086,11 +20088,14 @@ export default function Home() {
                         const lateMarks = captureRequests.filter(
                           (item) => item.serviceId === req.serviceId,
                         ).length;
+                        // Direccion y Subdireccion Medica tambien aprueban: es su
+                        // potestad habilitar un tablero cuando alguien no alcanzo a
+                        // capturar en los dias estipulados.
                         const canResolve =
-                          !isDirector &&
-                          (isAdmin ||
-                            (serviceProfile.supervisorModules.includes(req.moduleId) &&
-                              isServiceInChiefScope(serviceProfile, req.serviceId)));
+                          isAdmin ||
+                          (serviceProfile.permissions.canToggleCapture &&
+                            serviceProfile.supervisorModules.includes(req.moduleId) &&
+                            isServiceInChiefScope(serviceProfile, req.serviceId));
                         return (
                           <div
                             key={req.id}
