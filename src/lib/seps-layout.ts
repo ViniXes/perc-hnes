@@ -27,6 +27,10 @@ export type SepsLayoutExtraRow = {
    * Si viene, manda sobre lo que herede del ancla: sirve para abrir un título
    * nuevo dentro de una tabla (Chagas) y colgarle sus filas (Reactiva, etc.). */
   groups?: string[];
+  /** Fila de TOTAL: no se digita, se calcula sumando las filas de `sumOf`. */
+  readOnly?: boolean;
+  /** Claves de las filas que suma esta fila de total, día por día. */
+  sumOf?: string[];
 };
 
 /** Tabla creada desde cero. */
@@ -185,6 +189,8 @@ export function applySepsLayout(
         label,
         ...(groups ? { groups } : {}),
         ...(group ? { group } : {}),
+        ...(extra.readOnly ? { readOnly: true } : {}),
+        ...(extra.sumOf && extra.sumOf.length > 0 ? { sumOf: extra.sumOf } : {}),
       };
       if (index >= 0) rows.splice(index + 1, 0, newRow);
       else rows.push(newRow);
@@ -220,6 +226,8 @@ export function applySepsLayout(
         key: row.key,
         label: layout.rowLabels[row.key] ?? row.label,
         ...(propios.length > 0 ? { groups: propios } : {}),
+        ...(row.readOnly ? { readOnly: true } : {}),
+        ...(row.sumOf && row.sumOf.length > 0 ? { sumOf: row.sumOf } : {}),
       });
     }
     tables.push({

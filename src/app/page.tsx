@@ -9710,12 +9710,12 @@ export default function Home() {
       kind: "text",
       title: "Construir bloque",
       description:
-        "Primera línea: el título grande. Después, una línea por fila. Para agrupar filas bajo un subtítulo, escribí «Subtítulo > fila».",
+        "Primera línea: el título grande. Después, una línea por fila. Para agrupar filas bajo un subtítulo, escribí «Subtítulo > fila». Empezá una línea con «=» para que esa fila sea un TOTAL que se calcula solo.",
       label: "Título y filas (una por línea)",
       value: "",
       multiline: true,
       placeholder:
-        "Anticuerpo Hepatitis B Core (AntiHBc)\nTamizada\nResultado > Reactiva\nResultado > No reactiva\nResultado > Indeterminada",
+        "Anticuerpo Hepatitis B Core (AntiHBc)\nTamizada\nResultado > Reactiva\nResultado > No reactiva\nResultado > Indeterminada\n= Resultado > Total",
       confirmLabel: "Crear bloque",
       onConfirm: (value) => {
         const lineas = value
@@ -9742,24 +9742,51 @@ export default function Home() {
             return;
           }
 
-          let ancla = afterKey;
-          filas.forEach((linea, indice) => {
-            const partes = linea
+          // Primero se resuelve cada línea: su ruta de grupos, su etiqueta y si es
+          // una fila de TOTAL (las que empiezan con "=").
+          const parsed = filas.map((linea, indice) => {
+            const esTotal = linea.startsWith("=");
+            const limpia = esTotal ? linea.slice(1).trim() : linea;
+            const partes = limpia
               .split(">")
               .map((parte) => parte.trim())
               .filter((parte) => parte !== "");
-            const etiqueta = partes[partes.length - 1];
+            const etiqueta = partes[partes.length - 1] || "Total";
             const subniveles = partes.slice(0, -1);
-            const key = `lt-${base}-${indice}`;
+            return {
+              key: `lt-${base}-${indice}`,
+              etiqueta,
+              esTotal,
+              groups: [titulo, ...subniveles],
+            };
+          });
+
+          let ancla = afterKey;
+          for (const fila of parsed) {
+            // Una fila de TOTAL suma las filas normales que comparten su misma ruta
+            // de grupos (p. ej. todas las de "Resultado"); si está al nivel del
+            // título, suma todas las del bloque.
+            const suma = fila.esTotal
+              ? parsed
+                  .filter(
+                    (otra) =>
+                      !otra.esTotal &&
+                      otra.groups.slice(0, fila.groups.length).join("§") ===
+                        fila.groups.join("§"),
+                  )
+                  .map((otra) => otra.key)
+              : [];
+
             draft.extraRows.push({
               tableId,
-              key,
-              label: etiqueta,
+              key: fila.key,
+              label: fila.etiqueta,
               afterKey: ancla,
-              groups: [titulo, ...subniveles],
+              groups: fila.groups,
+              ...(fila.esTotal ? { readOnly: true, sumOf: suma } : {}),
             });
-            ancla = key;
-          });
+            ancla = fila.key;
+          }
         });
 
         setMessage(
