@@ -128,6 +128,10 @@ type ManagedUser = {
   // Para jefes de division: "medica" | "apoyo" | "administrativa" | "enfermeria" | "direccion".
   division: string | null;
   department: string | null;
+  // Division que esta cuenta MONITOREA (solo lectura) aunque no sea supervisor:
+  // le habilita "Monitoreo general" limitado a los servicios de esa division.
+  // Se usa para jefes de division que ademas capturan su propio servicio.
+  monitorDivision: string | null;
   isDirector: boolean;
   mustChangePassword: boolean;
   isActive: boolean;
@@ -161,6 +165,7 @@ type AdminDraft = {
   menuGrants: string[];
   noCapture: boolean;
   isChief: boolean;
+  monitorDivision: string;
   viewPerc: string[];
   viewSeps: string[];
   viewHoras: string[];
@@ -3204,6 +3209,7 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     isChief: data.isChief === true,
     division: typeof data.division === "string" ? data.division : null,
     department: typeof data.department === "string" ? data.department : null,
+    monitorDivision: typeof data.monitorDivision === "string" && data.monitorDivision ? data.monitorDivision : null,
     isDirector: data.isDirector === true,
     mustChangePassword: data.mustChangePassword !== false,
     isActive: data.isActive !== false,
@@ -3242,6 +3248,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         menuGrants: managedUser.menuGrants,
         noCapture: managedUser.noCapture,
         isChief: managedUser.isChief,
+        monitorDivision: managedUser.monitorDivision || "",
         viewPerc: managedUser.viewPerc,
         viewSeps: managedUser.viewSeps,
         viewHoras: managedUser.viewHoras,
@@ -3263,6 +3270,7 @@ type UserAccessView = {
   rol: string;
   esJefe: boolean;
   soloAccesos: boolean;
+  monitoreaDivision: string;
   capturaModulos: { id: ModuleId; label: string; tabulador: string }[];
   submenus: string[];
   consultaPerc: string[];
@@ -3306,6 +3314,9 @@ function buildUserAccessView(u: ManagedUser): UserAccessView {
     rol: u.role === "admin" ? "Administrador" : u.role === "supervisor" ? "Supervisor" : "Servicio",
     esJefe: u.isChief === true,
     soloAccesos: u.noCapture === true,
+    monitoreaDivision: u.monitorDivision
+      ? SERVICE_GROUP_LABELS[u.monitorDivision] || u.monitorDivision
+      : "",
     capturaModulos,
     submenus: (u.menuGrants || []).map(
       (id) => GRANTABLE_MENUS.find((g) => g.id === id)?.label || id,
@@ -5445,7 +5456,7 @@ export default function Home() {
     const rawStats = dashboardGroups
       .flatMap((group) => group.services)
       .filter((service) => service.modules.some((m) => m.label === statsLabel))
-      .filter((service) => isServiceInChiefScope(serviceProfile, service.id));
+      .filter((service) => isServiceInChiefScope(monitorScopeProfile, service.id));
 
     const isDone = (service: (typeof rawStats)[number]) =>
       !!service.modules.find((m) => m.label === statsLabel)?.completed;
@@ -5533,6 +5544,17 @@ export default function Home() {
   const isDirector = serviceProfile?.isDirector === true;
   // Monitor de RRHH (aamaya): SOLO monitorea horas y descarga; no habilita tableros.
   const isHorasMonitor = normalizeKey(serviceProfile?.username || "") === normalizeKey("aamaya");
+  // Jefe de division que ADEMAS captura su propio servicio (p. ej. Enfermeria):
+  // el admin le asigna una division a MONITOREAR y con eso ve el "Monitoreo general"
+  // limitado a los servicios de esa division. Es solo lectura: no habilita tableros
+  // ni resuelve solicitudes (eso sigue siendo de supervisores y Direccion).
+  const monitorDivision = serviceProfile?.monitorDivision || null;
+  // Alcance que se usa para contar servicios en los monitoreos. Si la cuenta ya es
+  // jefe de division/departamento manda su propio alcance; si no, el que le asignaron.
+  const monitorScopeProfile =
+    monitorDivision && !serviceProfile?.division && !serviceProfile?.department
+      ? { division: monitorDivision, department: null }
+      : serviceProfile;
   // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
   // y los administradores (por temas de calidad y control).
   const hasGrant = (id: string) => (serviceProfile?.menuGrants ?? []).includes(id);
@@ -11442,6 +11464,7 @@ export default function Home() {
               isDirector: false,
               division: null,
               department: deptKey,
+              monitorDivision: draft.monitorDivision || null,
               captureModules: [],
               supervisorModules: ["perc", "sesps", "distribucion"],
               permissions: { canEdit: true, canManageUsers: false, canToggleCapture: false },
@@ -11459,6 +11482,7 @@ export default function Home() {
               isActive: draft.isActive,
               mustChangePassword: draft.mustChangePassword,
               department: null,
+              monitorDivision: draft.monitorDivision || null,
               captureModules: draft.captureModules,
               menuGrants: draft.menuGrants,
               noCapture: draft.noCapture,
@@ -15431,12 +15455,15 @@ export default function Home() {
       // Monitoreo General: PERC + SEPS + Horas en una sola pantalla. Lo ven los
       // administradores y tambien Direccion y Subdireccion Medica, que monitorean
       // todo el hospital sin capturar nada.
-      ...(isAdmin || isDirector || isSupervisor
+      ...(isAdmin || isDirector || isSupervisor || monitorDivision
         ? [
             {
               id: "panel-monitor-general",
               label: "Monitoreo general",
-              detail: "PERC, SEPS y Horas en una vista",
+              detail:
+                monitorDivision && !isAdmin && !isDirector && !isSupervisor
+                  ? `PERC, SEPS y Horas · ${SERVICE_GROUP_LABELS[monitorDivision] || "su division"}`
+                  : "PERC, SEPS y Horas en una vista",
               badge: "MG",
             },
           ]
@@ -18934,6 +18961,35 @@ export default function Home() {
                           </span>
                         </label>
 
+                        {/* MONITOREO POR DIVISION: para el jefe de una division que ademas
+                            captura su propio servicio. Le habilita "Monitoreo general" pero
+                            contando SOLO los servicios de la division elegida. Es solo
+                            lectura: no habilita tableros ni resuelve solicitudes. */}
+                        <label className="mt-3 block">
+                          <span className="text-xs font-medium text-slate-400">
+                            Monitorea la división (solo lectura)
+                          </span>
+                          <select
+                            value={draft.monitorDivision}
+                            onChange={(event) =>
+                              updateAdminDraft(selectedUser.uid, { monitorDivision: event.target.value })
+                            }
+                            className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400"
+                          >
+                            <option value="">— Ninguna —</option>
+                            {Object.entries(SERVICE_GROUP_LABELS).map(([key, label]) => (
+                              <option key={key} value={key}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="mt-1 block text-[11px] text-slate-500">
+                            Le agrega el menú &quot;Monitoreo general&quot; (PERC, SEPS y Horas) con
+                            los servicios de esa división únicamente. No le da permiso de abrir
+                            tableros ni de modificar nada.
+                          </span>
+                        </label>
+
                         <div className="mt-4 flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -19656,6 +19712,11 @@ export default function Home() {
                               No llena tabuladores
                             </span>
                           ) : null}
+                          {a.monitoreaDivision ? (
+                            <span className="rounded-full bg-cyan-500/15 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
+                              Monitorea: {a.monitoreaDivision}
+                            </span>
+                          ) : null}
                           <span
                             className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                               a.activa
@@ -19917,7 +19978,7 @@ export default function Home() {
 
           {/* MONITOREO GENERAL (solo admin): PERC + SEPS + Horas en una sola vista.
               Los monitoreos por modulo siguen funcionando por separado. */}
-          {(isAdmin || isDirector || isSupervisor) && showGeneralMonitorModal
+          {(isAdmin || isDirector || isSupervisor || monitorDivision) && showGeneralMonitorModal
             ? (() => {
                 const columnas = [
                   { key: "PERC" as const, titulo: "PERC", periodo: periodId, color: "#38bdf8" },
@@ -19947,6 +20008,11 @@ export default function Home() {
                           <h3 className="mt-1 text-xl font-bold text-white sm:text-2xl">
                             Monitoreo general
                           </h3>
+                          {monitorDivision && !isAdmin && !isDirector && !isSupervisor ? (
+                            <p className="mt-1 inline-flex rounded-full bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-200">
+                              {SERVICE_GROUP_LABELS[monitorDivision] || "Su división"}
+                            </p>
+                          ) : null}
                           <p className="mt-1 text-xs text-slate-400">
                             Quién completó cada tabulador · cierre de {getPeriodLabel(periodId)}
                           </p>
@@ -20065,7 +20131,7 @@ export default function Home() {
                 const rawStats = dashboardGroups
                   .flatMap((g) => g.services)
                   .filter((s) => s.modules.some((m) => m.label === statsLabel))
-                  .filter((s) => isServiceInChiefScope(serviceProfile, s.id));
+                  .filter((s) => isServiceInChiefScope(monitorScopeProfile, s.id));
                 const isStatsDone = (s: (typeof rawStats)[number]) =>
                   !!s.modules.find((m) => m.label === statsLabel)?.completed;
                 // UCI/UCIN se muestran como 1 entrada agregada con % (subunidades llenas
