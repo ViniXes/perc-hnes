@@ -8756,11 +8756,18 @@ export default function Home() {
         return;
       }
       const id = `signup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // Si algo falla de aqui en adelante hay que SOLTAR el documento que se acaba
+      // de reservar; si no, la persona queda con el DUI apartado y sin solicitud.
+      const docKeyReservado = normalizeDocKey(signupForm.docNumber);
+      try {
       await setDoc(doc(db, "signupRequests", id), {
         firstName: signupForm.firstName.trim(),
         lastName: signupForm.lastName.trim(),
         email: signupForm.email.trim(),
-        serviceId: isDivision || isDepartment || isDeptEditor || isDirector ? "" : service!.id,
+        serviceId:
+          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector
+            ? ""
+            : service?.id ?? "",
         serviceName: isDivision
           ? DIVISION_LABELS[signupForm.division]
           : isDepartment
@@ -8769,7 +8776,9 @@ export default function Home() {
               ? departmentEditorLabel(signupForm.department)
               : isDirector
                 ? "Directora"
-                : service!.name,
+                : isSubdirector
+                  ? "Subdirección Médica"
+                  : service?.name ?? "",
         requestType: isDivision
           ? "division"
           : isDepartment
@@ -8797,6 +8806,16 @@ export default function Home() {
         acceptedPrivacy: true,
         createdAt: serverTimestamp(),
       });
+      } catch (requestError) {
+        if (docKeyReservado) {
+          await deleteDoc(doc(db, "documentRegistry", docKeyReservado)).catch(() => {});
+        }
+        setError(
+          "No pudimos enviar tu solicitud. Tu documento quedó libre: volvé a intentarlo.",
+        );
+        console.error(requestError);
+        return;
+      }
       setShowSignupModal(false);
       setSignupForm({
         firstName: "",
