@@ -15519,7 +15519,9 @@ export default function Home() {
             },
           ]
         : []),
-      ...(isAdmin
+      // La bandeja la ve quien puede resolverla: admin, Direccion / Subdireccion
+      // Medica y los jefes de division (cada uno solo con lo de su ambito).
+      ...(isAdmin || puedeHabilitarTableros
         ? [
             {
               id: "panel-requests",
