@@ -3380,13 +3380,17 @@ function buildSepsEffectiveRows(
   table: SepsTable,
   extraRows: SepsExtraRow[],
   hiddenKeys: string[],
+  // Filas que el administrador creo desde la ESTRUCTURA (sepsLayouts). Ya vienen
+  // dentro de table.rows con sus grupos/total, pero hay que marcarlas como propias
+  // para que muestren las acciones de fila (convertir en total, renombrar, etc.).
+  layoutExtraKeys?: Set<string>,
 ): (SepsRow & { isExtra?: boolean })[] {
   const hidden = new Set(hiddenKeys);
   const groupsOf = (r: SepsRow): string[] =>
     r.groups && r.groups.length > 0 ? r.groups : r.group ? [r.group] : [];
   const list: (SepsRow & { isExtra?: boolean })[] = table.rows
     .filter((r) => !hidden.has(r.key))
-    .map((r) => ({ ...r }));
+    .map((r) => ({ ...r, isExtra: layoutExtraKeys?.has(r.key) === true }));
   const groupByKey = new Map<string, string[]>(list.map((r) => [r.key, groupsOf(r)]));
   const extras = extraRows.filter((e) => e.tableId === table.id && !hidden.has(e.key));
   const insertedAfter: Record<string, number> = {};
@@ -3815,6 +3819,16 @@ function buildAvancePeriods(currentPeriodId: string): string[] {
 }
 
 // Cuenta, por modulo, cuantas dependencias completaron su captura en un tablero.
+// Servicios de PERC cuyas filas son TODAS de valor fijo (Aseo = metros cuadrados por
+// centro de costo; Vacunacion = 1 en Administracion). Nadie los digita: el sistema los
+// deja cargados hasta que ESDOMED indique un cambio. Por eso en el monitoreo cuentan
+// como COMPLETOS desde el primer dia del mes, igual que si alguien los hubiera llenado.
+const PERC_FIXED_SERVICE_IDS = new Set(
+  SERVICE_DEFINITIONS.filter(
+    (service) => service.rows.length > 0 && service.rows.every(isFixedRow),
+  ).map((service) => service.id),
+);
+
 function computeModuleStats(groups: PublicDashboardGroup[]) {
   const base: Record<string, { done: number; total: number }> = {
     PERC: { done: 0, total: 0 },
@@ -5444,8 +5458,23 @@ export default function Home() {
       })),
     [],
   );
-  const dashboardGroups =
-    publicDashboardGroups.length > 0 ? publicDashboardGroups : fallbackDashboardGroups;
+  // Tablero general + el overlay de los servicios de datos fijos (Aseo, Vacunacion):
+  // su PERC siempre se ve completo, sin depender de que alguien lo guarde.
+  const dashboardGroups = useMemo(() => {
+    const base =
+      publicDashboardGroups.length > 0 ? publicDashboardGroups : fallbackDashboardGroups;
+    if (PERC_FIXED_SERVICE_IDS.size === 0) return base;
+    return base.map((group) => ({
+      ...group,
+      services: group.services.map((service) => {
+        if (!PERC_FIXED_SERVICE_IDS.has(service.id)) return service;
+        const modules = service.modules.map((mod) =>
+          mod.label === "PERC" ? { ...mod, completed: true } : mod,
+        );
+        return { ...service, modules, completed: modules.every((mod) => mod.completed) };
+      }),
+    }));
+  }, [publicDashboardGroups, fallbackDashboardGroups]);
   // Estadistica general por modulo (cuantas dependencias completaron PERC/SEPS/Horas).
   const moduleStats = useMemo(() => computeModuleStats(dashboardGroups), [dashboardGroups]);
 
@@ -5713,6 +5742,16 @@ export default function Home() {
     () => applySepsLayout(sepsBaseTemplate, sepsEditingLayout ? sepsLayoutDraft : sepsLayout),
     [sepsBaseTemplate, sepsLayout, sepsLayoutDraft, sepsEditingLayout],
   );
+  // Keys de las filas creadas por el administrador desde la ESTRUCTURA del SEPS.
+  const sepsLayoutExtraKeys = useMemo(() => {
+    const layout = sepsEditingLayout ? sepsLayoutDraft : sepsLayout;
+    const keys = new Set<string>();
+    for (const extra of layout?.extraRows ?? []) keys.add(extra.key);
+    for (const tabla of layout?.extraTables ?? []) {
+      for (const fila of tabla.rows ?? []) keys.add(fila.key);
+    }
+    return keys;
+  }, [sepsLayout, sepsLayoutDraft, sepsEditingLayout]);
   const horasTemplate = useMemo(
     () => getHorasTemplate(effectiveServiceId),
     [effectiveServiceId],
@@ -5723,6 +5762,36 @@ export default function Home() {
   );
   const sepsPeriodId = sepsWindow.periodId;
   const sepsPeriodLabel = useMemo(() => getPeriodLabel(sepsPeriodId), [sepsPeriodId]);
+  // ¿El mes que se esta monitoreando ya CERRO en este modulo? Se usa solo para pintar
+  // el monitoreo: mientras la ventana esta abierta un servicio esta "completo" o
+  // "pendiente"; una vez pasada la hora de cierre pasa a "Cerrado completo" o
+  // "Cerrado sin completar". No toca la logica de captura: solo lee las ventanas.
+  // Al cambiar el mes (dia 1 a las 00:00) el periodo se corre solo y todo vuelve a
+  // empezar en "pendiente", sin nada que reiniciar a mano.
+  function isMonitorPeriodClosed(statsLabel: "PERC" | "SEPS" | "Horas"): boolean {
+    if (statsLabel === "SEPS") {
+      // SEPS: cerrado durante la transicion (entre el cierre y la reapertura del dia 6).
+      // En fase "captura" el monitoreo ya mira el mes en curso, que esta abierto.
+      return sepsWindow.phase === "transicion";
+    }
+    const win = getCaptureWindow(
+      now,
+      currentBlockedDates,
+      statsLabel === "PERC" ? "perc" : "distribucion",
+    );
+    const last = win.lastOpenDay;
+    if (!last) return false;
+    const cierre = new Date(
+      last.getFullYear(),
+      last.getMonth(),
+      last.getDate(),
+      CAPTURE_CLOSE_HOUR,
+      CAPTURE_CLOSE_MINUTE,
+      0,
+      0,
+    );
+    return now.getTime() >= cierre.getTime();
+  }
   const sepsDayColumns = useMemo(() => getDayColumns(sepsPeriodId), [sepsPeriodId]);
   const sepsCaptureOpen = useMemo(() => {
     const override = sepsTemplate
@@ -9572,9 +9641,12 @@ export default function Home() {
     if (!table) {
       return;
     }
-    const rows = buildSepsEffectiveRows(table, sepsExtraRows, sepsHiddenKeys).filter(
-      (r) => !r.readOnly,
-    );
+    const rows = buildSepsEffectiveRows(
+      table,
+      sepsExtraRows,
+      sepsHiddenKeys,
+      sepsLayoutExtraKeys,
+    ).filter((r) => !r.readOnly);
     const days = sepsDayColumns;
     const rIdx = rows.findIndex((r) => r.key === rowKey);
     const cIdx = days.indexOf(day);
@@ -9827,7 +9899,7 @@ export default function Home() {
       kind: "text",
       title: "Construir bloque",
       description:
-        "Viene con una estructura de ejemplo: cambiale los nombres, borrá lo que no uses y agregá las líneas que falten. Primera línea = título grande. «Subtítulo > fila» agrupa. Una línea que empieza con «=» es un TOTAL que se calcula solo.",
+        "Cambiale solo los nombres: la estructura ya viene armada igual que los bloques oficiales. Regla: 1ª línea = título grande · «Subtítulo > fila» agrupa (Resultado) · una línea que empieza con «=» NO se digita, se suma sola (así es Tamizada). Abajo ves cómo va a quedar antes de crearlo.",
       label: "Título y filas (una por línea)",
       // Viene con la estructura ya armada: solo hay que cambiarle los nombres.
       value: [
@@ -12870,7 +12942,12 @@ export default function Home() {
             // a un arreglo de grupos (externo -> interno); cada nivel se dibuja en su
             // propia columna con celdas combinadas (rowspan).
             // Filas EFECTIVAS: plantilla + filas agregadas a mano - filas ocultas.
-            const effRows = buildSepsEffectiveRows(table, sepsExtraRows, sepsHiddenKeys);
+            const effRows = buildSepsEffectiveRows(
+              table,
+              sepsExtraRows,
+              sepsHiddenKeys,
+              sepsLayoutExtraKeys,
+            );
             const canManageTabRows = isAdmin || isSupervisor || sepsEditingLayout;
             const rowGroups = effRows.map((row) =>
               row.groups && row.groups.length > 0
@@ -17758,6 +17835,87 @@ export default function Home() {
                     </label>
                   ) : null}
 
+                  {/* VISTA PREVIA del bloque: muestra exactamente como va a quedar antes
+                      de crearlo, para no tener que borrarlo y volver a empezar. Las filas
+                      en ambar son TOTALES (llevan "=" adelante): no se digitan, se suman. */}
+                  {layoutDialog.kind === "text" && layoutDialog.multiline
+                    ? (() => {
+                        const lineas = layoutDialogValue
+                          .split("\n")
+                          .map((linea) => linea.trim())
+                          .filter((linea) => linea !== "");
+                        if (lineas.length === 0) return null;
+                        const tituloPrevio = lineas[0];
+                        const filasPrevias = lineas.slice(1).map((linea) => {
+                          const esTotal = linea.startsWith("=");
+                          const limpia = esTotal ? linea.slice(1).trim() : linea;
+                          const partes = limpia
+                            .split(">")
+                            .map((parte) => parte.trim())
+                            .filter((parte) => parte !== "");
+                          return {
+                            etiqueta: partes[partes.length - 1] || "Total",
+                            sub: partes.slice(0, -1).join(" · "),
+                            esTotal,
+                          };
+                        });
+                        return (
+                          <div
+                            className="mt-4 rounded-2xl border p-3"
+                            style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+                          >
+                            <p
+                              className="text-[10px] font-semibold uppercase tracking-[0.2em]"
+                              style={{ color: "var(--text-faint)" }}
+                            >
+                              Así va a quedar
+                            </p>
+                            <p
+                              className="mt-2 text-[13px] font-bold"
+                              style={{ color: "var(--text)" }}
+                            >
+                              {tituloPrevio}
+                            </p>
+                            {filasPrevias.length === 0 ? (
+                              <p className="mt-1 text-[11.5px]" style={{ color: "var(--text-muted)" }}>
+                                Agregá al menos una fila debajo del título.
+                              </p>
+                            ) : (
+                              <div className="mt-2 space-y-1">
+                                {filasPrevias.map((fila, indice) => (
+                                  <div
+                                    key={`${fila.sub}-${fila.etiqueta}-${indice}`}
+                                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12px]"
+                                    style={{
+                                      background: fila.esTotal
+                                        ? "rgba(203,174,131,0.14)"
+                                        : "var(--surface-3)",
+                                      color: fila.esTotal ? "#cbae83" : "var(--text-muted)",
+                                    }}
+                                  >
+                                    {fila.sub ? (
+                                      <span
+                                        className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                                        style={{ background: "var(--surface-1)", color: "var(--text-faint)" }}
+                                      >
+                                        {fila.sub}
+                                      </span>
+                                    ) : null}
+                                    <span className="min-w-0 flex-1 truncate font-medium">
+                                      {fila.etiqueta}
+                                    </span>
+                                    <span className="shrink-0 text-[10px] font-semibold">
+                                      {fila.esTotal ? "suma sola (no se digita)" : "se digita"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()
+                    : null}
+
                   <div className="mt-6 flex items-center justify-end gap-2">
                     <button
                       type="button"
@@ -18901,8 +19059,16 @@ export default function Home() {
                               <option value="">Sin servicio</option>
                               {SERVICE_DEFINITIONS.map((service) => {
                                 const assignedUser = assignedServiceUsers.get(service.id);
+                                // "Asignado a X" solo bloquea si es OTRO servicio. El servicio que
+                                // esta cuenta ya tiene guardado nunca se bloquea: en varias unidades
+                                // hay 2 cuentas (jefe + digitador) y la tabla de asignaciones solo
+                                // guarda una; bloquearlo impedia volver a guardar la cuenta.
+                                const esSuServicioActual =
+                                  service.id === (selectedUser.serviceId || "") || service.id === draft.serviceId;
                                 const isTakenByAnotherUser =
-                                  Boolean(assignedUser) && assignedUser?.uid !== selectedUser.uid;
+                                  Boolean(assignedUser) &&
+                                  assignedUser?.uid !== selectedUser.uid &&
+                                  !esSuServicioActual;
                                 return (
                                   <option
                                     key={service.id}
@@ -19984,7 +20150,11 @@ export default function Home() {
                   { key: "PERC" as const, titulo: "PERC", periodo: periodId, color: "#38bdf8" },
                   { key: "SEPS" as const, titulo: "SEPS", periodo: sepsPeriodId, color: "#a78bfa" },
                   { key: "Horas" as const, titulo: "Distribución de Horas", periodo: periodId, color: "#34d399" },
-                ].map((col) => ({ ...col, stats: computeMonitorStats(col.key) }));
+                ].map((col) => ({
+                  ...col,
+                  stats: computeMonitorStats(col.key),
+                  cerrado: isMonitorPeriodClosed(col.key),
+                }));
 
                 return (
                   <div
@@ -20057,8 +20227,13 @@ export default function Home() {
                                   {col.stats.pct}%
                                 </span>
                               </div>
-                              <p className="mt-0.5 text-[11px] text-slate-400">
+                              <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
                                 {getPeriodLabel(col.periodo)}
+                                {col.cerrado ? (
+                                  <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-300">
+                                    Cerrado
+                                  </span>
+                                ) : null}
                               </p>
 
                               <div className="mt-3 flex items-end justify-between">
@@ -20070,7 +20245,9 @@ export default function Home() {
                                   </span>
                                 </p>
                                 <p className="text-[11px] text-slate-400">
-                                  {col.stats.pendientes} pendiente{col.stats.pendientes === 1 ? "" : "s"}
+                                  {col.cerrado
+                                    ? `${col.stats.pendientes} sin completar`
+                                    : `${col.stats.pendientes} pendiente${col.stats.pendientes === 1 ? "" : "s"}`}
                                 </p>
                               </div>
 
@@ -20091,11 +20268,24 @@ export default function Home() {
                                 col.stats.items.map((item) => (
                                   <div
                                     key={item.id}
+                                    title={`${item.name} — ${
+                                      col.cerrado
+                                        ? item.done
+                                          ? "Cerrado completo"
+                                          : "Cerrado sin completar"
+                                        : item.done
+                                          ? "Completo"
+                                          : "Pendiente"
+                                    }`}
                                     className="flex items-center gap-2.5 rounded-xl px-2.5 py-2 transition hover:bg-white/5"
                                   >
                                     <span
                                       className={`h-2 w-2 shrink-0 rounded-full ${
-                                        item.done ? "bg-emerald-400" : "bg-rose-400/70"
+                                        item.done
+                                          ? "bg-emerald-400"
+                                          : col.cerrado
+                                            ? "bg-rose-400"
+                                            : "bg-amber-400"
                                       }`}
                                     />
                                     <span
@@ -20175,6 +20365,9 @@ export default function Home() {
                 const ordered = [...statsItems].sort((a, b) =>
                   a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
                 );
+                // Ya paso la hora de cierre del mes: los estados dejan de ser
+                // "completo / pendiente" y pasan a "Cerrado completo / Cerrado sin completar".
+                const cerrado = isMonitorPeriodClosed(statsLabel);
                 return (
                   <div
                     role="dialog"
@@ -20192,8 +20385,13 @@ export default function Home() {
                           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300/90">
                             Avance · {statsLabel}
                           </p>
-                          <h3 className="mt-1 text-xl font-semibold text-white">
+                          <h3 className="mt-1 flex flex-wrap items-center gap-2 text-xl font-semibold text-white">
                             {getPeriodLabel(statsModule === "sesps" ? sepsPeriodId : periodId)}
+                            {cerrado ? (
+                              <span className="rounded-full bg-rose-500/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-rose-300">
+                                Cerrado
+                              </span>
+                            ) : null}
                           </h3>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
@@ -20257,14 +20455,16 @@ export default function Home() {
                             style={{ width: `${pct}%` }}
                           />
                         </div>
-                        <div className="mt-3 flex items-center gap-4 text-xs">
+                        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
                           <span className="flex items-center gap-1.5 text-slate-300">
                             <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                            {completosCount} completos
+                            {completosCount} {cerrado ? "cerrado completo" : "completos"}
                           </span>
                           <span className="flex items-center gap-1.5 text-slate-300">
-                            <span className="h-2 w-2 rounded-full bg-amber-400" />
-                            {incompletosCount} incompletos
+                            <span
+                              className={`h-2 w-2 rounded-full ${cerrado ? "bg-rose-400" : "bg-amber-400"}`}
+                            />
+                            {incompletosCount} {cerrado ? "cerrado sin completar" : "incompletos"}
                           </span>
                         </div>
                       </div>
@@ -20284,17 +20484,31 @@ export default function Home() {
                                 title={
                                   fam
                                     ? `${it.name} — ${fam.done}/${fam.total} (${fam.pct}%)`
-                                    : `${it.name} — ${done ? "Completo" : "Pendiente"}`
+                                    : `${it.name} — ${
+                                        cerrado
+                                          ? done
+                                            ? "Cerrado completo"
+                                            : "Cerrado sin completar"
+                                          : done
+                                            ? "Completo"
+                                            : "Pendiente"
+                                      }`
                                 }
                                 className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2 ${
                                   greenish
                                     ? "border-emerald-400/15 bg-emerald-500/[0.06]"
-                                    : "border-amber-400/15 bg-amber-500/[0.06]"
+                                    : cerrado
+                                      ? "border-rose-400/20 bg-rose-500/[0.07]"
+                                      : "border-amber-400/15 bg-amber-500/[0.06]"
                                 }`}
                               >
                                 <span
                                   className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${
-                                    greenish ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"
+                                    greenish
+                                      ? "bg-emerald-500/15 text-emerald-300"
+                                      : cerrado
+                                        ? "bg-rose-500/15 text-rose-300"
+                                        : "bg-amber-500/15 text-amber-300"
                                   }`}
                                 >
                                   <ServiceIcon serviceId={it.id} className="h-3.5 w-3.5" />
@@ -20305,7 +20519,7 @@ export default function Home() {
                                 {fam ? (
                                   <span
                                     className={`shrink-0 text-[11px] font-bold ${
-                                      done ? "text-emerald-300" : "text-amber-300"
+                                      done ? "text-emerald-300" : cerrado ? "text-rose-300" : "text-amber-300"
                                     }`}
                                   >
                                     {fam.pct}%
@@ -20313,9 +20527,17 @@ export default function Home() {
                                 ) : (
                                   <span
                                     className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                                      done ? "bg-emerald-400" : "bg-amber-400"
+                                      done ? "bg-emerald-400" : cerrado ? "bg-rose-400" : "bg-amber-400"
                                     }`}
-                                    aria-label={done ? "Completo" : "Pendiente"}
+                                    aria-label={
+                                      cerrado
+                                        ? done
+                                          ? "Cerrado completo"
+                                          : "Cerrado sin completar"
+                                        : done
+                                          ? "Completo"
+                                          : "Pendiente"
+                                    }
                                   />
                                 )}
                               </div>
