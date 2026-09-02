@@ -11330,10 +11330,13 @@ export default function Home() {
     setError("");
     setMessage("");
 
-    // El perfil prestado va SIN permisos: aunque algo se escape, no puede editar.
+    // Se conservan sus permisos de GESTION (habilitar tableros, usuarios) para que la
+    // vista sea fiel: si no, desaparecian menus que la persona si tiene. Lo unico que
+    // se apaga es la EDICION de datos, y ademas ningun guardado se ejecuta en este
+    // modo (blockedByGhost corta todas las escrituras).
     setServiceProfile({
       ...target,
-      permissions: { canEdit: false, canManageUsers: false, canToggleCapture: false },
+      permissions: { ...target.permissions, canEdit: false },
     });
   }
 
