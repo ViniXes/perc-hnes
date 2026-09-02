@@ -240,14 +240,9 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
       "713_5-Trabajo social | Entrevista",
     ],
   },
-  {
-    // Docencia e Investigacion es la MISMA unidad que UDP (Unidad de Desarrollo
-    // Profesional). La produccion del centro de costo 702_1 la reporta UDP; esta
-    // entrada queda sin filas para no duplicar el consolidado.
-    id: "docencia-e-investigacion",
-    name: "Docencia e investigacion",
-    rows: [],
-  },
+  // Docencia e Investigacion NO existe como servicio aparte: es la MISMA unidad que
+  // UDP (Unidad de Desarrollo Profesional), que reporta el centro de costo 702_1.
+  // Se quito para que no aparezca duplicada en el monitoreo ni en el consolidado.
   // Servicios con PERC/SERV (productividad por servicio): no usan la grilla de
   // centros de costo, solo unos pocos numeros (ver PERC_SERV_FIELDS en page.tsx).
   {
@@ -348,9 +343,8 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   },
   {
     // UDP: reporta Distribucion de Horas y el PERC de Docencia e Investigacion
-    // (centro de costo 702_1). OJO: esa misma fila la tiene el servicio
-    // "Docencia e investigacion"; el consolidado SUMA las dos, asi que solo una
-    // de las dos cuentas debe llenarla para no duplicar la produccion.
+    // (centro de costo 702_1). Es la UNICA cuenta de esa unidad: el servicio
+    // "Docencia e investigacion" se elimino por ser exactamente la misma.
     id: "udp",
     name: "Unidad de Desarrollo Profesional",
     rows: ["702_1-Docencia e investigacion | Capacitacion"],
