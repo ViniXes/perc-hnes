@@ -2125,19 +2125,32 @@ const PERC_SERV_CONSOLIDADO: {
   serviceId?: string;
   // `key` -> toma el valor del PERC/SERV capturado por ese servicio.
   // `censoRow` -> toma el TOTAL mensual de esa fila del Censo Diario de Pacientes.
-  units: { label: string; key?: string; censoRow?: string }[];
+  // `apiTablero` -> lo trae ESDOMED Services (egresos/ingresos reales del mes).
+  units: { label: string; key?: string; censoRow?: string; apiTablero?: string }[];
 }[] = [
   {
     centro: "66__01101 - Hospitalizacion medicina interna",
-    units: [{ label: "1__Egreso" }, { label: "2__Dco", censoRow: "medicina-interna" }, { label: "6__N. Camas" }],
+    units: [
+      { label: "1__Egreso", apiTablero: "medicina-interna" },
+      { label: "2__Dco", censoRow: "medicina-interna" },
+      { label: "6__N. Camas" },
+    ],
   },
   {
     centro: "95__01206 - Hospitalizacion cirugia general",
-    units: [{ label: "1__Egreso" }, { label: "2__Dco", censoRow: "cirugia" }, { label: "6__N. Camas" }],
+    units: [
+      { label: "1__Egreso", apiTablero: "cirugia" },
+      { label: "2__Dco", censoRow: "cirugia" },
+      { label: "6__N. Camas" },
+    ],
   },
   {
     centro: "745__02014 - Hospitalizacion servicios por convenios",
-    units: [{ label: "1__Egreso" }, { label: "2__Dco", censoRow: "bienestar-magisterial" }, { label: "6__N. Camas" }],
+    units: [
+      { label: "1__Egreso", apiTablero: "convenios" },
+      { label: "2__Dco", censoRow: "bienestar-magisterial" },
+      { label: "6__N. Camas" },
+    ],
   },
   {
     centro: "166__05001 - Unidad de cuidados intensivos",
@@ -2178,7 +2191,7 @@ const PERC_SERV_CONSOLIDADO: {
   },
   {
     centro: "766__70016 - Servicio de apoyo a riiss",
-    units: [{ label: "1__Atencion" }],
+    units: [{ label: "1__Atencion", apiTablero: "apoyo-riiss" }],
   },
 ];
 
@@ -2835,8 +2848,9 @@ function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: stri
 type ConsolidadoUnit = {
   label: string;
   qty: string;
-  source: "servicio" | "censo" | "camas" | "none";
-  // Solo para source "censo": si el mes del Censo esta completo (verde) o no (amarillo).
+  source: "servicio" | "censo" | "camas" | "services" | "none";
+  // Para source "censo": si el mes del Censo esta completo (verde) o no (amarillo).
+  // Para source "services": si el dato llego de ESDOMED Services (verde) o no.
   complete?: boolean;
 };
 type ConsolidadoRow = { centro: string; units: ConsolidadoUnit[] };
@@ -2865,6 +2879,8 @@ function computeConsolidado(
   overview: AdminOverviewEntry[],
   censoInfo: Record<string, CensoRowInfo>,
   camas: Record<string, number> = {},
+  // Totales que devuelve ESDOMED Services para ese mes, por id de tablero.
+  servicesTotals: Record<string, number> = {},
 ): ConsolidadoRow[] {
   const valuesByService = new Map<string, Record<string, Record<string, unknown>>>();
   for (const entry of overview) {
@@ -2896,6 +2912,13 @@ function computeConsolidado(
           qty = ci ? formatConsolidatedNumber(ci.total) : "0";
           source = "censo";
           complete = ci?.complete ?? false;
+        } else if (unit.apiTablero) {
+          // Egresos / ingresos reales del mes, tomados de ESDOMED Services.
+          const dato = servicesTotals[unit.apiTablero];
+          const llego = Number.isFinite(dato);
+          qty = llego ? formatConsolidatedNumber(Number(dato)) : "0";
+          source = "services";
+          complete = llego;
         }
         return { label: unit.label, qty, source, complete };
       }),
@@ -3078,6 +3101,7 @@ function downloadServiceProductionReport(
   periodId: string,
   censoInfo: Record<string, CensoRowInfo> = {},
   camas: Record<string, number> = {},
+  servicesTotals: Record<string, number> = {},
 ) {
   const headerCells = ["Centro de Producción", "Unidades de Producción", "Cantidad"]
     .map(
@@ -3086,7 +3110,7 @@ function downloadServiceProductionReport(
     )
     .join("");
 
-  const bodyRows = computeConsolidado(overview, censoInfo, camas)
+  const bodyRows = computeConsolidado(overview, censoInfo, camas, servicesTotals)
     .map((svc) =>
       svc.units
         .map((unit, index) => {
@@ -3098,7 +3122,7 @@ function downloadServiceProductionReport(
           const qtyStyle =
             unit.source === "camas"
               ? "background:#ffff00;color:#111827;font-weight:700;"
-              : unit.source === "censo"
+              : unit.source === "censo" || unit.source === "services"
                 ? unit.complete
                   ? "background:#dcfce7;color:#166534;font-weight:700;"
                   : "background:#fef9c3;color:#854d0e;font-weight:700;"
@@ -4952,6 +4976,9 @@ export default function Home() {
   // seleccionable y ESTRICTO: el consolidado muestra el censo de ESE mismo mes.
   const [showCensoConsolidadoPreview, setShowCensoConsolidadoPreview] = useState(false);
   const [consolidadoPreview, setConsolidadoPreview] = useState<ConsolidadoRow[] | null>(null);
+  // null = todavia no se consulto; true/false = si la integracion con ESDOMED
+  // Services esta configurada y respondiendo.
+  const [servicesConectado, setServicesConectado] = useState<boolean | null>(null);
   const [consolidadoPeriod, setConsolidadoPeriod] = useState("");
   const [isLoadingConsolidado, setIsLoadingConsolidado] = useState(false);
   const [adminBusyUserId, setAdminBusyUserId] = useState("");
@@ -7214,6 +7241,29 @@ export default function Home() {
     }
   }
 
+  // Trae de ESDOMED Services los totales del mes (egresos de Medicina Interna,
+  // Cirugia y Convenios; ingresos de Apoyo a RIISS). Va por nuestra propia ruta de
+  // servidor para que la llave nunca llegue al navegador. Si Services no responde
+  // o todavia no esta configurado, devuelve {} y el consolidado sigue igual.
+  async function fetchServicesTotals(period: string): Promise<Record<string, number>> {
+    try {
+      const response = await fetch(
+        `/api/services/tableros?mes=${encodeURIComponent(period)}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) return {};
+      const data = (await response.json()) as {
+        configurado?: boolean;
+        totales?: Record<string, number>;
+      };
+      setServicesConectado(data?.configurado === true);
+      return data?.totales ?? {};
+    } catch {
+      setServicesConectado(false);
+      return {};
+    }
+  }
+
   // Carga (o recarga) la previsualizacion del consolidado para un mes exacto: lee
   // la produccion de los servicios y el Censo de ESE mismo mes.
   async function loadConsolidadoPreview(period: string) {
@@ -7228,8 +7278,11 @@ export default function Home() {
         fetchAdminOverviewForPeriod(period),
         fetchCensoInfoForPeriod(period),
       ]);
-      const camas = await loadCamasFijas();
-      setConsolidadoPreview(computeConsolidado(overview, censoInfo, camas));
+      const [camas, servicesTotals] = await Promise.all([
+        loadCamasFijas(),
+        fetchServicesTotals(period),
+      ]);
+      setConsolidadoPreview(computeConsolidado(overview, censoInfo, camas, servicesTotals));
     } catch (previewError) {
       if (await handleFirestoreError(previewError)) {
         return;
@@ -7266,8 +7319,11 @@ export default function Home() {
         fetchAdminOverviewForPeriod(period),
         fetchCensoInfoForPeriod(period),
       ]);
-      const camas = await loadCamasFijas();
-      downloadServiceProductionReport(overview, period, censoInfo, camas);
+      const [camas, servicesTotals] = await Promise.all([
+        loadCamasFijas(),
+        fetchServicesTotals(period),
+      ]);
+      downloadServiceProductionReport(overview, period, censoInfo, camas, servicesTotals);
       setMessage(`Producción de Servicio generada para ${getPeriodLabel(period)}.`);
     } catch (exportError) {
       if (await handleFirestoreError(exportError)) {
@@ -7293,8 +7349,17 @@ export default function Home() {
         fetchAdminOverviewForPeriod(consolidadoPeriod),
         fetchCensoInfoForPeriod(consolidadoPeriod),
       ]);
-      const camas = await loadCamasFijas();
-      downloadServiceProductionReport(overview, consolidadoPeriod, censoInfo, camas);
+      const [camas, servicesTotals] = await Promise.all([
+        loadCamasFijas(),
+        fetchServicesTotals(consolidadoPeriod),
+      ]);
+      downloadServiceProductionReport(
+        overview,
+        consolidadoPeriod,
+        censoInfo,
+        camas,
+        servicesTotals,
+      );
       setShowCensoConsolidadoPreview(false);
       setMessage(
         `Producción de Servicio generada para ${getPeriodLabel(consolidadoPeriod)}.`,
@@ -20599,8 +20664,15 @@ export default function Home() {
                 </div>
 
                 <p className="mt-3 shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] text-slate-400">
-                  Consolidado de <strong className="text-slate-200">{getPeriodLabel(consolidadoPeriod)}</strong>. Los datos que vienen del <strong className="text-slate-200">Censo Diario</strong> de ese mismo mes se pintan en <span className="font-semibold text-amber-300">amarillo</span> mientras el mes está incompleto y en <span className="font-semibold text-emerald-300">verde</span> cuando ya se llenaron todos los días. El total se actualiza automáticamente.
+                  Consolidado de <strong className="text-slate-200">{getPeriodLabel(consolidadoPeriod)}</strong>. Los datos que vienen del <strong className="text-slate-200">Censo Diario</strong> de ese mismo mes se pintan en <span className="font-semibold text-amber-300">amarillo</span> mientras el mes está incompleto y en <span className="font-semibold text-emerald-300">verde</span> cuando ya se llenaron todos los días. Los <strong className="text-slate-200">Egresos</strong> y la <strong className="text-slate-200">Atención de Apoyo a RIISS</strong> los trae ESDOMED Services. El total se actualiza automáticamente.
                 </p>
+                {servicesConectado === false ? (
+                  <p className="mt-2 shrink-0 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                    ESDOMED Services todavía no está conectado: faltan las variables
+                    <strong> SERVICES_API_URL</strong> y <strong>SERVICES_API_KEY</strong> en Vercel.
+                    Mientras tanto los Egresos y la Atención de Apoyo a RIISS quedan en 0.
+                  </p>
+                ) : null}
 
                 <div className="relative mt-4 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-white/10">
                   {isLoadingConsolidado ? (
@@ -20652,7 +20724,7 @@ export default function Home() {
                                   className={`inline-flex min-w-[2.75rem] items-center justify-center gap-1 rounded-full px-2 py-0.5 font-bold ${
                                     unit.source === "camas"
                                       ? "bg-amber-400/20 text-amber-100 ring-1 ring-amber-300/40"
-                                      : unit.source === "censo"
+                                      : unit.source === "censo" || unit.source === "services"
                                       ? unit.complete
                                         ? "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/40"
                                         : "bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40"
@@ -20665,10 +20737,14 @@ export default function Home() {
                                       ? unit.complete
                                         ? "Censo del mes completo"
                                         : "Censo del mes aún incompleto"
-                                      : undefined
+                                      : unit.source === "services"
+                                        ? unit.complete
+                                          ? "Dato traído de ESDOMED Services"
+                                          : "ESDOMED Services no devolvió este dato"
+                                        : undefined
                                   }
                                 >
-                                  {unit.source === "censo" ? (
+                                  {unit.source === "censo" || unit.source === "services" ? (
                                     <span className={`h-1.5 w-1.5 rounded-full ${unit.complete ? "bg-emerald-400" : "bg-amber-400"}`} />
                                   ) : null}
                                   {unit.qty}
