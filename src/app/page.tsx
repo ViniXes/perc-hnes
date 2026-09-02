@@ -9710,9 +9710,17 @@ export default function Home() {
       kind: "text",
       title: "Construir bloque",
       description:
-        "Primera línea: el título grande. Después, una línea por fila. Para agrupar filas bajo un subtítulo, escribí «Subtítulo > fila». Empezá una línea con «=» para que esa fila sea un TOTAL que se calcula solo.",
+        "Viene con una estructura de ejemplo: cambiale los nombres, borrá lo que no uses y agregá las líneas que falten. Primera línea = título grande. «Subtítulo > fila» agrupa. Una línea que empieza con «=» es un TOTAL que se calcula solo.",
       label: "Título y filas (una por línea)",
-      value: "",
+      // Viene con la estructura ya armada: solo hay que cambiarle los nombres.
+      value: [
+        "NUEVO TÍTULO",
+        "Tamizada",
+        "Resultado > Reactiva",
+        "Resultado > No reactiva",
+        "Resultado > Indeterminada",
+        "= Resultado > Total",
+      ].join("\n"),
       multiline: true,
       placeholder:
         "Anticuerpo Hepatitis B Core (AntiHBc)\nTamizada\nResultado > Reactiva\nResultado > No reactiva\nResultado > Indeterminada\n= Resultado > Total",
