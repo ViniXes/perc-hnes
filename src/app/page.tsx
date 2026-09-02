@@ -4741,6 +4741,8 @@ export default function Home() {
     value: string;
     placeholder?: string;
     allowEmpty?: boolean;
+    /** Varias líneas: Enter agrega renglón en vez de confirmar. */
+    multiline?: boolean;
     danger?: boolean;
     confirmLabel: string;
     onConfirm: (value: string) => void;
@@ -9700,31 +9702,69 @@ export default function Home() {
     });
   }
 
-  /** Crea un TÍTULO nuevo dentro de la tabla, con su primera fila. */
+  /** Constructor de bloque: crea el título grande con todas sus filas de una vez.
+   *  Primera línea = título. Cada línea siguiente = una fila; si lleva "Sub > fila"
+   *  esa fila queda agrupada bajo ese subtítulo (como Resultado en el Excel). */
   function handleLayoutAddTitle(tableId: string, afterKey: string) {
     openLayoutDialog({
       kind: "text",
-      title: "Agregar título",
+      title: "Construir bloque",
       description:
-        "Crea un bloque nuevo dentro de la tabla (la celda combinada de la izquierda) con su primera fila. Después le agregás las filas que necesite con el botón +.",
-      label: "Nombre del título",
+        "Primera línea: el título grande. Después, una línea por fila. Para agrupar filas bajo un subtítulo, escribí «Subtítulo > fila».",
+      label: "Título y filas (una por línea)",
       value: "",
-      placeholder: "Ej. EJEMPLO 1",
-      confirmLabel: "Crear título",
+      multiline: true,
+      placeholder:
+        "Anticuerpo Hepatitis B Core (AntiHBc)\nTamizada\nResultado > Reactiva\nResultado > No reactiva\nResultado > Indeterminada",
+      confirmLabel: "Crear bloque",
       onConfirm: (value) => {
-        const titulo = value.trim();
-        if (!titulo) return;
-        const key = `lt-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+        const lineas = value
+          .split("\n")
+          .map((linea) => linea.trim())
+          .filter((linea) => linea !== "");
+
+        if (lineas.length === 0) return;
+
+        const titulo = lineas[0];
+        const filas = lineas.slice(1);
+        const base = Date.now().toString(36);
+
         updateSepsLayoutDraft((draft) => {
-          draft.extraRows.push({
-            tableId,
-            key,
-            label: "Nueva fila",
-            afterKey,
-            groups: [titulo],
+          if (filas.length === 0) {
+            // Solo el título: se crea con una fila para poder renombrarla.
+            draft.extraRows.push({
+              tableId,
+              key: `lt-${base}-0`,
+              label: "Nueva fila",
+              afterKey,
+              groups: [titulo],
+            });
+            return;
+          }
+
+          let ancla = afterKey;
+          filas.forEach((linea, indice) => {
+            const partes = linea
+              .split(">")
+              .map((parte) => parte.trim())
+              .filter((parte) => parte !== "");
+            const etiqueta = partes[partes.length - 1];
+            const subniveles = partes.slice(0, -1);
+            const key = `lt-${base}-${indice}`;
+            draft.extraRows.push({
+              tableId,
+              key,
+              label: etiqueta,
+              afterKey: ancla,
+              groups: [titulo, ...subniveles],
+            });
+            ancla = key;
           });
         });
-        setMessage(`Título "${titulo}" creado. Renombrá su fila y agregá las que falten con +.`);
+
+        setMessage(
+          `Bloque "${titulo}" creado con ${Math.max(filas.length, 1)} fila(s). Revisá el orden con las flechas.`,
+        );
       },
     });
   }
@@ -12722,8 +12762,8 @@ export default function Home() {
                               <button
                                 type="button"
                                 onClick={() => handleLayoutAddTitle(table.id, row.key)}
-                                title="Agregar un título nuevo debajo"
-                                aria-label="Agregar un título nuevo debajo"
+                                title="Construir un bloque nuevo: título + sus filas"
+                                aria-label="Construir un bloque nuevo: título y sus filas"
                                 className="inline-flex h-6 w-6 items-center justify-center rounded-lg font-bold text-slate-400 transition hover:bg-violet-500/10 hover:text-violet-300"
                               >
                                 <span className="text-[13px] leading-none">T</span>
@@ -17355,11 +17395,12 @@ export default function Home() {
                       </span>
                       <textarea
                         autoFocus
-                        rows={2}
+                        rows={layoutDialog.multiline ? 7 : 2}
                         value={layoutDialogValue}
                         placeholder={layoutDialog.placeholder}
                         onChange={(event) => setLayoutDialogValue(event.target.value)}
                         onKeyDown={(event) => {
+                          if (layoutDialog.multiline) return;
                           if (event.key === "Enter" && !event.shiftKey) {
                             event.preventDefault();
                             const clean = layoutDialogValue.trim();
@@ -17386,8 +17427,10 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => {
-                        const clean = layoutDialogValue.trim();
-                        if (layoutDialog.kind === "text" && !clean && !layoutDialog.allowEmpty) return;
+                        const clean = layoutDialog.multiline
+                          ? layoutDialogValue.replace(/^\n+|\n+$/g, "")
+                          : layoutDialogValue.trim();
+                        if (layoutDialog.kind === "text" && !clean.trim() && !layoutDialog.allowEmpty) return;
                         layoutDialog.onConfirm(clean);
                         setLayoutDialog(null);
                       }}
