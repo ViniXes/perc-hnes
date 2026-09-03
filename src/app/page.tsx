@@ -6266,6 +6266,59 @@ export default function Home() {
     firestoreUnavailable,
   ]);
 
+  // Carga el tabulador PERC del servicio que se esta viendo. Antes el PERC solo se
+  // cargaba al elegir un servicio a mano o al iniciar sesion; SEPS y Horas si tenian
+  // su propio efecto. Por eso el MODO VERIFICACION mostraba el PERC vacio aunque el
+  // servicio tuviera datos: se prestaba el perfil pero nadie iba a buscar la tabla.
+  useEffect(() => {
+    if (firestoreUnavailable || !user) {
+      return;
+    }
+    // En historial manda lo que eligio el usuario en el selector de mes.
+    if (percViewPeriod !== null) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      if (!currentService) {
+        if (!cancelled) {
+          setTableValues({});
+          setPercExtraRows([]);
+          setPercHiddenKeys([]);
+          setPercAutoria(null);
+        }
+        return;
+      }
+
+      try {
+        const data = await fetchSavedDataForPeriod(currentService, periodId);
+        if (!cancelled) {
+          setTableValues(data.values);
+          setPercExtraRows(data.extraRows);
+          setPercHiddenKeys(data.hiddenKeys);
+          setPercAutoria(data.autoria);
+        }
+      } catch (percError) {
+        if (await handleFirestoreError(percError)) {
+          return;
+        }
+        if (!cancelled) {
+          setTableValues(buildEmptyTable(currentService));
+          setPercExtraRows([]);
+          setPercHiddenKeys([]);
+          setPercAutoria(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentService?.id, periodId, user, firestoreUnavailable]);
+
   // Carga el tabulador SEPS del servicio logueado para el periodo activo de su ventana.
   useEffect(() => {
     if (firestoreUnavailable || !user) {
@@ -11867,6 +11920,7 @@ export default function Home() {
     setShowSignupRequestsModal(false);
     setShowDistribuidaPreview(false);
     setAdminSelectedServiceId("");
+    setPercViewPeriod(null);
     setMobileView("home");
     setError("");
     setMessage("");
@@ -11884,6 +11938,7 @@ export default function Home() {
     setGhostUid("");
     setGhostName("");
     setAdminSelectedServiceId("");
+    setPercViewPeriod(null);
     setMobileView("home");
     setError("");
     setMessage("");
