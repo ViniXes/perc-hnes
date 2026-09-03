@@ -182,8 +182,10 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     rows: ["761_1-Saneamiento ambiental | Inspeccion"],
   },
   {
+    // Servicios Generales / Aseo: reporta PERC (metros cuadrados, valor fijo) y
+    // Distribucion de Horas. NO tiene SEPS.
     id: "aseo",
-    name: "Aseo",
+    name: "Servicios generales/aseo",
     rows: ["648_1-Aseo | Metro cuadrado"],
   },
   // Almacen lo capturan por separado TRES servicios/areas con la MISMA fila 721_1

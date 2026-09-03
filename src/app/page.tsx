@@ -638,9 +638,16 @@ const SIGNUP_DIVISIONS: { key: string; label: string; jefeLabel: string | null }
 // Terminos extra de busqueda por servicio (p.ej. siglas), en minusculas. Permiten
 // encontrar un servicio por su acronimo aunque el nombre visible sea el completo.
 const SERVICE_SEARCH_ALIASES: Record<string, string[]> = {
+  aseo: ["aseo", "servicios generales"],
   udp: ["udp"],
   ucp: ["ucp"],
   "gestion-documental": ["ugd", "ugda"],
+};
+
+// Servicio -> centro de costo PROPIO, cuando el nombre del servicio no coincide
+// literalmente con el del centro. Ese centro queda bloqueado en su propio PERC.
+const PERC_SELF_HEADER_BY_SERVICE: Record<string, string> = {
+  aseo: "648-Aseo",
 };
 
 // Familias de subservicios que se agrupan bajo un padre desplegable en el buscador
@@ -5507,6 +5514,13 @@ export default function Home() {
   // centro de costo (ej. Banco de Sangre -> 575). Esa celda queda bloqueada.
   const percSelfHeader = useMemo(() => {
     if (!currentService) return null;
+    // Excepciones: servicios cuyo NOMBRE ya no coincide con el del centro de costo
+    // (p. ej. "Servicios generales/aseo" -> centro "648-Aseo"). Sin esto se perderia
+    // el bloqueo de su propia columna.
+    const explicito = PERC_SELF_HEADER_BY_SERVICE[currentService.id];
+    if (explicito) {
+      return TABULATOR_HEADERS.find((h) => h === explicito) ?? null;
+    }
     const name = currentService.name.trim().toLowerCase();
     return (
       TABULATOR_HEADERS.find(
