@@ -672,7 +672,7 @@ const VERIFICACION_SUMAS: {
     titulo: "Extracorpórea (Hemodiálisis)",
     detalle: "UCI Extracorporea + MI/Extracorporea",
     bloque: "268-Hemodialisis",
-    servicios: ["hemodialisis", "hemodialisis-medicina-interna"],
+    servicios: ["hemodialisis-medicina-interna", "hemodialisis"],
     filas: [
       "268_1-Hemodialisis | Procedimiento",
       "268_2-Hemodialisis | Paciente",
@@ -18000,87 +18000,108 @@ export default function Home() {
                           <strong className={isLightPanelTheme ? "text-slate-800" : "text-slate-200"}>{grupo.bloque}</strong>
                         </p>
 
-                        {grupo.filas.map((fila) => {
-                          const etiquetaFila = fila.includes("|") ? fila.split("|")[1].trim() : fila;
-                          // Solo los centros de costo donde alguno de los dos cargó algo.
-                          const centros = TABULATOR_HEADERS.filter((header) =>
-                            grupo.servicios.some((sid) => num(sid, fila, header) !== 0),
-                          );
-                          const totalDe = (sid: string) =>
-                            TABULATOR_HEADERS.reduce((acc, h) => acc + num(sid, fila, h), 0);
-                          const ocultos = TABULATOR_HEADERS.length - centros.length;
-                          return (
-                            <div key={fila} className="mt-3">
-                              <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-                                {etiquetaFila}
+                        {(() => {
+                          // UNA sola tabla por grupo. Cada linea es una unidad de
+                          // produccion + un centro de costo donde alguno de los dos
+                          // cargo algo. Asi Extracorporea (4 unidades) se lee igual
+                          // de facil que Almacen (1 unidad).
+                          const varias = grupo.filas.length > 1;
+                          const lineas: { fila: string; etiqueta: string; header: string }[] = [];
+                          for (const fila of grupo.filas) {
+                            const etiqueta = fila.includes("|") ? fila.split("|")[1].trim() : fila;
+                            for (const header of TABULATOR_HEADERS) {
+                              if (grupo.servicios.some((sid) => num(sid, fila, header) !== 0)) {
+                                lineas.push({ fila, etiqueta, header });
+                              }
+                            }
+                          }
+                          if (lineas.length === 0) {
+                            return (
+                              <p className={`mt-3 text-[12px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
+                                Ninguno de los dos cargó datos en este mes.
                               </p>
-                              {centros.length === 0 ? (
-                                <p className={`mt-1 text-[12px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
-                                  Ninguno de los dos cargó datos en esta fila.
-                                </p>
-                              ) : (
-                                <div className="show-scrollbar mt-2 overflow-x-auto">
-                                  <table className={`w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
-                                    <thead>
-                                      <tr className={isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}>
-                                        <th className="border-b border-white/10 px-3 py-2 text-left font-semibold">
-                                          Centro de costo
-                                        </th>
+                            );
+                          }
+                          const totalDe = (sid: string) =>
+                            lineas.reduce((acc, l) => acc + num(sid, l.fila, l.header), 0);
+                          return (
+                            <div className="show-scrollbar mt-3 overflow-x-auto">
+                              <table className={`w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+                                <thead>
+                                  <tr className={isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}>
+                                    {varias ? (
+                                      <th className="border-b border-white/10 px-3 py-2 text-left font-semibold">
+                                        Unidad
+                                      </th>
+                                    ) : null}
+                                    <th className="border-b border-white/10 px-3 py-2 text-left font-semibold">
+                                      Centro de costo
+                                    </th>
+                                    {grupo.servicios.map((sid) => (
+                                      <th key={sid} className="border-b border-white/10 px-3 py-2 text-center font-semibold">
+                                        {nombreDe(sid)}
+                                      </th>
+                                    ))}
+                                    <th className="border-b border-white/10 px-3 py-2 text-center font-bold text-amber-300">
+                                      Suma
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {lineas.map((linea, indice) => {
+                                    const suma = grupo.servicios.reduce(
+                                      (acc, sid) => acc + num(sid, linea.fila, linea.header),
+                                      0,
+                                    );
+                                    const nuevaUnidad =
+                                      indice === 0 || lineas[indice - 1].fila !== linea.fila;
+                                    return (
+                                      <tr
+                                        key={`${linea.fila}-${linea.header}`}
+                                        className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}
+                                      >
+                                        {varias ? (
+                                          <td className={`px-3 py-1.5 font-semibold ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                                            {nuevaUnidad ? linea.etiqueta : ""}
+                                          </td>
+                                        ) : null}
+                                        <td className="px-3 py-1.5">{linea.header}</td>
                                         {grupo.servicios.map((sid) => (
-                                          <th key={sid} className="border-b border-white/10 px-3 py-2 text-center font-semibold">
-                                            {nombreDe(sid)}
-                                          </th>
-                                        ))}
-                                        <th className="border-b border-white/10 px-3 py-2 text-center font-bold text-amber-300">
-                                          Suma
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {centros.map((header) => {
-                                        const suma = grupo.servicios.reduce(
-                                          (acc, sid) => acc + num(sid, fila, header),
-                                          0,
-                                        );
-                                        return (
-                                          <tr key={header} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
-                                            <td className="px-3 py-1.5">{header}</td>
-                                            {grupo.servicios.map((sid) => (
-                                              <td key={sid} className="px-3 py-1.5 text-center">
-                                                {formatearNumeroSimple(num(sid, fila, header))}
-                                              </td>
-                                            ))}
-                                            <td className={`px-3 py-1.5 text-center font-bold ${isLightPanelTheme ? "bg-amber-50 text-amber-800" : "bg-amber-500/10 text-amber-200"}`}>
-                                              {formatearNumeroSimple(suma)}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                      <tr className={`border-t-2 ${isLightPanelTheme ? "border-slate-300 bg-slate-100" : "border-white/20 bg-white/5"}`}>
-                                        <td className="px-3 py-2 font-bold">TOTAL de la fila</td>
-                                        {grupo.servicios.map((sid) => (
-                                          <td key={sid} className="px-3 py-2 text-center font-bold">
-                                            {formatearNumeroSimple(totalDe(sid))}
+                                          <td key={sid} className="px-3 py-1.5 text-center">
+                                            {formatearNumeroSimple(num(sid, linea.fila, linea.header))}
                                           </td>
                                         ))}
-                                        <td className={`px-3 py-2 text-center font-bold ${isLightPanelTheme ? "bg-amber-100 text-amber-900" : "bg-amber-500/20 text-amber-100"}`}>
-                                          {formatearNumeroSimple(
-                                            grupo.servicios.reduce((acc, sid) => acc + totalDe(sid), 0),
-                                          )}
+                                        <td className={`px-3 py-1.5 text-center font-bold ${isLightPanelTheme ? "bg-amber-50 text-amber-800" : "bg-amber-500/10 text-amber-200"}`}>
+                                          {formatearNumeroSimple(suma)}
                                         </td>
                                       </tr>
-                                    </tbody>
-                                  </table>
-                                  {ocultos > 0 ? (
-                                    <p className={`mt-1 text-[10.5px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
-                                      Se ocultaron {ocultos} centro(s) de costo donde ambos van en cero.
-                                    </p>
-                                  ) : null}
-                                </div>
-                              )}
+                                    );
+                                  })}
+                                  <tr className={`border-t-2 ${isLightPanelTheme ? "border-slate-300 bg-slate-100" : "border-white/20 bg-white/5"}`}>
+                                    <td className="px-3 py-2 font-bold" colSpan={varias ? 2 : 1}>
+                                      TOTAL
+                                    </td>
+                                    {grupo.servicios.map((sid) => (
+                                      <td key={sid} className="px-3 py-2 text-center font-bold">
+                                        {formatearNumeroSimple(totalDe(sid))}
+                                      </td>
+                                    ))}
+                                    <td className={`px-3 py-2 text-center font-bold ${isLightPanelTheme ? "bg-amber-100 text-amber-900" : "bg-amber-500/20 text-amber-100"}`}>
+                                      {formatearNumeroSimple(
+                                        grupo.servicios.reduce((acc, sid) => acc + totalDe(sid), 0),
+                                      )}
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                              <p className={`mt-1.5 text-[10.5px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
+                                Solo se listan los centros de costo donde alguno de los dos cargó algo.
+                                La columna <strong>Suma</strong> es lo que pasa a Producción Distribuida
+                                en el bloque {grupo.bloque}.
+                              </p>
                             </div>
                           );
-                        })}
+                        })()}
                       </div>
                     );
                   })}
