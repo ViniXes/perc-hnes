@@ -3502,38 +3502,74 @@ type SepsData = {
   comments: SepsComment[];
 };
 
+/**
+ * Suma los SEPS de las unidades que alimentan un consolidado (mismas claves de
+ * fila y de dia). Devuelve la matriz completa, con "" donde nadie cargo nada.
+ * Tambien informa cuantas de esas unidades tenian datos, para poder avisarlo.
+ */
+async function sumarConsolidadoSeps(
+  template: SepsTemplate,
+  periodId: string,
+): Promise<{ values: SepsValues; fuentesConDatos: number; fuentes: number }> {
+  const base = buildEmptySeps(template, periodId);
+  const fuentes = template.consolidatesFrom ?? [];
+  const sums: Record<string, Record<string, number>> = {};
+  let fuentesConDatos = 0;
+
+  for (const srcId of fuentes) {
+    const src = await getDoc(doc(db, "sepsTabulators", `${periodId}__${srcId}`));
+    if (!src.exists()) continue;
+    const srcVals =
+      (src.data() as { values?: Record<string, Record<string, unknown>> }).values || {};
+    let tuvoAlgo = false;
+    for (const rowKey of Object.keys(srcVals)) {
+      for (const day of Object.keys(srcVals[rowKey] || {})) {
+        const raw = (srcVals[rowKey] || {})[day];
+        if (raw === "" || raw === null || raw === undefined) continue;
+        const n = Number(raw);
+        if (!Number.isFinite(n)) continue;
+        if (!sums[rowKey]) sums[rowKey] = {};
+        sums[rowKey][day] = (sums[rowKey][day] || 0) + n;
+        tuvoAlgo = true;
+      }
+    }
+    if (tuvoAlgo) fuentesConDatos += 1;
+  }
+
+  const values: SepsValues = {};
+  for (const rowKey of Object.keys(base)) {
+    values[rowKey] = {};
+    for (const day of Object.keys(base[rowKey])) {
+      const s = sums[rowKey]?.[day];
+      values[rowKey][day] = s === undefined ? "" : String(s);
+    }
+  }
+  return { values, fuentesConDatos, fuentes: fuentes.length };
+}
+
 async function fetchSepsDataForPeriod(
   template: SepsTemplate,
   periodId: string,
 ): Promise<SepsData> {
-  // Consolidado (solo lectura): suma los SEPS de varios servicios (mismas claves de fila).
+  // Consolidado: arranca con la SUMA de sus unidades, pero si alguien ya lo reviso
+  // y lo guardo a mano, manda lo guardado (se puede volver a sumar con el boton
+  // "Recalcular"). Antes era de solo lectura y no habia forma de corregirlo.
   if (template.consolidatesFrom && template.consolidatesFrom.length > 0) {
-    const base = buildEmptySeps(template, periodId);
-    const sums: Record<string, Record<string, number>> = {};
-    for (const srcId of template.consolidatesFrom) {
-      const src = await getDoc(doc(db, "sepsTabulators", `${periodId}__${srcId}`));
-      if (!src.exists()) continue;
-      const srcVals =
-        (src.data() as { values?: Record<string, Record<string, unknown>> }).values || {};
-      for (const rowKey of Object.keys(srcVals)) {
-        for (const day of Object.keys(srcVals[rowKey] || {})) {
-          const raw = (srcVals[rowKey] || {})[day];
-          if (raw === "" || raw === null || raw === undefined) continue;
-          const n = Number(raw);
-          if (!Number.isFinite(n)) continue;
-          if (!sums[rowKey]) sums[rowKey] = {};
-          sums[rowKey][day] = (sums[rowKey][day] || 0) + n;
-        }
+    const propio = await getDoc(
+      doc(db, "sepsTabulators", `${periodId}__${template.serviceId}`),
+    );
+    if (propio.exists()) {
+      const data = propio.data() as { values?: SepsValues; comments?: unknown };
+      if (data.values && Object.keys(data.values).length > 0) {
+        return {
+          values: data.values,
+          extraRows: [],
+          hiddenKeys: [],
+          comments: Array.isArray(data.comments) ? (data.comments as SepsComment[]) : [],
+        };
       }
     }
-    const values: SepsValues = {};
-    for (const rowKey of Object.keys(base)) {
-      values[rowKey] = {};
-      for (const day of Object.keys(base[rowKey])) {
-        const s = sums[rowKey]?.[day];
-        values[rowKey][day] = s === undefined ? "" : String(s);
-      }
-    }
+    const { values } = await sumarConsolidadoSeps(template, periodId);
     return { values, extraRows: [], hiddenKeys: [], comments: [] };
   }
 
@@ -10683,14 +10719,37 @@ export default function Home() {
     }
   }
 
+  /** Vuelve a traer la SUMA de las unidades que alimentan un consolidado y la deja
+   *  cargada en pantalla (todavia sin guardar: se revisa y luego se toca Guardar). */
+  async function handleRecalcularConsolidado() {
+    if (blockedByGhost()) return;
+    if (!sepsTemplate?.consolidatesFrom || firestoreUnavailable) return;
+    const periodo = sepsViewPeriod ?? sepsPeriodId;
+    setIsLoadingSeps(true);
+    setError("");
+    setMessage("");
+    try {
+      const { values, fuentesConDatos, fuentes } = await sumarConsolidadoSeps(
+        sepsTemplate,
+        periodo,
+      );
+      setSepsValues(values);
+      setMessage(
+        fuentesConDatos === 0
+          ? `Ninguna de las ${fuentes} unidades tiene SEPS cargado en ${getPeriodLabel(periodo)}: la suma queda en cero. Podés digitarlo a mano.`
+          : `Suma recalculada de ${fuentesConDatos} de ${fuentes} unidades. Revisá y tocá «Guardar» para dejarla fija.`,
+      );
+    } catch (recalcError) {
+      if (await handleFirestoreError(recalcError)) return;
+      setError("No pudimos recalcular la suma de las unidades.");
+    } finally {
+      setIsLoadingSeps(false);
+    }
+  }
+
   async function handleSaveSeps() {
     if (blockedByGhost()) return;
     if (!user || !sepsTemplate || !serviceProfile || firestoreUnavailable) {
-      return;
-    }
-
-    // El consolidado es de solo lectura (suma calculada): no se guarda.
-    if (sepsTemplate.consolidatesFrom) {
       return;
     }
 
@@ -12695,9 +12754,9 @@ export default function Home() {
     const activeSepsPeriod = sepsViewPeriod ?? sepsPeriodId;
     const isSepsHistory = sepsViewPeriod !== null;
     const sepsHistReadOnly = isSepsHistory && !isAdmin;
+    // Los consolidados YA NO son de solo lectura: traen la suma de sus unidades y
+    // se pueden corregir a mano (con el boton "Recalcular" para volver a la suma).
     const sepsEditingBlocked = ghostUid
-      ? true
-      : sepsTemplate?.consolidatesFrom
       ? true
       : isAdmin || isSepsStaff
         ? false
@@ -12727,6 +12786,26 @@ export default function Home() {
               {sepsTemplate.displayName ?? currentService?.name ?? sepsTemplate.serviceId} · {sepsPeriodLabel} ·{" "}
               {sepsTemplate.establishment}
             </p>
+            {/* Consolidado: se explica de dónde salen los números y que se puede corregir. */}
+            {sepsTemplate.consolidatesFrom ? (
+              <div
+                className={`mt-2 rounded-xl border px-3 py-2 text-[11.5px] leading-relaxed ${
+                  isLightPanelTheme
+                    ? "border-amber-300/50 bg-amber-50 text-amber-900"
+                    : "border-amber-400/25 bg-amber-500/10 text-amber-100"
+                }`}
+              >
+                <strong>Tabulador consolidado.</strong> Arranca con la suma del SEPS de{" "}
+                {sepsTemplate.consolidatesFrom.length} unidades:{" "}
+                {sepsTemplate.consolidatesFrom
+                  .map((id) => getServiceById(id)?.name ?? id)
+                  .join(" · ")}
+                . Si sale en blanco es porque esas unidades todavía no cargaron su SEPS del mes.
+                Podés <strong>digitar y corregir</strong> lo que haga falta y guardarlo: a partir de
+                ahí manda lo guardado. Con <strong>«Recalcular desde las unidades»</strong> volvés a
+                traer la suma.
+              </div>
+            ) : null}
           </div>
           <div className="flex flex-col items-start gap-2 lg:items-end">
             <div className="flex flex-wrap items-center gap-2">
@@ -13992,6 +14071,21 @@ export default function Home() {
                     className="hidden"
                   />
                 </>
+              ) : null}
+              {sepsTemplate?.consolidatesFrom ? (
+                <button
+                  type="button"
+                  onClick={() => void handleRecalcularConsolidado()}
+                  disabled={isLoadingSeps || sepsEditingBlocked}
+                  title="Vuelve a sumar el SEPS de las unidades que alimentan este consolidado"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                    <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                    <path d="M21 3v6h-6" />
+                  </svg>
+                  {isLoadingSeps ? "Sumando…" : "Recalcular desde las unidades"}
+                </button>
               ) : null}
               {!isSepsHistory ? (
                 <button
