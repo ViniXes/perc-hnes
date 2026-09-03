@@ -3374,7 +3374,36 @@ function sortManagedUsers(users: ManagedUser[]) {
 
 // Fila PERC agregada a mano (admin/supervisor). `afterKey` = fila tras la cual va.
 type PercExtraRow = { key: string; label: string; afterKey: string };
-type PercData = { values: TableValues; extraRows: PercExtraRow[]; hiddenKeys: string[] };
+// Quien guardo por ultima vez un tabulador y cuando. Se muestra en pantalla para
+// poder responder "¿quien llenó esto?" sin tener que abrir la base de datos.
+type PercAutoria = { usuario: string; fecha: string } | null;
+type PercData = {
+  values: TableValues;
+  extraRows: PercExtraRow[];
+  hiddenKeys: string[];
+  autoria: PercAutoria;
+};
+
+/** "hcardoza@perc-hnes.app" -> "hcardoza". Deja igual cualquier otro correo. */
+function usuarioDeCorreo(correo: string): string {
+  const limpio = (correo || "").trim();
+  if (!limpio) return "";
+  return limpio.endsWith("@perc-hnes.app") ? limpio.split("@")[0] : limpio;
+}
+
+/** Fecha y hora legibles de un Timestamp de Firestore (o "" si no hay). */
+function fechaLegible(valor: unknown): string {
+  const ts = valor as { toDate?: () => Date } | undefined;
+  const fecha = typeof ts?.toDate === "function" ? ts.toDate() : null;
+  if (!fecha || Number.isNaN(fecha.getTime())) return "";
+  return fecha.toLocaleString("es-SV", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 async function fetchSavedDataForPeriod(
   service: ServiceDefinition,
@@ -3383,19 +3412,24 @@ async function fetchSavedDataForPeriod(
   const snapshot = await getDoc(doc(db, "serviceTabulators", `${periodId}__${service.id}`));
 
   if (!snapshot.exists()) {
-    return { values: buildEmptyTable(service), extraRows: [], hiddenKeys: [] };
+    return { values: buildEmptyTable(service), extraRows: [], hiddenKeys: [], autoria: null };
   }
 
   const data = snapshot.data() as {
     values?: Record<string, Record<string, unknown>>;
     extraRows?: PercExtraRow[];
     hiddenKeys?: string[];
+    userEmail?: string;
+    updatedAt?: unknown;
   };
   const extraRows = Array.isArray(data.extraRows) ? data.extraRows : [];
+  const usuario = usuarioDeCorreo(typeof data.userEmail === "string" ? data.userEmail : "");
+  const fecha = fechaLegible(data.updatedAt);
   return {
     values: mergeWithTemplate(service, data.values, extraRows.map((e) => e.key)),
     extraRows,
     hiddenKeys: Array.isArray(data.hiddenKeys) ? data.hiddenKeys : [],
+    autoria: usuario || fecha ? { usuario, fecha } : null,
   };
 }
 
@@ -4846,6 +4880,8 @@ export default function Home() {
   // Filas PERC agregadas a mano y filas oficiales ocultas (admin/supervisores),
   // por servicio+mes. Se guardan en el doc serviceTabulators junto con los valores.
   const [percExtraRows, setPercExtraRows] = useState<PercExtraRow[]>([]);
+  // Quién guardó por última vez el PERC del servicio que se está viendo.
+  const [percAutoria, setPercAutoria] = useState<PercAutoria>(null);
   const [percHiddenKeys, setPercHiddenKeys] = useState<string[]>([]);
   const [sepsValues, setSepsValues] = useState<SepsValues>({});
   // Filas agregadas a mano y filas ocultas del SEPS (admin/supervisores). Se
@@ -6915,11 +6951,13 @@ export default function Home() {
             setTableValues(data.values);
             setPercExtraRows(data.extraRows);
             setPercHiddenKeys(data.hiddenKeys);
+            setPercAutoria(data.autoria);
           }
         } else if (!cancelled) {
           setTableValues({});
           setPercExtraRows([]);
           setPercHiddenKeys([]);
+          setPercAutoria(null);
         }
 
         if (profile.permissions.canManageUsers || profile.role === "admin") {
@@ -7023,6 +7061,7 @@ export default function Home() {
       setTableValues(values);
       setPercExtraRows(data.extraRows);
       setPercHiddenKeys(data.hiddenKeys);
+      setPercAutoria(data.autoria);
 
       if (showEmptyMessage && isEmpty) {
         setMessage("No hay datos guardados todavia para este servicio en el mes actual.");
@@ -7057,6 +7096,7 @@ export default function Home() {
       setTableValues(data.values);
       setPercExtraRows(data.extraRows);
       setPercHiddenKeys(data.hiddenKeys);
+      setPercAutoria(data.autoria);
       setPercViewPeriod(period === periodId ? null : period);
 
       if (period !== periodId) {
@@ -7137,6 +7177,7 @@ export default function Home() {
       setTableValues(data.values);
       setPercExtraRows(data.extraRows);
       setPercHiddenKeys(data.hiddenKeys);
+      setPercAutoria(data.autoria);
     } catch (loadError) {
       if (await handleFirestoreError(loadError)) {
         return;
@@ -7144,6 +7185,7 @@ export default function Home() {
       setTableValues(buildEmptyTable(service));
       setPercExtraRows([]);
       setPercHiddenKeys([]);
+      setPercAutoria(null);
     } finally {
       setIsLoadingData(false);
     }
@@ -9705,6 +9747,16 @@ export default function Home() {
       );
 
       setTableValues(normalizedValues);
+      setPercAutoria({
+        usuario: usuarioDeCorreo(user.email || ""),
+        fecha: new Date().toLocaleString("es-SV", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      });
       await refreshPublicDashboard(false);
 
       setMessage(`Datos guardados correctamente para ${currentService.name} (${targetPeriodLabel}).`);
@@ -11976,10 +12028,12 @@ export default function Home() {
           setTableValues(data.values);
           setPercExtraRows(data.extraRows);
           setPercHiddenKeys(data.hiddenKeys);
+          setPercAutoria(data.autoria);
         } else {
           setTableValues({});
           setPercExtraRows([]);
           setPercHiddenKeys([]);
+          setPercAutoria(null);
         }
       }
 
@@ -17966,6 +18020,23 @@ export default function Home() {
                           ? "Reabierta por un supervisor: podes registrar fuera de tus dias habiles."
                           : `Dia habil ${captureWindow.activeDayNumber} de ${captureWindow.totalDays}.`}
                   </span>
+                  {/* Quién guardó por última vez este tabulador. Responde de una la
+                      pregunta "¿este servicio ya cargó, y quién lo hizo?". */}
+                  {percAutoria ? (
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/[0.06] text-slate-300"
+                      }`}
+                      title="Última cuenta que guardó este tabulador"
+                    >
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                      Guardado por {percAutoria.usuario || "—"}
+                      {percAutoria.fecha ? ` · ${percAutoria.fecha}` : ""}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               {getPercServFields(currentService.id) ? (
