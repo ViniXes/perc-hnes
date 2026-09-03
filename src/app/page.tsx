@@ -15094,7 +15094,7 @@ export default function Home() {
               ? [{ id: "panel-admin-export", label: "Consolidados PERC", detail: "Descarga consolidado", badge: "XL", icon: "consolidado" }]
               : []),
             ...(isAdmin
-              ? [{ id: "panel-verificar-sumas", label: "Verificar suma almacén", detail: "Servicios que suman en un solo bloque", badge: "VS", icon: "consolidado" }]
+              ? [{ id: "panel-verificar-sumas", label: "Sumas compartidas", detail: "Servicios que suman en un solo bloque", badge: "SC", icon: "consolidado" }]
               : []),
             ...(canManagePerc ? [serviciosChild("PERC Servicios")] : []),
             ...(isAdmin || hasGrant("panel-gastos-perc")
@@ -17925,7 +17925,9 @@ export default function Home() {
           {/* VERIFICAR SUMAS: los pares de servicios que capturan lo mismo y que en el
               consolidado caen en un solo bloque. El monitoreo los muestra por
               separado, así que acá se ven uno al lado del otro con su suma. */}
-          {isAdmin ? (
+          {isAdmin &&
+          (activeSidebarSection === "panel-verificar-sumas" ||
+            mobileView === "panel-verificar-sumas") ? (
             <section
               id="panel-verificar-sumas"
               data-view="panel-verificar-sumas"
@@ -17941,7 +17943,7 @@ export default function Home() {
                     Control cruzado
                   </p>
                   <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                    Verificar suma almacén
+                    Sumas compartidas
                   </h2>
                   <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
                     Servicios que capturan las mismas filas por separado y que en el consolidado
@@ -17967,6 +17969,22 @@ export default function Home() {
                     className="rounded-xl border border-amber-400/40 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-200 transition hover:bg-amber-500/25 disabled:opacity-50"
                   >
                     {verifSumasCargando ? "Cargando…" : "Actualizar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVerifSumasData(null);
+                      handleSidebarNavigation("panel-overview");
+                    }}
+                    aria-label="Cerrar"
+                    title="Cerrar y volver al inicio"
+                    className={`flex h-8 w-8 items-center justify-center rounded-full border text-sm transition ${
+                      isLightPanelTheme
+                        ? "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                        : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                    }`}
+                  >
+                    ✕
                   </button>
                 </div>
               </div>
