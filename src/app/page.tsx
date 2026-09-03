@@ -11935,37 +11935,41 @@ export default function Home() {
     setMessage("");
 
     try {
+      // VARIAS CUENTAS POR SERVICIO: en el hospital es normal que un servicio tenga
+      // jefe y digitador (Abastecimiento: Arévalo + Rosales; Enfermería: Delgado +
+      // Ávila). Antes el panel lo impedía. Ahora se permite: todas las cuentas del
+      // mismo servicio ven y llenan EL MISMO tabulador (el dato vive por servicio +
+      // mes, no por persona). La tabla serviceAssignments guarda solo la cuenta
+      // TITULAR del servicio y no se le quita a nadie por agregar una segunda.
       if (effectiveServiceId !== (current.serviceId || "")) {
-        if (effectiveServiceId) {
-          const nextAssignmentRef = doc(db, "serviceAssignments", effectiveServiceId);
-          const nextAssignmentSnapshot = await getDoc(nextAssignmentRef);
-
-          if (
-            nextAssignmentSnapshot.exists() &&
-            String(nextAssignmentSnapshot.data().uid || "") !== uid
-          ) {
-            throw new Error("service-already-assigned-admin");
-          }
-        }
-
         if (current.serviceId) {
-          await deleteDoc(doc(db, "serviceAssignments", current.serviceId));
+          const anteriorRef = doc(db, "serviceAssignments", current.serviceId);
+          const anterior = await getDoc(anteriorRef);
+          // Solo se libera si el titular era ESTA cuenta.
+          if (anterior.exists() && String(anterior.data().uid || "") === uid) {
+            await deleteDoc(anteriorRef);
+          }
         }
       }
 
       if (effectiveServiceId && nextService) {
-        await setDoc(
-          doc(db, "serviceAssignments", effectiveServiceId),
-          {
-            serviceId: nextService.id,
-            serviceName: nextService.name,
-            uid,
-            email: draft.email,
-            username: nextUsername,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true },
-        );
+        const assignmentRef = doc(db, "serviceAssignments", effectiveServiceId);
+        const yaExiste = await getDoc(assignmentRef);
+        // Si el servicio ya tiene titular (otra cuenta), no se lo quitamos.
+        if (!yaExiste.exists() || String(yaExiste.data().uid || "") === uid) {
+          await setDoc(
+            assignmentRef,
+            {
+              serviceId: nextService.id,
+              serviceName: nextService.name,
+              uid,
+              email: draft.email,
+              username: nextUsername,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
+        }
       }
 
       await setDoc(
@@ -19932,18 +19936,17 @@ export default function Home() {
                                 // guarda una; bloquearlo impedia volver a guardar la cuenta.
                                 const esSuServicioActual =
                                   service.id === (selectedUser.serviceId || "") || service.id === draft.serviceId;
-                                const isTakenByAnotherUser =
+                                // Ya NO se bloquea: un servicio puede tener varias
+                                // cuentas (jefe + digitador). Solo se avisa quién lo
+                                // tiene, para elegir a conciencia.
+                                const yaLoTieneOtro =
                                   Boolean(assignedUser) &&
                                   assignedUser?.uid !== selectedUser.uid &&
                                   !esSuServicioActual;
                                 return (
-                                  <option
-                                    key={service.id}
-                                    value={service.id}
-                                    disabled={isTakenByAnotherUser}
-                                  >
-                                    {isTakenByAnotherUser
-                                      ? `${service.name} - asignado a ${assignedUser?.name}`
+                                  <option key={service.id} value={service.id}>
+                                    {yaLoTieneOtro
+                                      ? `${service.name} — también lo tiene ${assignedUser?.name}`
                                       : service.name}
                                   </option>
                                 );
