@@ -182,16 +182,21 @@ body {
 }
 
 .panel-shell.theme-light {
-  --bg: #f1f4f9;            /* gris perla claro, afin al acento cian */
-  --surface: #ffffff;
-  --surface-2: #f6f8fb;
-  --surface-3: #eef2f7;
-  --chip: #e7edf5;
-  --border: rgba(15, 23, 42, 0.10);
-  --border-strong: rgba(8, 145, 178, 0.35);
-  --text: #0f172a;
-  --text-muted: #475569;
-  --text-faint: #8590a3;
+  /* Paleta un 8% mas oscura que la original: el blanco puro encandilaba en las
+     pantallas del hospital. Se bajaron TODAS las superficies en la misma
+     proporcion, asi que la jerarquia (fondo < tarjeta) se mantiene igual. */
+  --bg: #e4e9f1;            /* gris perla, afin al acento */
+  --surface: #f0f3f8;       /* tarjeta principal (antes blanco puro) */
+  --surface-2: #e8ecf3;
+  --surface-3: #e0e6ef;
+  --chip: #d8e0ec;
+  /* Bordes y textos mas marcados para que el contraste no se pierda al bajar
+     el brillo de las tarjetas. */
+  --border: rgba(15, 23, 42, 0.14);
+  --border-strong: rgba(8, 145, 178, 0.42);
+  --text: #0b1220;          /* casi negro: titulos y datos */
+  --text-muted: #334155;
+  --text-faint: #64748b;
   --accent: #0e7490;        /* cian/teal oscuro: texto, bordes, detalles */
   --accent-btn: #0891b2;    /* cian para botones */
   --accent-ink: #ffffff;    /* texto blanco sobre el boton */
@@ -515,9 +520,28 @@ body[data-panel-theme="light"] [class*="text-violet-1"],
 body[data-panel-theme="light"] [class*="text-violet-2"],
 body[data-panel-theme="light"] [class*="text-violet-3"] { color: #6d28d9 !important; } /* violet-700 */
 
+/* DORADOS en tema claro: se usan para los titulos de seccion y los avisos.
+   Antes quedaban lavados sobre el fondo claro; ahora van a un oro mas profundo
+   y saturado, y en negrita, para que se lean de lejos. */
 body[data-panel-theme="light"] [class*="text-amber-1"],
 body[data-panel-theme="light"] [class*="text-amber-2"],
-body[data-panel-theme="light"] [class*="text-amber-3"] { color: #b45309 !important; } /* amber-700 */
+body[data-panel-theme="light"] [class*="text-amber-3"],
+body[data-panel-theme="light"] [class*="text-amber-4"],
+body[data-panel-theme="light"] [class*="text-yellow-1"],
+body[data-panel-theme="light"] [class*="text-yellow-2"],
+body[data-panel-theme="light"] [class*="text-yellow-3"] { color: #96620a !important; }
+
+/* El dorado hardcodeado de las ramas claras de los ternarios va al mismo tono. */
+body[data-panel-theme="light"] [style*="836229"],
+body[data-panel-theme="light"] [style*="cbae83"],
+body[data-panel-theme="light"] [style*="d0b184"] { color: #96620a !important; }
+
+/* Los rotulos dorados de seccion (los que van en mayusculas y espaciados) se
+   marcan un poco mas: pesan poco por su tamaño. */
+body[data-panel-theme="light"] [class*="text-amber-"][class*="uppercase"],
+body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
+  font-weight: 700;
+}
 
 /* ===========================================================================
    Modal DOCS-POA/MOF: filas y celdas de estado.
