@@ -644,6 +644,50 @@ const SERVICE_SEARCH_ALIASES: Record<string, string[]> = {
   "gestion-documental": ["ugd", "ugda"],
 };
 
+// =============================================================================
+// VERIFICACION DE SUMAS: pares de servicios que capturan por separado LAS MISMAS
+// filas y que en el consolidado se suman en un solo bloque. Es el punto ciego del
+// monitoreo (cada uno figura aparte), asi que el admin tiene una pantalla que los
+// pone uno debajo del otro con su suma, para cuadrarlos de un vistazo.
+// =============================================================================
+const VERIFICACION_SUMAS: {
+  id: string;
+  titulo: string;
+  detalle: string;
+  /** Centro de costo del consolidado donde caen sumados. */
+  bloque: string;
+  servicios: string[];
+  filas: string[];
+}[] = [
+  {
+    id: "almacen",
+    titulo: "Almacén",
+    detalle: "Almacen Medicamentos + Depto. de Abastecimiento",
+    bloque: "721-Almacen",
+    servicios: ["almacen-medicamentos", "almacen"],
+    filas: ["721_1-Almacen | Despacho"],
+  },
+  {
+    id: "extracorporea",
+    titulo: "Extracorpórea (Hemodiálisis)",
+    detalle: "UCI Extracorporea + MI/Extracorporea",
+    bloque: "268-Hemodialisis",
+    servicios: ["hemodialisis", "hemodialisis-medicina-interna"],
+    filas: [
+      "268_1-Hemodialisis | Procedimiento",
+      "268_2-Hemodialisis | Paciente",
+      "268_3-Hemodialisis | Sesion",
+      "268_4-Hemodialisis | Tratamiento",
+    ],
+  },
+];
+
+/** Numero para mostrar en las tablas de verificacion (sin decimales si es entero). */
+function formatearNumeroSimple(valor: number): string {
+  if (!Number.isFinite(valor)) return "0";
+  return Number.isInteger(valor) ? String(valor) : String(Math.round(valor * 100) / 100);
+}
+
 // Servicio -> centro de costo PROPIO, cuando el nombre del servicio no coincide
 // literalmente con el del centro. Ese centro queda bloqueado en su propio PERC.
 const PERC_SELF_HEADER_BY_SERVICE: Record<string, string> = {
@@ -5067,6 +5111,10 @@ export default function Home() {
   // seleccionable y ESTRICTO: el consolidado muestra el censo de ESE mismo mes.
   const [showCensoConsolidadoPreview, setShowCensoConsolidadoPreview] = useState(false);
   const [consolidadoPreview, setConsolidadoPreview] = useState<ConsolidadoRow[] | null>(null);
+  // Verificacion de sumas: produccion de TODOS los servicios del mes elegido.
+  const [verifSumasData, setVerifSumasData] = useState<AdminOverviewEntry[] | null>(null);
+  const [verifSumasPeriodo, setVerifSumasPeriodo] = useState("");
+  const [verifSumasCargando, setVerifSumasCargando] = useState(false);
   // null = todavia no se consulto; true/false = si la integracion con ESDOMED
   // Services esta configurada y respondiendo.
   const [servicesConectado, setServicesConectado] = useState<boolean | null>(null);
@@ -7418,6 +7466,24 @@ export default function Home() {
     } catch {
       setServicesConectado(false);
       return {};
+    }
+  }
+
+  /** Carga la produccion de todos los servicios para la pantalla de verificacion. */
+  async function loadVerificacionSumas(period?: string) {
+    if (!isAdmin || firestoreUnavailable) return;
+    const objetivo = period || verifSumasPeriodo || periodId;
+    setVerifSumasPeriodo(objetivo);
+    setVerifSumasCargando(true);
+    setError("");
+    try {
+      const overview = await fetchAdminOverviewForPeriod(objetivo);
+      setVerifSumasData(overview);
+    } catch (verifError) {
+      if (await handleFirestoreError(verifError)) return;
+      setError("No pudimos cargar la verificación de sumas.");
+    } finally {
+      setVerifSumasCargando(false);
     }
   }
 
@@ -12307,6 +12373,9 @@ export default function Home() {
     } else if (itemId === "panel-poa") {
       openPoaPanel();
       handleSidebarNavigation(itemId);
+    } else if (itemId === "panel-verificar-sumas") {
+      void loadVerificacionSumas();
+      handleSidebarNavigation(itemId);
     } else {
       handleSidebarNavigation(itemId);
     }
@@ -15023,6 +15092,9 @@ export default function Home() {
               : []),
             ...(isAdmin || hasGrant("panel-admin-export")
               ? [{ id: "panel-admin-export", label: "Consolidados PERC", detail: "Descarga consolidado", badge: "XL", icon: "consolidado" }]
+              : []),
+            ...(isAdmin
+              ? [{ id: "panel-verificar-sumas", label: "Verificar suma almacén", detail: "Servicios que suman en un solo bloque", badge: "VS", icon: "consolidado" }]
               : []),
             ...(canManagePerc ? [serviciosChild("PERC Servicios")] : []),
             ...(isAdmin || hasGrant("panel-gastos-perc")
@@ -17848,6 +17920,173 @@ export default function Home() {
 
           {captureToggleSection ? (
             <div data-view="panel-capture-toggle">{captureToggleSection}</div>
+          ) : null}
+
+          {/* VERIFICAR SUMAS: los pares de servicios que capturan lo mismo y que en el
+              consolidado caen en un solo bloque. El monitoreo los muestra por
+              separado, así que acá se ven uno al lado del otro con su suma. */}
+          {isAdmin ? (
+            <section
+              id="panel-verificar-sumas"
+              data-view="panel-verificar-sumas"
+              className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
+                isLightPanelTheme
+                  ? "border border-slate-200 bg-white text-slate-900"
+                  : "border border-white/10 bg-[#202c41] text-slate-100"
+              }`}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-300/90">
+                    Control cruzado
+                  </p>
+                  <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                    Verificar suma almacén
+                  </h2>
+                  <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                    Servicios que capturan las mismas filas por separado y que en el consolidado
+                    se suman en un solo bloque. Acá se ven uno al lado del otro con su total.
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+                    <span className="font-semibold uppercase tracking-wide">Mes</span>
+                    <input
+                      type="month"
+                      value={verifSumasPeriodo || periodId}
+                      onChange={(event) => {
+                        if (event.target.value) void loadVerificacionSumas(event.target.value);
+                      }}
+                      className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-900" : "text-white [color-scheme:dark]"}`}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void loadVerificacionSumas()}
+                    disabled={verifSumasCargando}
+                    className="rounded-xl border border-amber-400/40 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-200 transition hover:bg-amber-500/25 disabled:opacity-50"
+                  >
+                    {verifSumasCargando ? "Cargando…" : "Actualizar"}
+                  </button>
+                </div>
+              </div>
+
+              {!verifSumasData ? (
+                <p className={`mt-5 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                  Tocá <strong>Actualizar</strong> para traer la producción del mes.
+                </p>
+              ) : (
+                <div className="mt-5 space-y-6">
+                  {VERIFICACION_SUMAS.map((grupo) => {
+                    const valoresDe = (serviceId: string) =>
+                      verifSumasData.find((e) => e.service.id === serviceId)?.values ?? {};
+                    const nombreDe = (serviceId: string) =>
+                      getServiceById(serviceId)?.name ?? serviceId;
+                    const num = (serviceId: string, fila: string, header: string) => {
+                      const bruto = valoresDe(serviceId)[fila]?.[header];
+                      const n = Number.parseFloat(String(bruto ?? ""));
+                      return Number.isFinite(n) ? n : 0;
+                    };
+                    return (
+                      <div
+                        key={grupo.id}
+                        className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-white/[0.03]"}`}
+                      >
+                        <p className={`text-sm font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                          {grupo.titulo}
+                        </p>
+                        <p className={`mt-0.5 text-[11.5px] ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
+                          {grupo.detalle} · en el consolidado caen sumados en{" "}
+                          <strong className={isLightPanelTheme ? "text-slate-800" : "text-slate-200"}>{grupo.bloque}</strong>
+                        </p>
+
+                        {grupo.filas.map((fila) => {
+                          const etiquetaFila = fila.includes("|") ? fila.split("|")[1].trim() : fila;
+                          // Solo los centros de costo donde alguno de los dos cargó algo.
+                          const centros = TABULATOR_HEADERS.filter((header) =>
+                            grupo.servicios.some((sid) => num(sid, fila, header) !== 0),
+                          );
+                          const totalDe = (sid: string) =>
+                            TABULATOR_HEADERS.reduce((acc, h) => acc + num(sid, fila, h), 0);
+                          const ocultos = TABULATOR_HEADERS.length - centros.length;
+                          return (
+                            <div key={fila} className="mt-3">
+                              <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                                {etiquetaFila}
+                              </p>
+                              {centros.length === 0 ? (
+                                <p className={`mt-1 text-[12px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
+                                  Ninguno de los dos cargó datos en esta fila.
+                                </p>
+                              ) : (
+                                <div className="show-scrollbar mt-2 overflow-x-auto">
+                                  <table className={`w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+                                    <thead>
+                                      <tr className={isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}>
+                                        <th className="border-b border-white/10 px-3 py-2 text-left font-semibold">
+                                          Centro de costo
+                                        </th>
+                                        {grupo.servicios.map((sid) => (
+                                          <th key={sid} className="border-b border-white/10 px-3 py-2 text-center font-semibold">
+                                            {nombreDe(sid)}
+                                          </th>
+                                        ))}
+                                        <th className="border-b border-white/10 px-3 py-2 text-center font-bold text-amber-300">
+                                          Suma
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {centros.map((header) => {
+                                        const suma = grupo.servicios.reduce(
+                                          (acc, sid) => acc + num(sid, fila, header),
+                                          0,
+                                        );
+                                        return (
+                                          <tr key={header} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
+                                            <td className="px-3 py-1.5">{header}</td>
+                                            {grupo.servicios.map((sid) => (
+                                              <td key={sid} className="px-3 py-1.5 text-center">
+                                                {formatearNumeroSimple(num(sid, fila, header))}
+                                              </td>
+                                            ))}
+                                            <td className={`px-3 py-1.5 text-center font-bold ${isLightPanelTheme ? "bg-amber-50 text-amber-800" : "bg-amber-500/10 text-amber-200"}`}>
+                                              {formatearNumeroSimple(suma)}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                      <tr className={`border-t-2 ${isLightPanelTheme ? "border-slate-300 bg-slate-100" : "border-white/20 bg-white/5"}`}>
+                                        <td className="px-3 py-2 font-bold">TOTAL de la fila</td>
+                                        {grupo.servicios.map((sid) => (
+                                          <td key={sid} className="px-3 py-2 text-center font-bold">
+                                            {formatearNumeroSimple(totalDe(sid))}
+                                          </td>
+                                        ))}
+                                        <td className={`px-3 py-2 text-center font-bold ${isLightPanelTheme ? "bg-amber-100 text-amber-900" : "bg-amber-500/20 text-amber-100"}`}>
+                                          {formatearNumeroSimple(
+                                            grupo.servicios.reduce((acc, sid) => acc + totalDe(sid), 0),
+                                          )}
+                                        </td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                  {ocultos > 0 ? (
+                                    <p className={`mt-1 text-[10.5px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
+                                      Se ocultaron {ocultos} centro(s) de costo donde ambos van en cero.
+                                    </p>
+                                  ) : null}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           ) : null}
 
           {isAdmin || hasGrant("panel-admin-export") ? (
