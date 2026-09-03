@@ -2152,11 +2152,19 @@ const PERC_SERV_CONSOLIDADO: {
   },
   {
     centro: "166__05001 - Unidad de cuidados intensivos",
-    units: [{ label: "1__Transferencia" }, { label: "2__Dco", censoRow: "uci" }, { label: "6__N. Camas" }],
+    units: [
+      { label: "1__Transferencia", apiTablero: "uci" },
+      { label: "2__Dco", censoRow: "uci" },
+      { label: "6__N. Camas" },
+    ],
   },
   {
     centro: "179__05101 - Unidad de cuidados intermedios",
-    units: [{ label: "1__Transferencia" }, { label: "2__Dco", censoRow: "ucin" }, { label: "6__N. Camas" }],
+    units: [
+      { label: "1__Transferencia", apiTablero: "ucin" },
+      { label: "2__Dco", censoRow: "ucin" },
+      { label: "6__N. Camas" },
+    ],
   },
   {
     centro: "201__10001 - Emergencias",
@@ -2185,7 +2193,11 @@ const PERC_SERV_CONSOLIDADO: {
   },
   {
     centro: "767__5014 - Unidad de cuidados especiales",
-    units: [{ label: "1__Dco", censoRow: "paliativos" }, { label: "2__Transferencia" }, { label: "6__N. Camas" }],
+    units: [
+      { label: "1__Dco", censoRow: "paliativos" },
+      { label: "2__Transferencia", apiTablero: "paliativos" },
+      { label: "6__N. Camas" },
+    ],
   },
   {
     centro: "766__70016 - Servicio de apoyo a riiss",

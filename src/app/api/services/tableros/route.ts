@@ -18,9 +18,17 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Tablero de Services -> que representa. Los tres primeros devuelven EGRESOS
-// (total = vivos + fallecidos); apoyo-riiss devuelve INGRESOS.
-const TABLEROS = ["medicina-interna", "cirugia", "convenios", "apoyo-riiss"] as const;
+// Tablero de Services -> que representa. Todos devuelven EGRESOS (total = vivos +
+// fallecidos) menos apoyo-riiss, que devuelve INGRESOS.
+const TABLEROS = [
+  "medicina-interna",
+  "cirugia",
+  "convenios",
+  "uci",
+  "ucin",
+  "paliativos",
+  "apoyo-riiss",
+] as const;
 type TableroId = (typeof TABLEROS)[number];
 
 function baseUrl(): string {
