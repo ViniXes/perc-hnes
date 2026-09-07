@@ -141,6 +141,10 @@ type ManagedUser = {
   loginEmail: string;
   // Submenus extra otorgados por el admin (ids de GRANTABLE_MENUS).
   menuGrants: string[];
+  // Tablas del SEPS que esta cuenta puede ver y llenar DENTRO de su servicio.
+  // Vacio = todas (lo normal). Con contenido, solo esas: sirve para servicios que
+  // tienen varias tablas y cada disciplina llena la suya (Cuidados Paliativos).
+  sepsTables: string[];
   // true = la cuenta NO captura ningun tabulador: solo entra a los submenus que se
   // le otorgaron (p. ej. solo "Depreciacion Mensual PERC").
   noCapture: boolean;
@@ -167,6 +171,7 @@ type AdminDraft = {
   noCapture: boolean;
   isChief: boolean;
   monitorDivision: string;
+  sepsTables: string[];
   viewPerc: string[];
   viewSeps: string[];
   viewHoras: string[];
@@ -3318,6 +3323,9 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
       ? (data.menuGrants.filter((x): x is string => typeof x === "string"))
       : [],
     noCapture: data.noCapture === true,
+    sepsTables: Array.isArray(data.sepsTables)
+      ? (data.sepsTables.filter((x): x is string => typeof x === "string"))
+      : [],
     loginEmail: typeof data.loginEmail === "string" ? data.loginEmail : "",
     docType: typeof data.docType === "string" ? data.docType : "",
     docNumber: typeof data.docNumber === "string" ? data.docNumber : "",
@@ -3350,6 +3358,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         noCapture: managedUser.noCapture,
         isChief: managedUser.isChief,
         monitorDivision: managedUser.monitorDivision || "",
+        sepsTables: managedUser.sepsTables,
         viewPerc: managedUser.viewPerc,
         viewSeps: managedUser.viewSeps,
         viewHoras: managedUser.viewHoras,
@@ -6004,10 +6013,21 @@ export default function Home() {
   // Todo el sistema (captura, guardado, importación, consolidados) usa ESTA
   // plantilla, así que basta aplicar la estructura aquí para que el ajuste del
   // administrador se propague a todo el tabulador.
-  const sepsTemplate = useMemo(
-    () => applySepsLayout(sepsBaseTemplate, sepsEditingLayout ? sepsLayoutDraft : sepsLayout),
-    [sepsBaseTemplate, sepsLayout, sepsLayoutDraft, sepsEditingLayout],
-  );
+  const sepsTemplate = useMemo(() => {
+    const base = applySepsLayout(sepsBaseTemplate, sepsEditingLayout ? sepsLayoutDraft : sepsLayout);
+    // Permiso POR TABLA: si a la cuenta le asignaron tablas concretas, solo ve esas
+    // (p. ej. Enfermería dentro de Cuidados Paliativos). Vacío = ve todas.
+    const permitidas = serviceProfile?.sepsTables ?? [];
+    if (!base || permitidas.length === 0 || !base.tables) return base;
+    const tables = base.tables.filter((tabla) => permitidas.includes(tabla.id));
+    return tables.length > 0 ? { ...base, tables } : base;
+  }, [
+    sepsBaseTemplate,
+    sepsLayout,
+    sepsLayoutDraft,
+    sepsEditingLayout,
+    serviceProfile?.sepsTables,
+  ]);
   // Keys de las filas creadas por el administrador desde la ESTRUCTURA del SEPS.
   const sepsLayoutExtraKeys = useMemo(() => {
     const layout = sepsEditingLayout ? sepsLayoutDraft : sepsLayout;
@@ -12234,6 +12254,7 @@ export default function Home() {
               mustChangePassword: draft.mustChangePassword,
               department: null,
               monitorDivision: draft.monitorDivision || null,
+              sepsTables: draft.sepsTables,
               captureModules: draft.captureModules,
               menuGrants: draft.menuGrants,
               noCapture: draft.noCapture,
@@ -20466,6 +20487,64 @@ export default function Home() {
                             ese caso se ignora el servicio de arriba.
                           </span>
                         </label>
+
+                        {/* TABLAS DEL SEPS: cuando el servicio tiene varias tablas y cada
+                            persona llena solo la suya (Cuidados Paliativos: Médico,
+                            Enfermería, Psicólogo, Trabajo Social, Espiritual). Sin marcar
+                            nada, la cuenta ve todas las tablas del servicio. */}
+                        {(() => {
+                          const tablasSeps = getSepsTemplate(draft.serviceId)?.tables ?? [];
+                          if (tablasSeps.length < 2) return null;
+                          const marcadas = draft.sepsTables ?? [];
+                          return (
+                            <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                              <p className="text-xs font-medium text-slate-300">
+                                Tablas del SEPS que puede llenar
+                              </p>
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                Sin marcar ninguna, ve <strong>todas</strong> las tablas del
+                                servicio. Al marcar, solo verá las elegidas: el resto ni le
+                                aparece.
+                              </p>
+                              <div className="mt-2.5 flex flex-wrap gap-2">
+                                {tablasSeps.map((tabla) => {
+                                  const activa = marcadas.includes(tabla.id);
+                                  return (
+                                    <button
+                                      key={tabla.id}
+                                      type="button"
+                                      onClick={() =>
+                                        updateAdminDraft(selectedUser.uid, {
+                                          sepsTables: activa
+                                            ? marcadas.filter((x) => x !== tabla.id)
+                                            : [...marcadas, tabla.id],
+                                        })
+                                      }
+                                      title={tabla.title}
+                                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                        activa
+                                          ? "bg-emerald-500/15 text-emerald-300"
+                                          : "bg-white/5 text-slate-400 hover:bg-white/10"
+                                      }`}
+                                    >
+                                      {activa ? "✓ " : ""}
+                                      {tabla.subtitle || tabla.title}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {marcadas.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => updateAdminDraft(selectedUser.uid, { sepsTables: [] })}
+                                  className="mt-2.5 text-[11px] font-semibold text-cyan-300 transition hover:text-cyan-200"
+                                >
+                                  Quitar la restricción (que vea todas)
+                                </button>
+                              ) : null}
+                            </div>
+                          );
+                        })()}
 
                         {/* MONITOREO POR DIVISION: para el jefe de una division que ademas
                             captura su propio servicio. Le habilita "Monitoreo general" pero
