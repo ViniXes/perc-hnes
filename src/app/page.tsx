@@ -698,10 +698,22 @@ const SEPS_FAMILIA_CONSOLIDADO: Record<string, string> = {
 
 // Subunidades que NO cuentan para el avance de su familia en SEPS. Se usa cuando la
 // tabla existe pero todavia no hay nadie asignado para llenarla: se sigue mostrando
-// el tabulador, pero no arrastra el porcentaje hacia abajo. Al asignar a alguien se
-// borra de esta lista y vuelve a contar.
-const SEPS_FAMILIA_SIN_RESPONSABLE: Record<string, string[]> = {
-  "cuidados-paliativos": ["cuidados-paliativos-psicologo"],
+// el tabulador, pero no arrastra el porcentaje hacia abajo. Hoy esta vacio: Cuidados
+// Paliativos dejo de ser una familia (es un solo servicio con varias tablas).
+const SEPS_FAMILIA_SIN_RESPONSABLE: Record<string, string[]> = {};
+
+// Servicios que se UNIFICARON: al abrir el SEPS del servicio nuevo se leen tambien
+// los documentos de los servicios viejos del mismo mes, para no perder lo que ya se
+// habia capturado antes del cambio. Se puede quitar cuando ya no queden meses con
+// datos viejos por consultar.
+const SEPS_SERVICIOS_HEREDADOS: Record<string, string[]> = {
+  "cuidados-paliativos": [
+    "cuidados-paliativos-enfermeria",
+    "cuidados-paliativos-psicologo",
+    "cuidados-paliativos-fisioterapia",
+    "cuidados-paliativos-ts",
+    "cuidados-paliativos-espiritual",
+  ],
 };
 
 // Servicio -> centro de costo PROPIO, cuando el nombre del servicio no coincide
@@ -733,12 +745,6 @@ const SERVICE_FAMILIES: { id: string; title: string; group: string; members: str
       "uci-quirurgica",
       "uci-consolidado",
     ],
-  },
-  {
-    id: "cuidados-paliativos",
-    title: "Cuidados Paliativos",
-    group: "medica",
-    members: ["cuidados-paliativos", "cuidados-paliativos-enfermeria", "cuidados-paliativos-psicologo", "cuidados-paliativos-ts", "cuidados-paliativos-espiritual", "cuidados-paliativos-consolidado"],
   },
 ];
 const SERVICE_FAMILY_BY_ID: Record<string, string> = Object.fromEntries(
@@ -792,11 +798,6 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "ucin-cronicos": "medica",
   "ucin": "medica",
   "ucin-consolidado": "medica",
-  "cuidados-paliativos-enfermeria": "medica",
-  "cuidados-paliativos-psicologo": "medica",
-  "cuidados-paliativos-ts": "medica",
-  "cuidados-paliativos-espiritual": "medica",
-  "cuidados-paliativos-consolidado": "medica",
   "uci-aislados": "medica",
   "uci-cardiovascular": "medica",
   "uci-extracorporea": "medica",
@@ -3689,19 +3690,40 @@ async function fetchSepsDataForPeriod(
     doc(db, "sepsTabulators", `${periodId}__${template.serviceId}`),
   );
 
-  if (!snapshot.exists()) {
+  const data = snapshot.exists()
+    ? (snapshot.data() as {
+        values?: Record<string, Record<string, unknown>>;
+        extraRows?: SepsExtraRow[];
+        hiddenKeys?: string[];
+        comments?: SepsComment[];
+      })
+    : {};
+  const extraRows = Array.isArray(data.extraRows) ? data.extraRows : [];
+
+  // Datos capturados ANTES de unificar el servicio (cuando cada disciplina era un
+  // servicio aparte). Se leen y se mezclan para no perder lo ya digitado; como las
+  // claves de fila no se repiten entre disciplinas, la union es limpia. Lo que ya
+  // este en el documento nuevo siempre manda.
+  const heredados = SEPS_SERVICIOS_HEREDADOS[template.serviceId] ?? [];
+  let valoresBase = data.values;
+  if (heredados.length > 0) {
+    const unidos: Record<string, Record<string, unknown>> = { ...(data.values ?? {}) };
+    for (const viejoId of heredados) {
+      const viejo = await getDoc(doc(db, "sepsTabulators", `${periodId}__${viejoId}`));
+      if (!viejo.exists()) continue;
+      const vals =
+        (viejo.data() as { values?: Record<string, Record<string, unknown>> }).values || {};
+      for (const rowKey of Object.keys(vals)) {
+        if (unidos[rowKey] === undefined) unidos[rowKey] = vals[rowKey];
+      }
+    }
+    valoresBase = unidos;
+  } else if (!snapshot.exists()) {
     return { values: buildEmptySeps(template, periodId), extraRows: [], hiddenKeys: [], comments: [] };
   }
 
-  const data = snapshot.data() as {
-    values?: Record<string, Record<string, unknown>>;
-    extraRows?: SepsExtraRow[];
-    hiddenKeys?: string[];
-    comments?: SepsComment[];
-  };
-  const extraRows = Array.isArray(data.extraRows) ? data.extraRows : [];
   return {
-    values: mergeSepsWithTemplate(template, periodId, data.values, extraRows.map((e) => e.key)),
+    values: mergeSepsWithTemplate(template, periodId, valoresBase, extraRows.map((e) => e.key)),
     extraRows,
     hiddenKeys: Array.isArray(data.hiddenKeys) ? data.hiddenKeys : [],
     comments: Array.isArray(data.comments) ? data.comments : [],

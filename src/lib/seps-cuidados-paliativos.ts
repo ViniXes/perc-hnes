@@ -208,3 +208,30 @@ export const CUIDADOS_PALIATIVOS_CONSOLIDADO_TEMPLATE: SepsTemplate = {
     },
   ],
 };
+
+// =============================================================================
+// PLANTILLA UNICA de Cuidados Paliativos.
+// -----------------------------------------------------------------------------
+// En el hospital Cuidados Paliativos es UN solo servicio: medico, enfermeria,
+// psicologo, trabajo social e intervencion espiritual son disciplinas del mismo
+// equipo, no servicios distintos. Antes cada una era un servicio aparte (y por eso
+// el monitoreo contaba 6 donde hay 1). Ahora todas las tablas viven en el mismo
+// tabulador: quien entra a Cuidados Paliativos las ve todas y llena la suya.
+// Las claves de fila NO se repiten entre disciplinas, asi que unir las tablas no
+// pisa ningun dato.
+// =============================================================================
+const conSubtitulo = (plantilla: SepsTemplate, subtitulo: string) =>
+  (plantilla.tables ?? []).map((tabla) => ({ ...tabla, subtitle: subtitulo }));
+
+export const CUIDADOS_PALIATIVOS_TEMPLATE: SepsTemplate = {
+  serviceId: "cuidados-paliativos",
+  establishment: "HOSPITAL NACIONAL EL SALVADOR",
+  displayName: "Cuidados Paliativos",
+  tables: [
+    ...conSubtitulo(CUIDADOS_PALIATIVOS_MEDICO_TEMPLATE, "Médico"),
+    ...conSubtitulo(CUIDADOS_PALIATIVOS_ENFERMERIA_TEMPLATE, "Enfermería"),
+    ...conSubtitulo(CUIDADOS_PALIATIVOS_PSICOLOGO_TEMPLATE, "Psicólogo"),
+    ...conSubtitulo(CUIDADOS_PALIATIVOS_TS_TEMPLATE, "Trabajo Social"),
+    ...conSubtitulo(CUIDADOS_PALIATIVOS_ESPIRITUAL_TEMPLATE, "Intervención Espiritual"),
+  ],
+};

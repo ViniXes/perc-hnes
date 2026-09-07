@@ -389,33 +389,9 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     name: "UCIN Consolidado",
     rows: [],
   },
-  {
-    id: "cuidados-paliativos-enfermeria",
-    name: "Cuidados Paliativos - Enfermería",
-    rows: [],
-  },
-  {
-    id: "cuidados-paliativos-psicologo",
-    name: "Cuidados Paliativos - Psicólogo",
-    rows: [],
-  },
-  // "Cuidados Paliativos - Fisioterapia" se elimino: esa tabla ya vive dentro del
-  // SEPS de Fisioterapia, no es un servicio aparte.
-  {
-    id: "cuidados-paliativos-ts",
-    name: "Cuidados Paliativos - Trabajo Social",
-    rows: [],
-  },
-  {
-    id: "cuidados-paliativos-espiritual",
-    name: "Cuidados Paliativos - Intervención Espiritual",
-    rows: [],
-  },
-  {
-    id: "cuidados-paliativos-consolidado",
-    name: "Cuidados Paliativos Consolidado",
-    rows: [],
-  },
+  // Cuidados Paliativos es UN solo servicio: las disciplinas (medico, enfermeria,
+  // psicologo, trabajo social, intervencion espiritual) son tablas dentro de su
+  // propio SEPS, no servicios aparte. La de fisioterapia vive en Fisioterapia.
   {
     id: "uci-aislados",
     name: "UCI Aislados",
