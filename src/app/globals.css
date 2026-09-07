@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+/* =============================================================================
+   Variante "desk": es la vista de ESCRITORIO. Antes se usaba el breakpoint xl
+   (1280px), pero al dividir la pantalla en la PC la ventana baja de ese ancho y
+   PULSO pasaba a la vista movil aunque se estuviera en una computadora. Ahora la
+   vista de escritorio se activa por ancho O porque el usuario la forzo desde el
+   menu (clase .forzar-escritorio en el <html>). Los telefonos no cambian: nunca
+   tienen esa clase ni ese ancho.
+   ============================================================================= */
+@custom-variant desk {
+  @media (width >= 1280px) {
+    @slot;
+  }
+  :where(.forzar-escritorio) & {
+    @slot;
+  }
+}
+
 @theme inline {
   --font-sans: var(--font-sans);
 }
@@ -276,10 +293,10 @@ body {
    con colores oscuros que el remapeo base (clases sin prefijo) no alcanza. Aca los
    corregimos dentro del mismo breakpoint para que los iconos se vean. */
 @media (min-width: 1280px) {
-  .panel-shell.theme-light .xl\:text-slate-100,
-  .panel-shell.theme-light .xl\:text-slate-300 { color: var(--text-muted); }
-  .panel-shell.theme-light .xl\:bg-white\/5 { background-color: var(--chip); }
-  .panel-shell.theme-light .xl\:ring-white\/10 { --tw-ring-color: var(--border); }
+  .panel-shell.theme-light .desk\:text-slate-100,
+  .panel-shell.theme-light .desk\:text-slate-300 { color: var(--text-muted); }
+  .panel-shell.theme-light .desk\:bg-white\/5 { background-color: var(--chip); }
+  .panel-shell.theme-light .desk\:ring-white\/10 { --tw-ring-color: var(--border); }
 }
 
 /* ----- Modo claro: botones solidos mas suaves y coherentes ----------------

@@ -330,6 +330,10 @@ type CensoValues = Record<string, Record<string, string>>;
 
 const FIRESTORE_SETUP_MESSAGE = `Firestore no esta creado o configurado en este proyecto de Firebase. Verifica la base de datos '${firestoreDatabaseId}' para habilitar login, tablero y guardado.`;
 const FIRESTORE_DISABLED_STORAGE_KEY = "perc-hnes.firestore-disabled";
+// Vista de escritorio FORZADA: cuando el usuario divide la pantalla en su PC, la
+// ventana baja de 1280px y PULSO pasaba a la vista movil. Con esto la fuerza a
+// escritorio y queda recordado en ESA computadora (no afecta a nadie mas).
+const FORZAR_ESCRITORIO_KEY = "pulso.forzarEscritorio";
 const PANEL_THEME_STORAGE_KEY = "perc-hnes.panel-theme";
 const ADMIN_USERS_CACHE_STORAGE_KEY = "perc-hnes.admin-users-cache";
 
@@ -599,7 +603,7 @@ function renderSectionDivider(
   const pill = light ? "bg-white ring-slate-200 shadow-sm" : "bg-white/5 ring-white/10";
   const lineClass = light ? "via-slate-300" : "via-slate-400/50";
   return (
-    <div className="hidden items-center gap-3 pt-8 xl:flex" aria-hidden="true">
+    <div className="hidden items-center gap-3 pt-8 desk:flex" aria-hidden="true">
       <span className={`h-px flex-1 bg-gradient-to-r from-transparent ${lineClass} to-transparent`} />
       <span className={`flex w-56 flex-col items-center rounded-2xl px-6 py-2 text-center ring-1 ${pill}`}>
         <span className={`text-sm font-bold uppercase tracking-[0.24em] ${textTone[tone]}`}>{label}</span>
@@ -1466,7 +1470,7 @@ function renderSubmenuIcon(icon: string | undefined): ReactNode {
 }
 
 // Degradado bonito por icono (estilo launcher de app) para el menu en movil.
-// Cada modulo tiene su color propio. En PC los iconos van neutros (ver clases xl:).
+// Cada modulo tiene su color propio. En PC los iconos van neutros (ver clases desk:).
 const SIDEBAR_TILE_GRADIENT: Record<string, string> = {
   "panel-overview": "from-sky-400 to-blue-600",
   "panel-tabulator": "from-emerald-400 to-teal-600",
@@ -5248,6 +5252,10 @@ export default function Home() {
     const savedTheme = window.localStorage.getItem(PANEL_THEME_STORAGE_KEY);
     return savedTheme === "light" ? "light" : "dark";
   });
+  const [forzarEscritorio, setForzarEscritorio] = useState(false);
+  // ¿El aparato tiene mouse? Solo en ese caso ofrecemos "Vista de escritorio":
+  // en un teléfono o tablet ese botón no tiene sentido y solo estorbaría.
+  const [tieneMouse, setTieneMouse] = useState(false);
   const [firestoreUnavailable, setFirestoreUnavailable] = useState(false);
   const [firestoreStatusReady, setFirestoreStatusReady] = useState(false);
   // Asistente virtual (robot) con preguntas frecuentes (chat interactivo).
@@ -6248,6 +6256,32 @@ export default function Home() {
       // Ignore local storage access issues.
     }
   }, [panelTheme]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    setTieneMouse(window.matchMedia("(pointer: fine)").matches);
+  }, []);
+
+  // Vista de escritorio forzada: se lee una vez al abrir y se guarda al cambiarla.
+  // La clase va en el <html> porque de ahi cuelga la variante "desk" del CSS.
+  useEffect(() => {
+    try {
+      setForzarEscritorio(window.localStorage.getItem(FORZAR_ESCRITORIO_KEY) === "1");
+    } catch {
+      // Ignore local storage access issues.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.classList.toggle("forzar-escritorio", forzarEscritorio);
+    try {
+      if (forzarEscritorio) window.localStorage.setItem(FORZAR_ESCRITORIO_KEY, "1");
+      else window.localStorage.removeItem(FORZAR_ESCRITORIO_KEY);
+    } catch {
+      // Ignore local storage access issues.
+    }
+  }, [forzarEscritorio]);
 
   // Etiqueta el <body> con el tema para poder ajustar colores globalmente en CSS
   // (p.ej. oscurecer los verdes claros en modo claro para que se lea la letra).
@@ -12666,7 +12700,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[280px_1fr]">
+        <div className="grid gap-3 desk:grid-cols-[280px_1fr]">
           <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-3">
             <label className="block">
               <span className="text-sm font-medium text-slate-200">Mes a configurar</span>
@@ -13037,7 +13071,7 @@ export default function Home() {
                   </svg>
                 </button>
                 <div className={groupOpen ? "p-2.5" : "hidden"}>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 desk:grid-cols-5">
                     {group.services.map((service) => {
                       const svcModuleIds = getAreaById(service.id)?.modules ?? [];
                       const svcModules = toggleableModules.filter((m) => svcModuleIds.includes(m));
@@ -15477,7 +15511,7 @@ export default function Home() {
                   Nombre del empleado
                 </th>
                 <th className="px-2 py-2 text-left font-medium">DUI / NIT</th>
-                <th className="hidden px-2 py-2 text-left font-medium xl:table-cell">Comentario</th>
+                <th className="hidden px-2 py-2 text-left font-medium desk:table-cell">Comentario</th>
                 {horasTemplate.columns.map((col) => (
                   <th key={col} className="px-2 py-2 text-center font-medium">
                     {col}
@@ -15492,7 +15526,7 @@ export default function Home() {
                 <tr key={index} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
                   <td className={`sticky left-0 z-10 min-w-[12rem] border-r px-2 py-1 ${isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#202c41]"}`}>
                     <div className="flex items-center gap-1.5">
-                      <span className="hidden w-5 shrink-0 text-right text-[10px] text-slate-500 xl:block">
+                      <span className="hidden w-5 shrink-0 text-right text-[10px] text-slate-500 desk:block">
                         {index + 1}
                       </span>
                       <input
@@ -15521,11 +15555,11 @@ export default function Home() {
                         onChange={(event) => handleHorasDui(index, event.target.value)}
                         disabled={horasEditingBlocked}
                         placeholder={emp.docType === "nit" ? "0000-000000-000-0" : "00000000-0"}
-                        className={`w-[6.5rem] rounded border px-2 py-1 text-xs outline-none focus:border-cyan-400 disabled:opacity-50 xl:w-[7.5rem] ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
+                        className={`w-[6.5rem] rounded border px-2 py-1 text-xs outline-none focus:border-cyan-400 disabled:opacity-50 desk:w-[7.5rem] ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#1b2537] text-white"}`}
                       />
                     </div>
                   </td>
-                  <td className="hidden px-1.5 py-1 xl:table-cell">
+                  <td className="hidden px-1.5 py-1 desk:table-cell">
                     <input
                       value={emp.comment}
                       onChange={(event) => handleHorasComment(index, event.target.value)}
@@ -15685,12 +15719,12 @@ export default function Home() {
                 onClick={handleClearHoras}
                 title="Limpiar tabla"
                 aria-label="Limpiar tabla"
-                className="inline-flex items-center gap-2 rounded-2xl bg-slate-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-slate-500 xl:px-4"
+                className="inline-flex items-center gap-2 rounded-2xl bg-slate-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-slate-500 desk:px-4"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 desk:h-3.5 desk:w-3.5" aria-hidden="true">
                   <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
                 </svg>
-                <span className="hidden xl:inline">Limpiar tabla</span>
+                <span className="hidden desk:inline">Limpiar tabla</span>
               </button>
               {!isHorasHistory ? (
                 <button
@@ -15699,12 +15733,12 @@ export default function Home() {
                   disabled={isLoadingHoras}
                   title="Recuperar datos"
                   aria-label="Recuperar datos"
-                  className="inline-flex items-center gap-2 rounded-2xl bg-sky-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-sky-900/70 xl:px-4"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-sky-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-sky-900/70 desk:px-4"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 desk:h-3.5 desk:w-3.5" aria-hidden="true">
                     <path d="M12 3v12M7 11l5 5 5-5M5 21h14" />
                   </svg>
-                  <span className="hidden xl:inline">
+                  <span className="hidden desk:inline">
                     {isLoadingHoras ? "Recuperando..." : "Recuperar datos"}
                   </span>
                 </button>
@@ -15715,13 +15749,13 @@ export default function Home() {
                 disabled={isSavingHoras || horasEditingBlocked}
                 title="Guardar Horas"
                 aria-label="Guardar Horas"
-                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 xl:px-4"
+                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 desk:px-4"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 desk:h-3.5 desk:w-3.5" aria-hidden="true">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                   <path d="M17 21v-8H7v8M7 3v5h8" />
                 </svg>
-                <span className="hidden xl:inline">
+                <span className="hidden desk:inline">
                   {isSavingHoras ? "Guardando..." : isHorasHistory ? "Guardar cambios del mes" : "Guardar Horas"}
                 </span>
               </button>
@@ -16764,7 +16798,7 @@ export default function Home() {
             </h2>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 desk:grid-cols-3">
             {visibleModules.map((mod) => {
               const status = getModuleUiStatus(mod);
               const isComplete = status === "completo";
@@ -16870,7 +16904,7 @@ export default function Home() {
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             title="Salir del servicio y volver al panel"
-            className="fixed bottom-24 right-4 z-[120] inline-flex items-center gap-2 rounded-full border border-amber-300/40 bg-[#1b2537] px-4 py-3 text-xs font-bold text-amber-200 shadow-[0_10px_30px_rgba(3,7,18,0.55)] transition hover:bg-[#243049] xl:bottom-6 xl:right-6 xl:text-sm"
+            className="fixed bottom-24 right-4 z-[120] inline-flex items-center gap-2 rounded-full border border-amber-300/40 bg-[#1b2537] px-4 py-3 text-xs font-bold text-amber-200 shadow-[0_10px_30px_rgba(3,7,18,0.55)] transition hover:bg-[#243049] desk:bottom-6 desk:right-6 desk:text-sm"
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -16914,19 +16948,19 @@ export default function Home() {
 
         <div
           className={`mx-auto grid max-w-[1850px] grid-cols-1 gap-6 ${
-            menuOpen ? "xl:grid-cols-[290px_minmax(0,1fr)]" : "xl:grid-cols-1"
+            menuOpen ? "desk:grid-cols-[290px_minmax(0,1fr)]" : "desk:grid-cols-1"
           }`}
         >
           {/* Fondo oscuro detras del cajon (solo movil/cuando esta abierto). */}
           {menuOpen ? (
             <div
               onClick={() => setMenuOpen(false)}
-              className="fixed inset-0 z-40 bg-black/50 xl:hidden"
+              className="fixed inset-0 z-40 bg-black/50 desk:hidden"
             />
           ) : null}
           <aside
-            className={`self-start overflow-y-auto px-4 pt-4 pb-28 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] xl:inset-x-auto xl:bottom-auto xl:z-auto xl:w-auto xl:max-h-[calc(100vh-2rem)] xl:rounded-[24px] xl:p-4 xl:pb-4 xl:shadow-[0_24px_80px_rgba(3,7,18,0.22)] xl:transition-none xl:sticky xl:top-4 ${
-              menuOpen ? "translate-y-0" : "translate-y-full xl:hidden"
+            className={`self-start overflow-y-auto px-4 pt-4 pb-28 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] desk:inset-x-auto desk:bottom-auto desk:z-auto desk:w-auto desk:max-h-[calc(100vh-2rem)] desk:rounded-[24px] desk:p-4 desk:pb-4 desk:shadow-[0_24px_80px_rgba(3,7,18,0.22)] desk:transition-none desk:sticky desk:top-4 ${
+              menuOpen ? "translate-y-0" : "translate-y-full desk:hidden"
             } ${
               isLightPanelTheme
                 ? "border border-slate-200 bg-[#eef2fb] text-slate-900"
@@ -16938,9 +16972,9 @@ export default function Home() {
               type="button"
               onClick={() => setMenuOpen(false)}
               aria-label="Cerrar menú"
-              className="mx-auto mb-3 block h-1.5 w-12 rounded-full bg-slate-400/40 xl:hidden"
+              className="mx-auto mb-3 block h-1.5 w-12 rounded-full bg-slate-400/40 desk:hidden"
             />
-            <div className={`pb-4 text-center xl:pb-3 ${isLightPanelTheme ? "border-b border-slate-200" : "border-b border-white/10"}`}>
+            <div className={`pb-4 text-center desk:pb-3 ${isLightPanelTheme ? "border-b border-slate-200" : "border-b border-white/10"}`}>
               <p className="hospital-shimmer text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
                 Hospital Nacional
               </p>
@@ -16950,7 +16984,7 @@ export default function Home() {
             </div>
 
             <div
-              className={`mt-4 flex items-center gap-3 rounded-2xl px-3 py-2.5 shadow-sm xl:mt-3 xl:py-2 ${
+              className={`mt-4 flex items-center gap-3 rounded-2xl px-3 py-2.5 shadow-sm desk:mt-3 desk:py-2 ${
                 isLightPanelTheme ? "bg-white" : "bg-[#202c41]"
               }`}
             >
@@ -16969,7 +17003,7 @@ export default function Home() {
               <PulsoMark className="ml-1 h-8 w-8 shrink-0 opacity-90" />
             </div>
 
-            <nav className="mt-5 grid grid-cols-3 gap-2 xl:mt-3 xl:block xl:space-y-0.5">
+            <nav className="mt-5 grid grid-cols-3 gap-2 desk:mt-3 desk:block desk:space-y-0.5">
               {sidebarItems.map((item) => {
                 const isActive = activeSidebarSection === item.id;
                 // Alerta roja cuando hay solicitudes pendientes, o cuando el SERVICIO
@@ -17000,7 +17034,9 @@ export default function Home() {
                         return;
                       }
                       const isMobile =
-                        typeof window !== "undefined" && window.innerWidth < 1280;
+                        !forzarEscritorio &&
+                        typeof window !== "undefined" &&
+                        window.innerWidth < 1280;
                       // En movil, los items de navegacion abren SU pantalla (una a la vez).
                       const view =
                         item.id === "panel-overview"
@@ -17026,7 +17062,7 @@ export default function Home() {
                       }
                     }}
                     title={item.detail}
-                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-2.5 text-center transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-1.5 xl:text-left ${
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-2.5 text-center transition desk:w-full desk:flex-row desk:justify-start desk:gap-2.5 desk:px-2.5 desk:py-1.5 desk:text-left ${
                       hasAlert
                         ? "border-rose-400/60 bg-rose-500/15 hover:bg-rose-500/25"
                         : isActive
@@ -17037,12 +17073,12 @@ export default function Home() {
                     }`}
                   >
                     <span
-                      className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${tileGradient} text-[10px] font-semibold uppercase tracking-[0.12em] text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:shadow-none xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px] ${
+                      className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${tileGradient} text-[10px] font-semibold uppercase tracking-[0.12em] text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] desk:h-7 desk:w-7 desk:rounded-lg desk:shadow-none desk:[&_svg]:h-[18px] desk:[&_svg]:w-[18px] ${
                         hasAlert
-                          ? "xl:bg-none xl:bg-rose-500"
+                          ? "desk:bg-none desk:bg-rose-500"
                           : isActive
                             ? ""
-                            : "xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:ring-1 xl:ring-white/10"
+                            : "desk:bg-none desk:bg-white/5 desk:text-slate-100 desk:ring-1 desk:ring-white/10"
                       }`}
                     >
                       {SIDEBAR_ICON_BY_ID[item.id] ?? item.badge}
@@ -17053,7 +17089,7 @@ export default function Home() {
                       ) : null}
                     </span>
                     <span
-                      className={`block w-full truncate text-[10px] font-medium leading-tight xl:flex-1 xl:text-[13px] ${
+                      className={`block w-full truncate text-[10px] font-medium leading-tight desk:flex-1 desk:text-[13px] ${
                         hasAlert
                           ? "text-rose-200"
                           : isLightPanelTheme
@@ -17074,7 +17110,7 @@ export default function Home() {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         aria-hidden="true"
-                        className={`hidden shrink-0 text-slate-400 transition-transform xl:block ${isExpanded ? "rotate-180" : ""}`}
+                        className={`hidden shrink-0 text-slate-400 transition-transform desk:block ${isExpanded ? "rotate-180" : ""}`}
                       >
                         <path d="m6 9 6 6 6-6" />
                       </svg>
@@ -17082,8 +17118,8 @@ export default function Home() {
                   </button>
                   {hasChildren && isExpanded ? (
                     <div
-                      className={`col-span-3 mt-1 space-y-0.5 xl:mt-1 xl:ml-[22px] xl:border-l xl:pl-3 ${
-                        isLightPanelTheme ? "xl:border-slate-200" : "xl:border-white/10"
+                      className={`col-span-3 mt-1 space-y-0.5 desk:mt-1 desk:ml-[22px] desk:border-l desk:pl-3 ${
+                        isLightPanelTheme ? "desk:border-slate-200" : "desk:border-white/10"
                       }`}
                     >
                       {itemChildren!.map((child) => {
@@ -17097,7 +17133,9 @@ export default function Home() {
                             title={child.detail}
                             onClick={() => {
                               const isMobile =
-                                typeof window !== "undefined" && window.innerWidth < 1280;
+                                !forzarEscritorio &&
+                                typeof window !== "undefined" &&
+                                window.innerWidth < 1280;
                               // Los items tipo modal (Monitoreo) abren el modal en PC y movil.
                               const isModalChild =
                                 child.id.startsWith("panel-monitor-") ||
@@ -17123,7 +17161,7 @@ export default function Home() {
                             {childActive ? (
                               <span
                                 aria-hidden="true"
-                                className="absolute -left-3 top-1/2 hidden h-5 w-[3px] -translate-y-1/2 rounded-full bg-current opacity-80 xl:block"
+                                className="absolute -left-3 top-1/2 hidden h-5 w-[3px] -translate-y-1/2 rounded-full bg-current opacity-80 desk:block"
                               />
                             ) : null}
                             <span
@@ -17146,15 +17184,43 @@ export default function Home() {
               })}
             </nav>
 
-            <div className={`mt-4 grid grid-cols-3 gap-2 pt-4 xl:mt-3 xl:pt-3 xl:block xl:space-y-0.5 ${isLightPanelTheme ? "border-t border-slate-200" : "border-t border-white/10"}`}>
+            <div className={`mt-4 grid grid-cols-3 gap-2 pt-4 desk:mt-3 desk:pt-3 desk:block desk:space-y-0.5 ${isLightPanelTheme ? "border-t border-slate-200" : "border-t border-white/10"}`}>
+              {tieneMouse ? (
               <button
                 type="button"
-                onClick={handleTogglePanelTheme}
-                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-1.5 xl:text-left xl:text-[13px] ${
+                onClick={() => setForzarEscritorio((v) => !v)}
+                title={
+                  forzarEscritorio
+                    ? "Volver a la vista automática (móvil en ventanas angostas)"
+                    : "Mantener la vista de escritorio aunque la ventana sea angosta (pantalla dividida)"
+                }
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition desk:w-full desk:flex-row desk:justify-start desk:gap-2.5 desk:px-2.5 desk:py-1.5 desk:text-left desk:text-[13px] ${
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
+                <span
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] desk:h-7 desk:w-7 desk:rounded-lg desk:bg-none desk:bg-white/5 desk:text-slate-100 desk:shadow-none desk:ring-1 desk:ring-white/10 desk:[&_svg]:h-[18px] desk:[&_svg]:w-[18px] ${
+                    forzarEscritorio
+                      ? "bg-gradient-to-br from-emerald-400 to-teal-600"
+                      : "bg-gradient-to-br from-slate-400 to-slate-600"
+                  }`}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="2" y="4" width="20" height="13" rx="2" />
+                    <path d="M8 21h8M12 17v4" />
+                  </svg>
+                </span>
+                <span>{forzarEscritorio ? "Vista automática" : "Vista de escritorio"}</span>
+              </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={handleTogglePanelTheme}
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition desk:w-full desk:flex-row desk:justify-start desk:gap-2.5 desk:px-2.5 desk:py-1.5 desk:text-left desk:text-[13px] ${
+                  isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
+                }`}
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] desk:h-7 desk:w-7 desk:rounded-lg desk:bg-none desk:bg-white/5 desk:text-slate-100 desk:shadow-none desk:ring-1 desk:ring-white/10 desk:[&_svg]:h-[18px] desk:[&_svg]:w-[18px]">
                   {isLightPanelTheme ? IconMoon : IconSun}
                 </span>
                 <span>{isLightPanelTheme ? "Modo oscuro" : "Modo claro"}</span>
@@ -17169,11 +17235,11 @@ export default function Home() {
                   setShowPasswordText(false);
                   setShowPasswordModal(true);
                 }}
-                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-1.5 xl:text-left xl:text-[13px] ${
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition desk:w-full desk:flex-row desk:justify-start desk:gap-2.5 desk:px-2.5 desk:py-1.5 desk:text-left desk:text-[13px] ${
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-400 to-purple-600 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-400 to-purple-600 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] desk:h-7 desk:w-7 desk:rounded-lg desk:bg-none desk:bg-white/5 desk:text-slate-100 desk:shadow-none desk:ring-1 desk:ring-white/10 desk:[&_svg]:h-[18px] desk:[&_svg]:w-[18px]">
                   {IconKey}
                 </span>
                 <span>Cambiar contrasena</span>
@@ -17185,11 +17251,11 @@ export default function Home() {
                   setMessage("");
                   setShowSupportModal(true);
                 }}
-                className={`relative flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-1.5 xl:text-left xl:text-[13px] ${
+                className={`relative flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium transition desk:w-full desk:flex-row desk:justify-start desk:gap-2.5 desk:px-2.5 desk:py-1.5 desk:text-left desk:text-[13px] ${
                   isLightPanelTheme ? "text-slate-700 hover:bg-white" : "text-slate-200 hover:bg-white/5"
                 }`}
               >
-                <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-cyan-600 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-100 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px]">
+                <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-cyan-600 text-white shadow-md shadow-black/30 [&_svg]:h-[22px] [&_svg]:w-[22px] desk:h-7 desk:w-7 desk:rounded-lg desk:bg-none desk:bg-white/5 desk:text-slate-100 desk:shadow-none desk:ring-1 desk:ring-white/10 desk:[&_svg]:h-[18px] desk:[&_svg]:w-[18px]">
                   {IconHeadset}
                   {(isAdmin || isSupervisor) && pendingSupportCount > 0 ? (
                     <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white ring-2 ring-[#0e1626]">
@@ -17202,9 +17268,9 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="group flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-300 xl:w-full xl:flex-row xl:justify-start xl:gap-2.5 xl:px-2.5 xl:py-1.5 xl:text-left xl:text-[13px]"
+                className="group flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10px] font-medium text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-300 desk:w-full desk:flex-row desk:justify-start desk:gap-2.5 desk:px-2.5 desk:py-1.5 desk:text-left desk:text-[13px]"
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-md shadow-rose-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px] xl:h-7 xl:w-7 xl:rounded-lg xl:bg-none xl:bg-white/5 xl:text-slate-300 xl:shadow-none xl:ring-1 xl:ring-white/10 xl:[&_svg]:h-[18px] xl:[&_svg]:w-[18px] xl:transition xl:group-hover:bg-rose-500/15 xl:group-hover:text-rose-300">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-md shadow-rose-900/40 [&_svg]:h-[22px] [&_svg]:w-[22px] desk:h-7 desk:w-7 desk:rounded-lg desk:bg-none desk:bg-white/5 desk:text-slate-300 desk:shadow-none desk:ring-1 desk:ring-white/10 desk:[&_svg]:h-[18px] desk:[&_svg]:w-[18px] desk:transition desk:group-hover:bg-rose-500/15 desk:group-hover:text-rose-300">
                   {IconLogout}
                 </span>
                 <span>Cerrar sesion</span>
@@ -17215,7 +17281,7 @@ export default function Home() {
           {/* Barra inferior: SOLO movil. Solo la casita, centrada (abre el menu).
               Hermana del aside para que el fixed llegue al borde inferior real. */}
           <nav
-            className={`fixed inset-x-0 bottom-0 z-50 flex items-center justify-center border-t px-12 pt-2.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(3,7,18,0.6)] xl:hidden ${
+            className={`fixed inset-x-0 bottom-0 z-50 flex items-center justify-center border-t px-12 pt-2.5 pb-[max(0.6rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(3,7,18,0.6)] desk:hidden ${
               isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#141c2c]"
             }`}
           >
@@ -17335,7 +17401,7 @@ export default function Home() {
               role="dialog"
               aria-modal="true"
               aria-label="Salir de la aplicación"
-              className="fixed inset-0 z-[100] flex items-center justify-center p-4 xl:hidden"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 desk:hidden"
             >
               <div
                 className="modal-fade-in absolute inset-0 bg-slate-950/75 backdrop-blur-sm"
@@ -17402,9 +17468,9 @@ export default function Home() {
             </div>
           ) : null}
 
-          <div data-mview={mobileView} className="min-w-0 space-y-6 pb-28 xl:pb-0">
+          <div data-mview={mobileView} className="min-w-0 space-y-6 pb-28 desk:pb-0">
             {/* Boton de menu (hamburguesa) PEGAJOSO: solo PC (en movil se usa la casita inferior). */}
-            <div className="sticky top-3 z-30 hidden items-center justify-between gap-2 xl:flex">
+            <div className="sticky top-3 z-30 hidden items-center justify-between gap-2 desk:flex">
               <button
                 type="button"
                 onClick={() => setMenuOpen((value) => !value)}
@@ -17420,12 +17486,12 @@ export default function Home() {
                   <span className="block h-0.5 w-5 rounded-full bg-amber-400" />
                   <span className="block h-0.5 w-5 rounded-full bg-amber-400" />
                 </span>
-                <span className="hidden xl:inline">Menú</span>
+                <span className="hidden desk:inline">Menú</span>
               </button>
             </div>
 
             {/* Pantalla de INICIO (resumen) — SOLO movil, ajustada a una vista. */}
-            <div data-home className="xl:hidden">
+            <div data-home className="desk:hidden">
               <div className="flex flex-col gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-cyan-300/80">
@@ -17565,7 +17631,7 @@ export default function Home() {
             {/* Barra de "volver a Inicio" — SOLO movil, en cualquier vista que no sea Inicio. */}
             <div
               data-view="panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-depreciacion-perc panel-calendar panel-admin-export panel-capture-toggle"
-              className="flex items-center gap-3 xl:hidden"
+              className="flex items-center gap-3 desk:hidden"
             >
               <button
                 type="button"
@@ -17620,7 +17686,7 @@ export default function Home() {
                   ].filter(Boolean) as { id: string; label: string }[];
                   if (tabs.length < 2) return null;
                   return (
-                    <div className="flex gap-1.5 rounded-2xl border border-white/10 bg-[#1b2537] p-1.5 xl:hidden">
+                    <div className="flex gap-1.5 rounded-2xl border border-white/10 bg-[#1b2537] p-1.5 desk:hidden">
                       {tabs.map((t) => {
                         const active = mobileView === t.id;
                         return (
@@ -17645,7 +17711,7 @@ export default function Home() {
 
             <section
               id="panel-overview"
-              className={`relative hidden overflow-hidden rounded-[22px] px-5 py-4 shadow-[0_24px_80px_rgba(3,7,18,0.45)] xl:block ${
+              className={`relative hidden overflow-hidden rounded-[22px] px-5 py-4 shadow-[0_24px_80px_rgba(3,7,18,0.45)] desk:block ${
                 isLightPanelTheme
                   ? "border border-slate-200 bg-white text-slate-900"
                   : "border border-white/10 bg-gradient-to-br from-[#233152] via-[#1b2740] to-[#141d2f] text-white"
@@ -17658,7 +17724,7 @@ export default function Home() {
                 <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
               </>
             ) : null}
-            <div className="relative flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="relative flex flex-col gap-4 desk:flex-row desk:items-center desk:justify-between">
               <div className="flex min-w-0 items-center gap-3.5">
                 <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg shadow-cyan-500/25 ring-1 ring-white/20">
                   <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -17725,7 +17791,7 @@ export default function Home() {
             </div>
             </section>
 
-            <div className="hidden xl:block">{moduleSections}</div>
+            <div className="hidden desk:block">{moduleSections}</div>
 
           {/* Toasts sutiles (esquina) para exito/error. Se desvanecen solos. */}
           {error || message ? (
@@ -18620,7 +18686,7 @@ export default function Home() {
                 </div>
               ) : (
               <>
-              <div className="show-scrollbar hidden overflow-x-auto xl:block">
+              <div className="show-scrollbar hidden overflow-x-auto desk:block">
                 <table className={`min-w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                   <thead>
                     <tr className={`text-left ${isLightPanelTheme ? "bg-slate-100" : "bg-[#1a2334]"}`}>
@@ -18727,7 +18793,7 @@ export default function Home() {
               </div>
 
               {/* Tabulador PERC en TARJETAS verticales — SOLO movil (una por centro de costo). */}
-              <div className="xl:hidden">
+              <div className="desk:hidden">
                 {/* Selector "Ir a centro de costo" — abre SOLO la tabla elegida. */}
                 <div className={`border-b px-4 py-3 ${isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#202c41]"}`}>
                   <div className="relative">
@@ -18987,12 +19053,12 @@ export default function Home() {
                       onClick={handleClearTable}
                       title="Limpiar tabla"
                       aria-label="Limpiar tabla"
-                      className="inline-flex items-center gap-2 rounded-2xl bg-slate-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-slate-500 xl:px-4"
+                      className="inline-flex items-center gap-2 rounded-2xl bg-slate-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-slate-500 desk:px-4"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 desk:h-3.5 desk:w-3.5" aria-hidden="true">
                         <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
                       </svg>
-                      <span className="hidden xl:inline">Limpiar tabla</span>
+                      <span className="hidden desk:inline">Limpiar tabla</span>
                     </button>
                     {!isPercHistory ? (
                       <button
@@ -19001,12 +19067,12 @@ export default function Home() {
                         disabled={isLoadingData}
                         title="Recuperar datos"
                         aria-label="Recuperar datos"
-                        className="inline-flex items-center gap-2 rounded-2xl bg-sky-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-sky-900/70 xl:px-4"
+                        className="inline-flex items-center gap-2 rounded-2xl bg-sky-600 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-sky-900/70 desk:px-4"
                       >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 desk:h-3.5 desk:w-3.5" aria-hidden="true">
                           <path d="M12 3v12M7 11l5 5 5-5M5 21h14" />
                         </svg>
-                        <span className="hidden xl:inline">
+                        <span className="hidden desk:inline">
                           {isLoadingData ? "Recuperando..." : "Recuperar datos"}
                         </span>
                       </button>
@@ -19017,13 +19083,13 @@ export default function Home() {
                       disabled={isSaving || percEditingBlocked}
                       title="Guardar datos"
                       aria-label="Guardar datos"
-                      className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 xl:px-4"
+                      className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 desk:px-4"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 xl:h-3.5 xl:w-3.5" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 desk:h-3.5 desk:w-3.5" aria-hidden="true">
                         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                         <path d="M17 21v-8H7v8M7 3v5h8" />
                       </svg>
-                      <span className="hidden xl:inline">
+                      <span className="hidden desk:inline">
                         {isSaving
                           ? "Guardando..."
                           : isPercHistory
@@ -20021,7 +20087,7 @@ export default function Home() {
               </div>
 
               {usersModalTab === "servicios" ? (
-              <div className="mb-6 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="mb-6 grid gap-4 desk:grid-cols-[1.05fr_0.95fr]">
                 <form
                   className="rounded-[24px] border border-white/10 bg-[#1b2537] p-5"
                   onSubmit={handleAdminCreateUser}
@@ -23381,7 +23447,7 @@ export default function Home() {
           ) : null}
 
           {/* Asistente virtual (robot medico) - abajo a la derecha. SOLO en PC. */}
-          <div className="fixed bottom-5 right-5 z-40 hidden flex-col items-end gap-3 xl:flex">
+          <div className="fixed bottom-5 right-5 z-40 hidden flex-col items-end gap-3 desk:flex">
             {assistantOpen ? (
               <div className="modal-pop-in flex h-[66vh] max-h-[560px] w-[360px] max-w-[90vw] flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
                 {/* Encabezado */}
@@ -23578,7 +23644,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f4efe6] text-slate-950">
-      <section className="flex min-h-screen items-start justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-4 pb-10 pt-8 sm:pt-12 xl:items-center xl:px-10 xl:py-6">
+      <section className="flex min-h-screen items-start justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-4 pb-10 pt-8 sm:pt-12 desk:items-center desk:px-10 desk:py-6">
         {/* Panel de monitoreo OCULTO: la pantalla de inicio solo muestra el login. */}
         <div className="hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.22),transparent_28%),radial-gradient(circle_at_80%_15%,rgba(16,185,129,0.18),transparent_25%),linear-gradient(150deg,#020617_0%,#111827_55%,#172554_100%)]" />
@@ -23630,7 +23696,7 @@ export default function Home() {
                       className="rounded-[24px] border border-white/10 bg-[#162034]/90 p-5"
                     >
                       <div className="h-6 w-52 rounded bg-white/10" />
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2 desk:grid-cols-3">
                         {Array.from({ length: 6 }, (_, cardIndex) => (
                           <div
                             key={`card-skeleton-${groupIndex}-${cardIndex}`}
@@ -23751,11 +23817,11 @@ export default function Home() {
 
         </div>
 
-        <div className="relative flex w-full max-w-md items-start justify-center xl:min-h-[672px] xl:max-w-[1456px] xl:overflow-hidden xl:rounded-[30px] xl:border xl:border-white/[0.22] xl:bg-[#0e1626]/75 xl:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_40px_120px_rgba(2,6,18,0.7)] xl:backdrop-blur-2xl">
-          <div className="w-full xl:flex xl:w-1/2 xl:shrink-0 xl:flex-col xl:justify-center xl:px-14 xl:py-10">
+        <div className="relative flex w-full max-w-md items-start justify-center desk:min-h-[672px] desk:max-w-[1456px] desk:overflow-hidden desk:rounded-[30px] desk:border desk:border-white/[0.22] desk:bg-[#0e1626]/75 desk:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_40px_120px_rgba(2,6,18,0.7)] desk:backdrop-blur-2xl">
+          <div className="w-full desk:flex desk:w-1/2 desk:shrink-0 desk:flex-col desk:justify-center desk:px-14 desk:py-10">
             {/* Encabezado fuera del modal: Hospital Nacional · El Salvador. */}
-            <div className="mb-4 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl xl:mx-auto xl:mb-0 xl:max-w-[400px] xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:pb-6 xl:shadow-none xl:backdrop-blur-none">
-              <p className="text-xl font-light tracking-[0.22em] text-white sm:text-2xl xl:text-lg">
+            <div className="mb-4 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl desk:mx-auto desk:mb-0 desk:max-w-[400px] desk:rounded-none desk:border-0 desk:bg-transparent desk:p-0 desk:pb-6 desk:shadow-none desk:backdrop-blur-none">
+              <p className="text-xl font-light tracking-[0.22em] text-white sm:text-2xl desk:text-lg">
                 HOSPITAL NACIONAL
               </p>
               <div
@@ -23793,16 +23859,16 @@ export default function Home() {
                 </button>
               </section>
             ) : (
-              <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#0e1626]/80 p-6 shadow-2xl shadow-black/60 backdrop-blur-xl sm:p-9 xl:mx-auto xl:w-full xl:max-w-[400px] xl:rounded-[22px] xl:border xl:border-white/[0.16] xl:bg-white/[0.02] xl:p-7 xl:shadow-none xl:backdrop-blur-none">
+              <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#0e1626]/80 p-6 shadow-2xl shadow-black/60 backdrop-blur-xl sm:p-9 desk:mx-auto desk:w-full desk:max-w-[400px] desk:rounded-[22px] desk:border desk:border-white/[0.16] desk:bg-white/[0.02] desk:p-7 desk:shadow-none desk:backdrop-blur-none">
                 {/* Resplandores de fondo */}
                 <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-cyan-500/20 blur-3xl" />
                 <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-20 h-56 w-56 rounded-full bg-blue-600/20 blur-3xl" />
                 <div className="relative">
-                <div className="mb-7 flex flex-col items-center text-center xl:mb-5">
+                <div className="mb-7 flex flex-col items-center text-center desk:mb-5">
                   {/* Logo PULSO con resplandor */}
-                  <span className="relative flex h-16 w-16 items-center justify-center xl:h-12 xl:w-12">
+                  <span className="relative flex h-16 w-16 items-center justify-center desk:h-12 desk:w-12">
                     <span aria-hidden className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 opacity-60 blur-lg" />
-                    <svg viewBox="0 0 48 48" className="relative h-16 w-16 drop-shadow-lg xl:h-12 xl:w-12" aria-hidden="true">
+                    <svg viewBox="0 0 48 48" className="relative h-16 w-16 drop-shadow-lg desk:h-12 desk:w-12" aria-hidden="true">
                       <defs>
                         <linearGradient id="pulsoGradLogin" x1="0" y1="0" x2="1" y2="1">
                           <stop offset="0" stopColor="#22d3ee" />
@@ -23820,16 +23886,16 @@ export default function Home() {
                       />
                     </svg>
                   </span>
-                  <h2 className="mt-4 text-3xl font-bold tracking-tight text-white xl:mt-3 xl:text-2xl">
+                  <h2 className="mt-4 text-3xl font-bold tracking-tight text-white desk:mt-3 desk:text-2xl">
                     Bienvenido a PULSO
                   </h2>
-                  <p className="mt-1.5 text-[13px] font-medium leading-snug text-slate-300 xl:text-[12px]">
+                  <p className="mt-1.5 text-[13px] font-medium leading-snug text-slate-300 desk:text-[12px]">
                     Plataforma Única de Logística y Servicios Operativos
                   </p>
-                  <p className="mt-1.5 text-sm text-slate-400 xl:mt-1 xl:text-[12.5px]">Iniciá sesión para continuar</p>
+                  <p className="mt-1.5 text-sm text-slate-400 desk:mt-1 desk:text-[12.5px]">Iniciá sesión para continuar</p>
                 </div>
 
-                <form className="space-y-5 xl:space-y-3.5" onSubmit={handleSubmit}>
+                <form className="space-y-5 desk:space-y-3.5" onSubmit={handleSubmit}>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-300">Usuario</span>
                     <div className="relative mt-2">
@@ -23946,7 +24012,7 @@ export default function Home() {
             )}
 
             {/* Creditos del equipo desarrollador, debajo del modal de login. */}
-            <div className="mt-10 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl xl:hidden">
+            <div className="mt-10 w-full rounded-[24px] border border-white/10 bg-[#0e1626]/70 px-6 py-4 text-center shadow-xl shadow-black/40 backdrop-blur-xl desk:hidden">
               <p className="text-[10px] font-light uppercase tracking-[0.32em] text-slate-400">
                 Desarrollado por
               </p>
@@ -23966,7 +24032,7 @@ export default function Home() {
           {/* Mitad derecha de la tarjeta. SOLO escritorio (>= xl): identidad de la
               plataforma arriba y los creditos de ESDOMED al pie. El logo no se
               repite aqui: vive unicamente en la tarjeta de inicio de sesion. */}
-          <aside className="relative hidden xl:flex xl:w-1/2 xl:flex-col xl:justify-between xl:border-l xl:border-white/10 xl:bg-gradient-to-br xl:from-white/[0.03] xl:via-transparent xl:to-transparent xl:px-14 xl:py-11">
+          <aside className="relative hidden desk:flex desk:w-1/2 desk:flex-col desk:justify-between desk:border-l desk:border-white/10 desk:bg-gradient-to-br desk:from-white/[0.03] desk:via-transparent desk:to-transparent desk:px-14 desk:py-11">
             <div aria-hidden className="pointer-events-none absolute -right-28 -top-32 h-72 w-72 rounded-full bg-cyan-500/[0.07] blur-3xl" />
 
             <div className="relative">
