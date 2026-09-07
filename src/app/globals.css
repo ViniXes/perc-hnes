@@ -92,11 +92,10 @@ body {
   }
 }
 
-/* Con la vista de escritorio forzada nada se oculta: se ve el panel entero. */
-html.forzar-escritorio [data-mview] > [data-view],
-html.forzar-escritorio [data-mview] > [data-home] {
-  display: block;
-}
+/* Con la vista de escritorio forzada no hace falta ninguna regla extra: al quedar
+   excluida del bloque de arriba, ya no se oculta nada y cada elemento conserva lo
+   que dice su propia clase. (Antes se forzaba display:block y eso hacia aparecer
+   TAMBIEN la pantalla de inicio movil, duplicando el resumen del periodo.) */
 
 /* ===========================================================================
    Escala de escritorio: en pantallas grandes (>= 1280px) se reduce todo al 90%,

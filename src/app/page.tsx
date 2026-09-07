@@ -6117,19 +6117,18 @@ export default function Home() {
     () => calendarOverrides[calendarEditorPeriodId] || [],
     [calendarEditorPeriodId, calendarOverrides],
   );
-  // Resumen de la pantalla de inicio. Antes comparaba contra TODOS los servicios
-  // definidos (65), incluidos los que no reportan nada, y el numerador ignoraba los
-  // tableros automaticos y los recibidos fuera de PULSO: daba "25 de 65" cuando en
-  // realidad estaban casi todos. Ahora sale del mismo tablero que las barras.
-  const resumenDependencias = useMemo(() => {
-    const servicios = dashboardGroups
-      .flatMap((group) => group.services)
-      .filter((service) => service.modules.length > 0);
-    const completos = servicios.filter((service) =>
-      service.modules.every((mod) => mod.completed),
-    ).length;
-    return { completos, total: servicios.length };
-  }, [dashboardGroups]);
+  // Resumen de la pantalla de inicio: cuenta TABLEROS (PERC + SEPS + Horas), que es
+  // exactamente la suma de las tres barras que van debajo. Contar "dependencias"
+  // daba numeros que no cerraban: las subunidades de UCI y UCIN se cuentan como una
+  // sola en el monitoreo pero son varias como servicio, y aparecian como pendientes
+  // aunque las tres barras estuvieran al 100%.
+  const resumenDependencias = useMemo(
+    () => ({
+      completos: moduleStats.PERC.done + moduleStats.SEPS.done + moduleStats.Horas.done,
+      total: moduleStats.PERC.total + moduleStats.SEPS.total + moduleStats.Horas.total,
+    }),
+    [moduleStats],
+  );
   const currentMonthProgress = Math.round(
     (resumenDependencias.completos / Math.max(resumenDependencias.total, 1)) * 100,
   );
@@ -17598,7 +17597,7 @@ export default function Home() {
                     </div>
                   </div>
                   <p className="mt-3 text-center text-xs text-slate-400">
-                    {resumenDependencias.completos} de {resumenDependencias.total} dependencias han ingresado su información
+                    {resumenDependencias.completos} de {resumenDependencias.total} tableros del mes están completos
                   </p>
                 </div>
 
