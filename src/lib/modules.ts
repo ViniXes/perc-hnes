@@ -130,6 +130,9 @@ const DISTRIBUCION_AREAS: AreaDefinition[] = SERVICE_DEFINITIONS.map((service) =
 // entradas nuevas en NEW_AREAS (abajo).
 
 const AREA_OVERRIDES: Record<string, ModuleId[]> = {
+  // Servicios Generales / Aseo: SOLO PERC. Sus horas se reportan dentro de
+  // "Servicios Varios", junto con Saneamiento y Transporte.
+  aseo: ["perc"],
   // Transporte General: SOLO PERC. Su Distribucion de Horas se reporta dentro del
   // servicio "Servicios Varios" (Saneamiento + Transporte), no aqui.
   "transporte-general": ["perc"],
@@ -195,8 +198,6 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "medicina-critica": ["distribucion"],
   // Biologia Molecular: por ahora SOLO Distribucion de Horas.
   "biologia-molecular": ["perc", "distribucion"],
-  // Recursos Humanos: por ahora SOLO Distribucion de Horas.
-  rrhh: ["distribucion", "sesps"],
   // UCIN (Unidad de Cuidados Intermedios): 3 subunidades, solo SEPS.
   "ucin-aislados": ["sesps"],
   "ucin-cronicos": ["sesps"],

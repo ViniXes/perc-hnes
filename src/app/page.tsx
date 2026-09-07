@@ -296,9 +296,8 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
     firstName: "Andrea Michelle",
     lastName: "Amaya Majano",
     modules: ["distribucion"],
-    // Ademas de monitorear/descargar el consolidado, DIGITA su propio servicio
-    // de Recursos Humanos (Horas + SEPS de "Salud Mental I").
-    captureServiceId: "rrhh",
+    // Ya NO captura: el servicio de Recursos Humanos se elimino (no reporta ni SEPS
+    // ni Horas). Queda solo como monitora del consolidado de Horas.
   },
 ];
 // --- Censo Diario de Pacientes (submenu bajo PERC; SOLO supervision) -----------
@@ -822,7 +821,6 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "transporte-general": "administrativa",
   mantenimiento: "administrativa",
   "saneamiento-ambiental": "administrativa",
-  rrhh: "administrativa",
   "servicios-varios": "administrativa",
   tecnologia: "administrativa",
 };
@@ -897,7 +895,6 @@ const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   lavanderia: "dep.lavanderia",
   "transporte-general": "dep.transporte",
   mantenimiento: "dep.mantenimiento",
-  rrhh: "dep.rrhh",
   "servicios-varios": "dep.serviciosvarios",
   tecnologia: "dep.tecnologia",
   ucp: "dep.ucp",

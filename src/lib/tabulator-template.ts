@@ -460,12 +460,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     name: "Biologia Molecular",
     rows: ["530_1-Laboratorio de biologia molecular | Examen"],
   },
-  {
-    // Recursos Humanos: por ahora SOLO Distribucion de Horas.
-    id: "rrhh",
-    name: "Recursos Humanos",
-    rows: [],
-  },
+  // "Recursos Humanos" se elimino: ya no reporta SEPS ni Distribucion de Horas.
   {
     // Servicios Varios (Saneamiento + Transporte juntos): SOLO Distribucion de Horas.
     id: "servicios-varios",

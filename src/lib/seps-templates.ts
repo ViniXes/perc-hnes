@@ -23,7 +23,6 @@ import { ENFERMERIA_TEMPLATE } from "@/lib/seps-enfermeria";
 import { MEDICINA_INTERNA_TEMPLATE } from "@/lib/seps-medicina-interna";
 import { MAXIMA_EMERGENCIA_TEMPLATE } from "@/lib/seps-maxima-emergencia";
 import { CENTRO_QUIRURGICO_TEMPLATE } from "@/lib/seps-centro-quirurgico";
-import { RRHH_TEMPLATE } from "@/lib/seps-rrhh";
 import { UCIN_AISLADOS_TEMPLATE, UCIN_CRONICOS_TEMPLATE, UCIN_TEMPLATE, UCIN_CONSOLIDADO_TEMPLATE } from "@/lib/seps-ucin";
 import { CUIDADOS_PALIATIVOS_TEMPLATE } from "@/lib/seps-cuidados-paliativos";
 import { UCI_AISLADOS_TEMPLATE, UCI_CARDIOVASCULAR_TEMPLATE, UCI_EXTRACORPOREA_TEMPLATE, UCI_GENERAL_1_TEMPLATE, UCI_GENERAL_2_TEMPLATE, UCI_NEUROCRITICOS_TEMPLATE, UCI_QUIRURGICA_TEMPLATE, UCI_CONSOLIDADO_TEMPLATE } from "@/lib/seps-uci";
@@ -220,8 +219,6 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "maxima-emergencia": MAXIMA_EMERGENCIA_TEMPLATE,
   // Cirugia (Centro Quirurgico): SEPS diario.
   "centro-quirurgico": CENTRO_QUIRURGICO_TEMPLATE,
-  // Recursos Humanos (Salud Mental I): SEPS diario.
-  "rrhh": RRHH_TEMPLATE,
   // UCIN: 3 subunidades (mismo cuadro Hospitalizacion).
   "ucin-aislados": UCIN_AISLADOS_TEMPLATE,
   "ucin-cronicos": UCIN_CRONICOS_TEMPLATE,
