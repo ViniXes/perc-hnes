@@ -204,7 +204,6 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "ucin-consolidado": ["sesps"],
   "cuidados-paliativos-enfermeria": ["sesps"],
   "cuidados-paliativos-psicologo": ["sesps"],
-  "cuidados-paliativos-fisioterapia": ["sesps"],
   "cuidados-paliativos-ts": ["sesps"],
   "cuidados-paliativos-espiritual": ["sesps"],
   "cuidados-paliativos-consolidado": ["sesps"],

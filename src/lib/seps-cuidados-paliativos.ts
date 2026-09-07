@@ -148,7 +148,7 @@ export const CUIDADOS_PALIATIVOS_CONSOLIDADO_TEMPLATE: SepsTemplate = {
   serviceId: "cuidados-paliativos-consolidado",
   establishment: "HOSPITAL NACIONAL EL SALVADOR",
   displayName: "Cuidados Paliativos Consolidado",
-  consolidatesFrom: ["cuidados-paliativos", "cuidados-paliativos-enfermeria", "cuidados-paliativos-psicologo", "cuidados-paliativos-fisioterapia", "cuidados-paliativos-ts", "cuidados-paliativos-espiritual"],
+  consolidatesFrom: ["cuidados-paliativos", "cuidados-paliativos-enfermeria", "cuidados-paliativos-psicologo", "cuidados-paliativos-ts", "cuidados-paliativos-espiritual"],
   tables: [
     {
       id: "cp_consolidado",

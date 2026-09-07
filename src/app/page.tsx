@@ -738,7 +738,7 @@ const SERVICE_FAMILIES: { id: string; title: string; group: string; members: str
     id: "cuidados-paliativos",
     title: "Cuidados Paliativos",
     group: "medica",
-    members: ["cuidados-paliativos", "cuidados-paliativos-enfermeria", "cuidados-paliativos-psicologo", "cuidados-paliativos-fisioterapia", "cuidados-paliativos-ts", "cuidados-paliativos-espiritual", "cuidados-paliativos-consolidado"],
+    members: ["cuidados-paliativos", "cuidados-paliativos-enfermeria", "cuidados-paliativos-psicologo", "cuidados-paliativos-ts", "cuidados-paliativos-espiritual", "cuidados-paliativos-consolidado"],
   },
 ];
 const SERVICE_FAMILY_BY_ID: Record<string, string> = Object.fromEntries(
@@ -794,7 +794,6 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "ucin-consolidado": "medica",
   "cuidados-paliativos-enfermeria": "medica",
   "cuidados-paliativos-psicologo": "medica",
-  "cuidados-paliativos-fisioterapia": "medica",
   "cuidados-paliativos-ts": "medica",
   "cuidados-paliativos-espiritual": "medica",
   "cuidados-paliativos-consolidado": "medica",
@@ -4000,21 +3999,57 @@ const PERC_FIXED_SERVICE_IDS = new Set(
   ).map((service) => service.id),
 );
 
+/**
+ * Avance por modulo. Cuenta EXACTAMENTE igual que el monitoreo: las familias
+ * (UCI, UCIN, Cuidados Paliativos) valen 1, no una por subunidad; en SEPS, UCI y
+ * UCIN se miden por su consolidado y las tablas sin responsable no cuentan. Antes
+ * esta funcion sumaba servicio por servicio y por eso el avance decia "20 de 39"
+ * mientras el monitoreo decia "18 de 23".
+ */
 function computeModuleStats(groups: PublicDashboardGroup[]) {
   const base: Record<string, { done: number; total: number }> = {
     PERC: { done: 0, total: 0 },
     SEPS: { done: 0, total: 0 },
     Horas: { done: 0, total: 0 },
   };
-  for (const group of groups) {
-    for (const service of group.services) {
-      for (const mod of service.modules) {
-        const stat = base[mod.label];
-        if (stat) {
-          stat.total += 1;
-          if (mod.completed) stat.done += 1;
-        }
+  const todos = groups.flatMap((group) => group.services);
+
+  for (const label of ["PERC", "SEPS", "Horas"] as const) {
+    const delModulo = todos.filter((service) =>
+      service.modules.some((mod) => mod.label === label),
+    );
+    const listo = (service: (typeof delModulo)[number]) =>
+      !!service.modules.find((mod) => mod.label === label)?.completed;
+    const familiasVistas = new Set<string>();
+
+    for (const service of delModulo) {
+      const familyId = SERVICE_FAMILY_BY_ID[service.id];
+
+      if (!familyId) {
+        base[label].total += 1;
+        if (listo(service)) base[label].done += 1;
+        continue;
       }
+      if (familiasVistas.has(familyId)) continue;
+      familiasVistas.add(familyId);
+      base[label].total += 1;
+
+      const consolidadoId = label === "SEPS" ? SEPS_FAMILIA_CONSOLIDADO[familyId] : undefined;
+      if (consolidadoId) {
+        const consolidado = delModulo.find((x) => x.id === consolidadoId);
+        if (consolidado && listo(consolidado)) base[label].done += 1;
+        continue;
+      }
+
+      const excluidos =
+        label === "SEPS" ? (SEPS_FAMILIA_SIN_RESPONSABLE[familyId] ?? []) : [];
+      const miembros = delModulo.filter(
+        (x) =>
+          SERVICE_FAMILY_BY_ID[x.id] === familyId &&
+          !getSepsTemplate(x.id)?.consolidatesFrom &&
+          !excluidos.includes(x.id),
+      );
+      if (miembros.length > 0 && miembros.every(listo)) base[label].done += 1;
     }
   }
   return base;

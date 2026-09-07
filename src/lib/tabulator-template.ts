@@ -399,11 +399,8 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     name: "Cuidados Paliativos - Psicólogo",
     rows: [],
   },
-  {
-    id: "cuidados-paliativos-fisioterapia",
-    name: "Cuidados Paliativos - Fisioterapia",
-    rows: [],
-  },
+  // "Cuidados Paliativos - Fisioterapia" se elimino: esa tabla ya vive dentro del
+  // SEPS de Fisioterapia, no es un servicio aparte.
   {
     id: "cuidados-paliativos-ts",
     name: "Cuidados Paliativos - Trabajo Social",
