@@ -66,26 +66,36 @@ body {
    coincide con la vista activa. En PC (>= 1280) no aplica: se ve el panel completo.
    =========================================================================== */
 @media (max-width: 1279px) {
-  [data-mview] > [data-view],
-  [data-mview] > [data-home] {
+  /* html.forzar-escritorio queda EXCLUIDO: si el usuario pidio la vista de
+     escritorio, el panel se muestra completo aunque la ventana sea angosta
+     (pantalla dividida en la PC). Sin esta exclusion quedaba una vista hibrida:
+     menu de escritorio pero contenido oculto de a una pantalla. */
+  html:not(.forzar-escritorio) [data-mview] > [data-view],
+  html:not(.forzar-escritorio) [data-mview] > [data-home] {
     display: none !important;
   }
-  [data-mview="home"] > [data-home] {
+  html:not(.forzar-escritorio) [data-mview="home"] > [data-home] {
     display: block !important;
   }
-  [data-mview="home"] > [data-view~="home"],
-  [data-mview="panel-services"] > [data-view~="panel-services"],
-  [data-mview="panel-tabulator"] > [data-view~="panel-tabulator"],
-  [data-mview="panel-seps"] > [data-view~="panel-seps"],
-  [data-mview="panel-horas"] > [data-view~="panel-horas"],
-  [data-mview="panel-calendar"] > [data-view~="panel-calendar"],
-  [data-mview="panel-capture-toggle"] > [data-view~="panel-capture-toggle"],
-  [data-mview="panel-censo"] > [data-view~="panel-censo"],
-  [data-mview="panel-insumos"] > [data-view~="panel-insumos"],
-  [data-mview="panel-poa"] > [data-view~="panel-poa"],
-  [data-mview="panel-admin-export"] > [data-view~="panel-admin-export"] {
+  html:not(.forzar-escritorio) [data-mview="home"] > [data-view~="home"],
+  html:not(.forzar-escritorio) [data-mview="panel-services"] > [data-view~="panel-services"],
+  html:not(.forzar-escritorio) [data-mview="panel-tabulator"] > [data-view~="panel-tabulator"],
+  html:not(.forzar-escritorio) [data-mview="panel-seps"] > [data-view~="panel-seps"],
+  html:not(.forzar-escritorio) [data-mview="panel-horas"] > [data-view~="panel-horas"],
+  html:not(.forzar-escritorio) [data-mview="panel-calendar"] > [data-view~="panel-calendar"],
+  html:not(.forzar-escritorio) [data-mview="panel-capture-toggle"] > [data-view~="panel-capture-toggle"],
+  html:not(.forzar-escritorio) [data-mview="panel-censo"] > [data-view~="panel-censo"],
+  html:not(.forzar-escritorio) [data-mview="panel-insumos"] > [data-view~="panel-insumos"],
+  html:not(.forzar-escritorio) [data-mview="panel-poa"] > [data-view~="panel-poa"],
+  html:not(.forzar-escritorio) [data-mview="panel-admin-export"] > [data-view~="panel-admin-export"] {
     display: block !important;
   }
+}
+
+/* Con la vista de escritorio forzada nada se oculta: se ve el panel entero. */
+html.forzar-escritorio [data-mview] > [data-view],
+html.forzar-escritorio [data-mview] > [data-home] {
+  display: block;
 }
 
 /* ===========================================================================
@@ -99,6 +109,11 @@ body {
   body {
     zoom: 0.92;
   }
+}
+/* Misma reduccion cuando la vista de escritorio se forzo en una ventana angosta:
+   ayuda a que entre mas tabla a lo ancho. */
+html.forzar-escritorio body {
+  zoom: 0.92;
 }
 
 /* ===========================================================================

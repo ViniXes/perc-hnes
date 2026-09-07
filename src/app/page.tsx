@@ -30,7 +30,6 @@ import { auth, createSecondaryAuth, firestoreDatabaseId } from "@/lib/firebase";
 import { db, shutdownFirestore } from "@/lib/firestore";
 import {
   CONSOLIDADO_ROW_ORDER,
-  SERVICE_COUNT,
   SERVICE_DEFINITIONS,
   TABULATOR_HEADERS,
   isFixedRow,
@@ -5221,7 +5220,6 @@ export default function Home() {
   const [avancePeriod, setAvancePeriod] = useState("");
   const [avanceGroups, setAvanceGroups] = useState<PublicDashboardGroup[] | null>(null);
   const [avanceLoading, setAvanceLoading] = useState(false);
-  const [publicCompletedCount, setPublicCompletedCount] = useState(0);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
   const [calendarEditorPeriodId, setCalendarEditorPeriodId] = useState(() => getPeriodId(new Date()));
   // Rango de fechas no habiles a agregar de una sola vez (Desde / Hasta).
@@ -6119,8 +6117,21 @@ export default function Home() {
     () => calendarOverrides[calendarEditorPeriodId] || [],
     [calendarEditorPeriodId, calendarOverrides],
   );
+  // Resumen de la pantalla de inicio. Antes comparaba contra TODOS los servicios
+  // definidos (65), incluidos los que no reportan nada, y el numerador ignoraba los
+  // tableros automaticos y los recibidos fuera de PULSO: daba "25 de 65" cuando en
+  // realidad estaban casi todos. Ahora sale del mismo tablero que las barras.
+  const resumenDependencias = useMemo(() => {
+    const servicios = dashboardGroups
+      .flatMap((group) => group.services)
+      .filter((service) => service.modules.length > 0);
+    const completos = servicios.filter((service) =>
+      service.modules.every((mod) => mod.completed),
+    ).length;
+    return { completos, total: servicios.length };
+  }, [dashboardGroups]);
   const currentMonthProgress = Math.round(
-    (publicCompletedCount / Math.max(SERVICE_DEFINITIONS.length, 1)) * 100,
+    (resumenDependencias.completos / Math.max(resumenDependencias.total, 1)) * 100,
   );
   const assignedServiceUsers = useMemo(() => {
     const assignedByService = new Map<string, ManagedUser>();
@@ -6262,6 +6273,15 @@ export default function Home() {
     setTieneMouse(window.matchMedia("(pointer: fine)").matches);
   }, []);
 
+  // Tableros dados por recibidos fuera de PULSO: se leen al ENTRAR. Antes solo se
+  // leian al abrir un monitoreo, y por eso la pantalla de inicio mostraba menos
+  // completos que el monitoreo (el mismo mes daba dos numeros distintos).
+  useEffect(() => {
+    if (!user || firestoreUnavailable || !firestoreStatusReady) return;
+    void loadRecibidosExternos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, firestoreUnavailable, firestoreStatusReady]);
+
   // Vista de escritorio forzada: se lee una vez al abrir y se guarda al cambiarla.
   // La clase va en el <html> porque de ahi cuelga la variante "desk" del CSS.
   useEffect(() => {
@@ -6398,7 +6418,6 @@ export default function Home() {
         setCalendarOverrides(dashboard.calendarOverrides);
         setPublicDashboardMonths(dashboard.months);
         setPublicDashboardGroups(dashboard.groups);
-        setPublicCompletedCount(dashboard.completedCount);
 
         // Los overrides de tableros son opcionales para el tablero: si su lectura
         // falla (p.ej. reglas aun no publicadas), no debe romper el dashboard.
@@ -6416,7 +6435,6 @@ export default function Home() {
           if (!cancelled) {
             setPublicDashboardMonths([]);
             setPublicDashboardGroups([]);
-            setPublicCompletedCount(0);
           }
 
           return;
@@ -6425,7 +6443,6 @@ export default function Home() {
         if (!cancelled) {
           setPublicDashboardMonths([]);
           setPublicDashboardGroups([]);
-          setPublicCompletedCount(0);
         }
       } finally {
         if (!cancelled) {
@@ -8828,7 +8845,6 @@ export default function Home() {
       setCalendarOverrides(dashboard.calendarOverrides);
       setPublicDashboardMonths(dashboard.months);
       setPublicDashboardGroups(dashboard.groups);
-      setPublicCompletedCount(dashboard.completedCount);
 
       if (showMessage) {
         setMessage("Tablero general actualizado.");
@@ -8837,7 +8853,6 @@ export default function Home() {
       if (await handleFirestoreError(dashboardError)) {
         setPublicDashboardMonths([]);
         setPublicDashboardGroups([]);
-        setPublicCompletedCount(0);
         return;
       }
 
@@ -17572,18 +17587,18 @@ export default function Home() {
                     <div className="min-w-0 flex-1 space-y-2">
                       <div className="flex items-center justify-between rounded-xl bg-emerald-500/10 px-3 py-2">
                         <span className="text-xs font-medium text-emerald-200">Completados</span>
-                        <span className="text-lg font-bold text-emerald-300">{publicCompletedCount}</span>
+                        <span className="text-lg font-bold text-emerald-300">{resumenDependencias.completos}</span>
                       </div>
                       <div className="flex items-center justify-between rounded-xl bg-amber-500/10 px-3 py-2">
                         <span className="text-xs font-medium text-amber-200">Pendientes</span>
                         <span className="text-lg font-bold text-amber-300">
-                          {Math.max(SERVICE_COUNT - publicCompletedCount, 0)}
+                          {Math.max(resumenDependencias.total - resumenDependencias.completos, 0)}
                         </span>
                       </div>
                     </div>
                   </div>
                   <p className="mt-3 text-center text-xs text-slate-400">
-                    {publicCompletedCount} de {SERVICE_COUNT} dependencias han ingresado su información
+                    {resumenDependencias.completos} de {resumenDependencias.total} dependencias han ingresado su información
                   </p>
                 </div>
 
