@@ -696,6 +696,14 @@ const SEPS_FAMILIA_CONSOLIDADO: Record<string, string> = {
   ucin: "ucin-consolidado",
 };
 
+// Subunidades que NO cuentan para el avance de su familia en SEPS. Se usa cuando la
+// tabla existe pero todavia no hay nadie asignado para llenarla: se sigue mostrando
+// el tabulador, pero no arrastra el porcentaje hacia abajo. Al asignar a alguien se
+// borra de esta lista y vuelve a contar.
+const SEPS_FAMILIA_SIN_RESPONSABLE: Record<string, string[]> = {
+  "cuidados-paliativos": ["cuidados-paliativos-psicologo"],
+};
+
 // Servicio -> centro de costo PROPIO, cuando el nombre del servicio no coincide
 // literalmente con el del centro. Ese centro queda bloqueado en su propio PERC.
 const PERC_SELF_HEADER_BY_SERVICE: Record<string, string> = {
@@ -5696,8 +5704,13 @@ export default function Home() {
           });
           continue;
         }
+        const excluidos =
+          statsLabel === "SEPS" ? (SEPS_FAMILIA_SIN_RESPONSABLE[familyId] ?? []) : [];
         const members = rawStats.filter(
-          (x) => SERVICE_FAMILY_BY_ID[x.id] === familyId && !getSepsTemplate(x.id)?.consolidatesFrom,
+          (x) =>
+            SERVICE_FAMILY_BY_ID[x.id] === familyId &&
+            !getSepsTemplate(x.id)?.consolidatesFrom &&
+            !excluidos.includes(x.id),
         );
         const done = members.filter(isDone).length;
         const total = members.length;
@@ -21601,6 +21614,8 @@ export default function Home() {
                   name: string;
                   done: boolean;
                   family?: { done: number; total: number; pct: number };
+                  /** Subunidades que faltan (para decir en el tooltip cuales son). */
+                  pendientes?: string[];
                 };
                 const statsItems: StatsItem[] = [];
                 const seenFam = new Set<string>();
@@ -21624,10 +21639,13 @@ export default function Home() {
                       });
                       continue;
                     }
+                    const excluidosFam =
+                      statsLabel === "SEPS" ? (SEPS_FAMILIA_SIN_RESPONSABLE[famId] ?? []) : [];
                     const members = rawStats.filter(
                       (x) =>
                         SERVICE_FAMILY_BY_ID[x.id] === famId &&
-                        !getSepsTemplate(x.id)?.consolidatesFrom,
+                        !getSepsTemplate(x.id)?.consolidatesFrom &&
+                        !excluidosFam.includes(x.id),
                     );
                     const dm = members.filter(isStatsDone).length;
                     const tm = members.length;
@@ -21637,6 +21655,7 @@ export default function Home() {
                       name: famDef?.title ?? famId,
                       done: pm === 100,
                       family: { done: dm, total: tm, pct: pm },
+                      pendientes: members.filter((x) => !isStatsDone(x)).map((x) => x.name),
                     });
                   } else {
                     statsItems.push({ id: s.id, name: s.name, done: isStatsDone(s) });
@@ -21767,7 +21786,11 @@ export default function Home() {
                                 key={it.id}
                                 title={
                                   fam
-                                    ? `${it.name} — ${fam.done}/${fam.total} (${fam.pct}%)`
+                                    ? `${it.name} — ${fam.done}/${fam.total} (${fam.pct}%)${
+                                        it.pendientes && it.pendientes.length > 0
+                                          ? `\nFalta: ${it.pendientes.join(", ")}`
+                                          : ""
+                                      }`
                                     : `${it.name} — ${
                                         cerrado
                                           ? done
