@@ -688,6 +688,14 @@ function formatearNumeroSimple(valor: number): string {
   return Number.isInteger(valor) ? String(valor) : String(Math.round(valor * 100) / 100);
 }
 
+// En el MONITOREO DE SEPS, estas familias NO se miden por sus subunidades: lo que
+// vale es que el CONSOLIDADO este lleno (es el que se entrega). Si el consolidado
+// tiene datos del mes, la familia va en verde al 100%.
+const SEPS_FAMILIA_CONSOLIDADO: Record<string, string> = {
+  uci: "uci-consolidado",
+  ucin: "ucin-consolidado",
+};
+
 // Servicio -> centro de costo PROPIO, cuando el nombre del servicio no coincide
 // literalmente con el del centro. Ese centro queda bloqueado en su propio PERC.
 const PERC_SELF_HEADER_BY_SERVICE: Record<string, string> = {
@@ -5673,6 +5681,21 @@ export default function Home() {
         if (seenFamilies.has(familyId)) continue;
         seenFamilies.add(familyId);
         const familyDef = SERVICE_FAMILIES.find((f) => f.id === familyId);
+        // SEPS: UCI y UCIN se miden SOLO por su consolidado (es lo que se entrega),
+        // no por cuantas subunidades llenaron.
+        const consolidadoId =
+          statsLabel === "SEPS" ? SEPS_FAMILIA_CONSOLIDADO[familyId] : undefined;
+        if (consolidadoId) {
+          const consolidado = rawStats.find((x) => x.id === consolidadoId);
+          const listo = !!consolidado && isDone(consolidado);
+          items.push({
+            id: familyId,
+            name: familyDef?.title ?? familyId,
+            done: listo,
+            family: { done: listo ? 1 : 0, total: 1, pct: listo ? 100 : 0 },
+          });
+          continue;
+        }
         const members = rawStats.filter(
           (x) => SERVICE_FAMILY_BY_ID[x.id] === familyId && !getSepsTemplate(x.id)?.consolidatesFrom,
         );
@@ -13604,6 +13627,20 @@ export default function Home() {
               groupSpans.push(spans);
             }
 
+            // COLUMNAS FIJAS del SEPS: antes solo quedaba inmovil el titulo (nivel 0).
+            // Ahora tambien los subtitulos y la columna Detalle. Para que "sticky"
+            // funcione con varias columnas hace falta un ancho fijo por nivel, y el
+            // desplazamiento acumulado de cada una.
+            const anchoNivel = (nivel: number) => (nivel === 0 ? 190 : 140);
+            const offsetNivel = (nivel: number) => {
+              let x = 0;
+              for (let i = 0; i < nivel; i += 1) x += anchoNivel(i);
+              return x;
+            };
+            const anchoDetalle = 230;
+            const bgFijoCabecera = isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]";
+            const bgFijoCuerpo = isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]";
+
             const tableOpen = openSepsTables.has(table.id);
 
             return (
@@ -13936,13 +13973,19 @@ export default function Home() {
                         {Array.from({ length: maxDepth }).map((_, L) => (
                           <th
                             key={`ghead-${L}`}
-                            className={`${L === 0 ? `sticky left-0 z-10 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}` : ""} px-3 py-2 text-left font-medium`}
+                            style={{
+                              left: offsetNivel(L),
+                              minWidth: anchoNivel(L),
+                              width: anchoNivel(L),
+                            }}
+                            className={`sticky z-20 ${bgFijoCabecera} px-3 py-2 text-left font-medium`}
                           >
                             {L === 0 ? "Grupo" : ""}
                           </th>
                         ))}
                         <th
-                          className={`${hasGroups ? "" : `sticky left-0 z-10 ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`} px-3 py-2 text-left font-medium`}
+                          style={{ left: offsetNivel(maxDepth), minWidth: anchoDetalle }}
+                          className={`sticky z-20 ${bgFijoCabecera} px-3 py-2 text-left font-medium`}
                         >
                           {table.detailLabel || "Detalle"}
                         </th>
@@ -13968,7 +14011,12 @@ export default function Home() {
                               <td
                                 key={`gcell-${L}`}
                                 rowSpan={groupSpans[L][index]}
-                                className={`${L === 0 ? "sticky left-0 z-10" : ""} whitespace-nowrap px-3 py-1.5 align-middle font-medium ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"}`}
+                                style={{
+                                  left: offsetNivel(L),
+                                  minWidth: anchoNivel(L),
+                                  width: anchoNivel(L),
+                                }}
+                                className={`sticky z-10 whitespace-normal px-3 py-1.5 align-middle font-medium ${bgFijoCuerpo}`}
                               >
                                 {rowGroups[index][L]}
                               </td>
@@ -13976,10 +14024,14 @@ export default function Home() {
                           )}
                           <td
                             colSpan={hasGroups ? maxDepth - rowGroups[index].length + 1 : 1}
-                            className={`${hasGroups ? "" : `sticky left-0 z-10 ${isLightPanelTheme ? "bg-slate-50" : "bg-[#1b2537]"}`} whitespace-nowrap px-3 py-1.5 ${
+                            className={`sticky z-10 whitespace-nowrap px-3 py-1.5 ${bgFijoCuerpo} ${
                               row.readOnly ? "font-semibold text-cyan-200" : ""
                             }`}
-                            style={row.indent ? { paddingLeft: `${12 + row.indent * 14}px` } : undefined}
+                            style={{
+                              left: offsetNivel(rowGroups[index].length),
+                              minWidth: anchoDetalle,
+                              ...(row.indent ? { paddingLeft: `${12 + row.indent * 14}px` } : {}),
+                            }}
                           >
                             {row.isExtra && canManageTabRows ? (
                               <input
@@ -14176,7 +14228,8 @@ export default function Home() {
                         <tr className={`border-t-2 font-semibold ${isLightPanelTheme ? "border-slate-300 bg-slate-100 text-slate-800" : "border-white/20 bg-[#243049] text-white"}`}>
                           <td
                             colSpan={maxDepth + 1 + (sepsEditingLayout ? 1 : 0)}
-                            className={`sticky left-0 z-10 px-3 py-2 text-left uppercase tracking-wide ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}
+                            style={{ left: 0, minWidth: offsetNivel(maxDepth) + anchoDetalle }}
+                            className={`sticky z-10 px-3 py-2 text-left uppercase tracking-wide ${bgFijoCabecera}`}
                           >
                             Total
                           </td>
@@ -21557,6 +21610,20 @@ export default function Home() {
                     if (seenFam.has(famId)) continue;
                     seenFam.add(famId);
                     const famDef = SERVICE_FAMILIES.find((f) => f.id === famId);
+                    // SEPS: UCI y UCIN valen por su CONSOLIDADO, no por las subunidades.
+                    const consolidadoFam =
+                      statsLabel === "SEPS" ? SEPS_FAMILIA_CONSOLIDADO[famId] : undefined;
+                    if (consolidadoFam) {
+                      const consolidado = rawStats.find((x) => x.id === consolidadoFam);
+                      const listo = !!consolidado && isStatsDone(consolidado);
+                      statsItems.push({
+                        id: famId,
+                        name: famDef?.title ?? famId,
+                        done: listo,
+                        family: { done: listo ? 1 : 0, total: 1, pct: listo ? 100 : 0 },
+                      });
+                      continue;
+                    }
                     const members = rawStats.filter(
                       (x) =>
                         SERVICE_FAMILY_BY_ID[x.id] === famId &&
