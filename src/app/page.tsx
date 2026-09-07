@@ -5190,6 +5190,10 @@ export default function Home() {
   // seleccionable y ESTRICTO: el consolidado muestra el censo de ESE mismo mes.
   const [showCensoConsolidadoPreview, setShowCensoConsolidadoPreview] = useState(false);
   const [consolidadoPreview, setConsolidadoPreview] = useState<ConsolidadoRow[] | null>(null);
+  // Tableros que el servicio entrego FUERA de PULSO (por correo, en papel) y que el
+  // admin da por recibidos: cuentan como completos en el monitoreo. Clave:
+  // "periodo__servicio__modulo". Vive en documentControl/recibidosExternos.
+  const [recibidosExternos, setRecibidosExternos] = useState<Record<string, { nota?: string; por?: string }>>({});
   // Verificacion de sumas: produccion de TODOS los servicios del mes elegido.
   const [verifSumasData, setVerifSumasData] = useState<AdminOverviewEntry[] | null>(null);
   const [verifSumasPeriodo, setVerifSumasPeriodo] = useState("");
@@ -5715,18 +5719,38 @@ export default function Home() {
   const dashboardGroups = useMemo(() => {
     const base =
       publicDashboardGroups.length > 0 ? publicDashboardGroups : fallbackDashboardGroups;
-    if (PERC_FIXED_SERVICE_IDS.size === 0) return base;
+    const hayRecibidos = Object.keys(recibidosExternos).length > 0;
+    if (PERC_FIXED_SERVICE_IDS.size === 0 && !hayRecibidos) return base;
+    // El periodo depende del modulo: el SEPS puede estar en un mes distinto al de
+    // PERC/Horas, asi que la clave del "recibido" se arma con el que corresponda.
+    const periodoSeps = getSepsWindow(now, currentBlockedDates).periodId;
+    const periodoDe = (label: string) => (label === "SEPS" ? periodoSeps : periodId);
     return base.map((group) => ({
       ...group,
       services: group.services.map((service) => {
-        if (!PERC_FIXED_SERVICE_IDS.has(service.id)) return service;
-        const modules = service.modules.map((mod) =>
-          mod.label === "PERC" ? { ...mod, completed: true } : mod,
-        );
+        const fijo = PERC_FIXED_SERVICE_IDS.has(service.id);
+        const modules = service.modules.map((mod) => {
+          if (fijo && mod.label === "PERC") return { ...mod, completed: true };
+          if (
+            hayRecibidos &&
+            recibidosExternos[`${periodoDe(mod.label)}__${service.id}__${mod.label}`]
+          ) {
+            return { ...mod, completed: true };
+          }
+          return mod;
+        });
+        if (modules.every((mod, i) => mod === service.modules[i])) return service;
         return { ...service, modules, completed: modules.every((mod) => mod.completed) };
       }),
     }));
-  }, [publicDashboardGroups, fallbackDashboardGroups]);
+  }, [
+    publicDashboardGroups,
+    fallbackDashboardGroups,
+    recibidosExternos,
+    periodId,
+    now,
+    currentBlockedDates,
+  ]);
   // Estadistica general por modulo (cuantas dependencias completaron PERC/SEPS/Horas).
   const moduleStats = useMemo(() => computeModuleStats(dashboardGroups), [dashboardGroups]);
 
@@ -6401,6 +6425,7 @@ export default function Home() {
     }
 
     void refreshPublicDashboard(false);
+    void loadRecibidosExternos();
     // refreshPublicDashboard se declara mas abajo en el componente (hoisted).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showStatsModal, showBoardModal, showGeneralMonitorModal, firestoreUnavailable, firestoreStatusReady]);
@@ -7553,6 +7578,50 @@ export default function Home() {
       setError("No pudimos guardar el número de camas.");
     } finally {
       setCamasBusy(false);
+    }
+  }
+
+  /** Clave del registro "recibido fuera de PULSO". */
+  function claveRecibido(periodo: string, serviceId: string, label: string) {
+    return `${periodo}__${serviceId}__${label}`;
+  }
+
+  /** Lee del servidor los tableros dados por recibidos fuera de PULSO. */
+  async function loadRecibidosExternos() {
+    if (firestoreUnavailable) return;
+    try {
+      const snapshot = await getDoc(doc(db, "documentControl", "recibidosExternos"));
+      const data = snapshot.exists()
+        ? (snapshot.data() as Record<string, { nota?: string; por?: string }>)
+        : {};
+      setRecibidosExternos(data || {});
+    } catch {
+      // Silencioso: si falla, el monitoreo simplemente no muestra estas marcas.
+    }
+  }
+
+  /** Marca (o desmarca) un tablero como recibido fuera de PULSO. Solo admin. */
+  async function toggleRecibidoExterno(serviceId: string, label: string, periodo: string) {
+    if (!isAdmin || firestoreUnavailable) return;
+    if (blockedByGhost()) return;
+    const clave = claveRecibido(periodo, serviceId, label);
+    const yaEsta = !!recibidosExternos[clave];
+    const previo = recibidosExternos;
+    const siguiente = { ...recibidosExternos };
+    if (yaEsta) delete siguiente[clave];
+    else siguiente[clave] = { por: usuarioDeCorreo(user?.email || "") };
+    setRecibidosExternos(siguiente);
+    try {
+      await setDoc(doc(db, "documentControl", "recibidosExternos"), siguiente);
+      setMessage(
+        yaEsta
+          ? "Se quitó la marca de recibido."
+          : "Marcado como recibido fuera de PULSO: ya cuenta como completo.",
+      );
+    } catch (marcaError) {
+      setRecibidosExternos(previo);
+      if (await handleFirestoreError(marcaError)) return;
+      setError("No pudimos guardar la marca.");
     }
   }
 
@@ -21980,6 +22049,41 @@ export default function Home() {
                                     }
                                   />
                                 )}
+                                {/* RECIBIDO FUERA DE PULSO: cuando el servicio entrego
+                                    el tablero por correo o en papel. Lo marca el admin y
+                                    a partir de ahi cuenta como completo. */}
+                                {isAdmin && !fam ? (() => {
+                                  const periodoItem =
+                                    statsLabel === "SEPS" ? sepsPeriodId : periodId;
+                                  const marcado =
+                                    !!recibidosExternos[
+                                      `${periodoItem}__${it.id}__${statsLabel}`
+                                    ];
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void toggleRecibidoExterno(it.id, statsLabel, periodoItem)
+                                      }
+                                      title={
+                                        marcado
+                                          ? `Recibido fuera de PULSO${
+                                              recibidosExternos[`${periodoItem}__${it.id}__${statsLabel}`]?.por
+                                                ? ` (marcó ${recibidosExternos[`${periodoItem}__${it.id}__${statsLabel}`]?.por})`
+                                                : ""
+                                            }. Tocá para quitar la marca.`
+                                          : "Marcar como recibido fuera de PULSO (por correo o en papel)"
+                                      }
+                                      className={`shrink-0 rounded px-1 text-[11px] leading-none transition ${
+                                        marcado
+                                          ? "text-emerald-300"
+                                          : "text-slate-600 hover:text-slate-300"
+                                      }`}
+                                    >
+                                      ✉
+                                    </button>
+                                  );
+                                })() : null}
                               </div>
                             );
                           })}
