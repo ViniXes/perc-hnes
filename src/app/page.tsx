@@ -16803,8 +16803,15 @@ export default function Home() {
         : []),
     ];
 
+    // "Menus del area" es el acceso rapido a los tabuladores PROPIOS de la cuenta.
+    // Si la cuenta no captura ninguno (administradores, Direccion, monitores), la
+    // tarjeta no dice nada util: se oculta en vez de mostrar tres "no le corresponde".
+    const tieneTablerosPropios = visibleModules.some(
+      (mod) => getModuleUiStatus(mod) !== "n/a",
+    );
+
     const moduleSections =
-      visibleModules.length > 0 ? (
+      visibleModules.length > 0 && tieneTablerosPropios ? (
         <section
           id="panel-modules"
           className={`rounded-[28px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
