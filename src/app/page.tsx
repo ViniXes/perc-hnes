@@ -12529,6 +12529,7 @@ export default function Home() {
       if (section) {
         section.scrollIntoView({ behavior: "smooth", block: "start" });
         highlightLocatedSection(section);
+        parpadearBotonMostrar(section);
       } else if (attempt < 5) {
         window.requestAnimationFrame(() => scrollToSection(attempt + 1));
       }
@@ -12539,6 +12540,26 @@ export default function Home() {
   // Enciende una "luz" blanca suave en el borde (las 4 lineas) de la seccion a la
   // que se acaba de navegar, ~2 s, para ubicar rapido lo que se buscaba. Usa la
   // Web Animations API para no interferir con el className que maneja React.
+  /**
+   * Si la seccion a la que se navego tiene su tabla COLAPSADA, hace parpadear el
+   * boton que la abre ("Mostrar tabla"). Asi la pantalla puede seguir liviana, con
+   * las tablas grandes ocultas, sin que el usuario tenga que buscar donde tocar.
+   */
+  function parpadearBotonMostrar(section: HTMLElement) {
+    const boton = section.querySelector<HTMLElement>("[data-abrir-tabla='si']");
+    if (!boton || typeof boton.animate !== "function") return;
+    boton.animate(
+      [
+        { boxShadow: "0 0 0 0 rgba(56,214,238,0)", transform: "scale(1)" },
+        { boxShadow: "0 0 0 4px rgba(56,214,238,0.55)", transform: "scale(1.06)", offset: 0.25 },
+        { boxShadow: "0 0 0 0 rgba(56,214,238,0)", transform: "scale(1)", offset: 0.5 },
+        { boxShadow: "0 0 0 4px rgba(56,214,238,0.55)", transform: "scale(1.06)", offset: 0.75 },
+        { boxShadow: "0 0 0 0 rgba(56,214,238,0)", transform: "scale(1)" },
+      ],
+      { duration: 2600, easing: "ease-in-out" },
+    );
+  }
+
   function highlightLocatedSection(section: HTMLElement) {
     if (typeof section.animate !== "function") {
       return;
@@ -15443,6 +15464,7 @@ export default function Home() {
               type="button"
               onClick={() => setHorasCollapsed((v) => !v)}
               aria-expanded={!horasCollapsed}
+              data-abrir-tabla={horasCollapsed ? "si" : "no"}
               className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                 isLightPanelTheme
                   ? "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -16264,7 +16286,7 @@ export default function Home() {
               <span className="font-semibold uppercase tracking-wide">Mes</span>
               <input type="month" value={gastosPeriod} onChange={(e) => setGastosPeriod(e.target.value || gastosPeriod)} className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`} />
             </label>
-            <button type="button" onClick={() => setGastosOpen((x) => !x)} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">{gastosOpen ? "Ocultar tabla" : "Mostrar tabla"}</button>
+            <button type="button" data-abrir-tabla={gastosOpen ? "no" : "si"} onClick={() => setGastosOpen((x) => !x)} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">{gastosOpen ? "Ocultar tabla" : "Mostrar tabla"}</button>
             <button type="button" onClick={() => void handleSaveGastos()} disabled={gastosSaving} className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50">{gastosSaving ? "Guardando…" : "Guardar"}</button>
             <button type="button" onClick={() => downloadGastosExcel()} className="rounded-xl border border-sky-400/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/25">Descargar Excel</button>
           </div>
@@ -16342,7 +16364,7 @@ export default function Home() {
               <span className="font-semibold uppercase tracking-wide">Mes</span>
               <input type="month" value={deprePeriod} onChange={(e) => setDeprePeriod(e.target.value || deprePeriod)} className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`} />
             </label>
-            <button type="button" onClick={() => setDepreOpen((x) => !x)} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">{depreOpen ? "Ocultar tabla" : "Mostrar tabla"}</button>
+            <button type="button" data-abrir-tabla={depreOpen ? "no" : "si"} onClick={() => setDepreOpen((x) => !x)} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">{depreOpen ? "Ocultar tabla" : "Mostrar tabla"}</button>
             <button type="button" onClick={() => void handleSaveDepre()} disabled={depreSaving} className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50">{depreSaving ? "Guardando…" : "Guardar"}</button>
             <button type="button" onClick={() => downloadDepreExcel()} className="rounded-xl border border-sky-400/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/25">Descargar Excel</button>
           </div>
@@ -16425,6 +16447,7 @@ export default function Home() {
               type="button"
               onClick={() => setInsumosCollapsed((v) => !v)}
               aria-expanded={!insumosCollapsed}
+              data-abrir-tabla={insumosCollapsed ? "si" : "no"}
               className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                 isLightPanelTheme
                   ? "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200"
