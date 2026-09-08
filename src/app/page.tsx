@@ -18526,27 +18526,62 @@ export default function Home() {
                   <div className="mt-4 space-y-5">
                     {(
                       [
-                        { key: "PERC", label: "PERC", color: "text-cyan-300", bar: "from-cyan-400 to-cyan-500" },
-                        { key: "SEPS", label: "SEPS (monitoreo)", color: "text-blue-300", bar: "from-blue-400 to-blue-500" },
-                        { key: "Horas", label: "Distribución de Horas", color: "text-amber-300", bar: "from-amber-400 to-amber-500" },
+                        { key: "PERC", modulo: "perc", label: "PERC", color: "text-cyan-300", bar: "from-cyan-400 to-cyan-500" },
+                        { key: "SEPS", modulo: "sesps", label: "SEPS (monitoreo)", color: "text-blue-300", bar: "from-blue-400 to-blue-500" },
+                        { key: "Horas", modulo: "distribucion", label: "Distribución de Horas", color: "text-amber-300", bar: "from-amber-400 to-amber-500" },
                       ] as const
                     ).map((m) => {
                       const stat = avanceStats[m.key];
                       const pct = stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0;
+                      // Esta tarjeta y el Monitoreo salen del MISMO calculo, asi que
+                      // los tableros dados por recibidos fuera de PULSO (correo/papel)
+                      // ya cuentan aqui. Mostramos quienes faltan y cuantos vienen
+                      // marcados por correo para que los dos numeros se puedan cuadrar.
+                      const detalle = isAvanceHistory ? null : computeMonitorStats(m.key);
+                      const faltan = detalle ? detalle.items.filter((it) => !it.done) : [];
+                      const porCorreo = isAvanceHistory
+                        ? 0
+                        : Object.keys(recibidosExternos).filter(
+                            (clave) =>
+                              clave.startsWith(`${m.key === "SEPS" ? sepsPeriodId : periodId}__`) &&
+                              clave.endsWith(`__${m.key}`),
+                          ).length;
                       return (
                         <div key={m.key}>
-                          <div className="flex items-center justify-between text-sm">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStatsModule(m.modulo);
+                              setShowStatsModal(true);
+                            }}
+                            title="Ver el monitoreo de este módulo"
+                            className="flex w-full items-center justify-between text-left text-sm transition hover:opacity-80"
+                          >
                             <span className={`font-semibold ${m.color}`}>{m.label}</span>
                             <span className="font-bold text-white">
                               {stat.done} de {stat.total}
                             </span>
-                          </div>
+                          </button>
                           <div className={`mt-2 h-4 overflow-hidden rounded-full ring-1 ${isLightPanelTheme ? "bg-slate-200 ring-slate-300/70" : "bg-white/10 ring-white/5"}`}>
                             <div
                               className={`h-full rounded-full bg-gradient-to-r ${m.bar}`}
                               style={{ width: pct > 0 ? `max(${pct}%, 0.75rem)` : "0%" }}
                             />
                           </div>
+                          {faltan.length > 0 ? (
+                            <p className="mt-1.5 text-[11px] leading-4 text-slate-400">
+                              Falta{faltan.length === 1 ? "" : "n"}:{" "}
+                              <span className="text-slate-300">
+                                {faltan.slice(0, 4).map((it) => it.name).join(", ")}
+                                {faltan.length > 4 ? ` y ${faltan.length - 4} más` : ""}
+                              </span>
+                            </p>
+                          ) : null}
+                          {porCorreo > 0 ? (
+                            <p className="mt-0.5 text-[11px] leading-4 text-emerald-300/80">
+                              ✉ Incluye {porCorreo} recibido{porCorreo === 1 ? "" : "s"} fuera de PULSO.
+                            </p>
+                          ) : null}
                         </div>
                       );
                     })}
