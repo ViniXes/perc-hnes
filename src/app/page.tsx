@@ -94,7 +94,6 @@ import {
   matchSmalltalk,
   getAvailableActions,
   getActionLabel,
-  KNOWN_ACTION_IDS,
   type AssistantActionId,
   type AssistantContext,
 } from "@/lib/assistant-actions";
@@ -5381,14 +5380,138 @@ export default function Home() {
     return { from: "bot", text: reply, action: { id, label } };
   }
 
-  // Asistente hibrido: 1) accion por palabras clave -> 2) charla basica -> 3)
-  // preguntas frecuentes -> 4) respaldo con IA (Gemini) si hay clave configurada.
+  // ---------------------------------------------------------------------------
+  // CAPA EN VIVO del asistente. Responde con el ESTADO REAL de la app (fechas de
+  // cierre calculadas, que tablero falta, por que esta bloqueado, quien guardo).
+  // Es 100% local: no llama a ningun servicio externo y no cuesta nada.
+  // ---------------------------------------------------------------------------
+  /** Quita tildes y pasa a minusculas para comparar lo que escribe la persona. */
+  function normalizarConsulta(texto: string) {
+    return texto
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  /** Fecha larga con la hora de corte, p. ej. "viernes 5 de septiembre, 2:30 p.m.". */
+  function fechaConCorte(fecha: Date | undefined) {
+    if (!fecha) return "sin fecha definida";
+    return `${HEADER_DATE_FORMATTER.format(fecha)} a las ${CAPTURE_CLOSE_HOUR}:${String(
+      CAPTURE_CLOSE_MINUTE,
+    ).padStart(2, "0")} p.m.`;
+  }
+
+  /** Estado de un modulo en una linea: abierto hasta cuando, o cerrado. */
+  function lineaDePlazo(etiqueta: string, moduleId: ModuleId) {
+    if (moduleId === "sesps") {
+      if (sepsWindow.phase === "cierre") {
+        return `• ${etiqueta}: ABIERTO para cerrar ${getPeriodLabel(sepsWindow.periodId)}. Último día: ${fechaConCorte(sepsWindow.lastCloseDay)}.`;
+      }
+      if (sepsWindow.phase === "captura") {
+        return `• ${etiqueta}: ABIERTO para digitar ${getPeriodLabel(sepsWindow.periodId)} (los diarios del mes en curso).`;
+      }
+      return `• ${etiqueta}: CERRADO. Vuelve a abrir el ${sepsWindow.reopenDay}.º día hábil del mes, a las 00:00.`;
+    }
+    const win = getCaptureWindow(now, currentBlockedDates, moduleId);
+    if (win.isOpen) {
+      return `• ${etiqueta}: ABIERTO (día ${win.activeDayNumber} de ${win.totalDays} hábiles). Cierra el ${fechaConCorte(win.lastOpenDay)}.`;
+    }
+    return `• ${etiqueta}: CERRADO. Se capturaba hasta el ${fechaConCorte(win.lastOpenDay)}.`;
+  }
+
+  /**
+   * Intenta responder con datos vivos. Devuelve null si la pregunta no es de
+   * este tipo, para que sigan las capas de acciones y preguntas frecuentes.
+   */
+  function respuestaEnVivo(pregunta: string, ctx: AssistantContext): string | null {
+    const t = normalizarConsulta(pregunta);
+    const tiene = (...palabras: string[]) => palabras.some((palabra) => t.includes(palabra));
+
+    // --- 1) Plazos: cuando cierra / cuanto tiempo tengo -----------------------
+    if (
+      tiene("cuando cierra", "cuanto tiempo", "hasta cuando", "fecha limite", "plazo", "vence",
+        "cuando abre", "cuando vuelve a abrir", "dias habiles", "que dia cierra", "cierre")
+    ) {
+      return [
+        `Mes en cierre: ${periodLabel}.`,
+        lineaDePlazo("PERC", "perc"),
+        lineaDePlazo("SEPS", "sesps"),
+        lineaDePlazo("Distribución de Horas", "distribucion"),
+      ].join("\n");
+    }
+
+    // --- 2) Por que no puedo digitar / esta bloqueado -------------------------
+    if (
+      tiene("no puedo digitar", "no puedo escribir", "no me deja", "bloqueado", "bloqueada",
+        "no puedo guardar", "esta gris", "no puedo editar", "por que no puedo")
+    ) {
+      const partes: string[] = [];
+      if (ctx.hasPerc) partes.push(lineaDePlazo("PERC", "perc"));
+      if (ctx.hasSeps) partes.push(lineaDePlazo("SEPS", "sesps"));
+      if (ctx.hasHoras) partes.push(lineaDePlazo("Distribución de Horas", "distribucion"));
+      if (partes.length === 0) {
+        return "Su cuenta no tiene tableros asignados todavía. Escriba a soporte desde el menú para que le asignen su servicio.";
+      }
+      return [
+        "Un tablero solo se puede digitar mientras su ventana está abierta. Así están hoy:",
+        ...partes,
+        "",
+        "Si necesita cargar un mes ya cerrado, pida una habilitación desde el menú y el administrador la autoriza.",
+      ].join("\n");
+    }
+
+    // --- 3) Que me falta -----------------------------------------------------
+    if (tiene("que me falta", "que falta", "ya termine", "estoy completo", "me falta", "pendiente")) {
+      if (!ctx.hasService) {
+        return "Su cuenta no tiene un servicio asignado, así que no hay tableros pendientes. Si esto no es correcto, escriba a soporte desde el menú.";
+      }
+      const filas: string[] = [];
+      if (ctx.hasPerc) filas.push(`• PERC: ${ctx.hasPercData ? "ya tiene datos cargados" : "todavía está vacío"}.`);
+      if (ctx.hasSeps) filas.push(`• SEPS: ${ctx.hasSepsData ? "ya tiene datos cargados" : "todavía está vacío"}.`);
+      if (ctx.hasHoras) filas.push(`• Distribución de Horas: ${ctx.hasHorasData ? "ya tiene datos cargados" : "todavía está vacía"}.`);
+      if (filas.length === 0) return "No tiene tableros habilitados en este momento.";
+      return [`Estado de ${currentService?.name ?? "su servicio"} en ${periodLabel}:`, ...filas,
+        "", "Recuerde que tener datos no es lo mismo que estar guardado: baje al pie de la tabla y toque «Guardar»."].join("\n");
+    }
+
+    // --- 4) Quien lleno / autoria -------------------------------------------
+    if (tiene("quien lleno", "quien guardo", "quien digito", "quien cargo", "quien lo hizo", "autoria")) {
+      if (percAutoria?.usuario) {
+        return `El PERC de ${periodLabel} lo guardó ${percAutoria.usuario}${percAutoria.fecha ? ` el ${percAutoria.fecha}` : ""}.`;
+      }
+      return `Todavía nadie ha guardado el PERC de ${periodLabel} en este servicio.`;
+    }
+
+    // --- 5) Que mes estoy llenando ------------------------------------------
+    if (tiene("que mes", "cual mes", "que periodo", "mes en cierre", "que estoy llenando")) {
+      return [
+        `PERC y Distribución de Horas: está en cierre ${periodLabel}.`,
+        `SEPS: en este momento corresponde ${getPeriodLabel(sepsWindow.periodId)}.`,
+      ].join("\n");
+    }
+
+    return null;
+  }
+
+  // Asistente offline en cuatro capas, todas locales (sin servicios externos ni
+  // costo): 1) datos vivos del sistema -> 2) accion por palabras clave ->
+  // 3) charla basica -> 4) preguntas frecuentes.
   async function pushAssistant(question: string, ctx: AssistantContext) {
     const q = question.trim();
     if (!q) return;
     setAssistantMsgs((current) => [...current, { from: "user", text: q }]);
     setAssistantInput("");
     setBotTyping(true);
+
+    // 0) Datos vivos del sistema (fechas reales, estado de los tableros).
+    const vivo = respuestaEnVivo(q, ctx);
+    if (vivo) {
+      window.setTimeout(() => {
+        setAssistantMsgs((current) => [...current, { from: "bot", text: vivo }]);
+        setBotTyping(false);
+      }, 450);
+      return;
+    }
 
     // 1) Accion por palabras clave (offline, instantaneo).
     const local = matchAction(q, ctx);
@@ -5421,35 +5544,30 @@ export default function Home() {
       return;
     }
 
-    // 4) Respaldo con IA. Si no hay clave, la API responde con un mensaje guia.
-    try {
-      const res = await fetch("/api/assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: q,
-          context: ctx,
-          availableActions: getAvailableActions(ctx),
-        }),
-      });
-      const data = await res.json();
-      const reply =
-        typeof data?.reply === "string" && data.reply.trim() ? data.reply.trim() : faq.text;
-      const actionId: AssistantActionId | null =
-        typeof data?.actionId === "string" && KNOWN_ACTION_IDS.includes(data.actionId)
-          ? (data.actionId as AssistantActionId)
-          : null;
+    // 5) No se reconocio la consulta: se ofrece lo que SI puede hacer. Antes aqui
+    // habia un respaldo con IA (Gemini); se elimino para que PULSO no dependa de
+    // ningun servicio externo, no envie informacion del hospital fuera y no genere
+    // ningun cobro. Todo lo que responde el asistente sale de la propia app.
+    const sugerencias = getAvailableActions(ctx)
+      .slice(0, 4)
+      .map((accion) => `• ${accion.label}`)
+      .join("\n");
+    window.setTimeout(() => {
       setAssistantMsgs((current) => [
         ...current,
-        actionId
-          ? buildActionMessage(actionId, getActionLabel(actionId), reply, ctx)
-          : { from: "bot", text: reply },
+        {
+          from: "bot",
+          text: [
+            faq.text,
+            sugerencias ? `\nTambién puedo:\n${sugerencias}` : "",
+            "\nPruebe preguntándome: «¿cuándo cierra?», «¿qué me falta?» o «¿por qué no puedo digitar?».",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        },
       ]);
-    } catch {
-      setAssistantMsgs((current) => [...current, { from: "bot", text: faq.text }]);
-    } finally {
       setBotTyping(false);
-    }
+    }, 450);
   }
   // El asistente recibe un Excel (arrastrado o adjuntado) y lo carga en el
   // tabulador que corresponda a la cuenta (SEPS / Distribucion de Horas / Insumos),
@@ -23546,10 +23664,15 @@ export default function Home() {
                 {/* Encabezado */}
                 <div className="flex items-center justify-between gap-2 px-4 py-3" style={{ background: "linear-gradient(120deg, rgba(34,211,238,0.16), rgba(124,58,237,0.16))", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full" style={{ background: "linear-gradient(135deg, #22d3ee, #6366f1)", boxShadow: "0 6px 16px rgba(99,102,241,0.45)" }}>
-                      <svg viewBox="0 0 24 24" className={`h-5 w-5 ${botTyping ? "bot-talk" : ""}`} fill="#fff" aria-hidden="true">
-                        <path d="M12 2.5l1.9 4.8 4.8 1.9-4.8 1.9L12 15.9l-1.9-4.8L5.3 9.2l4.8-1.9z" />
-                        <path d="M18.6 14.4l.82 2.08 2.08.82-2.08.82-.82 2.08-.82-2.08-2.08-.82 2.08-.82z" opacity="0.92" />
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full" style={{ background: "linear-gradient(135deg, #e3c07f, #b6863c)", boxShadow: "0 6px 16px rgba(182,134,60,0.45)" }}>
+                      <svg viewBox="0 0 24 24" className={`h-5 w-5 ${botTyping ? "bot-talk" : ""}`} fill="none" aria-hidden="true">
+                        <path
+                          d="M2.5 12.5H7l2-5.5 3.5 10 2.5-6 1.6 1.5h4.4"
+                          stroke="#1b1206"
+                          strokeWidth="2.3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
                       </svg>
                     </span>
                     <div>
@@ -23596,8 +23719,10 @@ export default function Home() {
                 >
                   {assistantMsgs.length === 0 && !botTyping ? (
                     <div className="flex h-full flex-col items-center justify-center px-3 text-center">
-                      <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-full" style={{ background: "linear-gradient(135deg, rgba(34,211,238,0.22), rgba(99,102,241,0.22))" }}>
-                        <svg viewBox="0 0 24 24" className="h-7 w-7" fill="#38d6ee" aria-hidden="true"><path d="M12 2.5l1.9 4.8 4.8 1.9-4.8 1.9L12 15.9l-1.9-4.8L5.3 9.2l4.8-1.9z" /></svg>
+                      <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-full" style={{ background: "linear-gradient(135deg, rgba(227,192,127,0.24), rgba(182,134,60,0.24))" }}>
+                        <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" aria-hidden="true">
+                          <path d="M2.5 12.5H7l2-5.5 3.5 10 2.5-6 1.6 1.5h4.4" stroke="#e3c07f" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
                       </span>
                       <p className="text-base font-bold text-white">¿En qué te ayudo?</p>
                       <p className="mt-1 max-w-[240px] text-xs leading-5 text-slate-400">
@@ -23605,10 +23730,11 @@ export default function Home() {
                       </p>
                       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                         {[
+                          "¿Cuándo cierra?",
+                          "¿Qué me falta?",
+                          "¿Por qué no puedo digitar?",
                           getSepsTemplate(currentService?.id) ? "Ir a mi SEPS" : "Ir a mi PERC",
-                          "Cambiar el tema",
                           "Guardar mi captura",
-                          "¿Cómo uso el sistema?",
                         ].map((q) => (
                           <button
                             key={q}
@@ -23715,16 +23841,20 @@ export default function Home() {
               type="button"
               onClick={openAssistant}
               aria-label="Asistente virtual"
-              className={`flex h-12 w-12 items-center justify-center rounded-full ring-2 ring-white/20 transition hover:scale-105 ${
+              className={`flex h-12 w-12 items-center justify-center rounded-full ring-2 ring-black/10 transition hover:scale-105 ${
                 assistantOpen ? "" : "bot-float"
               }`}
-              style={{ background: "linear-gradient(135deg, #22d3ee, #6366f1)", boxShadow: "0 12px 30px rgba(99,102,241,0.5)" }}
+              style={{ background: "linear-gradient(135deg, #e3c07f, #b6863c)", boxShadow: "0 12px 30px rgba(182,134,60,0.45)" }}
             >
-              {/* Chispa IA */}
-              <svg viewBox="0 0 24 24" className="h-7 w-7" fill="#ffffff" aria-hidden="true">
-                <path d="M12 2.2l2.05 5.15 5.15 2.05-5.15 2.05L12 16.6l-2.05-5.15L4.8 9.4l5.15-2.05z" />
-                <path d="M18.7 14.2l.9 2.25 2.25.9-2.25.9-.9 2.25-.9-2.25-2.25-.9 2.25-.9z" opacity="0.9" />
-                <path d="M5 3.6l.62 1.55L7.17 5.77 5.62 6.4 5 7.95 4.38 6.4 2.83 5.77l1.55-.62z" opacity="0.85" />
+              {/* Onda de pulso: el mismo electro del logo PULSO. */}
+              <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" aria-hidden="true">
+                <path
+                  d="M2.5 12.5H7l2-5.5 3.5 10 2.5-6 1.6 1.5h4.4"
+                  stroke="#1b1206"
+                  strokeWidth="2.3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </button>
           </div>
