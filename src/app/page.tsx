@@ -15267,23 +15267,30 @@ export default function Home() {
       ["panel-depreciacion-perc", "panel-gastos-perc", "panel-insumos", "panel-censo", "panel-admin-export"].find(
         (id) => hasGrant(id),
       ) || "panel-module-perc";
-    const getModuleUiStatus = (mod: ModuleDefinition): "completo" | "incompleto" => {
+    // Estado del modulo para las tarjetas de "Menus del area". "n/a" = esta cuenta no
+    // llena ese tabulador (p. ej. el administrador, que no tiene servicio propio):
+    // antes salia "Incompleto", como si estuviera atrasado con algo que no le toca.
+    const getModuleUiStatus = (
+      mod: ModuleDefinition,
+    ): "completo" | "incompleto" | "n/a" => {
       // El grid de centros de costo (tableValues) es el tabulador PERC.
       if (mod.id === "perc") {
+        if (!currentService || !capturesModule("perc")) return "n/a";
         return hasAnyCapturedValue(tableValues) ? "completo" : "incompleto";
       }
 
-      if (mod.id === "sesps" && sepsTemplate) {
+      if (mod.id === "sesps") {
+        if (!sepsTemplate || !capturesModule("sesps")) return "n/a";
         return hasAnySepsValue(sepsValues) ? "completo" : "incompleto";
       }
 
-      if (mod.id === "distribucion" && horasTemplate) {
+      if (mod.id === "distribucion") {
+        if (!horasTemplate || !currentService || !capturesModule("distribucion")) return "n/a";
         // Solo "completo" cuando se GUARDO (no por los empleados precargados).
         return horasSaved ? "completo" : "incompleto";
       }
 
-      // Sin plantilla aun -> incompleto por defecto.
-      return "incompleto";
+      return "n/a";
     };
     // Cada modulo lleva a SU tabulador. NOTA: el grid de centros de costo (id
     // "distribucion") es, para el hospital, el tabulador PERC -> el menu "PERC" lleva
@@ -16816,6 +16823,7 @@ export default function Home() {
             {visibleModules.map((mod) => {
               const status = getModuleUiStatus(mod);
               const isComplete = status === "completo";
+              const noAplica = status === "n/a";
 
               return (
                 <div
@@ -16837,10 +16845,16 @@ export default function Home() {
                       </h3>
                       <span
                         className={`mt-0.5 block text-[11px] font-semibold ${
-                          isComplete ? "text-emerald-400" : "text-amber-400"
+                          noAplica
+                            ? isLightPanelTheme
+                              ? "text-slate-500"
+                              : "text-slate-400"
+                            : isComplete
+                              ? "text-emerald-400"
+                              : "text-amber-400"
                         }`}
                       >
-                        {isComplete ? "Completo" : "Incompleto"}
+                        {noAplica ? "No le corresponde" : isComplete ? "Completo" : "Incompleto"}
                       </span>
                     </div>
                   </div>
