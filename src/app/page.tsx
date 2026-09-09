@@ -872,29 +872,74 @@ function isServiceInChiefScope(
 }
 
 /**
- * Hospitales que ESDOMED monitorea ademas del HNES. PULSO solo lee su avance.
- * Para sumar otro: una linea aca, una linea en la ruta /api/hospitales/sigma y
- * sus variables en Vercel.
+ * Las cinco regiones de salud del MINSAL. El menu de hospitales entra por aca:
+ * con 30 hospitales una lista plana no se puede leer, por region si.
+ */
+const REGIONES_SALUD = [
+  { id: "occidental", nombre: "Occidental", detalle: "Ahuachapán · Santa Ana · Sonsonate" },
+  { id: "central", nombre: "Central", detalle: "La Libertad · Chalatenango · Cuscatlán" },
+  { id: "metropolitana", nombre: "Metropolitana", detalle: "San Salvador" },
+  { id: "paracentral", nombre: "Paracentral", detalle: "San Vicente · La Paz · Cabañas" },
+  { id: "oriental", nombre: "Oriental", detalle: "San Miguel · Usulután · Morazán · La Unión" },
+];
+
+/**
+ * La red de hospitales nacionales, agrupada por region. Estan TODOS, aunque
+ * todavia no reporten: los que no estan conectados se ven apagados y sirven de
+ * mapa de avance del proyecto.
  *
- * soloAvance = el hospital no corre SIGMA sino su propio sistema, que unicamente
- * publica la lista de servicios con su estado. Ahi no hay insumos que mostrar ni
- * mes que elegir: lo que devuelve el enlace es el mes que ese sistema tenga en
- * curso, asi que la pantalla se adapta y esconde esas dos cosas.
+ * conectado  = PULSO ya puede leer su monitoreo. El id tiene que coincidir con
+ *              el de la ruta /api/hospitales/sigma y con sus variables en Vercel.
+ * soloAvance = no corre SIGMA sino su propio sistema, que solo publica la lista
+ *              de servicios con su estado: ahi no hay insumos ni mes que elegir.
+ *
+ * Para conectar uno: ponerle conectado: true aca, agregar su linea en la ruta y
+ * su variable en Vercel. Nada mas.
  */
 const HOSPITALES_EXTERNOS: {
   id: string;
   corto: string;
   nombre: string;
+  region: string;
+  lugar?: string;
+  conectado?: boolean;
   soloAvance?: boolean;
 }[] = [
-  { id: "psiquiatrico", corto: "Psiquiátrico", nombre: "Hospital Nacional Psiquiátrico" },
-  { id: "suchitoto", corto: "Suchitoto", nombre: "Hospital Nacional de Suchitoto" },
-  {
-    id: "sanmiguel",
-    corto: "San Miguel",
-    nombre: "Hospital Nacional San Juan de Dios, San Miguel",
-    soloAvance: true,
-  },
+  // --- Occidental ---------------------------------------------------------
+  { id: "ahuachapan", corto: "Ahuachapán", nombre: 'Hospital Nacional "Dr. Francisco Menéndez"', region: "occidental", lugar: "Ahuachapán" },
+  { id: "santaana", corto: "Santa Ana", nombre: 'Hospital Nacional Regional "San Juan de Dios"', region: "occidental", lugar: "Santa Ana" },
+  { id: "chalchuapa", corto: "Chalchuapa", nombre: "Hospital Nacional de Chalchuapa", region: "occidental", lugar: "Santa Ana" },
+  { id: "metapan", corto: "Metapán", nombre: 'Hospital Nacional "Dr. Arturo Morales"', region: "occidental", lugar: "Metapán, Santa Ana" },
+  { id: "sonsonate", corto: "Sonsonate", nombre: 'Hospital Nacional "Dr. Jorge Mazzini Villacorta"', region: "occidental", lugar: "Sonsonate" },
+  // --- Central ------------------------------------------------------------
+  { id: "santatecla", corto: "Santa Tecla", nombre: 'Hospital Nacional "San Rafael"', region: "central", lugar: "Santa Tecla, La Libertad" },
+  { id: "chalatenango", corto: "Chalatenango", nombre: 'Hospital Nacional "Dr. Luis Edmundo Vásquez"', region: "central", lugar: "Chalatenango" },
+  { id: "nuevaconcepcion", corto: "Nueva Concepción", nombre: "Hospital Nacional de Nueva Concepción", region: "central", lugar: "Chalatenango" },
+  { id: "cojutepeque", corto: "Cojutepeque", nombre: 'Hospital Nacional "Nuestra Señora de Fátima"', region: "central", lugar: "Cojutepeque, Cuscatlán" },
+  { id: "suchitoto", corto: "Suchitoto", nombre: "Hospital Nacional de Suchitoto", region: "central", lugar: "Cuscatlán", conectado: true },
+  // --- Metropolitana ------------------------------------------------------
+  { id: "rosales", corto: "Rosales", nombre: 'Hospital Nacional "Rosales"', region: "metropolitana", lugar: "San Salvador" },
+  { id: "bloom", corto: "Bloom", nombre: 'Hospital Nacional de Niños "Benjamín Bloom"', region: "metropolitana", lugar: "San Salvador" },
+  { id: "mujer", corto: "La Mujer", nombre: 'Hospital Nacional de la Mujer "Dra. María Isabel Rodríguez"', region: "metropolitana", lugar: "San Salvador" },
+  { id: "zacamil", corto: "Zacamil", nombre: 'Hospital Nacional "Dr. Juan José Fernández"', region: "metropolitana", lugar: "Mejicanos, San Salvador" },
+  { id: "saldana", corto: "Saldaña", nombre: 'Hospital Nacional de Neumología "Dr. José Antonio Saldaña"', region: "metropolitana", lugar: "San Salvador" },
+  { id: "sanbartolo", corto: "San Bartolo", nombre: 'Hospital Nacional "Enf. Angélica Vidal de Najarro"', region: "metropolitana", lugar: "Ilopango, San Salvador" },
+  { id: "psiquiatrico", corto: "Psiquiátrico", nombre: 'Hospital Nacional Psiquiátrico "Dr. José Molina Martínez"', region: "metropolitana", lugar: "Soyapango, San Salvador", conectado: true },
+  // --- Paracentral --------------------------------------------------------
+  { id: "sanvicente", corto: "San Vicente", nombre: 'Hospital Nacional "Santa Gertrudis"', region: "paracentral", lugar: "San Vicente" },
+  { id: "zacatecoluca", corto: "Zacatecoluca", nombre: 'Hospital Nacional "Santa Teresa"', region: "paracentral", lugar: "Zacatecoluca, La Paz" },
+  { id: "ilobasco", corto: "Ilobasco", nombre: "Hospital Nacional de Ilobasco", region: "paracentral", lugar: "Cabañas" },
+  { id: "sensuntepeque", corto: "Sensuntepeque", nombre: 'Hospital Nacional "San Jerónimo Emiliani"', region: "paracentral", lugar: "Sensuntepeque, Cabañas" },
+  // --- Oriental -----------------------------------------------------------
+  { id: "sanmiguel", corto: "San Miguel", nombre: 'Hospital Nacional Regional "San Juan de Dios"', region: "oriental", lugar: "San Miguel", conectado: true, soloAvance: true },
+  { id: "ciudadbarrios", corto: "Ciudad Barrios", nombre: 'Hospital Nacional "Monseñor Óscar Arnulfo Romero"', region: "oriental", lugar: "Ciudad Barrios, San Miguel" },
+  { id: "nuevaguadalupe", corto: "Nueva Guadalupe", nombre: "Hospital Nacional de Nueva Guadalupe", region: "oriental", lugar: "San Miguel" },
+  { id: "usulutan", corto: "Usulután", nombre: 'Hospital Nacional "San Pedro"', region: "oriental", lugar: "Usulután" },
+  { id: "jiquilisco", corto: "Jiquilisco", nombre: "Hospital Nacional de Jiquilisco", region: "oriental", lugar: "Usulután" },
+  { id: "santiagodemaria", corto: "Santiago de María", nombre: "Hospital Nacional de Santiago de María", region: "oriental", lugar: "Usulután" },
+  { id: "gotera", corto: "San Fco. Gotera", nombre: 'Hospital Nacional "Dr. Héctor Antonio Hernández Flores"', region: "oriental", lugar: "San Francisco Gotera, Morazán" },
+  { id: "launion", corto: "La Unión", nombre: "Hospital Nacional de La Unión", region: "oriental", lugar: "La Unión" },
+  { id: "santarosa", corto: "Santa Rosa de Lima", nombre: "Hospital Nacional de Santa Rosa de Lima", region: "oriental", lugar: "La Unión" },
 ];
 
 const SERVICE_USERNAME_BY_ID: Record<string, string> = {
@@ -5247,6 +5292,9 @@ export default function Home() {
   const [sigmaMonitoreo, setSigmaMonitoreo] = useState<Record<string, MonitoreoSigma>>({});
   const [sigmaCargando, setSigmaCargando] = useState<string | null>(null);
   const [sigmaMes, setSigmaMes] = useState<Record<string, string>>({});
+  // Navegacion de la pantalla de hospitales: primero region, luego hospital.
+  const [regionSel, setRegionSel] = useState("");
+  const [hospitalSel, setHospitalSel] = useState("");
   // Verificacion de sumas: produccion de TODOS los servicios del mes elegido.
   const [verifSumasData, setVerifSumasData] = useState<AdminOverviewEntry[] | null>(null);
   const [verifSumasPeriodo, setVerifSumasPeriodo] = useState("");
@@ -6441,21 +6489,16 @@ export default function Home() {
     setTieneMouse(window.matchMedia("(pointer: fine)").matches);
   }, []);
 
-  // Monitoreo del Psiquiatrico: se pide al abrir la seccion, no antes, para no
-  // gastar cuota de Apps Script en cada visita a PULSO.
+  // Monitoreo de un hospital: se pide al ELEGIRLO, no antes, para no gastar
+  // cuota del sistema del otro hospital en cada visita a PULSO. Lo que ya se
+  // consulto queda guardado, asi que volver atras y entrar de nuevo no repite
+  // el viaje.
   useEffect(() => {
-    // En celular la navegacion guarda la vista en mobileView y activeSidebarSection
-    // se queda con la anterior, asi que hay que mirar las DOS, no una u otra.
-    const hospital = HOSPITALES_EXTERNOS.find(
-      (h) =>
-        activeSidebarSection === `panel-hospital-${h.id}` ||
-        mobileView === `panel-hospital-${h.id}`,
-    );
-    if (!hospital) return;
-    if (sigmaMonitoreo[hospital.id] || sigmaCargando) return;
-    void loadSigmaMonitoreo(hospital.id);
+    if (!hospitalSel) return;
+    if (sigmaMonitoreo[hospitalSel] || sigmaCargando) return;
+    void loadSigmaMonitoreo(hospitalSel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSidebarSection, mobileView]);
+  }, [hospitalSel]);
 
   // Tableros dados por recibidos fuera de PULSO: se leen al ENTRAR. Antes solo se
   // leian al abrir un monitoreo, y por eso la pantalla de inicio mostraba menos
@@ -7961,7 +8004,7 @@ export default function Home() {
       if (datos?.configurado === false) {
         guardar({ configurado: false, error: datos?.mensaje });
       } else if (!datos?.ok) {
-        guardar({ configurado: true, error: datos?.error || "SIGMA no respondio." });
+        guardar({ configurado: true, error: datos?.error || "El hospital no respondio." });
       } else {
         guardar({
           configurado: true,
@@ -7969,10 +8012,12 @@ export default function Home() {
           mesEtiqueta: datos.mesEtiqueta,
           perc: datos.perc,
           insumos: datos.insumos,
+          sinInsumos: datos.sinInsumos,
+          sinMes: datos.sinMes,
         });
       }
     } catch {
-      guardar({ configurado: true, error: "No pudimos contactar a SIGMA." });
+      guardar({ configurado: true, error: "No pudimos contactar al hospital." });
     } finally {
       setSigmaCargando(null);
     }
@@ -17091,22 +17136,16 @@ export default function Home() {
       // "Servicios" ya no es un item suelto: cada modulo (PERC/SEPS/Horas) lo
       // ofrece como submenu "X Servicios" que abre la misma vista panel-services.
       ...moduleSidebarItems,
-      // HOSPITALES: otros hospitales que ESDOMED monitorea. Hoy solo el
-      // Psiquiatrico, que corre en SIGMA; se ve su avance, no sus cifras.
+      // HOSPITALES: la red de hospitales que ESDOMED monitorea. No lleva submenu:
+      // abre una pantalla que entra por region, porque son 30 y una lista plana
+      // en el menu no se puede leer.
       ...(isAdmin || isDirector || isSupervisor
         ? [
             {
               id: "panel-hospitales",
               label: "Hospitales",
-              detail: "Monitoreo de otros hospitales",
+              detail: "Monitoreo por región de salud",
               badge: "HO",
-              children: HOSPITALES_EXTERNOS.map((h) => ({
-                id: `panel-hospital-${h.id}`,
-                label: h.corto,
-                detail: "Avance mensual en SIGMA",
-                badge: h.corto.slice(0, 2).toUpperCase(),
-                icon: "monitor",
-              })),
             },
           ]
         : []),
@@ -17479,6 +17518,7 @@ export default function Home() {
                                 "panel-admin-export",
                                 "panel-capture-toggle",
                                 "panel-poa",
+                                "panel-hospitales",
                               ].includes(item.id)
                             ? item.id
                             : null;
@@ -18059,7 +18099,7 @@ export default function Home() {
 
             {/* Barra de "volver a Inicio" — SOLO movil, en cualquier vista que no sea Inicio. */}
             <div
-              data-view={`panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-depreciacion-perc panel-calendar panel-admin-export panel-capture-toggle ${HOSPITALES_EXTERNOS.map((h) => `panel-hospital-${h.id}`).join(" ")}`}
+              data-view="panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-depreciacion-perc panel-calendar panel-admin-export panel-capture-toggle panel-hospitales"
               className="flex items-center gap-3 desk:hidden"
             >
               <button
@@ -18088,9 +18128,9 @@ export default function Home() {
                           ? "Consolidados PERC"
                           : mobileView === "panel-capture-toggle"
                             ? "Habilitar tableros"
-                            : HOSPITALES_EXTERNOS.find(
-                                  (h) => mobileView === `panel-hospital-${h.id}`,
-                                )?.nombre ?? ""}
+                            : mobileView === "panel-hospitales"
+                              ? "Hospitales"
+                              : ""}
               </span>
             </div>
 
@@ -18629,140 +18669,257 @@ export default function Home() {
             <div data-view="panel-capture-toggle">{captureToggleSection}</div>
           ) : null}
 
-          {/* HOSPITALES: el monitoreo de los SIGMA de los otros hospitales que
-              ESDOMED acompaña. Solo avance: cuántos servicios entregaron y
-              cuáles faltan. Ninguna cifra de producción cruza entre sistemas.
-              Es una sola pantalla que se adapta al hospital elegido. */}
-          {(() => {
-            if (!isAdmin && !isDirector && !isSupervisor) return null;
-            const hospital = HOSPITALES_EXTERNOS.find(
-              (h) =>
-                activeSidebarSection === `panel-hospital-${h.id}` ||
-                mobileView === `panel-hospital-${h.id}`,
-            );
-            if (!hospital) return null;
-            const datos = sigmaMonitoreo[hospital.id];
-            const mes = sigmaMes[hospital.id] || "";
-            const cargando = sigmaCargando === hospital.id;
-            return (
-              <section
-                id={`panel-hospital-${hospital.id}`}
-                data-view={`panel-hospital-${hospital.id}`}
-                className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
-                  isLightPanelTheme
-                    ? "border border-slate-200 bg-white text-slate-900"
-                    : "border border-white/10 bg-[#202c41] text-slate-100"
-                }`}
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-teal-300/90">
-                      Hospitales
-                    </p>
-                    <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                      {hospital.nombre}
-                    </h2>
-                    <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                      {hospital.soloAvance
-                        ? "Avance de la producción distribuida del mes en curso, tal como lo publica el sistema del hospital. Es solo lectura: acá no se digita nada."
-                        : "Avance de la producción distribuida e insumos, tal como lo reporta SIGMA. Es solo lectura: acá no se digita nada."}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {hospital.soloAvance ? null : (
-                    <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
-                      <span className="font-semibold uppercase tracking-wide">Mes</span>
-                      <input
-                        type="month"
-                        value={mes}
-                        onChange={(event) => void loadSigmaMonitoreo(hospital.id, event.target.value, true)}
-                        className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-900" : "text-white [color-scheme:dark]"}`}
-                      />
-                    </label>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => void loadSigmaMonitoreo(hospital.id, mes, true)}
-                      disabled={cargando}
-                      className="rounded-xl bg-gradient-to-r from-teal-400 to-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-900 disabled:opacity-50"
-                    >
-                      {cargando ? "Consultando…" : "Actualizar"}
-                    </button>
-                  </div>
-                </div>
+          {/* HOSPITALES: el monitoreo de los otros hospitales que ESDOMED
+              acompaña. Se entra por región para que la lista siga siendo legible
+              cuando estén los 30. Solo avance: ninguna cifra de producción ni de
+              insumos cruza entre sistemas. */}
+          {(isAdmin || isDirector || isSupervisor) &&
+          (activeSidebarSection === "panel-hospitales" || mobileView === "panel-hospitales") ? (
+            <section
+              id="panel-hospitales"
+              data-view="panel-hospitales"
+              className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
+                isLightPanelTheme
+                  ? "border border-slate-200 bg-white text-slate-900"
+                  : "border border-white/10 bg-[#202c41] text-slate-100"
+              }`}
+            >
+              {(() => {
+                const hospital = HOSPITALES_EXTERNOS.find((h) => h.id === hospitalSel) || null;
+                const region = REGIONES_SALUD.find((r) => r.id === regionSel) || null;
+                const datos = hospital ? sigmaMonitoreo[hospital.id] : undefined;
+                const mes = hospital ? sigmaMes[hospital.id] || "" : "";
+                const cargando = hospital ? sigmaCargando === hospital.id : false;
+                const suave = isLightPanelTheme ? "text-slate-600" : "text-slate-300";
+                const tarjeta = isLightPanelTheme
+                  ? "border-slate-200 bg-slate-50"
+                  : "border-white/10 bg-[#1b2537]";
 
-                {!datos ? (
-                  <p className={`mt-6 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-                    Consultando a SIGMA…
-                  </p>
-                ) : !datos.configurado ? (
-                  <div className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200">
-                    <p className="font-semibold">Este hospital todavía no está conectado.</p>
-                    <p className="mt-1 leading-6 text-amber-200/80">{datos.error}</p>
-                  </div>
-                ) : datos.error ? (
-                  <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-200">
-                    <p className="font-semibold">No pudimos leer el monitoreo de este hospital.</p>
-                    <p className="mt-1 text-rose-200/80">{datos.error}</p>
-                  </div>
-                ) : (
+                return (
                   <>
-                    <div className={`mt-5 grid gap-3 ${datos.sinInsumos ? "" : "sm:grid-cols-2"}`}>
-                      <div className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                          Producción distribuida
+                    {/* Cabecera: siempre dice dónde está parado y cómo volver. */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-teal-300/90">
+                          Hospitales
+                          {region ? ` · Región ${region.nombre}` : ""}
                         </p>
-                        <p className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                          {datos.perc?.completos ?? 0} de {datos.perc?.total ?? 0}
-                        </p>
-                        <p className={`text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
-                          {datos.mesEtiqueta} · {datos.perc?.pct ?? 0}% entregado
-                        </p>
-                        <div className={`mt-3 h-2.5 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500"
-                            style={{ width: `${datos.perc?.pct ?? 0}%` }}
-                          />
-                        </div>
-                      </div>
-                      {datos.sinInsumos ? null : (
-                      <div className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                          Insumos de almacén
-                        </p>
-                        <p className={`mt-1 text-2xl font-bold ${datos.insumos?.completo ? "text-emerald-300" : "text-amber-300"}`}>
-                          {datos.insumos?.completo ? "Entregado" : "Pendiente"}
-                        </p>
-                        <p className={`text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
-                          Una sola tabla, la llena Almacén.
+                        <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                          {hospital ? hospital.nombre : region ? `Región ${region.nombre}` : "Red de hospitales"}
+                        </h2>
+                        <p className={`mt-1 text-sm ${suave}`}>
+                          {hospital
+                            ? hospital.soloAvance
+                              ? "Avance de la producción distribuida del mes en curso, tal como lo publica el sistema del hospital. Es solo lectura: acá no se digita nada."
+                              : "Avance de la producción distribuida e insumos, tal como lo reporta SIGMA. Es solo lectura: acá no se digita nada."
+                            : region
+                              ? region.detalle
+                              : "Elegí una región para ver sus hospitales y cuáles ya están conectados al monitoreo."}
                         </p>
                       </div>
-                      )}
+                      <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {hospital || region ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (hospital) setHospitalSel("");
+                              else setRegionSel("");
+                            }}
+                            className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                              isLightPanelTheme
+                                ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                                : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                            }`}
+                          >
+                            ‹ {hospital ? `Región ${region ? region.nombre : ""}`.trim() : "Regiones"}
+                          </button>
+                        ) : null}
+                        {hospital && !hospital.soloAvance ? (
+                          <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+                            <span className="font-semibold uppercase tracking-wide">Mes</span>
+                            <input
+                              type="month"
+                              value={mes}
+                              onChange={(event) => void loadSigmaMonitoreo(hospital.id, event.target.value, true)}
+                              className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-900" : "text-white [color-scheme:dark]"}`}
+                            />
+                          </label>
+                        ) : null}
+                        {hospital ? (
+                          <button
+                            type="button"
+                            onClick={() => void loadSigmaMonitoreo(hospital.id, mes, true)}
+                            disabled={cargando}
+                            className="rounded-xl bg-gradient-to-r from-teal-400 to-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-900 disabled:opacity-50"
+                          >
+                            {cargando ? "Consultando…" : "Actualizar"}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
 
-                    <div className="mt-5 grid gap-1.5 sm:grid-cols-2">
-                      {(datos.perc?.items ?? []).map((item) => (
-                        <div
-                          key={item.id}
-                          className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-sm ${
-                            isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#1b2537]"
-                          }`}
-                        >
-                          <span
-                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.completo ? "bg-emerald-400" : "bg-amber-400"}`}
-                            aria-label={item.completo ? "Entregado" : "Pendiente"}
-                          />
-                          <span className={`min-w-0 flex-1 truncate ${isLightPanelTheme ? "text-slate-700" : "text-slate-300"}`}>
-                            {item.nombre}
-                          </span>
+                    {/* NIVEL 1: las cinco regiones de salud. */}
+                    {!region && !hospital ? (
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {REGIONES_SALUD.map((r) => {
+                          const lista = HOSPITALES_EXTERNOS.filter((h) => h.region === r.id);
+                          const conectados = lista.filter((h) => h.conectado).length;
+                          const pct = lista.length ? Math.round((conectados / lista.length) * 100) : 0;
+                          return (
+                            <button
+                              key={r.id}
+                              type="button"
+                              onClick={() => {
+                                setRegionSel(r.id);
+                                setHospitalSel("");
+                              }}
+                              className={`rounded-2xl border p-4 text-left transition hover:border-teal-400/50 ${tarjeta}`}
+                            >
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                                Región
+                              </p>
+                              <p className={`mt-1 text-xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                {r.nombre}
+                              </p>
+                              <p className={`mt-0.5 text-xs ${suave}`}>{r.detalle}</p>
+                              <p className={`mt-3 text-sm font-semibold ${conectados ? "text-emerald-300" : "text-slate-400"}`}>
+                                {conectados} de {lista.length} conectados
+                              </p>
+                              <div className={`mt-2 h-2 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
+                                <div
+                                  className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    {/* NIVEL 2: los hospitales de la región elegida. Los que aún no
+                        están conectados se ven apagados y no se pueden abrir. */}
+                    {region && !hospital ? (
+                      <div className="mt-5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                        {HOSPITALES_EXTERNOS.filter((h) => h.region === region.id).map((h) => {
+                          const contenido = (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${h.conectado ? "bg-emerald-400" : "bg-slate-500"}`}
+                                  aria-hidden="true"
+                                />
+                                <p className={`min-w-0 flex-1 text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                  {h.corto}
+                                </p>
+                              </div>
+                              <p className={`mt-1 text-xs leading-5 ${suave}`}>{h.nombre}</p>
+                              {h.lugar ? (
+                                <p className="mt-0.5 text-[11px] uppercase tracking-wide text-slate-400">{h.lugar}</p>
+                              ) : null}
+                              <p className={`mt-2 text-[11px] font-semibold uppercase tracking-wide ${h.conectado ? "text-emerald-300" : "text-slate-500"}`}>
+                                {h.conectado ? "Ver monitoreo →" : "Sin conectar"}
+                              </p>
+                            </>
+                          );
+                          return h.conectado ? (
+                            <button
+                              key={h.id}
+                              type="button"
+                              onClick={() => setHospitalSel(h.id)}
+                              className={`rounded-2xl border p-4 text-left transition hover:border-teal-400/50 ${tarjeta}`}
+                            >
+                              {contenido}
+                            </button>
+                          ) : (
+                            <div
+                              key={h.id}
+                              className={`rounded-2xl border border-dashed p-4 opacity-60 ${
+                                isLightPanelTheme ? "border-slate-300 bg-slate-50" : "border-white/10 bg-[#1b2537]"
+                              }`}
+                            >
+                              {contenido}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    {/* NIVEL 3: el monitoreo del hospital elegido. */}
+                    {hospital ? (
+                      !datos ? (
+                        <p className={`mt-6 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                          Consultando al hospital…
+                        </p>
+                      ) : !datos.configurado ? (
+                        <div className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200">
+                          <p className="font-semibold">Este hospital todavía no está conectado.</p>
+                          <p className="mt-1 leading-6 text-amber-200/80">{datos.error}</p>
                         </div>
-                      ))}
-                    </div>
+                      ) : datos.error ? (
+                        <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-200">
+                          <p className="font-semibold">No pudimos leer el monitoreo de este hospital.</p>
+                          <p className="mt-1 text-rose-200/80">{datos.error}</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className={`mt-5 grid gap-3 ${datos.sinInsumos ? "" : "sm:grid-cols-2"}`}>
+                            <div className={`rounded-2xl border p-4 ${tarjeta}`}>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                                Producción distribuida
+                              </p>
+                              <p className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                {datos.perc?.completos ?? 0} de {datos.perc?.total ?? 0}
+                              </p>
+                              <p className={`text-xs ${suave}`}>
+                                {datos.mesEtiqueta} · {datos.perc?.pct ?? 0}% entregado
+                              </p>
+                              <div className={`mt-3 h-2.5 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
+                                <div
+                                  className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500"
+                                  style={{ width: `${datos.perc?.pct ?? 0}%` }}
+                                />
+                              </div>
+                            </div>
+                            {datos.sinInsumos ? null : (
+                              <div className={`rounded-2xl border p-4 ${tarjeta}`}>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                                  Insumos de almacén
+                                </p>
+                                <p className={`mt-1 text-2xl font-bold ${datos.insumos?.completo ? "text-emerald-300" : "text-amber-300"}`}>
+                                  {datos.insumos?.completo ? "Entregado" : "Pendiente"}
+                                </p>
+                                <p className={`text-xs ${suave}`}>Una sola tabla, la llena Almacén.</p>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mt-5 grid gap-1.5 sm:grid-cols-2">
+                            {(datos.perc?.items ?? []).map((item) => (
+                              <div
+                                key={item.id}
+                                className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-sm ${
+                                  isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#1b2537]"
+                                }`}
+                              >
+                                <span
+                                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.completo ? "bg-emerald-400" : "bg-amber-400"}`}
+                                  aria-label={item.completo ? "Entregado" : "Pendiente"}
+                                />
+                                <span className={`min-w-0 flex-1 truncate ${isLightPanelTheme ? "text-slate-700" : "text-slate-300"}`}>
+                                  {item.nombre}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )
+                    ) : null}
                   </>
-                )}
-              </section>
-            );
-          })()}
+                );
+              })()}
+            </section>
+          ) : null}
 
           {/* VERIFICAR SUMAS: los pares de servicios que capturan lo mismo y que en el
               consolidado caen en un solo bloque. El monitoreo los muestra por

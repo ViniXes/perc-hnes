@@ -90,10 +90,7 @@ body {
   html:not(.forzar-escritorio) [data-mview="panel-admin-export"] > [data-view~="panel-admin-export"] {
     display: block !important;
   }
-  /* HOSPITALES (SIGMA): la vista se llama panel-hospital-<id> y en pantalla solo
-     se dibuja el hospital elegido, asi que basta una regla por prefijo: agregar
-     un hospital nuevo no obliga a tocar este archivo. */
-  html:not(.forzar-escritorio) [data-mview^="panel-hospital-"] > [data-view*="panel-hospital-"] {
+  html:not(.forzar-escritorio) [data-mview="panel-hospitales"] > [data-view~="panel-hospitales"] {
     display: block !important;
   }
 }
