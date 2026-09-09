@@ -5196,6 +5196,14 @@ export default function Home() {
   // admin da por recibidos: cuentan como completos en el monitoreo. Clave:
   // "periodo__servicio__modulo". Vive en documentControl/recibidosExternos.
   const [recibidosExternos, setRecibidosExternos] = useState<Record<string, { nota?: string; por?: string }>>({});
+  // CIERRE MANUAL de los tableros que llena el admin (Insumos de Almacen, Gastos
+  // PERC y Depreciacion). No dependen de la ventana de captura de los servicios:
+  // el admin los cierra cuando ya digito el mes, y los reabre si necesita
+  // corregir. Es POR MES: cerrar agosto no toca septiembre, que nace abierto.
+  // Clave: "periodo__modulo". Vive en documentControl/cierresManuales.
+  const [cierresManuales, setCierresManuales] = useState<
+    Record<string, { por?: string; fecha?: string }>
+  >({});
   // HOSPITALES: monitoreo de SIGMA (Hospital Nacional Psiquiatrico). Llega por
   // nuestra propia ruta de servidor; la llave nunca toca el navegador.
   const [sigmaMonitoreo, setSigmaMonitoreo] = useState<{
@@ -6420,6 +6428,7 @@ export default function Home() {
   useEffect(() => {
     if (!user || firestoreUnavailable || !firestoreStatusReady) return;
     void loadRecibidosExternos();
+    void loadCierresManuales();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, firestoreUnavailable, firestoreStatusReady]);
 
@@ -7773,6 +7782,64 @@ export default function Home() {
     }
   }
 
+  /** Clave del cierre manual de un tablero del admin. */
+  function claveCierre(modulo: "insumos" | "gastos" | "depre", periodo: string) {
+    return `${periodo}__${modulo}`;
+  }
+
+  /** True si ese tablero ya fue cerrado a mano para ese mes. */
+  function estaCerradoManual(modulo: "insumos" | "gastos" | "depre", periodo: string) {
+    return !!cierresManuales[claveCierre(modulo, periodo)];
+  }
+
+  /** Lee del servidor los tableros cerrados a mano. */
+  async function loadCierresManuales() {
+    if (firestoreUnavailable) return;
+    try {
+      const snapshot = await getDoc(doc(db, "documentControl", "cierresManuales"));
+      const data = snapshot.exists()
+        ? (snapshot.data() as Record<string, { por?: string; fecha?: string }>)
+        : {};
+      setCierresManuales(data || {});
+    } catch {
+      // Silencioso: si falla, los tableros quedan abiertos como siempre.
+    }
+  }
+
+  /** Cierra o reabre a mano un tablero para un mes. Solo admin. */
+  async function toggleCierreManual(
+    modulo: "insumos" | "gastos" | "depre",
+    periodo: string,
+  ) {
+    if (!isAdmin || firestoreUnavailable) return;
+    if (blockedByGhost()) return;
+    const clave = claveCierre(modulo, periodo);
+    const estaba = !!cierresManuales[clave];
+    const previo = cierresManuales;
+    const siguiente = { ...cierresManuales };
+    if (estaba) delete siguiente[clave];
+    else {
+      siguiente[clave] = {
+        por: usuarioDeCorreo(user?.email || ""),
+        // fechaLegible espera un Timestamp de Firestore, no una fecha suelta.
+        fecha: new Date().toLocaleString("es-SV", { dateStyle: "short", timeStyle: "short" }),
+      };
+    }
+    setCierresManuales(siguiente);
+    try {
+      await setDoc(doc(db, "documentControl", "cierresManuales"), siguiente);
+      setMessage(
+        estaba
+          ? `Tablero reabierto para ${getPeriodLabel(periodo)}: ya se puede editar.`
+          : `Tablero cerrado para ${getPeriodLabel(periodo)}: queda solo lectura hasta que lo reabra.`,
+      );
+    } catch (cierreError) {
+      setCierresManuales(previo);
+      if (await handleFirestoreError(cierreError)) return;
+      setError("No pudimos guardar el cierre.");
+    }
+  }
+
   /** Clave del registro "recibido fuera de PULSO". */
   function claveRecibido(periodo: string, serviceId: string, label: string) {
     return `${periodo}__${serviceId}__${label}`;
@@ -8743,6 +8810,10 @@ export default function Home() {
   async function handleSaveDepre() {
     if (blockedByGhost()) return;
     if (!user || firestoreUnavailable) return;
+    if (estaCerradoManual("depre", deprePeriod)) {
+      setError(`La Depreciación de ${getPeriodLabel(deprePeriod)} está cerrada. Reabrila para poder guardar.`);
+      return;
+    }
     setDepreSaving(true);
     setError("");
     setMessage("");
@@ -8791,6 +8862,10 @@ export default function Home() {
 
   async function handleSaveGastos() {
     if (blockedByGhost()) return;
+    if (estaCerradoManual("gastos", gastosPeriod)) {
+      setError(`Los Gastos PERC de ${getPeriodLabel(gastosPeriod)} están cerrados. Reabrilos para poder guardar.`);
+      return;
+    }
     if (!user || firestoreUnavailable) return;
     setGastosSaving(true);
     setError("");
@@ -8847,6 +8922,10 @@ export default function Home() {
   }
 
   async function handleSaveInsumos() {
+    if (estaCerradoManual("insumos", insumosPeriod)) {
+      setError(`Los Insumos de ${getPeriodLabel(insumosPeriod)} están cerrados. Reabrilos para poder guardar.`);
+      return;
+    }
     if (blockedByGhost()) return;
     // Guardan quienes editan celdas (admin/almacen) o gestionan filas (además
     // supervisores). La persistencia real la valida Firestore por sus reglas.
@@ -16463,7 +16542,27 @@ export default function Home() {
               <input type="month" value={gastosPeriod} onChange={(e) => setGastosPeriod(e.target.value || gastosPeriod)} className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`} />
             </label>
             <button type="button" data-abrir-tabla={gastosOpen ? "no" : "si"} onClick={() => setGastosOpen((x) => !x)} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">{gastosOpen ? "Ocultar tabla" : "Mostrar tabla"}</button>
-            <button type="button" onClick={() => void handleSaveGastos()} disabled={gastosSaving} className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50">{gastosSaving ? "Guardando…" : "Guardar"}</button>
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => void toggleCierreManual("gastos", gastosPeriod)}
+                title={estaCerradoManual("gastos", gastosPeriod)
+                  ? "Reabrir este mes para poder editarlo"
+                  : "Cerrar este mes: queda solo lectura"}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                  estaCerradoManual("gastos", gastosPeriod)
+                    ? "border-rose-400/40 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
+                    : "border-slate-400/30 bg-white/5 text-slate-200 hover:bg-white/10"
+                }`}
+              >
+                {estaCerradoManual("gastos", gastosPeriod) ? "Reabrir mes" : "Cerrar mes"}
+              </button>
+            ) : estaCerradoManual("gastos", gastosPeriod) ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 px-2.5 py-1 text-[11px] font-semibold text-rose-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-400" /> Mes cerrado
+              </span>
+            ) : null}
+            <button type="button" onClick={() => void handleSaveGastos()} disabled={gastosSaving || estaCerradoManual("gastos", gastosPeriod)} className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50">{gastosSaving ? "Guardando…" : "Guardar"}</button>
             <button type="button" onClick={() => downloadGastosExcel()} className="rounded-xl border border-sky-400/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/25">Descargar Excel</button>
           </div>
         </div>
@@ -16489,7 +16588,7 @@ export default function Home() {
                 <td className={`sticky left-0 z-10 px-2 py-1.5 font-semibold ${isLightPanelTheme ? "bg-slate-50 text-slate-700" : "bg-[#1b2537] text-slate-200"}`}>Valor General</td>
                 {GASTOS_EXPENSES.map((_, c) => (
                   <td key={c} className="px-1 py-1 text-center">
-                    <input inputMode="decimal" value={gastosValues[`vg|${c}`] ?? ""} onChange={(e) => setGastosValues((v) => ({ ...v, [`vg|${c}`]: e.target.value }))} className={`w-20 rounded border px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`} />
+                    <input inputMode="decimal" disabled={estaCerradoManual("gastos", gastosPeriod)} value={gastosValues[`vg|${c}`] ?? ""} onChange={(e) => setGastosValues((v) => ({ ...v, [`vg|${c}`]: e.target.value }))} className={`w-20 rounded border px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`} />
                   </td>
                 ))}
               </tr>
@@ -16508,7 +16607,7 @@ export default function Home() {
                     }
                     return (
                       <td key={c} className="px-1 py-1 text-center">
-                        <input inputMode="decimal" value={gastosValues[`${r}|${c}`] ?? ""} onChange={(e) => setGastosValues((v) => ({ ...v, [`${r}|${c}`]: e.target.value }))} className={`w-20 rounded border px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`} />
+                        <input inputMode="decimal" disabled={estaCerradoManual("gastos", gastosPeriod)} value={gastosValues[`${r}|${c}`] ?? ""} onChange={(e) => setGastosValues((v) => ({ ...v, [`${r}|${c}`]: e.target.value }))} className={`w-20 rounded border px-1 py-1 text-center text-xs outline-none focus:border-cyan-400 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`} />
                       </td>
                     );
                   })}
@@ -16541,7 +16640,27 @@ export default function Home() {
               <input type="month" value={deprePeriod} onChange={(e) => setDeprePeriod(e.target.value || deprePeriod)} className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`} />
             </label>
             <button type="button" data-abrir-tabla={depreOpen ? "no" : "si"} onClick={() => setDepreOpen((x) => !x)} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">{depreOpen ? "Ocultar tabla" : "Mostrar tabla"}</button>
-            <button type="button" onClick={() => void handleSaveDepre()} disabled={depreSaving} className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50">{depreSaving ? "Guardando…" : "Guardar"}</button>
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => void toggleCierreManual("depre", deprePeriod)}
+                title={estaCerradoManual("depre", deprePeriod)
+                  ? "Reabrir este mes para poder editarlo"
+                  : "Cerrar este mes: queda solo lectura"}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                  estaCerradoManual("depre", deprePeriod)
+                    ? "border-rose-400/40 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
+                    : "border-slate-400/30 bg-white/5 text-slate-200 hover:bg-white/10"
+                }`}
+              >
+                {estaCerradoManual("depre", deprePeriod) ? "Reabrir mes" : "Cerrar mes"}
+              </button>
+            ) : estaCerradoManual("depre", deprePeriod) ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 px-2.5 py-1 text-[11px] font-semibold text-rose-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-400" /> Mes cerrado
+              </span>
+            ) : null}
+            <button type="button" onClick={() => void handleSaveDepre()} disabled={depreSaving || estaCerradoManual("depre", deprePeriod)} className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50">{depreSaving ? "Guardando…" : "Guardar"}</button>
             <button type="button" onClick={() => downloadDepreExcel()} className="rounded-xl border border-sky-400/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/25">Descargar Excel</button>
           </div>
         </div>
@@ -16561,7 +16680,7 @@ export default function Home() {
                   <td className={`whitespace-nowrap px-2 py-1.5 font-medium ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>{row.centro}</td>
                   <td className={`min-w-[280px] px-2 py-1.5 ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>{row.areas}</td>
                   <td className="px-2 py-1.5 text-center">
-                    <input inputMode="decimal" value={depreValues[`${r}`] ?? ""} onChange={(e) => setDepreValues((v) => ({ ...v, [`${r}`]: e.target.value }))} className={`w-28 rounded border px-2 py-1 text-center text-xs outline-none focus:border-cyan-400 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`} />
+                    <input inputMode="decimal" disabled={estaCerradoManual("depre", deprePeriod)} value={depreValues[`${r}`] ?? ""} onChange={(e) => setDepreValues((v) => ({ ...v, [`${r}`]: e.target.value }))} className={`w-28 rounded border px-2 py-1 text-center text-xs outline-none focus:border-cyan-400 ${isLightPanelTheme ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#16212c] text-white"}`} />
                   </td>
                 </tr>
               ))}
@@ -16610,7 +16729,27 @@ export default function Home() {
                 className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`}
               />
             </label>
-            {canEditInsumos ? (
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => void toggleCierreManual("insumos", insumosPeriod)}
+                title={estaCerradoManual("insumos", insumosPeriod)
+                  ? "Reabrir este mes para poder editarlo"
+                  : "Cerrar este mes: queda solo lectura"}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                  estaCerradoManual("insumos", insumosPeriod)
+                    ? "border-rose-400/40 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
+                    : "border-slate-400/30 bg-white/5 text-slate-200 hover:bg-white/10"
+                }`}
+              >
+                {estaCerradoManual("insumos", insumosPeriod) ? "Reabrir mes" : "Cerrar mes"}
+              </button>
+            ) : estaCerradoManual("insumos", insumosPeriod) ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 px-2.5 py-1 text-[11px] font-semibold text-rose-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-400" /> Mes cerrado
+              </span>
+            ) : null}
+            {canEditInsumos && !estaCerradoManual("insumos", insumosPeriod) ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Edición
               </span>
@@ -16770,7 +16909,7 @@ export default function Home() {
                               onChange={(event) => updateInsumosCell(row.key, col.key, event.target.value)}
                               onPaste={(event) => handleInsumosPaste(event, row.key, col.key)}
                               onKeyDown={(event) => handleInsumosKeyNav(event, row.key, col.key)}
-                              disabled={!canEditInsumos}
+                              disabled={!canEditInsumos || estaCerradoManual("insumos", insumosPeriod)}
                               inputMode="decimal"
                               className={insumosCellClass}
                             />
@@ -16851,7 +16990,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => void handleSaveInsumos()}
-              disabled={isSavingInsumos}
+              disabled={isSavingInsumos || estaCerradoManual("insumos", insumosPeriod)}
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
