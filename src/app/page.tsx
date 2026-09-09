@@ -18040,7 +18040,7 @@ export default function Home() {
 
             {/* Barra de "volver a Inicio" — SOLO movil, en cualquier vista que no sea Inicio. */}
             <div
-              data-view="panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-depreciacion-perc panel-calendar panel-admin-export panel-capture-toggle"
+              data-view={`panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-depreciacion-perc panel-calendar panel-admin-export panel-capture-toggle ${HOSPITALES_EXTERNOS.map((h) => `panel-hospital-${h.id}`).join(" ")}`}
               className="flex items-center gap-3 desk:hidden"
             >
               <button
@@ -18069,7 +18069,9 @@ export default function Home() {
                           ? "Consolidados PERC"
                           : mobileView === "panel-capture-toggle"
                             ? "Habilitar tableros"
-                            : ""}
+                            : HOSPITALES_EXTERNOS.find(
+                                  (h) => mobileView === `panel-hospital-${h.id}`,
+                                )?.nombre ?? ""}
               </span>
             </div>
 
