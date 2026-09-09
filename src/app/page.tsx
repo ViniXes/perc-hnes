@@ -872,14 +872,30 @@ function isServiceInChiefScope(
 }
 
 /**
- * Hospitales que ESDOMED monitorea ademas del HNES. Cada uno corre su propio
- * SIGMA; PULSO solo lee su avance. Para sumar otro: una linea aca, una linea en
- * la ruta /api/hospitales/sigma y sus dos variables en Vercel.
+ * Hospitales que ESDOMED monitorea ademas del HNES. PULSO solo lee su avance.
+ * Para sumar otro: una linea aca, una linea en la ruta /api/hospitales/sigma y
+ * sus variables en Vercel.
+ *
+ * soloAvance = el hospital no corre SIGMA sino su propio sistema, que unicamente
+ * publica la lista de servicios con su estado. Ahi no hay insumos que mostrar ni
+ * mes que elegir: lo que devuelve el enlace es el mes que ese sistema tenga en
+ * curso, asi que la pantalla se adapta y esconde esas dos cosas.
  */
-const HOSPITALES_EXTERNOS = [
+const HOSPITALES_EXTERNOS: {
+  id: string;
+  corto: string;
+  nombre: string;
+  soloAvance?: boolean;
+}[] = [
   { id: "psiquiatrico", corto: "Psiquiátrico", nombre: "Hospital Nacional Psiquiátrico" },
   { id: "suchitoto", corto: "Suchitoto", nombre: "Hospital Nacional de Suchitoto" },
-] as const;
+  {
+    id: "sanmiguel",
+    corto: "San Miguel",
+    nombre: "Hospital Nacional San Juan de Dios, San Miguel",
+    soloAvance: true,
+  },
+];
 
 const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   direccion: "dep.direccion",
@@ -5222,6 +5238,9 @@ export default function Home() {
     mesEtiqueta?: string;
     perc?: { total: number; completos: number; pendientes: number; pct: number; items: { id: string; nombre: string; completo: boolean }[] };
     insumos?: { completo: boolean };
+    // Los hospitales que no corren SIGMA no reportan insumos ni permiten elegir mes.
+    sinInsumos?: boolean;
+    sinMes?: boolean;
     error?: string;
   };
   // Un registro por hospital: cada uno se consulta y se recuerda por separado.
@@ -18644,11 +18663,13 @@ export default function Home() {
                       {hospital.nombre}
                     </h2>
                     <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                      Avance de la producción distribuida e insumos, tal como lo reporta SIGMA.
-                      Es solo lectura: acá no se digita nada.
+                      {hospital.soloAvance
+                        ? "Avance de la producción distribuida del mes en curso, tal como lo publica el sistema del hospital. Es solo lectura: acá no se digita nada."
+                        : "Avance de la producción distribuida e insumos, tal como lo reporta SIGMA. Es solo lectura: acá no se digita nada."}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
+                    {hospital.soloAvance ? null : (
                     <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
                       <span className="font-semibold uppercase tracking-wide">Mes</span>
                       <input
@@ -18658,6 +18679,7 @@ export default function Home() {
                         className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-900" : "text-white [color-scheme:dark]"}`}
                       />
                     </label>
+                    )}
                     <button
                       type="button"
                       onClick={() => void loadSigmaMonitoreo(hospital.id, mes, true)}
@@ -18685,7 +18707,7 @@ export default function Home() {
                   </div>
                 ) : (
                   <>
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div className={`mt-5 grid gap-3 ${datos.sinInsumos ? "" : "sm:grid-cols-2"}`}>
                       <div className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                           Producción distribuida
@@ -18703,6 +18725,7 @@ export default function Home() {
                           />
                         </div>
                       </div>
+                      {datos.sinInsumos ? null : (
                       <div className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                           Insumos de almacén
@@ -18714,6 +18737,7 @@ export default function Home() {
                           Una sola tabla, la llena Almacén.
                         </p>
                       </div>
+                      )}
                     </div>
 
                     <div className="mt-5 grid gap-1.5 sm:grid-cols-2">
