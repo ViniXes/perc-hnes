@@ -1,0 +1,1647 @@
+/* ===========================================================================
+   SIGMA - Sistema Integrado de Gestion de Matriz y Almacen
+   Hospital Nacional Psiquiatrico "Dr. Jose Molina Martinez"
+   ---------------------------------------------------------------------------
+   ARCHIVO UNICO. Todo el codigo del servidor vive aqui, en este orden:
+     1. Catalogos (los dos Excel oficiales del PERC 2026)
+     2. Base (configuracion, fechas, ventanas de captura)
+     3. Instalacion
+     4. Usuarios y sesiones
+     5. API que consume la pantalla
+     6. Descargas en Excel
+     7. Puente de monitoreo hacia PULSO
+     8. Punto de entrada web
+   La pantalla vive en el archivo Index.html.
+   =========================================================================== */
+
+/**
+ * SIGMA - Sistema Integrado de Gestion de Matriz y Almacen
+ * Hospital Nacional Psiquiatrico "Dr. Jose Molina Martinez"
+ * ---------------------------------------------------------------------------
+ * CATALOGOS. Salen tal cual de los dos Excel oficiales del PERC 2026:
+ *   - PRODUCCION DISTRIBUIDA PERC HN PSIQUIATRICO 2026
+ *   - INSUMOS PERC HN PSIQUIATRICO 2026
+ * No se editan a mano aqui: al instalar se copian a las hojas _Centros,
+ * _Renglones, _Servicios y _Insumos, y desde ahi se administran.
+ * ---------------------------------------------------------------------------
+ */
+
+/** Los 65 centros de costo (columnas de la matriz). [codigo, nombre] */
+var SEED_CENTROS = [
+  ["66", "Hospitalizacion medicina interna"],
+  ["95", "Hospitalizacion cirugia general"],
+  ["113", "Hospitalizacion obstetricia"],
+  ["114", "Hospitalizacion ginecologia"],
+  ["116", "Hospitalizacion pediatria"],
+  ["117", "Hospitalizacion neonatologia"],
+  ["140", "Hospitalizacion psiquiatria adultos agudos"],
+  ["143", "Hospitalizacion psiquiatria distrito judicial"],
+  ["144", "Hospitalizacion psiquiatria adultos cronica"],
+  ["154", "Hospitalizacion desintoxicacion alcohol y drogas"],
+  ["159", "Hospitalizacion de dia"],
+  ["745", "Hospitalizacion servicios por convenios"],
+  ["748", "Hospitalizacion de corta estancia"],
+  ["201", "Emergencias"],
+  ["749", "Maxima emergencia"],
+  ["230", "Consulta nutricion"],
+  ["233", "Consulta planificacion familiar"],
+  ["235", "Consulta de psicologia"],
+  ["740", "Consulta de servicios por convenios"],
+  ["787", "Consulta programas especiales"],
+  ["273", "Consulta medicina interna"],
+  ["280", "Consulta psiquiatria"],
+  ["282", "Consulta neumologia"],
+  ["296", "Consulta anestesiologia"],
+  ["764", "Consulta medicina reproductiva"],
+  ["309", "Consulta cirugia general"],
+  ["311", "Consulta urologia"],
+  ["315", "Consulta ortopedia"],
+  ["328", "Consulta pediatria"],
+  ["329", "Consulta neonatologia"],
+  ["353", "Consulta ginecologia"],
+  ["354", "Consulta obstetricia"],
+  ["804", "Hospitalizacion psiquiatria intervencion en crisis"],
+  ["805", "Hospitalizacion psiquiatria sub-agudos"],
+  ["806", "Centro quirurgico"],
+  ["515", "Sala de partos"],
+  ["516", "Centro obstetrico"],
+  ["766", "Servicio de apoyo a riiss"],
+  ["398", "Vacunacion"],
+  ["502", "Quirofanos menor (pequeña cirugia )"],
+  ["518", "Laboratorio clinico"],
+  ["559", "Ultrasonografia"],
+  ["775", "Estudios de cardiologia"],
+  ["779", "Estudios de neumonologia"],
+  ["780", "Estudios de imagenologia"],
+  ["781", "Estudios de neurologia"],
+  ["562", "Terapia fisica"],
+  ["593", "Servicio farmaceutico"],
+  ["600", "Colposcopia"],
+  ["612", "Albergue"],
+  ["803", "Rehablitacion psicosocial"],
+  ["644", "Ambulancia"],
+  ["662", "Central de esterilizacion"],
+  ["712", "Mantenimiento biomedico"],
+  ["648", "Aseo"],
+  ["649", "Vigilancia"],
+  ["721", "Almacen"],
+  ["652", "Servicio de alimentacion"],
+  ["659", "Lavanderia"],
+  ["661", "Costureria"],
+  ["664", "Transporte general"],
+  ["665", "Mantenimiento"],
+  ["713", "Trabajo social"],
+  ["670", "Administracion"],
+  ["702", "Docencia e investigacion"]
+];
+
+/** Los 52 renglones de produccion (filas). [id, servicio, unidad, etiquetaOficial] */
+var SEED_RENGLONES = [
+  ["398_1", "398", "Actividad", "398_1-Vacunacion | Actividad"],
+  ["398_2", "398", "Dosis aplicada", "398_2-Vacunacion | Dosis aplicada"],
+  ["502_1", "502", "Intervencion quirurgica", "502_1-Quirofanos menor (pequeña cirugia ) | Intervencion quirurgica"],
+  ["502_2", "502", "Procedimiento", "502_2-Quirofanos menor (pequeña cirugia ) | Procedimiento"],
+  ["518_1", "518", "Examen", "518_1-Laboratorio clinico | Examen"],
+  ["518_2", "518", "Prueba", "518_2-Laboratorio clinico | Prueba"],
+  ["559_1", "559", "Estudio", "559_1-Ultrasonografia | Estudio"],
+  ["775_1", "775", "Estudio", "775_1-Estudios de cardiologia | Estudio"],
+  ["779_1", "779", "Estudio", "779_1-Estudios de neumonologia | Estudio"],
+  ["780_1", "780", "Estudio", "780_1-Estudios de imagenologia | Estudio"],
+  ["781_1", "781", "Estudio", "781_1-Estudios de neurologia | Estudio"],
+  ["562_1", "562", "Sesion", "562_1-Terapia fisica | Sesion"],
+  ["593_1", "593", "Receta", "593_1-Servicio farmaceutico | Receta"],
+  ["593_2", "593", "Prescripcion", "593_2-Servicio farmaceutico | Prescripcion"],
+  ["593_3", "593", "Paciente", "593_3-Servicio farmaceutico | Paciente"],
+  ["593_4", "593", "Receta Unidosis", "593_4-Servicio farmaceutico | Receta Unidosis"],
+  ["593_5", "593", "Formula", "593_5-Servicio farmaceutico | Formula"],
+  ["600_1", "600", "Procedimiento", "600_1-Colposcopia | Procedimiento"],
+  ["600_2", "600", "Estudio", "600_2-Colposcopia | Estudio"],
+  ["612_1", "612", "Cupo mes utilizado", "612_1-Albergue | Cupo mes utilizado"],
+  ["612_2", "612", "Atencion", "612_2-Albergue | Atencion"],
+  ["803_1", "803", "Atencion", "803_1-Rehablitacion psicosocial | Atencion"],
+  ["644_1", "644", "Traslado", "644_1-Ambulancia | Traslado"],
+  ["644_2", "644", "Kilometro", "644_2-Ambulancia | Kilometro"],
+  ["644_3", "644", "Viajes", "644_3-Ambulancia | Viajes"],
+  ["662_1", "662", "Paquete", "662_1-Central de esterilizacion | Paquete"],
+  ["662_2", "662", "Metro cubico", "662_2-Central de esterilizacion | Metro cubico"],
+  ["712_1", "712", "Orden", "712_1-Mantenimiento biomedico | Orden"],
+  ["648_1", "648", "Metro cuadrado", "648_1-Aseo | Metro cuadrado"],
+  ["649_1", "649", "Metro cuadrado", "649_1-Vigilancia | Metro cuadrado"],
+  ["721_1", "721", "Despacho", "721_1-Almacen | Despacho"],
+  ["652_1", "652", "Racion paciente", "652_1-Servicio de alimentacion | Racion paciente"],
+  ["652_2", "652", "Racion funcionario", "652_2-Servicio de alimentacion | Racion funcionario"],
+  ["659_1", "659", "Libras", "659_1-Lavanderia | Libras"],
+  ["659_2", "659", "Pieza", "659_2-Lavanderia | Pieza"],
+  ["659_3", "659", "Kilo", "659_3-Lavanderia | Kilo"],
+  ["661_1", "661", "Pieza", "661_1-Costureria | Pieza"],
+  ["661_2", "661", "Metros cocidos", "661_2-Costureria | Metros cocidos"],
+  ["661_3", "661", "Pieza Elaborada", "661_3-Costureria | Pieza Elaborada"],
+  ["664_1", "664", "Traslado", "664_1-Transporte general | Traslado"],
+  ["664_2", "664", "Kilometro", "664_2-Transporte general | Kilometro"],
+  ["664_3", "664", "Viajes", "664_3-Transporte general | Viajes"],
+  ["665_1", "665", "Orden", "665_1-Mantenimiento | Orden"],
+  ["665_2", "665", "Solicitud", "665_2-Mantenimiento | Solicitud"],
+  ["665_3", "665", "Solicitud Recibida", "665_3-Mantenimiento | Solicitud Recibida"],
+  ["665_4", "665", "Solicitud Cumplida", "665_4-Mantenimiento | Solicitud Cumplida"],
+  ["713_1", "713", "Atencion", "713_1-Trabajo social | Atencion"],
+  ["713_2", "713", "Actividad", "713_2-Trabajo social | Actividad"],
+  ["713_3", "713", "Paciente", "713_3-Trabajo social | Paciente"],
+  ["713_4", "713", "Casos", "713_4-Trabajo social | Casos"],
+  ["713_5", "713", "Entrevista", "713_5-Trabajo social | Entrevista"],
+  ["702_1", "702", "Capacitacion", "702_1-Docencia e investigacion | Capacitacion"]
+];
+
+/** Los 26 servicios que producen. [id, nombre] */
+var SEED_SERVICIOS = [
+  ["398", "Vacunacion"],
+  ["502", "Quirofanos menor (pequeña cirugia )"],
+  ["518", "Laboratorio clinico"],
+  ["559", "Ultrasonografia"],
+  ["775", "Estudios de cardiologia"],
+  ["779", "Estudios de neumonologia"],
+  ["780", "Estudios de imagenologia"],
+  ["781", "Estudios de neurologia"],
+  ["562", "Terapia fisica"],
+  ["593", "Servicio farmaceutico"],
+  ["600", "Colposcopia"],
+  ["612", "Albergue"],
+  ["803", "Rehablitacion psicosocial"],
+  ["644", "Ambulancia"],
+  ["662", "Central de esterilizacion"],
+  ["712", "Mantenimiento biomedico"],
+  ["648", "Aseo"],
+  ["649", "Vigilancia"],
+  ["721", "Almacen"],
+  ["652", "Servicio de alimentacion"],
+  ["659", "Lavanderia"],
+  ["661", "Costureria"],
+  ["664", "Transporte general"],
+  ["665", "Mantenimiento"],
+  ["713", "Trabajo social"],
+  ["702", "Docencia e investigacion"]
+];
+
+/** Las 31 categorias de insumo (columnas de Insumos). [codigo, nombre] */
+var SEED_INSUMO_CATEGORIAS = [
+  ["9", "Gases medicinales"],
+  ["15", "Material de odontologia"],
+  ["16", "Material de osteosintesis y protesis"],
+  ["17", "Material imagenologia"],
+  ["18", "Material medico quirurgico"],
+  ["19", "Material y reactivos de laboratorio"],
+  ["24", "Materiales de oficina, productos de papel e impresos"],
+  ["29", "Materiales y elementos de aseo"],
+  ["30", "Medicamentos"],
+  ["43", "Productos textiles, vestuario y calzado"],
+  ["201", "Productos alimenticios para personas"],
+  ["230", "Accesorios de costura"],
+  ["231", "Accesorios para generacion y distribucion de energia"],
+  ["232", "Accesorios y suministros para manejo, acondicionamiento y almacenamiento de materiales"],
+  ["233", "Componentes electronicos, iluminacion y acondicionamiento"],
+  ["234", "Componentes y sistemas para vehiculo"],
+  ["235", "Componentes y suministros de fabricacion, estructuras y construcciones"],
+  ["236", "Instrumentos de medida y observacion"],
+  ["237", "Productos de proteccion y resguardo medico, docificacion y gas hospitalario."],
+  ["238", "Productos de rehabilitacion y terapia ocupacional y fisica"],
+  ["239", "Productos para la esterilizacion de instrumental medico"],
+  ["240", "Productos quimicos, bioquimicos, minerales y gases industriales"],
+  ["241", "Publicaciones y formularios impresos y electronicos"],
+  ["242", "Suministro para tratamiento de agua"],
+  ["243", "Suministros de nutricion clinica"],
+  ["244", "Suministros para manejo y almacenamiento de materiales"],
+  ["245", "Suministros y productos de tratamiento y cuidados medicos"],
+  ["246", "Telecomunicaciones y radiodifusion de tecnologia de la informacion"],
+  ["247", "Utensilios y equipos menores de cocina"],
+  ["248", "Vacunas"],
+  ["3", "Combustibles y lubricantes"]
+];
+
+/** Los 65 centros de produccion (filas de Insumos). [codigo, nombre] */
+var SEED_INSUMO_FILAS = [
+  ["66", "Hospitalizacion medicina interna"],
+  ["95", "Hospitalizacion cirugia general"],
+  ["113", "Hospitalizacion obstetricia"],
+  ["114", "Hospitalizacion ginecologia"],
+  ["116", "Hospitalizacion pediatria"],
+  ["117", "Hospitalizacion neonatologia"],
+  ["140", "Hospitalizacion psiquiatria adultos agudos"],
+  ["143", "Hospitalizacion psiquiatria distrito judicial"],
+  ["144", "Hospitalizacion psiquiatria adultos cronica"],
+  ["154", "Hospitalizacion desintoxicacion alcohol y drogas"],
+  ["159", "Hospitalizacion de dia"],
+  ["745", "Hospitalizacion servicios por convenios"],
+  ["748", "Hospitalizacion de corta estancia"],
+  ["201", "Emergencias"],
+  ["749", "Maxima emergencia"],
+  ["230", "Consulta nutricion"],
+  ["233", "Consulta planificacion familiar"],
+  ["235", "Consulta de psicologia"],
+  ["740", "Consulta de servicios por convenios"],
+  ["787", "Consulta programas especiales"],
+  ["273", "Consulta medicina interna"],
+  ["280", "Consulta psiquiatria"],
+  ["282", "Consulta neumologia"],
+  ["296", "Consulta anestesiologia"],
+  ["764", "Consulta medicina reproductiva"],
+  ["309", "Consulta cirugia general"],
+  ["311", "Consulta urologia"],
+  ["315", "Consulta ortopedia"],
+  ["328", "Consulta pediatria"],
+  ["329", "Consulta neonatologia"],
+  ["353", "Consulta ginecologia"],
+  ["354", "Consulta obstetricia"],
+  ["804", "Hospitalizacion psiquiatria intervencion en crisis"],
+  ["805", "Hospitalizacion psiquiatria sub-agudos"],
+  ["806", "Centro quirurgico"],
+  ["515", "Sala de partos"],
+  ["516", "Centro obstetrico"],
+  ["766", "Servicio de apoyo a riiss"],
+  ["398", "Vacunacion"],
+  ["502", "Quirofanos menor (pequeña cirugia )"],
+  ["518", "Laboratorio clinico"],
+  ["559", "Ultrasonografia"],
+  ["775", "Estudios de cardiologia"],
+  ["779", "Estudios de neumonologia"],
+  ["780", "Estudios de imagenologia"],
+  ["781", "Estudios de neurologia"],
+  ["562", "Terapia fisica"],
+  ["593", "Servicio farmaceutico"],
+  ["600", "Colposcopia"],
+  ["612", "Albergue"],
+  ["803", "Rehablitacion psicosocial"],
+  ["644", "Ambulancia"],
+  ["662", "Central de esterilizacion"],
+  ["712", "Mantenimiento biomedico"],
+  ["648", "Aseo"],
+  ["649", "Vigilancia"],
+  ["721", "Almacen"],
+  ["652", "Servicio de alimentacion"],
+  ["659", "Lavanderia"],
+  ["661", "Costureria"],
+  ["664", "Transporte general"],
+  ["665", "Mantenimiento"],
+  ["713", "Trabajo social"],
+  ["670", "Administracion"],
+  ["702", "Docencia e investigacion"]
+];
+
+/**
+ * SIGMA - Base: configuracion, acceso a la hoja de calculo, fechas y ventanas.
+ * ---------------------------------------------------------------------------
+ * Todo el sistema vive en UNA hoja de calculo de Google. Este archivo sabe
+ * como llegar a ella y expone los ayudantes que usan los demas archivos.
+ */
+
+var APP = {
+  nombre: 'SIGMA',
+  descripcion: 'Sistema Integrado de Gestion de Matriz y Almacen',
+  hospital: 'Hospital Nacional Psiquiatrico "Dr. Jose Molina Martinez"',
+  version: '1.0.0',
+};
+
+/** Nombres de las hojas internas. El guion bajo marca "no tocar a mano". */
+var HOJAS = {
+  config: '_Config',
+  centros: '_Centros',
+  renglones: '_Renglones',
+  servicios: '_Servicios',
+  insumos: '_Insumos',
+  usuarios: '_Usuarios',
+  festivos: '_Festivos',
+  habilitaciones: '_Habilitaciones',
+  estado: '_Estado',
+  bitacora: '_Bitacora',
+};
+
+/** Valores por defecto. Se escriben en _Config al instalar y se editan ahi. */
+var CONFIG_DEFAULT = {
+  diasHabilesPerc: '5',
+  diasHabilesInsumos: '5',
+  horaCorte: '14:30',
+  zonaHoraria: 'America/El_Salvador',
+};
+
+// ---------------------------------------------------------------------------
+// Hoja de calculo
+// ---------------------------------------------------------------------------
+
+/** Id de la hoja de calculo de SIGMA (se guarda al instalar). */
+function getSpreadsheetId_() {
+  return PropertiesService.getScriptProperties().getProperty('SS_ID') || '';
+}
+
+/**
+ * La hoja de calculo. Se abre UNA sola vez por ejecucion y se recuerda: abrir
+ * la hoja es de las llamadas mas caras de Apps Script, y antes se hacia en cada
+ * lectura. Esto solo ya recorta la mayor parte de la espera.
+ */
+var _ss = null;
+function getSS_() {
+  if (_ss) return _ss;
+  var id = getSpreadsheetId_();
+  if (!id) {
+    throw new Error(
+      'SIGMA todavia no esta instalado. Abra el editor de Apps Script y ejecute la funcion instalar().'
+    );
+  }
+  _ss = SpreadsheetApp.openById(id);
+  return _ss;
+}
+
+/** Devuelve una hoja por nombre; la crea vacia si no existe. */
+function hoja_(nombre) {
+  var ss = getSS_();
+  return ss.getSheetByName(nombre) || ss.insertSheet(nombre);
+}
+
+/**
+ * Lee una hoja completa como lista de objetos usando la fila 1 como encabezado.
+ * Una sola llamada a getValues: es la forma rapida de leer en Apps Script.
+ */
+var _tablas = {};
+function leerTabla_(nombre) {
+  if (_tablas[nombre]) return _tablas[nombre];
+  var sh = getSS_().getSheetByName(nombre);
+  if (!sh) return [];
+  var datos = sh.getDataRange().getValues();
+  if (datos.length < 2) return [];
+  var cab = datos[0].map(function (c) { return String(c).trim(); });
+  var filas = [];
+  for (var i = 1; i < datos.length; i++) {
+    var fila = datos[i];
+    if (fila.join('') === '') continue;
+    var obj = { _fila: i + 1 };
+    for (var j = 0; j < cab.length; j++) if (cab[j]) obj[cab[j]] = fila[j];
+    filas.push(obj);
+  }
+  _tablas[nombre] = filas;
+  return filas;
+}
+
+/** Olvida lo leido de una hoja (usar despues de escribir en ella). */
+function olvidarTabla_(nombre) {
+  delete _tablas[nombre];
+}
+
+/** Reemplaza el contenido de una hoja (encabezado + filas) de un solo golpe. */
+function escribirTabla_(nombre, encabezado, filas) {
+  olvidarTabla_(nombre);
+  var sh = hoja_(nombre);
+  sh.clear();
+  var todo = [encabezado].concat(filas);
+  sh.getRange(1, 1, todo.length, encabezado.length).setValues(todo);
+  sh.setFrozenRows(1);
+  sh.getRange(1, 1, 1, encabezado.length).setFontWeight('bold');
+}
+
+// ---------------------------------------------------------------------------
+// Configuracion
+// ---------------------------------------------------------------------------
+
+/** Toda la configuracion como objeto {clave: valor}. Se cachea 10 minutos. */
+function getConfig_() {
+  var cache = CacheService.getScriptCache();
+  var crudo = cache.get('config');
+  if (crudo) return JSON.parse(crudo);
+  var conf = {};
+  Object.keys(CONFIG_DEFAULT).forEach(function (k) { conf[k] = CONFIG_DEFAULT[k]; });
+  leerTabla_(HOJAS.config).forEach(function (f) {
+    if (f.clave) conf[String(f.clave)] = String(f.valor);
+  });
+  cache.put('config', JSON.stringify(conf), 600);
+  return conf;
+}
+
+/** Borra los caches derivados. Se llama cuando el admin cambia catalogos. */
+function limpiarCache_() {
+  CacheService.getScriptCache().removeAll(['config', 'catalogos', 'festivos']);
+}
+
+/** La zona horaria configurada (por defecto El Salvador). */
+function tz_() {
+  return getConfig_().zonaHoraria || 'America/El_Salvador';
+}
+
+// ---------------------------------------------------------------------------
+// Fechas, dias habiles y ventana de captura
+// ---------------------------------------------------------------------------
+
+/** Fecha -> "2026-08". */
+function periodoDe_(fecha) {
+  return Utilities.formatDate(fecha, tz_(), 'yyyy-MM');
+}
+
+/** Fecha -> "2026-08-14". */
+function iso_(fecha) {
+  return Utilities.formatDate(fecha, tz_(), 'yyyy-MM-dd');
+}
+
+/** "2026-08" -> "agosto de 2026". */
+function etiquetaPeriodo_(periodo) {
+  var p = String(periodo).split('-');
+  var meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+    'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var m = parseInt(p[1], 10);
+  if (!m || m < 1 || m > 12) return periodo;
+  return meses[m - 1] + ' de ' + p[0];
+}
+
+/** Lista de festivos configurados, como texto "yyyy-MM-dd". */
+function festivos_() {
+  var cache = CacheService.getScriptCache();
+  var crudo = cache.get('festivos');
+  if (crudo) return JSON.parse(crudo);
+  var lista = leerTabla_(HOJAS.festivos)
+    .map(function (f) {
+      var v = f.fecha;
+      if (v instanceof Date) return iso_(v);
+      return String(v || '').trim();
+    })
+    .filter(Boolean);
+  cache.put('festivos', JSON.stringify(lista), 600);
+  return lista;
+}
+
+/** True si la fecha NO es sabado, domingo ni festivo del hospital. */
+function esHabil_(fecha) {
+  var dia = fecha.getDay();
+  if (dia === 0 || dia === 6) return false;
+  return festivos_().indexOf(iso_(fecha)) === -1;
+}
+
+/** Los primeros N dias habiles del mes de la fecha dada. */
+function primerosDiasHabiles_(referencia, cuantos) {
+  var dias = [];
+  var cursor = new Date(referencia.getFullYear(), referencia.getMonth(), 1);
+  while (dias.length < cuantos && cursor.getMonth() === referencia.getMonth()) {
+    if (esHabil_(cursor)) dias.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dias;
+}
+
+/**
+ * El periodo que se esta cerrando: durante septiembre se digita agosto.
+ * Cambia solo el dia 1 de cada mes a las 00:00; de ahi sale el "bucle" mensual.
+ */
+function periodoEnCierre_(referencia) {
+  var f = referencia || new Date();
+  var anterior = new Date(f.getFullYear(), f.getMonth() - 1, 1);
+  return periodoDe_(anterior);
+}
+
+/**
+ * Estado de la ventana de captura de un modulo ('perc' o 'insumos').
+ * Abierta durante los primeros N dias habiles; el ultimo dia cierra a la
+ * hora de corte configurada (por defecto 2:30 p.m.).
+ */
+function ventana_(modulo, referencia) {
+  var ahora = referencia || new Date();
+  var conf = getConfig_();
+  var total = parseInt(
+    modulo === 'insumos' ? conf.diasHabilesInsumos : conf.diasHabilesPerc, 10
+  ) || 5;
+  var dias = primerosDiasHabiles_(ahora, total);
+  var ultimo = dias[dias.length - 1];
+  var corte = String(conf.horaCorte || '14:30').split(':');
+  var horaCorte = parseInt(corte[0], 10) || 14;
+  var minCorte = parseInt(corte[1], 10) || 0;
+
+  var hoy = iso_(ahora);
+  var indice = -1;
+  for (var i = 0; i < dias.length; i++) if (iso_(dias[i]) === hoy) indice = i;
+
+  var esUltimo = indice === dias.length - 1;
+  var antesDelCorte =
+    ahora.getHours() < horaCorte ||
+    (ahora.getHours() === horaCorte && ahora.getMinutes() < minCorte);
+  var abierta = indice >= 0 && (!esUltimo || antesDelCorte);
+
+  return {
+    modulo: modulo,
+    abierta: abierta,
+    diaActual: indice + 1,
+    totalDias: total,
+    ultimoDia: ultimo ? iso_(ultimo) : '',
+    ultimoDiaLargo: ultimo
+      ? Utilities.formatDate(ultimo, tz_(), "EEEE d 'de' MMMM").toLowerCase()
+      : '',
+    horaCorte: conf.horaCorte || '14:30',
+    periodo: periodoEnCierre_(ahora),
+  };
+}
+
+/** True si el admin habilito excepcionalmente a este servicio para este mes. */
+function tieneHabilitacion_(periodo, modulo, servicioId) {
+  var lista = leerTabla_(HOJAS.habilitaciones);
+  for (var i = 0; i < lista.length; i++) {
+    var h = lista[i];
+    if (
+      String(h.periodo) === String(periodo) &&
+      String(h.modulo) === String(modulo) &&
+      String(h.servicioId) === String(servicioId) &&
+      String(h.activa).toUpperCase() !== 'NO'
+    ) return true;
+  }
+  return false;
+}
+
+/** Puede este servicio digitar hoy: ventana abierta o habilitacion especial. */
+function puedeCapturar_(modulo, periodo, servicioId) {
+  var v = ventana_(modulo);
+  if (v.abierta && v.periodo === periodo) return true;
+  return tieneHabilitacion_(periodo, modulo, servicioId);
+}
+
+// ---------------------------------------------------------------------------
+// Bitacora
+// ---------------------------------------------------------------------------
+
+/** Deja constancia de una accion. Nunca rompe el flujo si falla. */
+function bitacora_(usuario, accion, detalle) {
+  try {
+    olvidarTabla_(HOJAS.bitacora);
+    hoja_(HOJAS.bitacora)
+      .appendRow([new Date(), usuario || '-', accion || '-', detalle || '']);
+  } catch (e) {
+    // La bitacora es un extra: si falla, la operacion principal sigue.
+  }
+}
+
+/** Fecha legible para mostrar autoria: "14/08/2026 10:32". */
+function fechaLegible_(fecha) {
+  if (!fecha) return '';
+  var d = fecha instanceof Date ? fecha : new Date(fecha);
+  if (isNaN(d.getTime())) return '';
+  return Utilities.formatDate(d, tz_(), 'dd/MM/yyyy HH:mm');
+}
+
+/**
+ * SIGMA - Instalacion.
+ * ---------------------------------------------------------------------------
+ * Ejecute instalar() UNA sola vez desde el editor de Apps Script. Crea la hoja
+ * de calculo, siembra los catalogos del PERC 2026 y deja creado el usuario
+ * administrador. Volver a ejecutarlo NO borra datos: solo repone lo que falte.
+ */
+
+function instalar() {
+  var props = PropertiesService.getScriptProperties();
+  // Candado: la aplicacion es de acceso publico (el personal no tiene cuenta de
+  // Google), asi que instalar() no puede quedar disponible para cualquiera. Una
+  // vez instalado, solo se vuelve a ejecutar borrando a mano la propiedad
+  // INSTALADO desde Configuracion del proyecto.
+  if (props.getProperty('INSTALADO') === 'SI') {
+    return 'SIGMA ya esta instalado. Para reinstalar, borre la propiedad INSTALADO.';
+  }
+  var id = props.getProperty('SS_ID');
+  var ss;
+
+  if (id) {
+    ss = SpreadsheetApp.openById(id);
+  } else {
+    // Si el proyecto se creo DESDE una hoja de calculo (Extensiones > Apps
+    // Script), se usa esa misma hoja. Si no, se crea una nueva.
+    ss = SpreadsheetApp.getActiveSpreadsheet() ||
+      SpreadsheetApp.create('SIGMA - Datos (' + APP.hospital + ')');
+    props.setProperty('SS_ID', ss.getId());
+  }
+  ss.setSpreadsheetTimeZone(CONFIG_DEFAULT.zonaHoraria);
+
+  sembrarConfig_();
+  sembrarCatalogos_();
+  sembrarHojasVacias_();
+  var clave = sembrarAdmin_();
+  limpiarCache_();
+  props.setProperty('INSTALADO', 'SI');
+
+  var msg =
+    'SIGMA quedo instalado.\n\n' +
+    'Hoja de datos: ' + ss.getUrl() + '\n\n' +
+    (clave
+      ? 'Usuario administrador: admin\nContrasena temporal: ' + clave +
+        '\n\nCambiela la primera vez que entre.'
+      : 'El usuario administrador ya existia; no se toco su contrasena.');
+  Logger.log(msg);
+  return msg;
+}
+
+/** Escribe la configuracion inicial sin pisar lo que ya este puesto. */
+function sembrarConfig_() {
+  var sh = hoja_(HOJAS.config);
+  if (sh.getLastRow() > 1) return;
+  var filas = Object.keys(CONFIG_DEFAULT).map(function (k) {
+    return [k, CONFIG_DEFAULT[k], descripcionConfig_(k)];
+  });
+  escribirTabla_(HOJAS.config, ['clave', 'valor', 'que significa'], filas);
+}
+
+function descripcionConfig_(clave) {
+  var textos = {
+    diasHabilesPerc: 'Dias habiles del mes siguiente para digitar el PERC.',
+    diasHabilesInsumos: 'Dias habiles del mes siguiente para digitar Insumos.',
+    horaCorte: 'Hora en que cierra el ultimo dia habil (formato 24 h).',
+    zonaHoraria: 'Zona horaria del hospital.',
+  };
+  return textos[clave] || '';
+}
+
+/** Copia los catalogos del PERC 2026 a sus hojas (solo si estan vacias). */
+function sembrarCatalogos_() {
+  if (!getSS_().getSheetByName(HOJAS.centros) ||
+      getSS_().getSheetByName(HOJAS.centros).getLastRow() < 2) {
+    escribirTabla_(HOJAS.centros, ['codigo', 'nombre', 'activo'],
+      SEED_CENTROS.map(function (c) { return [c[0], c[1], 'SI']; }));
+  }
+
+  if (!getSS_().getSheetByName(HOJAS.servicios) ||
+      getSS_().getSheetByName(HOJAS.servicios).getLastRow() < 2) {
+    escribirTabla_(HOJAS.servicios, ['id', 'nombre', 'activo'],
+      SEED_SERVICIOS.map(function (s) { return [s[0], s[1], 'SI']; }));
+  }
+
+  if (!getSS_().getSheetByName(HOJAS.renglones) ||
+      getSS_().getSheetByName(HOJAS.renglones).getLastRow() < 2) {
+    escribirTabla_(HOJAS.renglones,
+      ['orden', 'id', 'servicioId', 'unidad', 'etiqueta'],
+      SEED_RENGLONES.map(function (r, i) { return [i + 1, r[0], r[1], r[2], r[3]]; }));
+  }
+
+  if (!getSS_().getSheetByName(HOJAS.insumos) ||
+      getSS_().getSheetByName(HOJAS.insumos).getLastRow() < 2) {
+    escribirTabla_(HOJAS.insumos, ['codigo', 'nombre', 'activo'],
+      SEED_INSUMO_CATEGORIAS.map(function (c) { return [c[0], c[1], 'SI']; }));
+  }
+}
+
+/** Crea las hojas de trabajo que empiezan vacias, con su encabezado. */
+function sembrarHojasVacias_() {
+  var ss = getSS_();
+  if (!ss.getSheetByName(HOJAS.usuarios)) {
+    escribirTabla_(HOJAS.usuarios,
+      ['usuario', 'nombre', 'rol', 'servicios', 'insumos', 'activo',
+       'hash', 'salt', 'cambiarClave', 'creado'], []);
+  }
+  if (!ss.getSheetByName(HOJAS.festivos)) {
+    escribirTabla_(HOJAS.festivos, ['fecha', 'descripcion'], []);
+  }
+  if (!ss.getSheetByName(HOJAS.habilitaciones)) {
+    escribirTabla_(HOJAS.habilitaciones,
+      ['periodo', 'modulo', 'servicioId', 'activa', 'otorgada', 'por'], []);
+  }
+  if (!ss.getSheetByName(HOJAS.estado)) {
+    escribirTabla_(HOJAS.estado,
+      ['periodo', 'modulo', 'servicioId', 'completo', 'usuario', 'fecha'], []);
+  }
+  if (!ss.getSheetByName(HOJAS.bitacora)) {
+    escribirTabla_(HOJAS.bitacora, ['fecha', 'usuario', 'accion', 'detalle'], []);
+  }
+}
+
+/** Crea el usuario admin si no existe y devuelve su contrasena temporal. */
+function sembrarAdmin_() {
+  var usuarios = leerTabla_(HOJAS.usuarios);
+  for (var i = 0; i < usuarios.length; i++) {
+    if (String(usuarios[i].usuario).toLowerCase() === 'admin') return '';
+  }
+  var clave = claveTemporal_();
+  var salt = Utilities.getUuid();
+  hoja_(HOJAS.usuarios).appendRow([
+    'admin', 'Administrador de SIGMA', 'admin', '', 'NO', 'SI',
+    hashClave_(clave, salt), salt, 'SI', new Date(),
+  ]);
+  return clave;
+}
+
+/** Contrasena temporal legible: 3 letras + 4 numeros (ej. "sig4821"). */
+function claveTemporal_() {
+  var letras = 'abcdefghijkmnpqrstuvwxyz';
+  var texto = '';
+  for (var i = 0; i < 3; i++) {
+    texto += letras.charAt(Math.floor(Math.random() * letras.length));
+  }
+  return texto + String(Math.floor(1000 + Math.random() * 9000));
+}
+
+/**
+ * Crea (o repone) la hoja de datos de un periodo con la forma EXACTA del Excel
+ * oficial: fila 1 = centros de costo, columna A = servicio, columna B = renglon.
+ * La hoja ES la matriz consolidada; cada servicio solo escribe sus filas.
+ */
+function hojaPerc_(periodo) {
+  var nombre = 'PERC ' + periodo;
+  var ss = getSS_();
+  var sh = ss.getSheetByName(nombre);
+  // Version vieja (traia una columna "Servicio" que la plantilla oficial no
+  // lleva): se rehace con la forma correcta.
+  if (sh && String(sh.getRange(1, 1).getValue()).trim() === 'Servicio') {
+    ss.deleteSheet(sh);
+    sh = null;
+  }
+  if (sh) return sh;
+
+  sh = ss.insertSheet(nombre);
+  var cat = catalogos_();
+
+  // Forma EXACTA de la plantilla: A1 vacia, A2.. el renglon, y de la columna B
+  // en adelante los 65 centros de costo.
+  var cab = [''];
+  cat.centros.forEach(function (c) { cab.push(c.codigo + '-' + c.nombre); });
+
+  var filas = [cab];
+  cat.renglones.forEach(function (r) {
+    var fila = new Array(cab.length).fill('');
+    fila[0] = r.etiqueta;
+    filas.push(fila);
+  });
+
+  sh.getRange(1, 1, filas.length, cab.length).setValues(filas);
+  formatoMatriz_(sh, cab.length, filas.length, 1);
+  return sh;
+}
+
+/** Igual que hojaPerc_, pero para la matriz de Insumos (centros x categorias). */
+function hojaInsumos_(periodo) {
+  var nombre = 'INSUMOS ' + periodo;
+  var ss = getSS_();
+  var sh = ss.getSheetByName(nombre);
+  if (sh) return sh;
+
+  sh = ss.insertSheet(nombre);
+  var cats = catalogos_().insumoCategorias;
+  var cab = ['Servicio', 'Centro de Produccion'];
+  cats.forEach(function (c) { cab.push(c.codigo + '-' + c.nombre); });
+
+  var filas = [cab];
+  SEED_INSUMO_FILAS.forEach(function (f) {
+    var fila = new Array(cab.length).fill('');
+    fila[0] = f[1];
+    fila[1] = f[0] + '-' + f[1];
+    filas.push(fila);
+  });
+
+  sh.getRange(1, 1, filas.length, cab.length).setValues(filas);
+  formatoMatriz_(sh, cab.length, filas.length, 2);
+  return sh;
+}
+
+/**
+ * Formato comun de las dos matrices. `fijas` es cuantas columnas de rotulo
+ * tiene la tabla: 1 en el PERC (solo el renglon) y 2 en Insumos.
+ */
+function formatoMatriz_(sh, columnas, filas, fijas) {
+  fijas = fijas || 1;
+  sh.setFrozenRows(1);
+  sh.setFrozenColumns(fijas);
+  sh.getRange(1, 1, 1, columnas)
+    .setFontWeight('bold')
+    .setWrap(true)
+    .setVerticalAlignment('bottom')
+    .setBackground('#eef2f7');
+  sh.setColumnWidth(1, fijas === 1 ? 330 : 190);
+  if (fijas === 2) sh.setColumnWidth(2, 320);
+  if (columnas > fijas) {
+    sh.setColumnWidths(fijas + 1, columnas - fijas, 92);
+    sh.getRange(2, fijas + 1, filas - 1, columnas - fijas).setNumberFormat('#,##0');
+  }
+  sh.setRowHeight(1, 96);
+}
+
+/**
+ * SIGMA - Usuarios y sesiones.
+ * ---------------------------------------------------------------------------
+ * El personal del hospital no tiene cuenta de Google, asi que SIGMA maneja sus
+ * propios usuarios. Reglas que se respetan aqui:
+ *   - La contrasena NUNCA se guarda. Se guarda un hash SHA-256 con sal unica
+ *     por usuario, asi que ni quien abra la hoja de calculo puede leerla.
+ *   - La sesion es un token aleatorio que vive en el cache del servidor. Si el
+ *     token no esta o vencio, no hay sesion: se vuelve a pedir la contrasena.
+ */
+
+var SESION_HORAS = 6;
+
+/** Hash de una contrasena con su sal. */
+function hashClave_(clave, salt) {
+  var bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(salt) + '|' + String(clave),
+    Utilities.Charset.UTF_8
+  );
+  return Utilities.base64Encode(bytes);
+}
+
+/** Busca un usuario por su nombre de usuario (sin importar mayusculas). */
+function buscarUsuario_(usuario) {
+  var buscado = String(usuario || '').trim().toLowerCase();
+  if (!buscado) return null;
+  var lista = leerTabla_(HOJAS.usuarios);
+  for (var i = 0; i < lista.length; i++) {
+    if (String(lista[i].usuario).trim().toLowerCase() === buscado) return lista[i];
+  }
+  return null;
+}
+
+/** Version publica de un usuario: lo que el navegador puede saber de el. */
+function usuarioPublico_(fila) {
+  var servicios = String(fila.servicios || '')
+    .split(',')
+    .map(function (s) { return s.trim(); })
+    .filter(Boolean);
+  return {
+    usuario: String(fila.usuario),
+    nombre: String(fila.nombre || fila.usuario),
+    rol: String(fila.rol || 'digitador'),
+    servicios: servicios,
+    insumos: String(fila.insumos || 'NO').toUpperCase() === 'SI',
+    cambiarClave: String(fila.cambiarClave || 'NO').toUpperCase() === 'SI',
+  };
+}
+
+/**
+ * Freno de fuerza bruta. La app es de acceso publico, asi que tras varios
+ * intentos fallidos el usuario queda en pausa unos minutos. Se guarda en el
+ * cache, no en la hoja: es rapido y se limpia solo.
+ */
+var INTENTOS_MAX = 8;
+var PAUSA_MINUTOS = 15;
+
+function claveIntentos_(usuario) {
+  return 'int_' + String(usuario || '').trim().toLowerCase();
+}
+
+function intentosDe_(usuario) {
+  var v = CacheService.getScriptCache().get(claveIntentos_(usuario));
+  return v ? parseInt(v, 10) : 0;
+}
+
+function sumarIntento_(usuario) {
+  var cache = CacheService.getScriptCache();
+  var n = intentosDe_(usuario) + 1;
+  cache.put(claveIntentos_(usuario), String(n), PAUSA_MINUTOS * 60);
+  return n;
+}
+
+/** Inicia sesion. Devuelve {ok, token, usuario} o {ok:false, error}. */
+function iniciarSesion(usuario, clave) {
+  if (intentosDe_(usuario) >= INTENTOS_MAX) {
+    return {
+      ok: false,
+      error: 'Demasiados intentos fallidos. Espere ' + PAUSA_MINUTOS +
+        ' minutos o pida al administrador una contrasena nueva.',
+    };
+  }
+  var fila = buscarUsuario_(usuario);
+  // Mismo mensaje para usuario inexistente y clave mala: no se le dice a nadie
+  // cuales usuarios existen.
+  var generico = { ok: false, error: 'Usuario o contrasena incorrectos.' };
+  if (!fila) { sumarIntento_(usuario); return generico; }
+  if (String(fila.activo || 'SI').toUpperCase() !== 'SI') {
+    return { ok: false, error: 'Su usuario esta desactivado. Consulte con el administrador.' };
+  }
+  if (hashClave_(clave, fila.salt) !== String(fila.hash)) {
+    sumarIntento_(usuario);
+    return generico;
+  }
+  CacheService.getScriptCache().remove(claveIntentos_(usuario));
+
+  var token = Utilities.getUuid();
+  var pub = usuarioPublico_(fila);
+  CacheService.getScriptCache().put(
+    'ses_' + token, JSON.stringify(pub), SESION_HORAS * 3600
+  );
+  bitacora_(pub.usuario, 'Inicio de sesion', pub.rol);
+  // Se devuelve el arranque en la MISMA respuesta: antes eran dos viajes al
+  // servidor (entrar y despues cargar), y cada viaje en Apps Script se siente.
+  return { ok: true, token: token, usuario: pub, arranque: apiArranque(token) };
+}
+
+/** Cierra la sesion actual. */
+function cerrarSesion(token) {
+  if (token) CacheService.getScriptCache().remove('ses_' + token);
+  return { ok: true };
+}
+
+/** Devuelve el usuario de un token vigente, o null. */
+function sesion_(token) {
+  if (!token) return null;
+  var crudo = CacheService.getScriptCache().get('ses_' + token);
+  return crudo ? JSON.parse(crudo) : null;
+}
+
+/** Igual que sesion_, pero lanza error si no hay sesion. Uselo en cada api. */
+function exigirSesion_(token) {
+  var u = sesion_(token);
+  if (!u) throw new Error('SESION_VENCIDA');
+  return u;
+}
+
+/** Lanza error si el usuario no es administrador. */
+function exigirAdmin_(token) {
+  var u = exigirSesion_(token);
+  if (u.rol !== 'admin') throw new Error('Esta accion es solo del administrador.');
+  return u;
+}
+
+/** Cambia la contrasena del propio usuario. */
+function cambiarMiClave(token, claveActual, claveNueva) {
+  var u = exigirSesion_(token);
+  var fila = buscarUsuario_(u.usuario);
+  if (!fila) return { ok: false, error: 'No encontramos su usuario.' };
+  if (hashClave_(claveActual, fila.salt) !== String(fila.hash)) {
+    return { ok: false, error: 'La contrasena actual no coincide.' };
+  }
+  var problema = validarClave_(claveNueva);
+  if (problema) return { ok: false, error: problema };
+
+  var salt = Utilities.getUuid();
+  var sh = hoja_(HOJAS.usuarios);
+  olvidarTabla_(HOJAS.usuarios);
+  sh.getRange(fila._fila, columna_(HOJAS.usuarios, 'hash')).setValue(hashClave_(claveNueva, salt));
+  sh.getRange(fila._fila, columna_(HOJAS.usuarios, 'salt')).setValue(salt);
+  sh.getRange(fila._fila, columna_(HOJAS.usuarios, 'cambiarClave')).setValue('NO');
+
+  u.cambiarClave = false;
+  CacheService.getScriptCache().put('ses_' + token, JSON.stringify(u), SESION_HORAS * 3600);
+  bitacora_(u.usuario, 'Cambio de contrasena', '');
+  return { ok: true, usuario: u };
+}
+
+/** Reglas minimas de contrasena. Devuelve el problema o '' si esta bien. */
+function validarClave_(clave) {
+  var c = String(clave || '');
+  if (c.length < 8) return 'La contrasena debe tener al menos 8 caracteres.';
+  if (!/[a-zA-Z]/.test(c) || !/[0-9]/.test(c)) {
+    return 'La contrasena debe combinar letras y numeros.';
+  }
+  return '';
+}
+
+/** Numero de columna de un encabezado dentro de una hoja. */
+function columna_(nombreHoja, encabezado) {
+  var sh = getSS_().getSheetByName(nombreHoja);
+  var cab = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  for (var i = 0; i < cab.length; i++) {
+    if (String(cab[i]).trim() === encabezado) return i + 1;
+  }
+  throw new Error('No existe la columna "' + encabezado + '" en ' + nombreHoja + '.');
+}
+
+// ---------------------------------------------------------------------------
+// Administracion de usuarios (solo admin)
+// ---------------------------------------------------------------------------
+
+/** Lista de usuarios para el panel del administrador (sin hash ni sal). */
+function listarUsuarios(token) {
+  exigirAdmin_(token);
+  return leerTabla_(HOJAS.usuarios).map(function (f) {
+    return {
+      fila: f._fila,
+      usuario: String(f.usuario),
+      nombre: String(f.nombre || ''),
+      rol: String(f.rol || ''),
+      servicios: String(f.servicios || ''),
+      insumos: String(f.insumos || 'NO').toUpperCase() === 'SI',
+      activo: String(f.activo || 'SI').toUpperCase() === 'SI',
+      creado: fechaLegible_(f.creado),
+    };
+  });
+}
+
+/**
+ * Crea un usuario y devuelve su contrasena temporal, que el admin le entrega.
+ * SIGMA no envia correos: la clave se muestra una sola vez en pantalla.
+ */
+function crearUsuario(token, datos) {
+  exigirAdmin_(token);
+  var usuario = String(datos.usuario || '').trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,}$/.test(usuario)) {
+    return { ok: false, error: 'El usuario debe tener 3 o mas caracteres, sin espacios ni tildes.' };
+  }
+  if (buscarUsuario_(usuario)) return { ok: false, error: 'Ese usuario ya existe.' };
+
+  var clave = claveTemporal_();
+  var salt = Utilities.getUuid();
+  hoja_(HOJAS.usuarios).appendRow([
+    usuario,
+    String(datos.nombre || '').trim() || usuario,
+    String(datos.rol || 'digitador'),
+    String(datos.servicios || ''),
+    datos.insumos ? 'SI' : 'NO',
+    'SI',
+    hashClave_(clave, salt),
+    salt,
+    'SI',
+    new Date(),
+  ]);
+  olvidarTabla_(HOJAS.usuarios);
+  bitacora_(sesion_(token).usuario, 'Crea usuario', usuario);
+  return { ok: true, usuario: usuario, clave: clave };
+}
+
+/** Actualiza nombre, rol, servicios, insumos o estado de un usuario. */
+function actualizarUsuario(token, datos) {
+  exigirAdmin_(token);
+  var fila = buscarUsuario_(datos.usuario);
+  if (!fila) return { ok: false, error: 'No encontramos ese usuario.' };
+  var sh = hoja_(HOJAS.usuarios);
+  olvidarTabla_(HOJAS.usuarios);
+  var f = fila._fila;
+  if (datos.nombre !== undefined) sh.getRange(f, columna_(HOJAS.usuarios, 'nombre')).setValue(datos.nombre);
+  if (datos.rol !== undefined) sh.getRange(f, columna_(HOJAS.usuarios, 'rol')).setValue(datos.rol);
+  if (datos.servicios !== undefined) sh.getRange(f, columna_(HOJAS.usuarios, 'servicios')).setValue(datos.servicios);
+  if (datos.insumos !== undefined) sh.getRange(f, columna_(HOJAS.usuarios, 'insumos')).setValue(datos.insumos ? 'SI' : 'NO');
+  if (datos.activo !== undefined) sh.getRange(f, columna_(HOJAS.usuarios, 'activo')).setValue(datos.activo ? 'SI' : 'NO');
+  bitacora_(sesion_(token).usuario, 'Edita usuario', String(datos.usuario));
+  return { ok: true };
+}
+
+/** Genera una contrasena temporal nueva para un usuario que la perdio. */
+function reiniciarClave(token, usuario) {
+  exigirAdmin_(token);
+  var fila = buscarUsuario_(usuario);
+  if (!fila) return { ok: false, error: 'No encontramos ese usuario.' };
+  var clave = claveTemporal_();
+  var salt = Utilities.getUuid();
+  var sh = hoja_(HOJAS.usuarios);
+  olvidarTabla_(HOJAS.usuarios);
+  sh.getRange(fila._fila, columna_(HOJAS.usuarios, 'hash')).setValue(hashClave_(clave, salt));
+  sh.getRange(fila._fila, columna_(HOJAS.usuarios, 'salt')).setValue(salt);
+  sh.getRange(fila._fila, columna_(HOJAS.usuarios, 'cambiarClave')).setValue('SI');
+  bitacora_(sesion_(token).usuario, 'Reinicia contrasena', String(usuario));
+  return { ok: true, clave: clave };
+}
+
+/**
+ * SIGMA - API que consume la pantalla.
+ * ---------------------------------------------------------------------------
+ * Regla de velocidad: cada pantalla se arma con UNA sola llamada al servidor y
+ * una sola lectura de rango. Los catalogos viajan una vez y se quedan en el
+ * navegador; despues solo van y vienen los numeros.
+ */
+
+/** Catalogos completos, cacheados 10 minutos porque casi nunca cambian. */
+function catalogos_() {
+  var cache = CacheService.getScriptCache();
+  var crudo = cache.get('catalogos');
+  if (crudo) return JSON.parse(crudo);
+
+  var centros = leerTabla_(HOJAS.centros)
+    .filter(function (c) { return String(c.activo || 'SI').toUpperCase() === 'SI'; })
+    .map(function (c) { return { codigo: String(c.codigo), nombre: String(c.nombre) }; });
+
+  var servicios = {};
+  leerTabla_(HOJAS.servicios).forEach(function (s) {
+    servicios[String(s.id)] = String(s.nombre);
+  });
+
+  var renglones = leerTabla_(HOJAS.renglones).map(function (r, i) {
+    return {
+      orden: i + 1,
+      id: String(r.id),
+      servicioId: String(r.servicioId),
+      servicioNombre: servicios[String(r.servicioId)] || String(r.servicioId),
+      unidad: String(r.unidad),
+      etiqueta: String(r.etiqueta),
+    };
+  });
+
+  var insumoCategorias = leerTabla_(HOJAS.insumos)
+    .filter(function (c) { return String(c.activo || 'SI').toUpperCase() === 'SI'; })
+    .map(function (c) { return { codigo: String(c.codigo), nombre: String(c.nombre) }; });
+
+  var listaServicios = Object.keys(servicios).map(function (id) {
+    return { id: id, nombre: servicios[id] };
+  });
+
+  var datos = {
+    centros: centros,
+    renglones: renglones,
+    servicios: listaServicios,
+    insumoCategorias: insumoCategorias,
+    insumoFilas: SEED_INSUMO_FILAS.map(function (f) {
+      return { codigo: f[0], nombre: f[1] };
+    }),
+  };
+  cache.put('catalogos', JSON.stringify(datos), 600);
+  return datos;
+}
+
+/** Primera y ultima fila (1-based, en la hoja) de un servicio en la matriz. */
+function rangoDelServicio_(servicioId) {
+  var renglones = catalogos_().renglones;
+  var min = 0, max = 0;
+  renglones.forEach(function (r) {
+    if (r.servicioId !== String(servicioId)) return;
+    var fila = r.orden + 1; // +1 por el encabezado
+    if (!min || fila < min) min = fila;
+    if (fila > max) max = fila;
+  });
+  return { primera: min, ultima: max, cantidad: max ? max - min + 1 : 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Arranque
+// ---------------------------------------------------------------------------
+
+/**
+ * Todo lo que la pantalla necesita al entrar: usuario, catalogos, periodo,
+ * ventanas y (si es admin) el monitoreo. Una sola ida y vuelta.
+ */
+function apiArranque(token) {
+  var u = exigirSesion_(token);
+  var periodo = periodoEnCierre_();
+  var resp = {
+    app: APP,
+    usuario: u,
+    periodo: periodo,
+    periodoEtiqueta: etiquetaPeriodo_(periodo),
+    ventanas: { perc: ventana_('perc'), insumos: ventana_('insumos') },
+    catalogos: catalogos_(),
+    periodosDisponibles: periodosDisponibles_(),
+  };
+  if (u.rol === 'admin' || u.rol === 'monitor') {
+    resp.monitoreo = monitoreo_(periodo);
+  }
+  return resp;
+}
+
+/** Los periodos que ya tienen hoja creada, del mas nuevo al mas viejo. */
+function periodosDisponibles_() {
+  var vistos = {};
+  getSS_().getSheets().forEach(function (sh) {
+    var m = String(sh.getName()).match(/^(?:PERC|INSUMOS) (\d{4}-\d{2})$/);
+    if (m) vistos[m[1]] = true;
+  });
+  vistos[periodoEnCierre_()] = true;
+  return Object.keys(vistos).sort().reverse();
+}
+
+// ---------------------------------------------------------------------------
+// PERC: el bloque de un servicio
+// ---------------------------------------------------------------------------
+
+/** Carga el bloque de un servicio: sus renglones x todos los centros. */
+function apiCargarPerc(token, servicioId, periodo) {
+  var u = exigirSesion_(token);
+  servicioId = String(servicioId);
+  periodo = String(periodo || periodoEnCierre_());
+  if (!puedeVerServicio_(u, servicioId)) {
+    throw new Error('No tiene permiso sobre ese servicio.');
+  }
+
+  var rango = rangoDelServicio_(servicioId);
+  if (!rango.cantidad) throw new Error('Ese servicio no tiene renglones definidos.');
+
+  var sh = hojaPerc_(periodo);
+  var centros = catalogos_().centros;
+  var valores = sh
+    .getRange(rango.primera, 2, rango.cantidad, centros.length)
+    .getValues();
+
+  var estado = estadoDe_(periodo, 'perc', servicioId);
+  return {
+    servicioId: servicioId,
+    periodo: periodo,
+    periodoEtiqueta: etiquetaPeriodo_(periodo),
+    renglones: catalogos_().renglones.filter(function (r) {
+      return r.servicioId === servicioId;
+    }),
+    centros: centros,
+    valores: valores,
+    editable: puedeCapturar_('perc', periodo, servicioId) && u.rol !== 'monitor',
+    ventana: ventana_('perc'),
+    autoria: estado
+      ? { usuario: estado.usuario, fecha: fechaLegible_(estado.fecha) }
+      : null,
+  };
+}
+
+/** Guarda el bloque de un servicio. Solo toca las filas de ese servicio. */
+function apiGuardarPerc(token, servicioId, periodo, valores) {
+  var u = exigirSesion_(token);
+  servicioId = String(servicioId);
+  periodo = String(periodo);
+  if (!puedeVerServicio_(u, servicioId)) throw new Error('No tiene permiso sobre ese servicio.');
+  if (u.rol === 'monitor') throw new Error('Su perfil es de solo lectura.');
+  if (!puedeCapturar_('perc', periodo, servicioId)) {
+    return { ok: false, error: 'La captura de ' + etiquetaPeriodo_(periodo) + ' esta cerrada.' };
+  }
+
+  var rango = rangoDelServicio_(servicioId);
+  var centros = catalogos_().centros;
+  var limpio = normalizarMatriz_(valores, rango.cantidad, centros.length);
+
+  // Bloqueo: si dos personas del mismo servicio guardan a la vez, una espera.
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) {
+    return { ok: false, error: 'El sistema esta guardando otro tablero. Intente de nuevo en unos segundos.' };
+  }
+  try {
+    var sh = hojaPerc_(periodo);
+    sh.getRange(rango.primera, 2, rango.cantidad, centros.length).setValues(limpio);
+  } finally {
+    lock.releaseLock();
+  }
+
+  var conDatos = limpio.some(function (fila) {
+    return fila.some(function (v) { return v !== '' && v !== 0; });
+  });
+  marcarEstado_(periodo, 'perc', servicioId, conDatos, u.usuario);
+  bitacora_(u.usuario, 'Guarda PERC', servicioId + ' / ' + periodo);
+  return { ok: true, autoria: { usuario: u.nombre, fecha: fechaLegible_(new Date()) } };
+}
+
+// ---------------------------------------------------------------------------
+// Insumos: una sola tabla, la llena Almacen
+// ---------------------------------------------------------------------------
+
+function apiCargarInsumos(token, periodo) {
+  var u = exigirSesion_(token);
+  periodo = String(periodo || periodoEnCierre_());
+  if (!u.insumos && u.rol !== 'admin' && u.rol !== 'monitor') {
+    throw new Error('Su usuario no tiene el modulo de Insumos.');
+  }
+  var cat = catalogos_();
+  var sh = hojaInsumos_(periodo);
+  var valores = sh
+    .getRange(2, 3, cat.insumoFilas.length, cat.insumoCategorias.length)
+    .getValues();
+  var estado = estadoDe_(periodo, 'insumos', 'ALMACEN');
+  return {
+    periodo: periodo,
+    periodoEtiqueta: etiquetaPeriodo_(periodo),
+    filas: cat.insumoFilas,
+    categorias: cat.insumoCategorias,
+    valores: valores,
+    editable: puedeCapturar_('insumos', periodo, 'ALMACEN') && !!u.insumos,
+    ventana: ventana_('insumos'),
+    autoria: estado ? { usuario: estado.usuario, fecha: fechaLegible_(estado.fecha) } : null,
+  };
+}
+
+function apiGuardarInsumos(token, periodo, valores) {
+  var u = exigirSesion_(token);
+  periodo = String(periodo);
+  if (!u.insumos) throw new Error('Su usuario no tiene el modulo de Insumos.');
+  if (!puedeCapturar_('insumos', periodo, 'ALMACEN')) {
+    return { ok: false, error: 'La captura de Insumos de ' + etiquetaPeriodo_(periodo) + ' esta cerrada.' };
+  }
+  var cat = catalogos_();
+  var limpio = normalizarMatriz_(valores, cat.insumoFilas.length, cat.insumoCategorias.length);
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) {
+    return { ok: false, error: 'El sistema esta ocupado guardando. Intente de nuevo.' };
+  }
+  try {
+    var sh = hojaInsumos_(periodo);
+    sh.getRange(2, 3, limpio.length, cat.insumoCategorias.length).setValues(limpio);
+  } finally {
+    lock.releaseLock();
+  }
+
+  var conDatos = limpio.some(function (f) {
+    return f.some(function (v) { return v !== '' && v !== 0; });
+  });
+  marcarEstado_(periodo, 'insumos', 'ALMACEN', conDatos, u.usuario);
+  bitacora_(u.usuario, 'Guarda Insumos', periodo);
+  return { ok: true, autoria: { usuario: u.nombre, fecha: fechaLegible_(new Date()) } };
+}
+
+/** Deja la matriz recibida del navegador en numeros o vacio, del tamano exacto. */
+function normalizarMatriz_(valores, filas, columnas) {
+  var salida = [];
+  for (var i = 0; i < filas; i++) {
+    var origen = (valores && valores[i]) || [];
+    var fila = [];
+    for (var j = 0; j < columnas; j++) {
+      var v = origen[j];
+      if (v === null || v === undefined || String(v).trim() === '') {
+        fila.push('');
+      } else {
+        var n = Number(String(v).replace(/,/g, '').trim());
+        fila.push(isNaN(n) ? '' : n);
+      }
+    }
+    salida.push(fila);
+  }
+  return salida;
+}
+
+// ---------------------------------------------------------------------------
+// Estado y monitoreo
+// ---------------------------------------------------------------------------
+
+function estadoDe_(periodo, modulo, servicioId) {
+  var lista = leerTabla_(HOJAS.estado);
+  for (var i = 0; i < lista.length; i++) {
+    var e = lista[i];
+    if (String(e.periodo) === String(periodo) &&
+        String(e.modulo) === String(modulo) &&
+        String(e.servicioId) === String(servicioId)) return e;
+  }
+  return null;
+}
+
+/** Anota (o actualiza) quien entrego que y cuando. */
+function marcarEstado_(periodo, modulo, servicioId, completo, usuario) {
+  var sh = hoja_(HOJAS.estado);
+  var existente = estadoDe_(periodo, modulo, servicioId);
+  var valores = [periodo, modulo, servicioId, completo ? 'SI' : 'NO', usuario, new Date()];
+  if (existente) sh.getRange(existente._fila, 1, 1, valores.length).setValues([valores]);
+  else sh.appendRow(valores);
+  olvidarTabla_(HOJAS.estado);
+}
+
+/** Avance del mes: que servicios entregaron su PERC y si Almacen entrego Insumos. */
+function monitoreo_(periodo) {
+  var cat = catalogos_();
+  var estados = {};
+  leerTabla_(HOJAS.estado).forEach(function (e) {
+    if (String(e.periodo) !== String(periodo)) return;
+    estados[String(e.modulo) + '__' + String(e.servicioId)] = e;
+  });
+
+  var perc = cat.servicios.map(function (s) {
+    var e = estados['perc__' + s.id];
+    return {
+      id: s.id,
+      nombre: s.nombre,
+      completo: !!e && String(e.completo).toUpperCase() === 'SI',
+      usuario: e ? String(e.usuario) : '',
+      fecha: e ? fechaLegible_(e.fecha) : '',
+    };
+  });
+  var eIns = estados['insumos__ALMACEN'];
+
+  return {
+    periodo: periodo,
+    periodoEtiqueta: etiquetaPeriodo_(periodo),
+    perc: {
+      items: perc,
+      total: perc.length,
+      completos: perc.filter(function (p) { return p.completo; }).length,
+    },
+    insumos: {
+      completo: !!eIns && String(eIns.completo).toUpperCase() === 'SI',
+      usuario: eIns ? String(eIns.usuario) : '',
+      fecha: eIns ? fechaLegible_(eIns.fecha) : '',
+    },
+  };
+}
+
+/** Monitoreo de cualquier mes (lo pide el admin al cambiar de periodo). */
+function apiMonitoreo(token, periodo) {
+  var u = exigirSesion_(token);
+  if (u.rol !== 'admin' && u.rol !== 'monitor') {
+    throw new Error('El monitoreo es para administracion.');
+  }
+  return monitoreo_(String(periodo || periodoEnCierre_()));
+}
+
+/** True si este usuario puede ver el bloque de ese servicio. */
+function puedeVerServicio_(u, servicioId) {
+  if (u.rol === 'admin' || u.rol === 'monitor') return true;
+  return u.servicios.indexOf(String(servicioId)) !== -1;
+}
+
+// ---------------------------------------------------------------------------
+// Habilitaciones y festivos (admin)
+// ---------------------------------------------------------------------------
+
+/** Abre excepcionalmente un servicio y un mes ya cerrado. */
+function apiHabilitar(token, periodo, modulo, servicioId) {
+  var u = exigirAdmin_(token);
+  hoja_(HOJAS.habilitaciones).appendRow([
+    String(periodo), String(modulo), String(servicioId), 'SI', new Date(), u.usuario,
+  ]);
+  olvidarTabla_(HOJAS.habilitaciones);
+  bitacora_(u.usuario, 'Habilita captura', modulo + ' / ' + servicioId + ' / ' + periodo);
+  return { ok: true };
+}
+
+/** Quita todas las habilitaciones de un servicio y mes. */
+function apiQuitarHabilitacion(token, periodo, modulo, servicioId) {
+  var u = exigirAdmin_(token);
+  var sh = hoja_(HOJAS.habilitaciones);
+  var lista = leerTabla_(HOJAS.habilitaciones);
+  var col = columna_(HOJAS.habilitaciones, 'activa');
+  lista.forEach(function (h) {
+    if (String(h.periodo) === String(periodo) &&
+        String(h.modulo) === String(modulo) &&
+        String(h.servicioId) === String(servicioId)) {
+      sh.getRange(h._fila, col).setValue('NO');
+    }
+  });
+  bitacora_(u.usuario, 'Quita habilitacion', modulo + ' / ' + servicioId + ' / ' + periodo);
+  return { ok: true };
+}
+
+/** Lista de habilitaciones vigentes de un mes. */
+function apiHabilitaciones(token, periodo) {
+  exigirAdmin_(token);
+  return leerTabla_(HOJAS.habilitaciones)
+    .filter(function (h) {
+      return String(h.periodo) === String(periodo) &&
+             String(h.activa).toUpperCase() !== 'NO';
+    })
+    .map(function (h) {
+      return { modulo: String(h.modulo), servicioId: String(h.servicioId), por: String(h.por || '') };
+    });
+}
+
+/** Agrega un dia festivo del hospital (no cuenta como dia habil). */
+function apiAgregarFestivo(token, fecha, descripcion) {
+  var u = exigirAdmin_(token);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha))) {
+    return { ok: false, error: 'Use el formato 2026-08-14.' };
+  }
+  hoja_(HOJAS.festivos).appendRow([String(fecha), String(descripcion || '')]);
+  olvidarTabla_(HOJAS.festivos);
+  limpiarCache_();
+  bitacora_(u.usuario, 'Agrega festivo', String(fecha));
+  return { ok: true };
+}
+
+function apiFestivos(token) {
+  exigirSesion_(token);
+  return leerTabla_(HOJAS.festivos).map(function (f) {
+    return {
+      fecha: f.fecha instanceof Date ? iso_(f.fecha) : String(f.fecha),
+      descripcion: String(f.descripcion || ''),
+    };
+  });
+}
+
+/**
+ * SIGMA - Descargas en Excel.
+ * ---------------------------------------------------------------------------
+ * El archivo sale con la MISMA forma que la plantilla oficial del PERC 2026:
+ * fila 1 con los centros de costo, columna A el servicio y columna B el
+ * renglon. Asi se puede entregar tal cual, sin reacomodar nada.
+ *
+ * Como se hace: se copia la hoja del mes a un archivo temporal (para que el
+ * Excel salga con UNA sola pestana), se exporta, se manda al navegador en
+ * base64 y el temporal se borra de inmediato.
+ */
+
+/** Devuelve {nombre, mime, datos} listo para descargar en el navegador. */
+function apiDescargar(token, modulo, periodo) {
+  var u = exigirSesion_(token);
+  if (u.rol !== 'admin' && u.rol !== 'monitor') {
+    throw new Error('Las descargas del consolidado son para administracion.');
+  }
+  periodo = String(periodo || periodoEnCierre_());
+  var esInsumos = String(modulo) === 'insumos';
+  var origen = esInsumos ? hojaInsumos_(periodo) : hojaPerc_(periodo);
+
+  var titulo = (esInsumos ? 'INSUMOS' : 'PRODUCCION DISTRIBUIDA') +
+    ' PERC HN PSIQUIATRICO ' + periodo;
+
+  var temporal = SpreadsheetApp.create(titulo);
+  var archivoTemporal = DriveApp.getFileById(temporal.getId());
+  try {
+    var copia = origen.copyTo(temporal);
+    copia.setName(esInsumos ? 'Distribucion Insumo' : 'Produccion Distribuida');
+    var sobra = temporal.getSheets().filter(function (sh) {
+      return sh.getSheetId() !== copia.getSheetId();
+    });
+    sobra.forEach(function (sh) { temporal.deleteSheet(sh); });
+    SpreadsheetApp.flush();
+
+    var url = 'https://docs.google.com/spreadsheets/d/' + temporal.getId() +
+      '/export?format=xlsx';
+    var respuesta = UrlFetchApp.fetch(url, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true,
+    });
+    if (respuesta.getResponseCode() !== 200) {
+      throw new Error('Google no pudo generar el Excel (codigo ' +
+        respuesta.getResponseCode() + '). Intente de nuevo.');
+    }
+
+    bitacora_(u.usuario, 'Descarga ' + (esInsumos ? 'Insumos' : 'PERC'), periodo);
+    return {
+      nombre: titulo + '.xlsx',
+      mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      datos: Utilities.base64Encode(respuesta.getContent()),
+    };
+  } finally {
+    // Pase lo que pase, el archivo temporal no se queda en el Drive.
+    try { archivoTemporal.setTrashed(true); } catch (e) {}
+  }
+}
+
+/**
+ * Enlace directo a la hoja de calculo de SIGMA. Solo el administrador lo ve;
+ * sirve para revisar o corregir a mano en un caso extremo.
+ */
+function apiEnlaceHoja(token) {
+  exigirAdmin_(token);
+  return { url: getSS_().getUrl() };
+}
+
+/**
+ * SIGMA - Puente de monitoreo hacia PULSO.
+ * ---------------------------------------------------------------------------
+ * PULSO (el sistema del Hospital Nacional El Salvador) muestra el avance del
+ * Psiquiatrico en su menu "Hospitales". Para eso SIGMA expone AQUI una lectura
+ * y nada mas: cuantos servicios entregaron y cuales faltan. Nunca sale una sola
+ * cifra de produccion ni de insumos por esta puerta.
+ *
+ * Como se protege: la app web es de acceso publico (el personal no tiene cuenta
+ * de Google), asi que la URL sola no basta. Hay que mandar una llave que solo
+ * conoce el servidor de PULSO. Se genera una vez con crearLlaveApi().
+ * ---------------------------------------------------------------------------
+ */
+
+/**
+ * Genera (o rehace) la llave del puente y la muestra en el registro.
+ * Ejecutela desde el editor y copie la llave a las variables de entorno de
+ * PULSO. Si la llave se filtra, vuelva a ejecutar esto: la anterior deja de
+ * servir en el acto.
+ */
+function crearLlaveApi() {
+  var llave = Utilities.getUuid().replace(/-/g, '');
+  PropertiesService.getScriptProperties().setProperty('SIGMA_API_KEY', llave);
+  var msg = 'Llave del puente de monitoreo:\n\n' + llave +
+    '\n\nGuardela en PULSO como SIGMA_API_KEY. No la comparta por chat ni correo.';
+  Logger.log(msg);
+  return msg;
+}
+
+/** Respuesta JSON, que es lo unico que entiende el otro lado. */
+function json_(objeto) {
+  return ContentService.createTextOutput(JSON.stringify(objeto))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Monitoreo del mes en formato JSON. Se llama asi:
+ *   <URL de la app>?accion=monitoreo&mes=2026-08&key=<la llave>
+ * El parametro "mes" es opcional: sin el, responde el mes en cierre.
+ */
+function puenteMonitoreo_(parametros) {
+  var esperada = PropertiesService.getScriptProperties().getProperty('SIGMA_API_KEY') || '';
+  if (!esperada) {
+    return json_({ ok: false, error: 'El puente no esta configurado en SIGMA.' });
+  }
+  if (String(parametros.key || '') !== esperada) {
+    // Mismo mensaje siempre: no se le confirma a nadie que la URL es correcta.
+    return json_({ ok: false, error: 'No autorizado.' });
+  }
+
+  var mes = /^\d{4}-\d{2}$/.test(String(parametros.mes || ''))
+    ? String(parametros.mes)
+    : periodoEnCierre_();
+  var m = monitoreo_(mes);
+  var pct = m.perc.total ? Math.round((m.perc.completos / m.perc.total) * 100) : 0;
+
+  return json_({
+    ok: true,
+    sistema: APP.nombre,
+    hospital: APP.hospital,
+    mes: m.periodo,
+    mesEtiqueta: m.periodoEtiqueta,
+    perc: {
+      total: m.perc.total,
+      completos: m.perc.completos,
+      pendientes: m.perc.total - m.perc.completos,
+      pct: pct,
+      // Solo nombre y estado: sin cifras y sin quien lo digito.
+      items: m.perc.items.map(function (it) {
+        return { id: it.id, nombre: it.nombre, completo: it.completo };
+      }),
+    },
+    insumos: { completo: m.insumos.completo },
+    ventanas: {
+      perc: { abierta: ventana_('perc').abierta, ultimoDia: ventana_('perc').ultimoDia },
+      insumos: { abierta: ventana_('insumos').abierta, ultimoDia: ventana_('insumos').ultimoDia },
+    },
+    generadoEn: new Date().toISOString(),
+  });
+}
+
+/**
+ * SIGMA - Punto de entrada de la aplicacion web.
+ */
+
+function doGet(e) {
+  var parametros = (e && e.parameter) || {};
+  // Misma URL, dos usos: sin parametros sirve la pantalla; con accion=monitoreo
+  // y la llave correcta responde el JSON que consume PULSO.
+  if (parametros.accion === 'monitoreo') return puenteMonitoreo_(parametros);
+
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle('SIGMA \u00b7 Hospital Nacional Psiquiatrico')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/** Datos publicos para la pantalla de ingreso (sin sesion todavia). */
+function apiPortada() {
+  return {
+    app: APP,
+    periodoEtiqueta: etiquetaPeriodo_(periodoEnCierre_()),
+    ventanas: { perc: ventana_('perc'), insumos: ventana_('insumos') },
+  };
+}

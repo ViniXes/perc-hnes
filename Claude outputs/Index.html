@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es" data-tema="oscuro">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('Estilos'); ?>
+</head>
+<body>
+
+  <!-- ================================================== PANTALLA DE INGRESO -->
+  <section id="pantallaIngreso">
+    <div class="tarjetaIngreso">
+      <div class="marca">
+        <div class="sigma">&Sigma;</div>
+        <div>
+          <h1>SIGMA</h1>
+          <p>Sistema Integrado de<br>Gestión de Matriz y Almacén</p>
+        </div>
+      </div>
+
+      <p class="bajada" style="margin:18px 0 0">
+        Hospital Nacional Psiquiátrico<br>
+        <span style="color:var(--text-3)">“Dr. José Molina Martínez”</span>
+      </p>
+
+      <form id="formIngreso" autocomplete="on">
+        <div class="campo">
+          <label for="usuario">Usuario</label>
+          <input id="usuario" name="username" autocomplete="username"
+                 autocapitalize="off" spellcheck="false" required>
+        </div>
+        <div class="campo">
+          <label for="clave">Contraseña</label>
+          <input id="clave" name="password" type="password"
+                 autocomplete="current-password" required>
+        </div>
+        <div class="campo" style="margin-top:20px">
+          <button type="submit" class="btn principal ancho" id="btnEntrar">Entrar</button>
+        </div>
+      </form>
+
+      <div id="avisoIngreso" class="aviso oculto"></div>
+
+      <p id="notaPeriodo" class="bajada"
+         style="margin:18px 0 0;font-size:12px;text-align:center"></p>
+    </div>
+  </section>
+
+  <!-- ============================================================ APLICACIÓN -->
+  <div id="pantallaApp">
+    <header class="barra">
+      <div class="sigma">&Sigma;</div>
+      <div>
+        <h1>SIGMA</h1>
+        <div class="sub">Hospital Nacional Psiquiátrico</div>
+      </div>
+      <div class="crece"></div>
+      <span class="chip chipPeriodo" id="chipPeriodo"></span>
+      <button class="btn chico" id="btnTema" title="Cambiar entre claro y oscuro">◐</button>
+      <span class="chip" id="chipUsuario"></span>
+      <button class="btn chico" id="btnSalir">Salir</button>
+    </header>
+
+    <div class="cuerpo">
+      <nav class="menu" id="menu"></nav>
+      <main class="contenido" id="contenido"></main>
+    </div>
+  </div>
+
+  <div class="cargando" id="cargando"><div class="girador"></div></div>
+  <div id="brindis"></div>
+
+  <?!= include('Cliente'); ?>
+</body>
+</html>

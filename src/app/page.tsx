@@ -5196,6 +5196,18 @@ export default function Home() {
   // admin da por recibidos: cuentan como completos en el monitoreo. Clave:
   // "periodo__servicio__modulo". Vive en documentControl/recibidosExternos.
   const [recibidosExternos, setRecibidosExternos] = useState<Record<string, { nota?: string; por?: string }>>({});
+  // HOSPITALES: monitoreo de SIGMA (Hospital Nacional Psiquiatrico). Llega por
+  // nuestra propia ruta de servidor; la llave nunca toca el navegador.
+  const [sigmaMonitoreo, setSigmaMonitoreo] = useState<{
+    configurado: boolean;
+    hospital?: string;
+    mesEtiqueta?: string;
+    perc?: { total: number; completos: number; pendientes: number; pct: number; items: { id: string; nombre: string; completo: boolean }[] };
+    insumos?: { completo: boolean };
+    error?: string;
+  } | null>(null);
+  const [sigmaCargando, setSigmaCargando] = useState(false);
+  const [sigmaMes, setSigmaMes] = useState("");
   // Verificacion de sumas: produccion de TODOS los servicios del mes elegido.
   const [verifSumasData, setVerifSumasData] = useState<AdminOverviewEntry[] | null>(null);
   const [verifSumasPeriodo, setVerifSumasPeriodo] = useState("");
@@ -6389,6 +6401,18 @@ export default function Home() {
     if (typeof window === "undefined" || !window.matchMedia) return;
     setTieneMouse(window.matchMedia("(pointer: fine)").matches);
   }, []);
+
+  // Monitoreo del Psiquiatrico: se pide al abrir la seccion, no antes, para no
+  // gastar cuota de Apps Script en cada visita a PULSO.
+  useEffect(() => {
+    if (
+      activeSidebarSection !== "panel-hospital-psiquiatrico" &&
+      mobileView !== "panel-hospital-psiquiatrico"
+    ) return;
+    if (sigmaMonitoreo || sigmaCargando) return;
+    void loadSigmaMonitoreo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSidebarSection, mobileView]);
 
   // Tableros dados por recibidos fuera de PULSO: se leen al ENTRAR. Antes solo se
   // leian al abrir un monitoreo, y por eso la pantalla de inicio mostraba menos
@@ -7813,6 +7837,40 @@ export default function Home() {
     } catch {
       setServicesConectado(false);
       return {};
+    }
+  }
+
+  /**
+   * Trae el monitoreo del Psiquiatrico. Si SIGMA no esta configurado o no
+   * responde, la tarjeta lo dice y PULSO sigue igual: nunca lo rompe.
+   */
+  async function loadSigmaMonitoreo(mes?: string, refrescar?: boolean) {
+    const objetivo = mes || sigmaMes || "";
+    setSigmaMes(objetivo);
+    setSigmaCargando(true);
+    try {
+      const params = new URLSearchParams();
+      if (objetivo) params.set("mes", objetivo);
+      if (refrescar) params.set("refrescar", "1");
+      const respuesta = await fetch(`/api/hospitales/sigma?${params.toString()}`, { cache: "no-store" });
+      const datos = await respuesta.json();
+      if (datos?.configurado === false) {
+        setSigmaMonitoreo({ configurado: false, error: datos?.mensaje });
+      } else if (!datos?.ok) {
+        setSigmaMonitoreo({ configurado: true, error: datos?.error || "SIGMA no respondio." });
+      } else {
+        setSigmaMonitoreo({
+          configurado: true,
+          hospital: datos.hospital,
+          mesEtiqueta: datos.mesEtiqueta,
+          perc: datos.perc,
+          insumos: datos.insumos,
+        });
+      }
+    } catch {
+      setSigmaMonitoreo({ configurado: true, error: "No pudimos contactar a SIGMA." });
+    } finally {
+      setSigmaCargando(false);
     }
   }
 
@@ -16857,6 +16915,27 @@ export default function Home() {
       // "Servicios" ya no es un item suelto: cada modulo (PERC/SEPS/Horas) lo
       // ofrece como submenu "X Servicios" que abre la misma vista panel-services.
       ...moduleSidebarItems,
+      // HOSPITALES: otros hospitales que ESDOMED monitorea. Hoy solo el
+      // Psiquiatrico, que corre en SIGMA; se ve su avance, no sus cifras.
+      ...(isAdmin || isDirector || isSupervisor
+        ? [
+            {
+              id: "panel-hospitales",
+              label: "Hospitales",
+              detail: "Monitoreo de otros hospitales",
+              badge: "HO",
+              children: [
+                {
+                  id: "panel-hospital-psiquiatrico",
+                  label: "Psiquiátrico",
+                  detail: "Avance mensual en SIGMA",
+                  badge: "PS",
+                  icon: "monitor",
+                },
+              ],
+            },
+          ]
+        : []),
       {
         id: "panel-docs",
         label: "DOCS-POA/MOF",
@@ -18372,6 +18451,128 @@ export default function Home() {
 
           {captureToggleSection ? (
             <div data-view="panel-capture-toggle">{captureToggleSection}</div>
+          ) : null}
+
+          {/* HOSPITALES · PSIQUIÁTRICO: el monitoreo de SIGMA, el sistema del
+              Hospital Nacional Psiquiátrico. Solo avance: cuántos servicios
+              entregaron y cuáles faltan. Ninguna cifra de producción cruza. */}
+          {(isAdmin || isDirector || isSupervisor) &&
+          (activeSidebarSection === "panel-hospital-psiquiatrico" ||
+            mobileView === "panel-hospital-psiquiatrico") ? (
+            <section
+              id="panel-hospital-psiquiatrico"
+              data-view="panel-hospital-psiquiatrico"
+              className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
+                isLightPanelTheme
+                  ? "border border-slate-200 bg-white text-slate-900"
+                  : "border border-white/10 bg-[#202c41] text-slate-100"
+              }`}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-teal-300/90">
+                    Hospitales
+                  </p>
+                  <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                    Hospital Nacional Psiquiátrico
+                  </h2>
+                  <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                    Avance de la producción distribuida e insumos, tal como lo reporta SIGMA.
+                    Es solo lectura: acá no se digita nada.
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+                    <span className="font-semibold uppercase tracking-wide">Mes</span>
+                    <input
+                      type="month"
+                      value={sigmaMes}
+                      onChange={(event) => void loadSigmaMonitoreo(event.target.value, true)}
+                      className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-900" : "text-white [color-scheme:dark]"}`}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void loadSigmaMonitoreo(sigmaMes, true)}
+                    disabled={sigmaCargando}
+                    className="rounded-xl bg-gradient-to-r from-teal-400 to-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-900 disabled:opacity-50"
+                  >
+                    {sigmaCargando ? "Consultando…" : "Actualizar"}
+                  </button>
+                </div>
+              </div>
+
+              {!sigmaMonitoreo ? (
+                <p className={`mt-6 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                  Consultando a SIGMA…
+                </p>
+              ) : !sigmaMonitoreo.configurado ? (
+                <div className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200">
+                  <p className="font-semibold">SIGMA todavía no está conectado.</p>
+                  <p className="mt-1 leading-6 text-amber-200/80">
+                    Faltan las variables <strong>SIGMA_URL</strong> y <strong>SIGMA_API_KEY</strong> en
+                    Vercel. La llave se genera en SIGMA con la función <code>crearLlaveApi()</code>.
+                  </p>
+                </div>
+              ) : sigmaMonitoreo.error ? (
+                <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-200">
+                  <p className="font-semibold">No pudimos leer el monitoreo del Psiquiátrico.</p>
+                  <p className="mt-1 text-rose-200/80">{sigmaMonitoreo.error}</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                        Producción distribuida
+                      </p>
+                      <p className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                        {sigmaMonitoreo.perc?.completos ?? 0} de {sigmaMonitoreo.perc?.total ?? 0}
+                      </p>
+                      <p className={`text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
+                        {sigmaMonitoreo.mesEtiqueta} · {sigmaMonitoreo.perc?.pct ?? 0}% entregado
+                      </p>
+                      <div className={`mt-3 h-2.5 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500"
+                          style={{ width: `${sigmaMonitoreo.perc?.pct ?? 0}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                        Insumos de almacén
+                      </p>
+                      <p className={`mt-1 text-2xl font-bold ${sigmaMonitoreo.insumos?.completo ? "text-emerald-300" : "text-amber-300"}`}>
+                        {sigmaMonitoreo.insumos?.completo ? "Entregado" : "Pendiente"}
+                      </p>
+                      <p className={`text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
+                        Una sola tabla, la llena Almacén.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-1.5 sm:grid-cols-2">
+                    {(sigmaMonitoreo.perc?.items ?? []).map((item) => (
+                      <div
+                        key={item.id}
+                        className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-sm ${
+                          isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#1b2537]"
+                        }`}
+                      >
+                        <span
+                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.completo ? "bg-emerald-400" : "bg-amber-400"}`}
+                          aria-label={item.completo ? "Entregado" : "Pendiente"}
+                        />
+                        <span className={`min-w-0 flex-1 truncate ${isLightPanelTheme ? "text-slate-700" : "text-slate-300"}`}>
+                          {item.nombre}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </section>
           ) : null}
 
           {/* VERIFICAR SUMAS: los pares de servicios que capturan lo mismo y que en el
