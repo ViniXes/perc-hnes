@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="es" data-tema="oscuro">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+<style>
+/* =========================================================================
+   SIGMA - estilos. Un solo archivo, sin librerias externas: en Apps Script
+   cada peticion extra se nota, y asi la pantalla abre de inmediato.
+   ========================================================================= */
+
+:root {
+  --bg: #0a171d;
+  --bg-glow-1: rgba(45, 212, 191, 0.10);
+  --bg-glow-2: rgba(56, 132, 255, 0.10);
+  --surface: #10242c;
+  --surface-2: #16303a;
+  --surface-3: #1d3c47;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-fuerte: rgba(255, 255, 255, 0.16);
+  --text: #e8f3f4;
+  --text-2: #a9c2c7;
+  --text-3: #77949c;
+  --acento: #2dd4bf;
+  --acento-2: #5eead4;
+  --acento-suave: rgba(45, 212, 191, 0.14);
+  --ok: #34d399;
+  --alerta: #fbbf24;
+  --error: #fb7185;
+  --sombra: 0 18px 40px rgba(0, 0, 0, 0.45);
+  --radio: 16px;
+}
+
+html[data-tema="claro"] {
+  --bg: #eef2f4;
+  --bg-glow-1: rgba(13, 148, 136, 0.08);
+  --bg-glow-2: rgba(56, 132, 255, 0.07);
+  --surface: #ffffff;
+  --surface-2: #f2f6f7;
+  --surface-3: #e7eef0;
+  --line: rgba(12, 34, 41, 0.12);
+  --line-fuerte: rgba(12, 34, 41, 0.22);
+  --text: #0b1f26;
+  --text-2: #3c5a63;
+  --text-3: #64818a;
+  --acento: #0d9488;
+  --acento-2: #0f766e;
+  --acento-suave: rgba(13, 148, 136, 0.12);
+  --ok: #059669;
+  --alerta: #b45309;
+  --error: #be123c;
+  --sombra: 0 14px 30px rgba(12, 34, 41, 0.12);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 12% 8%, var(--bg-glow-1), transparent 42%),
+    radial-gradient(circle at 88% 92%, var(--bg-glow-2), transparent 45%),
+    var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; }
+
+/* ---------------------------------------------------------------- utilidades */
+.oculto { display: none !important; }
+.crece { flex: 1 1 auto; min-width: 0; }
+.fila { display: flex; align-items: center; gap: 10px; }
+.truncar { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ------------------------------------------------------------------- ingreso */
+#pantallaIngreso {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.tarjetaIngreso {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 34px 30px 30px;
+  box-shadow: var(--sombra);
+  animation: entra .5s cubic-bezier(.2, .8, .3, 1);
+}
+@keyframes entra {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+.marca { display: flex; align-items: center; gap: 13px; }
+.sigma {
+  width: 52px; height: 52px;
+  display: grid; place-items: center;
+  border-radius: 16px;
+  font-size: 30px; font-weight: 700; line-height: 1;
+  color: #05221f;
+  background: linear-gradient(135deg, #5eead4, #14b8a6);
+  box-shadow: 0 10px 22px rgba(20, 184, 166, .35);
+}
+.marca h1 { margin: 0; font-size: 26px; letter-spacing: .16em; }
+.marca p { margin: 2px 0 0; font-size: 10.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-3); line-height: 1.4; }
+
+.campo { margin-top: 16px; }
+.campo label {
+  display: block; margin-bottom: 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-3);
+}
+.campo input, .campo select {
+  width: 100%; padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.campo input:focus, .campo select:focus {
+  outline: none;
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3px var(--acento-suave);
+}
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 11px 18px; border-radius: 12px;
+  font-size: 14px; font-weight: 700;
+  background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--text); transition: .15s;
+}
+.btn:hover { border-color: var(--line-fuerte); background: var(--surface-3); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.principal {
+  background: linear-gradient(135deg, #5eead4, #14b8a6);
+  color: #05221f; border-color: transparent;
+}
+.btn.principal:hover { filter: brightness(1.06); }
+.btn.ancho { width: 100%; padding: 13px; }
+.btn.chico { padding: 7px 12px; font-size: 12.5px; border-radius: 10px; }
+
+.aviso {
+  margin-top: 14px; padding: 10px 13px; border-radius: 11px;
+  font-size: 13px; line-height: 1.5;
+  background: rgba(251, 113, 133, .12);
+  border: 1px solid rgba(251, 113, 133, .3);
+  color: var(--error);
+}
+.aviso.ok {
+  background: rgba(52, 211, 153, .12);
+  border-color: rgba(52, 211, 153, .32);
+  color: var(--ok);
+}
+
+/* -------------------------------------------------------------------- marco */
+#pantallaApp { display: none; min-height: 100vh; flex-direction: column; }
+#pantallaApp.visible { display: flex; }
+
+header.barra {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 18px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.barra .sigma { width: 38px; height: 38px; font-size: 21px; border-radius: 12px; }
+.barra h1 { margin: 0; font-size: 17px; letter-spacing: .14em; }
+.barra .sub { font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-3); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 700;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2);
+}
+.chip.ok { color: var(--ok); border-color: rgba(52, 211, 153, .3);
+  background: rgba(52, 211, 153, .1); }
+.chip.alerta { color: var(--alerta); border-color: rgba(251, 191, 36, .3);
+  background: rgba(251, 191, 36, .1); }
+.chip.cerrada { color: var(--error); border-color: rgba(251, 113, 133, .3);
+  background: rgba(251, 113, 133, .1); }
+.punto { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+.cuerpo { display: flex; flex: 1; min-height: 0; }
+
+nav.menu {
+  width: 224px; flex-shrink: 0;
+  padding: 16px 12px; border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 3px;
+}
+nav.menu button {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 10px 12px; border-radius: 11px;
+  font-size: 13.5px; font-weight: 600; color: var(--text-2);
+  text-align: left; transition: .13s;
+}
+nav.menu button:hover { background: var(--surface-2); color: var(--text); }
+nav.menu button.activo {
+  background: var(--acento-suave); color: var(--acento-2);
+  box-shadow: inset 2px 0 0 var(--acento);
+}
+nav.menu .grupo {
+  margin: 14px 0 4px; padding: 0 12px;
+  font-size: 10px; font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--text-3);
+}
+
+main.contenido { flex: 1; min-width: 0; padding: 22px; overflow: auto; }
+.titulo { margin: 0 0 4px; font-size: 23px; font-weight: 700; letter-spacing: -.01em; }
+.bajada { margin: 0 0 20px; font-size: 13.5px; color: var(--text-2); line-height: 1.6; }
+
+/* ------------------------------------------------------------------ tarjetas */
+.rejilla { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); }
+.tarjeta {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radio); padding: 17px;
+}
+.tarjeta.clic { cursor: pointer; transition: .15s; }
+.tarjeta.clic:hover { border-color: var(--acento); transform: translateY(-2px); }
+.tarjeta h3 { margin: 0 0 3px; font-size: 15.5px; }
+.tarjeta p { margin: 0; font-size: 12.5px; color: var(--text-2); line-height: 1.55; }
+.etiqueta { font-size: 10px; font-weight: 800; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--text-3); }
+
+.barraAvance { height: 9px; border-radius: 999px; background: var(--surface-3);
+  overflow: hidden; margin-top: 9px; }
+.barraAvance > div { height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #5eead4, #14b8a6); transition: width .5s; }
+
+/* -------------------------------------------------------------------- grilla */
+.herramientas {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 9px;
+  margin-bottom: 12px;
+}
+.herramientas input[type="search"] {
+  padding: 8px 12px; min-width: 210px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+}
+.herramientas input[type="search"]:focus { outline: none; border-color: var(--acento); }
+
+.marcoGrilla {
+  border: 1px solid var(--line); border-radius: var(--radio);
+  overflow: auto; max-height: calc(100vh - 250px); background: var(--surface);
+}
+table.grilla { border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+table.grilla th, table.grilla td {
+  border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  padding: 0; white-space: nowrap;
+}
+table.grilla thead th {
+  position: sticky; top: 0; z-index: 3;
+  background: var(--surface-2); color: var(--text-2);
+  font-size: 11px; font-weight: 700; text-align: left;
+  padding: 9px 10px; vertical-align: bottom;
+  height: 112px;
+}
+table.grilla thead th.girado > span {
+  display: block; width: 112px;
+  transform: rotate(-58deg); transform-origin: left bottom;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+table.grilla th.fija, table.grilla td.fija {
+  position: sticky; left: 0; z-index: 2;
+  background: var(--surface-2); min-width: 290px; max-width: 290px;
+  padding: 8px 11px; white-space: normal; line-height: 1.35;
+}
+table.grilla thead th.fija { z-index: 4; }
+table.grilla td.fija { font-weight: 600; color: var(--text); }
+table.grilla td.fija small { display: block; font-weight: 500; color: var(--text-3); }
+table.grilla td input {
+  width: 84px; padding: 8px 9px;
+  background: transparent; border: none; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+table.grilla td input:focus {
+  outline: none; background: var(--acento-suave);
+  box-shadow: inset 0 0 0 2px var(--acento);
+}
+table.grilla td input:disabled { color: var(--text-3); }
+table.grilla td.total {
+  position: sticky; right: 0; z-index: 2;
+  background: var(--surface-3); padding: 8px 12px;
+  text-align: right; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+table.grilla thead th.total { position: sticky; right: 0; z-index: 4;
+  background: var(--surface-3); text-align: right; height: auto; }
+table.grilla tbody tr:hover td.fija { background: var(--surface-3); }
+
+.pieGuardar {
+  position: sticky; bottom: 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  margin-top: 14px; padding: 12px 14px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line); border-radius: var(--radio);
+}
+
+/* ------------------------------------------------------------------- listado */
+.listado { display: flex; flex-direction: column; gap: 1px;
+  border: 1px solid var(--line); border-radius: var(--radio); overflow: hidden; }
+.listado .renglon {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 14px; background: var(--surface); font-size: 13.5px;
+}
+.listado .renglon:nth-child(even) { background: var(--surface-2); }
+.listado .renglon .meta { font-size: 11.5px; color: var(--text-3); }
+
+/* --------------------------------------------------------------------- extra */
+.cargando {
+  position: fixed; inset: 0; z-index: 60;
+  display: none; place-items: center;
+  background: rgba(4, 14, 18, .6); backdrop-filter: blur(3px);
+}
+.cargando.visible { display: grid; }
+.girador {
+  width: 42px; height: 42px; border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, .18); border-top-color: var(--acento);
+  animation: gira .8s linear infinite;
+}
+@keyframes gira { to { transform: rotate(360deg); } }
+
+#brindis {
+  position: fixed; left: 50%; bottom: 26px; z-index: 70;
+  transform: translate(-50%, 24px);
+  padding: 11px 18px; border-radius: 12px;
+  background: var(--surface-3); border: 1px solid var(--line-fuerte);
+  box-shadow: var(--sombra); font-size: 13.5px; font-weight: 600;
+  opacity: 0; pointer-events: none; transition: .25s;
+}
+#brindis.visible { opacity: 1; transform: translate(-50%, 0); }
+#brindis.malo { border-color: rgba(251, 113, 133, .5); color: var(--error); }
+
+/* ------------------------------------------------------------------- celular */
+@media (max-width: 900px) {
+  .cuerpo { flex-direction: column; }
+  nav.menu {
+    width: 100%; flex-direction: row; overflow-x: auto;
+    border-right: none; border-bottom: 1px solid var(--line);
+    padding: 9px 10px; gap: 6px;
+  }
+  nav.menu button { width: auto; white-space: nowrap; padding: 8px 13px; }
+  nav.menu .grupo { display: none; }
+  main.contenido { padding: 15px; }
+  .marcoGrilla { max-height: calc(100vh - 300px); }
+  table.grilla th.fija, table.grilla td.fija { min-width: 190px; max-width: 190px; }
+  .barra .sub, .barra .chipPeriodo { display: none; }
+}
+</style>
+</head>
+<body>
+
+  <!-- ================================================== PANTALLA DE INGRESO -->
+  <section id="pantallaIngreso">
+    <div class="tarjetaIngreso">
+      <div class="marca">
+        <div class="sigma">&Sigma;</div>
+        <div>
+          <h1>SIGMA</h1>
+          <p>Sistema Integrado de<br>Gestión de Matriz y Almacén</p>
+        </div>
+      </div>
+
+      <p class="bajada" style="margin:18px 0 0">
+        Hospital Nacional<br>
+        <span style="color:var(--text-3)">de Suchitoto</span>
+      </p>
+
+      <form id="formIngreso" autocomplete="on">
+        <div class="campo">
+          <label for="usuario">Usuario</label>
+          <input id="usuario" name="username" autocomplete="username"
+                 autocapitalize="off" spellcheck="false" required>
+        </div>
+        <div class="campo">
+          <label for="clave">Contraseña</label>
+          <input id="clave" name="password" type="password"
+                 autocomplete="current-password" required>
+        </div>
+        <div class="campo" style="margin-top:20px">
+          <button type="submit" class="btn principal ancho" id="btnEntrar">Entrar</button>
+        </div>
+      </form>
+
+      <div id="avisoIngreso" class="aviso oculto"></div>
+
+      <p id="notaPeriodo" class="bajada"
+         style="margin:18px 0 0;font-size:12px;text-align:center"></p>
+    </div>
+  </section>
+
+  <!-- ============================================================ APLICACIÓN -->
+  <div id="pantallaApp">
+    <header class="barra">
+      <div class="sigma">&Sigma;</div>
+      <div>
+        <h1>SIGMA</h1>
+        <div class="sub">Hospital Nacional de Suchitoto</div>
+      </div>
+      <div class="crece"></div>
+      <span class="chip chipPeriodo" id="chipPeriodo"></span>
+      <button class="btn chico" id="btnTema" title="Cambiar entre claro y oscuro">◐</button>
+      <span class="chip" id="chipUsuario"></span>
+      <button class="btn chico" id="btnSalir">Salir</button>
+    </header>
+
+    <div class="cuerpo">
+      <nav class="menu" id="menu"></nav>
+      <main class="contenido" id="contenido"></main>
+    </div>
+  </div>
+
+  <div class="cargando" id="cargando"><div class="girador"></div></div>
+  <div id="brindis"></div>
+
+<script>
+/* ===========================================================================
+   SIGMA - cliente.
+   Ideas de diseño que hacen que se sienta rápida:
+     1. Al entrar se hace UNA sola llamada (apiArranque) que trae todo.
+     2. Los catálogos se quedan en memoria; después solo viajan números.
+     3. Las tablas se arman como un solo string de HTML y se inyectan de golpe,
+        con delegación de eventos: nada de crear 2.000 escuchas.
+   =========================================================================== */
+
+var S = {
+  token: null, u: null, cat: null,
+  periodo: '', periodos: [], ventanas: {}, monitoreo: null,
+  seccion: 'inicio', vista: null,
+};
+
+/* ------------------------------------------------------------- utilidades */
+function $(id) { return document.getElementById(id); }
+function esc(t) {
+  return String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function num(v) {
+  var n = Number(String(v == null ? '' : v).replace(/,/g, '').trim());
+  return isNaN(n) ? 0 : n;
+}
+function miles(n) { return n ? Number(n).toLocaleString('es-SV') : '0'; }
+
+/** Envuelve google.script.run en una promesa, que se lee mucho mejor. */
+function llamar(nombre) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  return new Promise(function (ok, mal) {
+    google.script.run
+      .withSuccessHandler(ok)
+      .withFailureHandler(function (e) { mal(e); })[nombre].apply(null, args);
+  });
+}
+
+var pendientes = 0;
+function cargando(activo) {
+  pendientes += activo ? 1 : -1;
+  if (pendientes < 0) pendientes = 0;
+  $('cargando').classList.toggle('visible', pendientes > 0);
+}
+
+var brindisTimer = null;
+function brindis(texto, malo) {
+  var caja = $('brindis');
+  caja.textContent = texto;
+  caja.classList.toggle('malo', !!malo);
+  caja.classList.add('visible');
+  clearTimeout(brindisTimer);
+  brindisTimer = setTimeout(function () { caja.classList.remove('visible'); }, 3200);
+}
+
+/** Un error del servidor. Si la sesión venció, se vuelve al ingreso. */
+function fallo(e) {
+  cargando(false);
+  var msg = (e && e.message) ? e.message : String(e);
+  if (msg.indexOf('SESION_VENCIDA') !== -1) {
+    localStorage.removeItem('sigma.token');
+    S.token = null;
+    mostrarIngreso('Su sesión venció por inactividad. Vuelva a entrar.');
+    return;
+  }
+  brindis(msg.replace(/^Error:?\s*/, ''), true);
+}
+
+/* ------------------------------------------------------------------- tema */
+(function () {
+  var guardado = localStorage.getItem('sigma.tema');
+  if (guardado) document.documentElement.setAttribute('data-tema', guardado);
+})();
+function alternarTema() {
+  var raiz = document.documentElement;
+  var nuevo = raiz.getAttribute('data-tema') === 'claro' ? 'oscuro' : 'claro';
+  raiz.setAttribute('data-tema', nuevo);
+  localStorage.setItem('sigma.tema', nuevo);
+}
+
+/* =========================================================== INGRESO ===== */
+
+function mostrarIngreso(mensaje) {
+  $('pantallaApp').classList.remove('visible');
+  $('pantallaIngreso').style.display = 'grid';
+  if (mensaje) {
+    var caja = $('avisoIngreso');
+    caja.textContent = mensaje;
+    caja.classList.remove('oculto');
+  }
+  llamar('apiPortada').then(function (p) {
+    $('notaPeriodo').innerHTML =
+      'Mes en cierre: <strong>' + esc(p.periodoEtiqueta) + '</strong><br>' +
+      textoVentana(p.ventanas.perc);
+  }).catch(function () {});
+}
+
+function textoVentana(v) {
+  if (!v) return '';
+  if (v.abierta) {
+    return 'Captura abierta · día ' + v.diaActual + ' de ' + v.totalDias +
+      ' · cierra el ' + v.ultimoDiaLargo + ' a las ' + v.horaCorte;
+  }
+  return 'Captura cerrada · el plazo fue hasta el ' + v.ultimoDiaLargo +
+    ' a las ' + v.horaCorte;
+}
+
+$('formIngreso').addEventListener('submit', function (ev) {
+  ev.preventDefault();
+  var usuario = $('usuario').value.trim();
+  var clave = $('clave').value;
+  if (!usuario || !clave) return;
+  $('avisoIngreso').classList.add('oculto');
+  $('btnEntrar').disabled = true;
+  cargando(true);
+
+  llamar('iniciarSesion', usuario, clave).then(function (r) {
+    cargando(false);
+    $('btnEntrar').disabled = false;
+    if (!r.ok) {
+      var caja = $('avisoIngreso');
+      caja.textContent = r.error;
+      caja.classList.remove('oculto');
+      return;
+    }
+    S.token = r.token;
+    localStorage.setItem('sigma.token', r.token);
+    $('clave').value = '';
+    // El servidor ya mando el arranque junto con el login: se pinta de una,
+    // sin un segundo viaje.
+    if (r.arranque) aplicarArranque(r.arranque);
+    else arrancar();
+  }).catch(function (e) {
+    $('btnEntrar').disabled = false;
+    fallo(e);
+  });
+});
+
+$('btnSalir').addEventListener('click', function () {
+  llamar('cerrarSesion', S.token).catch(function () {});
+  localStorage.removeItem('sigma.token');
+  S.token = null;
+  location.reload();
+});
+$('btnTema').addEventListener('click', alternarTema);
+
+/* ========================================================== ARRANQUE ===== */
+
+function arrancar() {
+  cargando(true);
+  llamar('apiArranque', S.token).then(function (d) {
+    cargando(false);
+    aplicarArranque(d);
+  }).catch(fallo);
+}
+
+/** Pinta la aplicacion con los datos de arranque, vengan de donde vengan. */
+function aplicarArranque(d) {
+    S.u = d.usuario;
+    S.cat = d.catalogos;
+    S.periodo = d.periodo;
+    S.periodos = d.periodosDisponibles;
+    S.ventanas = d.ventanas;
+    S.monitoreo = d.monitoreo || null;
+
+    $('pantallaIngreso').style.display = 'none';
+    $('pantallaApp').classList.add('visible');
+    $('chipUsuario').textContent = S.u.nombre;
+    $('chipPeriodo').innerHTML = '<span class="punto"></span>' + esc(d.periodoEtiqueta);
+
+    pintarMenu();
+    ir(S.u.cambiarClave ? 'clave' : 'inicio');
+    if (S.u.cambiarClave) {
+      brindis('Por seguridad, cambie su contraseña temporal.');
+    }
+}
+
+/* ============================================================== MENÚ ===== */
+
+function opcionesMenu() {
+  var op = [{ id: 'inicio', txt: '◆  Inicio' }];
+  var esAdmin = S.u.rol === 'admin';
+  var esMonitor = S.u.rol === 'monitor';
+
+  if (S.u.servicios.length || esAdmin || esMonitor) {
+    op.push({ id: 'perc', txt: '▦  Producción distribuida' });
+  }
+  if (S.u.insumos || esAdmin || esMonitor) {
+    op.push({ id: 'insumos', txt: '▤  Insumos de almacén' });
+  }
+  if (esAdmin || esMonitor) {
+    op.push({ grupo: 'Administración' });
+    op.push({ id: 'monitoreo', txt: '◉  Monitoreo del mes' });
+    op.push({ id: 'descargas', txt: '↓  Descargar Excel' });
+  }
+  if (esAdmin) {
+    op.push({ id: 'usuarios', txt: '☺  Usuarios' });
+    op.push({ id: 'ajustes', txt: '⚙  Plazos y feriados' });
+  }
+  op.push({ grupo: 'Mi cuenta' });
+  op.push({ id: 'clave', txt: '⚿  Cambiar contraseña' });
+  return op;
+}
+
+function pintarMenu() {
+  $('menu').innerHTML = opcionesMenu().map(function (o) {
+    if (o.grupo) return '<div class="grupo">' + esc(o.grupo) + '</div>';
+    return '<button data-ir="' + o.id + '">' + esc(o.txt) + '</button>';
+  }).join('');
+}
+
+$('menu').addEventListener('click', function (ev) {
+  var b = ev.target.closest('[data-ir]');
+  if (b) ir(b.getAttribute('data-ir'));
+});
+
+function ir(seccion, extra) {
+  S.seccion = seccion;
+  Array.prototype.forEach.call($('menu').querySelectorAll('[data-ir]'), function (b) {
+    b.classList.toggle('activo', b.getAttribute('data-ir') === seccion);
+  });
+  $('contenido').scrollTop = 0;
+  var pintores = {
+    inicio: pintarInicio, perc: pintarPerc, insumos: pintarInsumos,
+    monitoreo: pintarMonitoreo, descargas: pintarDescargas,
+    usuarios: pintarUsuarios, ajustes: pintarAjustes, clave: pintarClave,
+  };
+  (pintores[seccion] || pintarInicio)(extra);
+}
+
+/* ============================================================= INICIO ==== */
+
+function pintarInicio() {
+  var v = S.ventanas.perc;
+  var tarjetas = [];
+
+  S.u.servicios.forEach(function (id) {
+    var s = servicioPorId(id);
+    tarjetas.push(
+      '<div class="tarjeta clic" data-abrir="perc" data-servicio="' + esc(id) + '">' +
+        '<div class="etiqueta">Producción distribuida</div>' +
+        '<h3>' + esc(s ? s.nombre : id) + '</h3>' +
+        '<p>Digite aquí la producción de su servicio repartida entre los centros de costo.</p>' +
+      '</div>');
+  });
+
+  if (S.u.insumos) {
+    tarjetas.push(
+      '<div class="tarjeta clic" data-abrir="insumos">' +
+        '<div class="etiqueta">Almacén</div>' +
+        '<h3>Insumos del mes</h3>' +
+        '<p>Distribución de insumos entre los 65 centros de producción.</p>' +
+      '</div>');
+  }
+
+  if (S.monitoreo) {
+    var m = S.monitoreo.perc;
+    var pct = m.total ? Math.round((m.completos / m.total) * 100) : 0;
+    tarjetas.push(
+      '<div class="tarjeta clic" data-abrir="monitoreo">' +
+        '<div class="etiqueta">Monitoreo</div>' +
+        '<h3>' + m.completos + ' de ' + m.total + ' servicios</h3>' +
+        '<p>Entregas de producción distribuida en ' + esc(S.monitoreo.periodoEtiqueta) + '.</p>' +
+        '<div class="barraAvance"><div style="width:' + pct + '%"></div></div>' +
+      '</div>');
+  }
+
+  if (!tarjetas.length) {
+    tarjetas.push(
+      '<div class="tarjeta"><h3>Sin tableros asignados</h3>' +
+      '<p>Su usuario todavía no tiene servicios a cargo. Pídale al administrador que se los asigne.</p></div>');
+  }
+
+  $('contenido').innerHTML =
+    '<h2 class="titulo">Hola, ' + esc(S.u.nombre.split(' ')[0]) + '</h2>' +
+    '<p class="bajada">' + esc(etiquetaMes()) + ' · ' + esc(textoVentana(v)) + '</p>' +
+    '<div class="rejilla">' + tarjetas.join('') + '</div>';
+
+}
+
+function etiquetaMes() {
+  var p = S.periodo.split('-');
+  var meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+    'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  return 'Mes en cierre: ' + meses[parseInt(p[1], 10) - 1] + ' de ' + p[0];
+}
+function servicioPorId(id) {
+  for (var i = 0; i < S.cat.servicios.length; i++) {
+    if (S.cat.servicios[i].id === String(id)) return S.cat.servicios[i];
+  }
+  return null;
+}
+
+/* ====================================================== GRILLA GENÉRICA == */
+/* Una sola grilla sirve para PERC y para Insumos: cambian los rótulos, no la
+   mecánica. Filas y columnas llegan como listas, y los valores como matriz.  */
+
+function pintarGrilla(cfg) {
+  S.vista = cfg;
+  var cab = ['<table class="grilla"><thead><tr>',
+    '<th class="fija">' + esc(cfg.tituloFila) + '</th>'];
+  cfg.columnas.forEach(function (c, j) {
+    cab.push('<th class="girado" data-col="' + j + '"><span>' + esc(c.nombre) + '</span></th>');
+  });
+  cab.push('<th class="total">Total</th></tr></thead><tbody>');
+
+  var cuerpo = cfg.filas.map(function (f, i) {
+    var celdas = ['<tr data-fila="' + i + '"><td class="fija">' + esc(f.nombre) +
+      (f.sub ? '<small>' + esc(f.sub) + '</small>' : '') + '</td>'];
+    cfg.columnas.forEach(function (c, j) {
+      var v = (cfg.valores[i] && cfg.valores[i][j] !== '' && cfg.valores[i][j] != null)
+        ? cfg.valores[i][j] : '';
+      celdas.push('<td data-col="' + j + '"><input inputmode="numeric" data-i="' + i +
+        '" data-j="' + j + '" value="' + esc(v) + '"' +
+        (cfg.editable ? '' : ' disabled') + '></td>');
+    });
+    celdas.push('<td class="total" data-total="' + i + '">0</td></tr>');
+    return celdas.join('');
+  }).join('');
+
+  return cab.join('') + cuerpo + '</tbody></table>';
+}
+
+/** Suma UNA fila y refresca su total. */
+function totalDeFila(tr) {
+  if (!tr) return;
+  var suma = 0;
+  Array.prototype.forEach.call(tr.querySelectorAll('input'), function (inp) {
+    suma += num(inp.value);
+  });
+  var celda = tr.querySelector('[data-total]');
+  if (celda) celda.textContent = miles(suma);
+}
+
+/**
+ * Totales de toda la tabla. Solo se llama al abrir: mientras se digita se
+ * recalcula unicamente la fila tocada, que es lo que hace que no se sienta
+ * pesado en tablas de 65 columnas.
+ */
+function recalcularTotales() {
+  var tabla = document.querySelector('table.grilla');
+  if (!tabla) return;
+  Array.prototype.forEach.call(tabla.querySelectorAll('tbody tr'), totalDeFila);
+}
+
+/** Lee la grilla y devuelve la matriz de valores lista para guardar. */
+function leerGrilla(filas, columnas) {
+  var m = [];
+  for (var i = 0; i < filas; i++) m.push(new Array(columnas).fill(''));
+  Array.prototype.forEach.call(document.querySelectorAll('table.grilla input'), function (inp) {
+    m[+inp.getAttribute('data-i')][+inp.getAttribute('data-j')] = inp.value.trim();
+  });
+  return m;
+}
+
+/** Filtro por nombre de columna y "solo columnas con datos". */
+function aplicarFiltro(texto, soloConDatos) {
+  var tabla = document.querySelector('table.grilla');
+  if (!tabla) return;
+  var buscado = (texto || '').toLowerCase().trim();
+  var conDatos = {};
+  if (soloConDatos) {
+    Array.prototype.forEach.call(tabla.querySelectorAll('input'), function (inp) {
+      if (num(inp.value)) conDatos[inp.getAttribute('data-j')] = true;
+    });
+  }
+  S.vista.columnas.forEach(function (c, j) {
+    var visible = (!buscado || c.nombre.toLowerCase().indexOf(buscado) !== -1) &&
+      (!soloConDatos || conDatos[j]);
+    Array.prototype.forEach.call(tabla.querySelectorAll('[data-col="' + j + '"]'), function (celda) {
+      celda.style.display = visible ? '' : 'none';
+    });
+  });
+}
+
+/** Flechas y Enter para moverse entre celdas, como en una hoja de cálculo. */
+function navegarConTeclado(ev) {
+  var inp = ev.target;
+  if (!inp.matches || !inp.matches('table.grilla input')) return;
+  var mapa = { ArrowUp: [-1, 0], ArrowDown: [1, 0], Enter: [1, 0] };
+  var salto = mapa[ev.key];
+  if (!salto && ev.key === 'ArrowLeft' && inp.selectionStart === 0) salto = [0, -1];
+  if (!salto && ev.key === 'ArrowRight' && inp.selectionStart === inp.value.length) salto = [0, 1];
+  if (!salto) return;
+  var i = +inp.getAttribute('data-i') + salto[0];
+  var j = +inp.getAttribute('data-j') + salto[1];
+  var destino = document.querySelector(
+    'table.grilla input[data-i="' + i + '"][data-j="' + j + '"]');
+  // Si la columna está filtrada, se sigue avanzando hasta encontrar una visible.
+  while (destino && destino.closest('td').style.display === 'none') {
+    j += salto[1] || 0;
+    if (!salto[1]) break;
+    destino = document.querySelector(
+      'table.grilla input[data-i="' + i + '"][data-j="' + j + '"]');
+  }
+  if (destino) { ev.preventDefault(); destino.focus(); destino.select(); }
+}
+
+/* ============================================ PRODUCCIÓN DISTRIBUIDA ===== */
+
+function pintarPerc(servicioId) {
+  var mios = S.u.servicios;
+  var puedeElegir = S.u.rol === 'admin' || S.u.rol === 'monitor';
+  var lista = puedeElegir ? S.cat.servicios.map(function (s) { return s.id; }) : mios;
+
+  if (!servicioId) {
+    if (lista.length === 1) return abrirBloquePerc(lista[0]);
+    if (!lista.length) {
+      $('contenido').innerHTML = '<h2 class="titulo">Producción distribuida</h2>' +
+        '<p class="bajada">Su usuario no tiene servicios asignados.</p>';
+      return;
+    }
+    $('contenido').innerHTML =
+      '<h2 class="titulo">Producción distribuida</h2>' +
+      '<p class="bajada">Elija el servicio cuyo bloque quiere abrir.</p>' +
+      '<div class="rejilla">' + lista.map(function (id) {
+        var s = servicioPorId(id);
+        var est = estadoServicio(id);
+        return '<div class="tarjeta clic" data-servicio="' + esc(id) + '">' +
+          '<div class="etiqueta">' + esc(id) + '</div>' +
+          '<h3>' + esc(s ? s.nombre : id) + '</h3>' +
+          '<p>' + (est ? (est.completo ? '✓ Entregado' : 'Pendiente') : 'Pendiente') + '</p>' +
+        '</div>';
+      }).join('') + '</div>';
+    return;
+  }
+  abrirBloquePerc(servicioId);
+}
+
+function estadoServicio(id) {
+  if (!S.monitoreo) return null;
+  var lista = S.monitoreo.perc.items;
+  for (var i = 0; i < lista.length; i++) if (lista[i].id === String(id)) return lista[i];
+  return null;
+}
+
+function abrirBloquePerc(servicioId) {
+  cargando(true);
+  llamar('apiCargarPerc', S.token, servicioId, S.periodo).then(function (d) {
+    cargando(false);
+    var s = servicioPorId(servicioId);
+    var grilla = pintarGrilla({
+      tituloFila: 'Renglón de producción',
+      filas: d.renglones.map(function (r) {
+        return { nombre: r.unidad, sub: r.etiqueta };
+      }),
+      columnas: d.centros.map(function (c) {
+        return { nombre: c.codigo + '-' + c.nombre };
+      }),
+      valores: d.valores,
+      editable: d.editable,
+      guardar: function () { guardarPerc(servicioId, d); },
+    });
+
+    $('contenido').innerHTML =
+      '<h2 class="titulo">' + esc(s ? s.nombre : servicioId) + '</h2>' +
+      '<p class="bajada">' + esc(d.periodoEtiqueta) + ' · ' + esc(textoVentana(d.ventana)) +
+        (d.autoria ? ' · Último guardado por ' + esc(d.autoria.usuario) + ' el ' + esc(d.autoria.fecha) : '') +
+      '</p>' + barraHerramientas(d.editable) +
+      '<div class="marcoGrilla">' + grilla + '</div>' + pieGuardar(d.editable);
+    prepararGrilla();
+  }).catch(fallo);
+}
+
+function guardarPerc(servicioId, d) {
+  var valores = leerGrilla(d.renglones.length, d.centros.length);
+  cargando(true);
+  llamar('apiGuardarPerc', S.token, servicioId, S.periodo, valores).then(function (r) {
+    cargando(false);
+    if (!r.ok) return brindis(r.error, true);
+    brindis('Guardado. Producción de ' + (servicioPorId(servicioId) || {}).nombre + ' al día.');
+    refrescarMonitoreo();
+  }).catch(fallo);
+}
+
+/* ================================================ INSUMOS DE ALMACÉN ===== */
+
+function pintarInsumos() {
+  cargando(true);
+  llamar('apiCargarInsumos', S.token, S.periodo).then(function (d) {
+    cargando(false);
+    var grilla = pintarGrilla({
+      tituloFila: 'Centro de producción',
+      filas: d.filas.map(function (f) { return { nombre: f.nombre, sub: f.codigo }; }),
+      columnas: d.categorias.map(function (c) {
+        return { nombre: c.codigo + '-' + c.nombre };
+      }),
+      valores: d.valores,
+      editable: d.editable,
+      guardar: function () { guardarInsumos(d); },
+    });
+    $('contenido').innerHTML =
+      '<h2 class="titulo">Insumos de almacén</h2>' +
+      '<p class="bajada">' + esc(d.periodoEtiqueta) + ' · ' + esc(textoVentana(d.ventana)) +
+        (d.autoria ? ' · Último guardado por ' + esc(d.autoria.usuario) + ' el ' + esc(d.autoria.fecha) : '') +
+      '</p>' + barraHerramientas(d.editable) +
+      '<div class="marcoGrilla">' + grilla + '</div>' + pieGuardar(d.editable);
+    prepararGrilla();
+  }).catch(fallo);
+}
+
+function guardarInsumos(d) {
+  var valores = leerGrilla(d.filas.length, d.categorias.length);
+  cargando(true);
+  llamar('apiGuardarInsumos', S.token, S.periodo, valores).then(function (r) {
+    cargando(false);
+    if (!r.ok) return brindis(r.error, true);
+    brindis('Insumos guardados.');
+    refrescarMonitoreo();
+  }).catch(fallo);
+}
+
+/* ------------------------------------------------ piezas comunes de grilla */
+
+function barraHerramientas(editable) {
+  return '<div class="herramientas">' +
+    '<input type="search" id="buscarCol" placeholder="Buscar centro o categoría…">' +
+    '<label class="chip"><input type="checkbox" id="soloDatos" style="margin-right:6px">' +
+      'Solo columnas con datos</label>' +
+    (editable ? '' : '<span class="chip cerrada"><span class="punto"></span>Solo lectura</span>') +
+  '</div>';
+}
+
+function pieGuardar(editable) {
+  if (!editable) {
+    return '<div class="pieGuardar"><span class="chip cerrada"><span class="punto"></span>' +
+      'La captura de este mes está cerrada. Si necesita corregir, pida una habilitación al administrador.' +
+      '</span></div>';
+  }
+  return '<div class="pieGuardar">' +
+    '<button class="btn principal" id="btnGuardar">Guardar</button>' +
+    '<span class="bajada" style="margin:0">Puede guardar las veces que necesite mientras el mes esté abierto.</span>' +
+  '</div>';
+}
+
+/** Conecta filtro, totales, teclado y botón guardar de la grilla recién pintada. */
+function prepararGrilla() {
+  recalcularTotales();
+  var marco = document.querySelector('.marcoGrilla');
+  if (marco) {
+    marco.addEventListener('input', function (ev) {
+      if (ev.target.tagName === 'INPUT') totalDeFila(ev.target.closest('tr'));
+    });
+    marco.addEventListener('keydown', navegarConTeclado);
+    marco.addEventListener('focusin', function (ev) {
+      if (ev.target.tagName === 'INPUT') ev.target.select();
+    });
+  }
+  var buscar = $('buscarCol');
+  var solo = $('soloDatos');
+  function filtrar() { aplicarFiltro(buscar ? buscar.value : '', solo && solo.checked); }
+  if (buscar) buscar.addEventListener('input', filtrar);
+  if (solo) solo.addEventListener('change', filtrar);
+
+  var btn = $('btnGuardar');
+  if (btn) btn.addEventListener('click', function () {
+    if (S.vista && S.vista.guardar) S.vista.guardar();
+  });
+}
+
+/* ========================================================== MONITOREO ==== */
+
+function pintarMonitoreo() {
+  var m = S.monitoreo;
+  if (!m) { $('contenido').innerHTML = '<p class="bajada">Sin datos de monitoreo.</p>'; return; }
+  var pct = m.perc.total ? Math.round((m.perc.completos / m.perc.total) * 100) : 0;
+
+  $('contenido').innerHTML =
+    '<h2 class="titulo">Monitoreo del mes</h2>' +
+    '<p class="bajada">' + esc(m.periodoEtiqueta) + ' · ' + m.perc.completos + ' de ' +
+      m.perc.total + ' servicios entregaron su producción (' + pct + '%).</p>' +
+    '<div class="tarjeta" style="margin-bottom:16px">' +
+      '<div class="etiqueta">Insumos de almacén</div>' +
+      '<h3>' + (m.insumos.completo ? '✓ Entregado' : 'Pendiente') + '</h3>' +
+      '<p>' + (m.insumos.completo
+        ? 'Guardado por ' + esc(m.insumos.usuario) + ' el ' + esc(m.insumos.fecha)
+        : 'Todavía nadie ha guardado la tabla de insumos de este mes.') + '</p>' +
+    '</div>' +
+    '<div class="barraAvance" style="margin-bottom:14px"><div style="width:' + pct + '%"></div></div>' +
+    '<div class="listado">' + m.perc.items.map(function (it) {
+      return '<div class="renglon">' +
+        '<span class="punto" style="color:' + (it.completo ? 'var(--ok)' : 'var(--alerta)') + '"></span>' +
+        '<span class="crece truncar">' + esc(it.nombre) + '</span>' +
+        '<span class="meta">' + (it.completo
+          ? esc(it.usuario) + ' · ' + esc(it.fecha) : 'Pendiente') + '</span>' +
+      '</div>';
+    }).join('') + '</div>';
+}
+
+function refrescarMonitoreo() {
+  if (S.u.rol !== 'admin' && S.u.rol !== 'monitor') return;
+  llamar('apiMonitoreo', S.token, S.periodo).then(function (m) {
+    S.monitoreo = m;
+  }).catch(function () {});
+}
+
+/* =========================================================== DESCARGAS === */
+
+function pintarDescargas() {
+  $('contenido').innerHTML =
+    '<h2 class="titulo">Descargar el consolidado</h2>' +
+    '<p class="bajada">Sale con la misma forma que la plantilla oficial del PERC: ' +
+      'los centros de costo en la fila 1 y los renglones en la columna B. ' +
+      'Se puede entregar tal cual.</p>' +
+    '<div class="campo" style="max-width:280px"><label>Mes</label>' +
+      '<select id="mesDescarga">' + S.periodos.map(function (p) {
+        return '<option value="' + esc(p) + '"' + (p === S.periodo ? ' selected' : '') +
+          '>' + esc(p) + '</option>';
+      }).join('') + '</select></div>' +
+    '<div class="rejilla" style="margin-top:16px">' +
+      '<div class="tarjeta"><div class="etiqueta">Excel</div>' +
+        '<h3>Producción distribuida</h3>' +
+        '<p>52 renglones × 65 centros de costo.</p>' +
+        '<button class="btn principal chico" style="margin-top:12px" data-bajar="perc">Descargar</button>' +
+      '</div>' +
+      '<div class="tarjeta"><div class="etiqueta">Excel</div>' +
+        '<h3>Insumos de almacén</h3>' +
+        '<p>65 centros × 31 categorías de insumo.</p>' +
+        '<button class="btn principal chico" style="margin-top:12px" data-bajar="insumos">Descargar</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function descargar(modulo, periodo) {
+  cargando(true);
+  brindis('Generando el Excel…');
+  llamar('apiDescargar', S.token, modulo, periodo).then(function (r) {
+    cargando(false);
+    var binario = atob(r.datos);
+    var bytes = new Uint8Array(binario.length);
+    for (var i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+    var url = URL.createObjectURL(new Blob([bytes], { type: r.mime }));
+    var a = document.createElement('a');
+    a.href = url; a.download = r.nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    brindis('Descarga lista.');
+  }).catch(fallo);
+}
+
+/* ============================================================ USUARIOS === */
+
+function pintarUsuarios() {
+  cargando(true);
+  llamar('listarUsuarios', S.token).then(function (lista) {
+    cargando(false);
+    $('contenido').innerHTML =
+      '<h2 class="titulo">Usuarios</h2>' +
+      '<p class="bajada">Cada persona entra con su propio usuario. Las contraseñas ' +
+        'se guardan cifradas: ni el administrador puede leerlas, solo reiniciarlas.</p>' +
+      '<div class="tarjeta" style="margin-bottom:18px">' +
+        '<h3>Crear usuario</h3>' +
+        '<div class="rejilla" style="grid-template-columns:repeat(auto-fill,minmax(190px,1fr))">' +
+          '<div class="campo"><label>Usuario</label><input id="nuUsuario" placeholder="jperez"></div>' +
+          '<div class="campo"><label>Nombre completo</label><input id="nuNombre"></div>' +
+          '<div class="campo"><label>Rol</label><select id="nuRol">' +
+            '<option value="jefe">Jefe de servicio</option>' +
+            '<option value="digitador">Digitador</option>' +
+            '<option value="monitor">Monitor (solo ve)</option>' +
+            '<option value="admin">Administrador</option>' +
+          '</select></div>' +
+          '<div class="campo"><label>Servicios (códigos separados por coma)</label>' +
+            '<input id="nuServicios" placeholder="593,600"></div>' +
+          '<div class="campo"><label>Insumos</label><select id="nuInsumos">' +
+            '<option value="NO">No</option><option value="SI">Sí, llena almacén</option>' +
+          '</select></div>' +
+        '</div>' +
+        '<button class="btn principal chico" id="btnCrearUsuario">Crear</button>' +
+        '<div id="claveNueva" class="aviso ok oculto"></div>' +
+      '</div>' +
+      '<div class="listado">' + lista.map(function (u) {
+        return '<div class="renglon">' +
+          '<span class="punto" style="color:' + (u.activo ? 'var(--ok)' : 'var(--text-3)') + '"></span>' +
+          '<span class="crece truncar"><strong>' + esc(u.usuario) + '</strong> · ' + esc(u.nombre) + '</span>' +
+          '<span class="meta">' + esc(u.rol) + (u.servicios ? ' · ' + esc(u.servicios) : '') +
+            (u.insumos ? ' · insumos' : '') + '</span>' +
+          '<button class="btn chico" data-reiniciar="' + esc(u.usuario) + '">Nueva clave</button>' +
+          '<button class="btn chico" data-activar="' + esc(u.usuario) + '" data-valor="' +
+            (u.activo ? '0' : '1') + '">' + (u.activo ? 'Desactivar' : 'Activar') + '</button>' +
+        '</div>';
+      }).join('') + '</div>' +
+      '<p class="bajada" style="margin-top:14px">Los códigos de servicio son los de la ' +
+        'matriz: 593 Servicio farmacéutico, 518 Laboratorio clínico, 721 Almacén, y así.</p>';
+
+    $('btnCrearUsuario').addEventListener('click', crearUsuario);
+  }).catch(fallo);
+}
+
+function crearUsuario() {
+  var datos = {
+    usuario: $('nuUsuario').value, nombre: $('nuNombre').value,
+    rol: $('nuRol').value, servicios: $('nuServicios').value,
+    insumos: $('nuInsumos').value === 'SI',
+  };
+  cargando(true);
+  llamar('crearUsuario', S.token, datos).then(function (r) {
+    cargando(false);
+    if (!r.ok) return brindis(r.error, true);
+    var caja = $('claveNueva');
+    caja.textContent = 'Usuario ' + r.usuario + ' creado. Contraseña temporal: ' +
+      r.clave + '  —  anótela y entréguesela; no se vuelve a mostrar.';
+    caja.classList.remove('oculto');
+    $('nuUsuario').value = ''; $('nuNombre').value = ''; $('nuServicios').value = '';
+  }).catch(fallo);
+}
+
+function reiniciarClave(usuario) {
+  cargando(true);
+  llamar('reiniciarClave', S.token, usuario).then(function (r) {
+    cargando(false);
+    if (!r.ok) return brindis(r.error, true);
+    brindis('Nueva contraseña de ' + usuario + ': ' + r.clave);
+  }).catch(fallo);
+}
+
+/* ============================================================= AJUSTES === */
+
+function pintarAjustes() {
+  cargando(true);
+  Promise.all([
+    llamar('apiFestivos', S.token),
+    llamar('apiHabilitaciones', S.token, S.periodo),
+  ]).then(function (res) {
+    cargando(false);
+    var festivos = res[0], habs = res[1];
+    $('contenido').innerHTML =
+      '<h2 class="titulo">Plazos y feriados</h2>' +
+      '<p class="bajada">La captura abre el día 1 y cierra en el día hábil que ' +
+        'indique la configuración. Los feriados del hospital no cuentan como hábiles.</p>' +
+      '<div class="tarjeta" style="margin-bottom:16px">' +
+        '<h3>Agregar feriado</h3>' +
+        '<div class="fila" style="flex-wrap:wrap;align-items:flex-end;gap:12px">' +
+          '<div class="campo" style="margin:0"><label>Fecha</label>' +
+            '<input id="feFecha" type="date"></div>' +
+          '<div class="campo crece" style="margin:0"><label>Motivo</label>' +
+            '<input id="feNota" placeholder="Día del empleado público"></div>' +
+          '<button class="btn principal chico" id="btnFestivo">Agregar</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="tarjeta" style="margin-bottom:16px">' +
+        '<h3>Habilitar un servicio fuera de plazo</h3>' +
+        '<div class="fila" style="flex-wrap:wrap;align-items:flex-end;gap:12px">' +
+          '<div class="campo" style="margin:0"><label>Módulo</label>' +
+            '<select id="haModulo"><option value="perc">Producción</option>' +
+            '<option value="insumos">Insumos</option></select></div>' +
+          '<div class="campo crece" style="margin:0"><label>Servicio</label>' +
+            '<select id="haServicio">' + S.cat.servicios.map(function (s) {
+              return '<option value="' + esc(s.id) + '">' + esc(s.nombre) + '</option>';
+            }).join('') + '<option value="ALMACEN">Almacén (insumos)</option></select></div>' +
+          '<button class="btn principal chico" id="btnHabilitar">Habilitar</button>' +
+        '</div>' +
+        (habs.length
+          ? '<p class="bajada" style="margin:12px 0 0">Vigentes: ' +
+            habs.map(function (h) { return esc(h.modulo + ' · ' + h.servicioId); }).join(', ') + '</p>'
+          : '') +
+      '</div>' +
+      '<h3 style="margin:20px 0 8px;font-size:15px">Feriados registrados</h3>' +
+      (festivos.length
+        ? '<div class="listado">' + festivos.map(function (f) {
+            return '<div class="renglon"><span class="crece">' + esc(f.fecha) + '</span>' +
+              '<span class="meta">' + esc(f.descripcion) + '</span></div>';
+          }).join('') + '</div>'
+        : '<p class="bajada">Todavía no hay feriados cargados.</p>');
+
+    $('btnFestivo').addEventListener('click', function () {
+      llamar('apiAgregarFestivo', S.token, $('feFecha').value, $('feNota').value)
+        .then(function (r) {
+          if (!r.ok) return brindis(r.error, true);
+          brindis('Feriado agregado.'); pintarAjustes();
+        }).catch(fallo);
+    });
+    $('btnHabilitar').addEventListener('click', function () {
+      llamar('apiHabilitar', S.token, S.periodo, $('haModulo').value, $('haServicio').value)
+        .then(function () { brindis('Servicio habilitado para ' + S.periodo + '.'); pintarAjustes(); })
+        .catch(fallo);
+    });
+  }).catch(fallo);
+}
+
+/* ====================================================== CAMBIAR CLAVE ==== */
+
+function pintarClave() {
+  $('contenido').innerHTML =
+    '<h2 class="titulo">Cambiar contraseña</h2>' +
+    '<p class="bajada">Debe tener al menos 8 caracteres y combinar letras y números.</p>' +
+    '<div class="tarjeta" style="max-width:420px">' +
+      '<div class="campo"><label>Contraseña actual</label>' +
+        '<input id="clAct" type="password" autocomplete="current-password"></div>' +
+      '<div class="campo"><label>Contraseña nueva</label>' +
+        '<input id="clNue" type="password" autocomplete="new-password"></div>' +
+      '<div class="campo"><label>Repita la nueva</label>' +
+        '<input id="clRep" type="password" autocomplete="new-password"></div>' +
+      '<button class="btn principal ancho" id="btnClave" style="margin-top:16px">Guardar</button>' +
+    '</div>';
+
+  $('btnClave').addEventListener('click', function () {
+    if ($('clNue').value !== $('clRep').value) {
+      return brindis('Las dos contraseñas nuevas no coinciden.', true);
+    }
+    cargando(true);
+    llamar('cambiarMiClave', S.token, $('clAct').value, $('clNue').value)
+      .then(function (r) {
+        cargando(false);
+        if (!r.ok) return brindis(r.error, true);
+        S.u = r.usuario;
+        brindis('Contraseña actualizada.');
+        ir('inicio');
+      }).catch(fallo);
+  });
+}
+
+/* =================================================== EVENTOS DELEGADOS === */
+/* Un unico escucha para toda la zona de contenido: al repintar una seccion no
+   quedan escuchas viejas acumuladas, que es la fuga clasica de estas apps.   */
+$('contenido').addEventListener('click', function (ev) {
+  var abrir = ev.target.closest('[data-abrir]');
+  if (abrir) {
+    return ir(abrir.getAttribute('data-abrir'), abrir.getAttribute('data-servicio') || null);
+  }
+  var servicio = ev.target.closest('[data-servicio]');
+  if (servicio) return abrirBloquePerc(servicio.getAttribute('data-servicio'));
+
+  var bajar = ev.target.closest('[data-bajar]');
+  if (bajar) return descargar(bajar.getAttribute('data-bajar'), $('mesDescarga').value);
+
+  var reiniciar = ev.target.closest('[data-reiniciar]');
+  if (reiniciar) return reiniciarClave(reiniciar.getAttribute('data-reiniciar'));
+
+  var activar = ev.target.closest('[data-activar]');
+  if (activar) {
+    return llamar('actualizarUsuario', S.token, {
+      usuario: activar.getAttribute('data-activar'),
+      activo: activar.getAttribute('data-valor') === '1',
+    }).then(pintarUsuarios).catch(fallo);
+  }
+});
+
+/* ============================================================== INICIO === */
+
+(function () {
+  var guardado = localStorage.getItem('sigma.token');
+  if (guardado) {
+    S.token = guardado;
+    arrancar();
+  } else {
+    mostrarIngreso();
+  }
+})();
+</script>
+</body>
+</html>

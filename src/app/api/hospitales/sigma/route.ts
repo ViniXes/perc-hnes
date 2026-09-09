@@ -1,24 +1,36 @@
 import { NextResponse } from "next/server";
 
 // =============================================================================
-// Puente con SIGMA (Hospital Nacional Psiquiatrico "Dr. Jose Molina Martinez").
+// Puente con los SIGMA de otros hospitales.
 // -----------------------------------------------------------------------------
-// SIGMA corre en Google Apps Script y expone SOLO su monitoreo: cuantos
-// servicios entregaron su produccion y cuales faltan. Nunca viaja una cifra de
-// produccion ni de insumos por aqui.
+// Cada hospital corre su propio SIGMA en Google Apps Script y expone SOLO su
+// monitoreo: cuantos servicios entregaron y cuales faltan. Nunca viaja una
+// cifra de produccion ni de insumos por aqui.
 //
-// PULSO lo consume desde el SERVIDOR para que la llave no llegue al navegador.
+// PULSO los consume desde el SERVIDOR para que las llaves no lleguen al
+// navegador. Para sumar un hospital nuevo: se agrega una linea en HOSPITALES y
+// sus dos variables de entorno en Vercel. Nada mas.
 //
-// Configuracion en Vercel (proyecto PULSO), Settings -> Environment Variables:
-//   SIGMA_URL     = https://script.google.com/macros/s/<id>/exec
-//   SIGMA_API_KEY = <la llave que devuelve crearLlaveApi() en SIGMA>
-//
-// Si falta cualquiera de las dos, responde 200 con configurado:false y la
-// pantalla muestra "sin conexion". Nunca rompe PULSO.
+// Variables (Vercel > Settings > Environment Variables):
+//   SIGMA_URL / SIGMA_API_KEY                        -> Psiquiatrico
+//   SIGMA_SUCHITOTO_URL / SIGMA_SUCHITOTO_API_KEY    -> Suchitoto
 // =============================================================================
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const HOSPITALES: Record<string, { url: string; llave: string; nombre: string }> = {
+  psiquiatrico: {
+    url: "SIGMA_URL",
+    llave: "SIGMA_API_KEY",
+    nombre: 'Hospital Nacional Psiquiátrico "Dr. José Molina Martínez"',
+  },
+  suchitoto: {
+    url: "SIGMA_SUCHITOTO_URL",
+    llave: "SIGMA_SUCHITOTO_API_KEY",
+    nombre: "Hospital Nacional de Suchitoto",
+  },
+};
 
 type Item = { id: string; nombre: string; completo: boolean };
 
@@ -34,8 +46,8 @@ type RespuestaSigma = {
 };
 
 // Cache en memoria del servidor: Apps Script tiene cuotas diarias y el
-// monitoreo se abre muchas veces al dia. Cinco minutos es suficiente para que
-// se sienta al instante sin quedar desactualizado.
+// monitoreo se abre muchas veces al dia. Cinco minutos alcanza para que se
+// sienta al instante sin quedar desactualizado.
 const CACHE_MS = 5 * 60 * 1000;
 const cache = new Map<string, { en: number; datos: RespuestaSigma }>();
 
@@ -43,22 +55,29 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const mes = (searchParams.get("mes") || "").trim();
   const refrescar = searchParams.get("refrescar") === "1";
+  // Sin parametro, el Psiquiatrico: es el que ya estaba antes de sumar otros.
+  const hospitalId = (searchParams.get("hospital") || "psiquiatrico").trim();
 
+  const hospital = HOSPITALES[hospitalId];
+  if (!hospital) {
+    return NextResponse.json({ ok: false, error: "Hospital desconocido." }, { status: 400 });
+  }
   if (mes && !/^\d{4}-\d{2}$/.test(mes)) {
     return NextResponse.json({ ok: false, error: "Parametro 'mes' invalido. Usa YYYY-MM." }, { status: 400 });
   }
 
-  const base = (process.env.SIGMA_URL || "").trim();
-  const llave = (process.env.SIGMA_API_KEY || "").trim();
+  const base = (process.env[hospital.url] || "").trim();
+  const llave = (process.env[hospital.llave] || "").trim();
   if (!base || !llave) {
     return NextResponse.json({
       ok: true,
       configurado: false,
-      mensaje: "Falta configurar SIGMA_URL y SIGMA_API_KEY en las variables de entorno.",
+      hospital: hospital.nombre,
+      mensaje: `Faltan las variables ${hospital.url} y ${hospital.llave} en las variables de entorno.`,
     });
   }
 
-  const clave = mes || "actual";
+  const clave = `${hospitalId}__${mes || "actual"}`;
   const guardado = cache.get(clave);
   if (!refrescar && guardado && Date.now() - guardado.en < CACHE_MS) {
     return NextResponse.json({ ok: true, configurado: true, cacheado: true, ...guardado.datos });
@@ -80,7 +99,7 @@ export async function GET(request: Request) {
       return NextResponse.json({
         ok: false,
         configurado: true,
-        error: `SIGMA respondio ${respuesta.status}.`,
+        error: `SIGMA respondió ${respuesta.status}.`,
       });
     }
     const datos = (await respuesta.json()) as RespuestaSigma;
@@ -88,7 +107,7 @@ export async function GET(request: Request) {
       return NextResponse.json({
         ok: false,
         configurado: true,
-        error: datos?.error || "SIGMA rechazo la consulta.",
+        error: datos?.error || "SIGMA rechazó la consulta.",
       });
     }
     cache.set(clave, { en: Date.now(), datos });

@@ -1,141 +1,96 @@
 /* ===========================================================================
    SIGMA - Sistema Integrado de Gestion de Matriz y Almacen
-   Hospital Nacional Psiquiatrico "Dr. Jose Molina Martinez"
+   Hospital Nacional de Suchitoto
    ---------------------------------------------------------------------------
-   ARCHIVO UNICO. Todo el codigo del servidor vive aqui, en este orden:
-     1. Catalogos (los dos Excel oficiales del PERC 2026)
-     2. Base (configuracion, fechas, ventanas de captura)
-     3. Instalacion
-     4. Usuarios y sesiones
-     5. API que consume la pantalla
-     6. Descargas en Excel
-     7. Puente de monitoreo hacia PULSO
-     8. Punto de entrada web
+   ARCHIVO UNICO. Mismo sistema que el del Psiquiatrico; lo unico que cambia
+   son los catalogos y el nombre del hospital.
    La pantalla vive en el archivo Index.html.
    =========================================================================== */
 
 /**
  * SIGMA - Sistema Integrado de Gestion de Matriz y Almacen
- * Hospital Nacional Psiquiatrico "Dr. Jose Molina Martinez"
+ * Hospital Nacional de Suchitoto
  * ---------------------------------------------------------------------------
  * CATALOGOS. Salen tal cual de los dos Excel oficiales del PERC 2026:
- *   - PRODUCCION DISTRIBUIDA PERC HN PSIQUIATRICO 2026
- *   - INSUMOS PERC HN PSIQUIATRICO 2026
+ *   - Produccion Distribuida 2026 (Suchitoto)
+ *   - Distribucion Insumo 2026 (Suchitoto)
  * No se editan a mano aqui: al instalar se copian a las hojas _Centros,
  * _Renglones, _Servicios y _Insumos, y desde ahi se administran.
  * ---------------------------------------------------------------------------
  */
 
-/** Los 65 centros de costo (columnas de la matriz). [codigo, nombre] */
+/** Los 42 centros de costo (columnas de la matriz). [codigo, nombre] */
 var SEED_CENTROS = [
   ["66", "Hospitalizacion medicina interna"],
   ["95", "Hospitalizacion cirugia general"],
   ["113", "Hospitalizacion obstetricia"],
   ["114", "Hospitalizacion ginecologia"],
   ["116", "Hospitalizacion pediatria"],
-  ["117", "Hospitalizacion neonatologia"],
-  ["140", "Hospitalizacion psiquiatria adultos agudos"],
-  ["143", "Hospitalizacion psiquiatria distrito judicial"],
-  ["144", "Hospitalizacion psiquiatria adultos cronica"],
-  ["154", "Hospitalizacion desintoxicacion alcohol y drogas"],
   ["159", "Hospitalizacion de dia"],
   ["745", "Hospitalizacion servicios por convenios"],
   ["748", "Hospitalizacion de corta estancia"],
   ["201", "Emergencias"],
-  ["749", "Maxima emergencia"],
+  ["229", "Consulta medica general"],
   ["230", "Consulta nutricion"],
   ["233", "Consulta planificacion familiar"],
   ["235", "Consulta de psicologia"],
   ["740", "Consulta de servicios por convenios"],
-  ["787", "Consulta programas especiales"],
   ["273", "Consulta medicina interna"],
-  ["280", "Consulta psiquiatria"],
-  ["282", "Consulta neumologia"],
   ["296", "Consulta anestesiologia"],
   ["764", "Consulta medicina reproductiva"],
   ["309", "Consulta cirugia general"],
-  ["311", "Consulta urologia"],
-  ["315", "Consulta ortopedia"],
   ["328", "Consulta pediatria"],
-  ["329", "Consulta neonatologia"],
   ["353", "Consulta ginecologia"],
   ["354", "Consulta obstetricia"],
-  ["804", "Hospitalizacion psiquiatria intervencion en crisis"],
-  ["805", "Hospitalizacion psiquiatria sub-agudos"],
+  ["356", "Consulta odontologia"],
   ["806", "Centro quirurgico"],
   ["515", "Sala de partos"],
   ["516", "Centro obstetrico"],
   ["766", "Servicio de apoyo a riiss"],
   ["398", "Vacunacion"],
-  ["502", "Quirofanos menor (pequeña cirugia )"],
   ["518", "Laboratorio clinico"],
   ["559", "Ultrasonografia"],
-  ["775", "Estudios de cardiologia"],
-  ["779", "Estudios de neumonologia"],
   ["780", "Estudios de imagenologia"],
-  ["781", "Estudios de neurologia"],
   ["562", "Terapia fisica"],
   ["593", "Servicio farmaceutico"],
-  ["600", "Colposcopia"],
-  ["612", "Albergue"],
-  ["803", "Rehablitacion psicosocial"],
   ["644", "Ambulancia"],
   ["662", "Central de esterilizacion"],
-  ["712", "Mantenimiento biomedico"],
-  ["648", "Aseo"],
-  ["649", "Vigilancia"],
+  ["761", "Saneamiento ambiental"],
   ["721", "Almacen"],
   ["652", "Servicio de alimentacion"],
   ["659", "Lavanderia"],
-  ["661", "Costureria"],
   ["664", "Transporte general"],
   ["665", "Mantenimiento"],
   ["713", "Trabajo social"],
-  ["670", "Administracion"],
-  ["702", "Docencia e investigacion"]
+  ["670", "Administracion"]
 ];
 
-/** Los 52 renglones de produccion (filas). [id, servicio, unidad, etiquetaOficial] */
+/** Los 36 renglones de produccion (filas). [id, servicio, unidad, etiquetaOficial] */
 var SEED_RENGLONES = [
   ["398_1", "398", "Actividad", "398_1-Vacunacion | Actividad"],
   ["398_2", "398", "Dosis aplicada", "398_2-Vacunacion | Dosis aplicada"],
-  ["502_1", "502", "Intervencion quirurgica", "502_1-Quirofanos menor (pequeña cirugia ) | Intervencion quirurgica"],
-  ["502_2", "502", "Procedimiento", "502_2-Quirofanos menor (pequeña cirugia ) | Procedimiento"],
   ["518_1", "518", "Examen", "518_1-Laboratorio clinico | Examen"],
   ["518_2", "518", "Prueba", "518_2-Laboratorio clinico | Prueba"],
   ["559_1", "559", "Estudio", "559_1-Ultrasonografia | Estudio"],
-  ["775_1", "775", "Estudio", "775_1-Estudios de cardiologia | Estudio"],
-  ["779_1", "779", "Estudio", "779_1-Estudios de neumonologia | Estudio"],
   ["780_1", "780", "Estudio", "780_1-Estudios de imagenologia | Estudio"],
-  ["781_1", "781", "Estudio", "781_1-Estudios de neurologia | Estudio"],
   ["562_1", "562", "Sesion", "562_1-Terapia fisica | Sesion"],
   ["593_1", "593", "Receta", "593_1-Servicio farmaceutico | Receta"],
   ["593_2", "593", "Prescripcion", "593_2-Servicio farmaceutico | Prescripcion"],
   ["593_3", "593", "Paciente", "593_3-Servicio farmaceutico | Paciente"],
   ["593_4", "593", "Receta Unidosis", "593_4-Servicio farmaceutico | Receta Unidosis"],
   ["593_5", "593", "Formula", "593_5-Servicio farmaceutico | Formula"],
-  ["600_1", "600", "Procedimiento", "600_1-Colposcopia | Procedimiento"],
-  ["600_2", "600", "Estudio", "600_2-Colposcopia | Estudio"],
-  ["612_1", "612", "Cupo mes utilizado", "612_1-Albergue | Cupo mes utilizado"],
-  ["612_2", "612", "Atencion", "612_2-Albergue | Atencion"],
-  ["803_1", "803", "Atencion", "803_1-Rehablitacion psicosocial | Atencion"],
   ["644_1", "644", "Traslado", "644_1-Ambulancia | Traslado"],
   ["644_2", "644", "Kilometro", "644_2-Ambulancia | Kilometro"],
   ["644_3", "644", "Viajes", "644_3-Ambulancia | Viajes"],
   ["662_1", "662", "Paquete", "662_1-Central de esterilizacion | Paquete"],
   ["662_2", "662", "Metro cubico", "662_2-Central de esterilizacion | Metro cubico"],
-  ["712_1", "712", "Orden", "712_1-Mantenimiento biomedico | Orden"],
-  ["648_1", "648", "Metro cuadrado", "648_1-Aseo | Metro cuadrado"],
-  ["649_1", "649", "Metro cuadrado", "649_1-Vigilancia | Metro cuadrado"],
+  ["761_1", "761", "Inspeccion", "761_1-Saneamiento ambiental | Inspeccion"],
   ["721_1", "721", "Despacho", "721_1-Almacen | Despacho"],
   ["652_1", "652", "Racion paciente", "652_1-Servicio de alimentacion | Racion paciente"],
   ["652_2", "652", "Racion funcionario", "652_2-Servicio de alimentacion | Racion funcionario"],
   ["659_1", "659", "Libras", "659_1-Lavanderia | Libras"],
   ["659_2", "659", "Pieza", "659_2-Lavanderia | Pieza"],
   ["659_3", "659", "Kilo", "659_3-Lavanderia | Kilo"],
-  ["661_1", "661", "Pieza", "661_1-Costureria | Pieza"],
-  ["661_2", "661", "Metros cocidos", "661_2-Costureria | Metros cocidos"],
-  ["661_3", "661", "Pieza Elaborada", "661_3-Costureria | Pieza Elaborada"],
   ["664_1", "664", "Traslado", "664_1-Transporte general | Traslado"],
   ["664_2", "664", "Kilometro", "664_2-Transporte general | Kilometro"],
   ["664_3", "664", "Viajes", "664_3-Transporte general | Viajes"],
@@ -147,38 +102,26 @@ var SEED_RENGLONES = [
   ["713_2", "713", "Actividad", "713_2-Trabajo social | Actividad"],
   ["713_3", "713", "Paciente", "713_3-Trabajo social | Paciente"],
   ["713_4", "713", "Casos", "713_4-Trabajo social | Casos"],
-  ["713_5", "713", "Entrevista", "713_5-Trabajo social | Entrevista"],
-  ["702_1", "702", "Capacitacion", "702_1-Docencia e investigacion | Capacitacion"]
+  ["713_5", "713", "Entrevista", "713_5-Trabajo social | Entrevista"]
 ];
 
-/** Los 26 servicios que producen. [id, nombre] */
+/** Los 15 servicios que producen. [id, nombre] */
 var SEED_SERVICIOS = [
   ["398", "Vacunacion"],
-  ["502", "Quirofanos menor (pequeña cirugia )"],
   ["518", "Laboratorio clinico"],
   ["559", "Ultrasonografia"],
-  ["775", "Estudios de cardiologia"],
-  ["779", "Estudios de neumonologia"],
   ["780", "Estudios de imagenologia"],
-  ["781", "Estudios de neurologia"],
   ["562", "Terapia fisica"],
   ["593", "Servicio farmaceutico"],
-  ["600", "Colposcopia"],
-  ["612", "Albergue"],
-  ["803", "Rehablitacion psicosocial"],
   ["644", "Ambulancia"],
   ["662", "Central de esterilizacion"],
-  ["712", "Mantenimiento biomedico"],
-  ["648", "Aseo"],
-  ["649", "Vigilancia"],
+  ["761", "Saneamiento ambiental"],
   ["721", "Almacen"],
   ["652", "Servicio de alimentacion"],
   ["659", "Lavanderia"],
-  ["661", "Costureria"],
   ["664", "Transporte general"],
   ["665", "Mantenimiento"],
-  ["713", "Trabajo social"],
-  ["702", "Docencia e investigacion"]
+  ["713", "Trabajo social"]
 ];
 
 /** Las 31 categorias de insumo (columnas de Insumos). [codigo, nombre] */
@@ -216,73 +159,50 @@ var SEED_INSUMO_CATEGORIAS = [
   ["3", "Combustibles y lubricantes"]
 ];
 
-/** Los 65 centros de produccion (filas de Insumos). [codigo, nombre] */
+/** Los 42 centros de produccion (filas de Insumos). [codigo, nombre] */
 var SEED_INSUMO_FILAS = [
   ["66", "Hospitalizacion medicina interna"],
   ["95", "Hospitalizacion cirugia general"],
   ["113", "Hospitalizacion obstetricia"],
   ["114", "Hospitalizacion ginecologia"],
   ["116", "Hospitalizacion pediatria"],
-  ["117", "Hospitalizacion neonatologia"],
-  ["140", "Hospitalizacion psiquiatria adultos agudos"],
-  ["143", "Hospitalizacion psiquiatria distrito judicial"],
-  ["144", "Hospitalizacion psiquiatria adultos cronica"],
-  ["154", "Hospitalizacion desintoxicacion alcohol y drogas"],
   ["159", "Hospitalizacion de dia"],
   ["745", "Hospitalizacion servicios por convenios"],
   ["748", "Hospitalizacion de corta estancia"],
   ["201", "Emergencias"],
-  ["749", "Maxima emergencia"],
+  ["229", "Consulta medica general"],
   ["230", "Consulta nutricion"],
   ["233", "Consulta planificacion familiar"],
   ["235", "Consulta de psicologia"],
   ["740", "Consulta de servicios por convenios"],
-  ["787", "Consulta programas especiales"],
   ["273", "Consulta medicina interna"],
-  ["280", "Consulta psiquiatria"],
-  ["282", "Consulta neumologia"],
   ["296", "Consulta anestesiologia"],
   ["764", "Consulta medicina reproductiva"],
   ["309", "Consulta cirugia general"],
-  ["311", "Consulta urologia"],
-  ["315", "Consulta ortopedia"],
   ["328", "Consulta pediatria"],
-  ["329", "Consulta neonatologia"],
   ["353", "Consulta ginecologia"],
   ["354", "Consulta obstetricia"],
-  ["804", "Hospitalizacion psiquiatria intervencion en crisis"],
-  ["805", "Hospitalizacion psiquiatria sub-agudos"],
+  ["356", "Consulta odontologia"],
   ["806", "Centro quirurgico"],
   ["515", "Sala de partos"],
   ["516", "Centro obstetrico"],
   ["766", "Servicio de apoyo a riiss"],
   ["398", "Vacunacion"],
-  ["502", "Quirofanos menor (pequeña cirugia )"],
   ["518", "Laboratorio clinico"],
   ["559", "Ultrasonografia"],
-  ["775", "Estudios de cardiologia"],
-  ["779", "Estudios de neumonologia"],
   ["780", "Estudios de imagenologia"],
-  ["781", "Estudios de neurologia"],
   ["562", "Terapia fisica"],
   ["593", "Servicio farmaceutico"],
-  ["600", "Colposcopia"],
-  ["612", "Albergue"],
-  ["803", "Rehablitacion psicosocial"],
   ["644", "Ambulancia"],
   ["662", "Central de esterilizacion"],
-  ["712", "Mantenimiento biomedico"],
-  ["648", "Aseo"],
-  ["649", "Vigilancia"],
+  ["761", "Saneamiento ambiental"],
   ["721", "Almacen"],
   ["652", "Servicio de alimentacion"],
   ["659", "Lavanderia"],
-  ["661", "Costureria"],
   ["664", "Transporte general"],
   ["665", "Mantenimiento"],
   ["713", "Trabajo social"],
-  ["670", "Administracion"],
-  ["702", "Docencia e investigacion"]
+  ["670", "Administracion"]
 ];
 
 /**
@@ -295,7 +215,7 @@ var SEED_INSUMO_FILAS = [
 var APP = {
   nombre: 'SIGMA',
   descripcion: 'Sistema Integrado de Gestion de Matriz y Almacen',
-  hospital: 'Hospital Nacional Psiquiatrico "Dr. Jose Molina Martinez"',
+  hospital: 'Hospital Nacional de Suchitoto',
   version: '1.0.0',
 };
 
@@ -1632,7 +1552,7 @@ function doGet(e) {
   if (parametros.accion === 'monitoreo') return puenteMonitoreo_(parametros);
 
   return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('SIGMA \u00b7 Hospital Nacional Psiquiatrico')
+    .setTitle('SIGMA \u00b7 Hospital Nacional de Suchitoto')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }

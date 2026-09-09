@@ -871,6 +871,16 @@ function isServiceInChiefScope(
   return true;
 }
 
+/**
+ * Hospitales que ESDOMED monitorea ademas del HNES. Cada uno corre su propio
+ * SIGMA; PULSO solo lee su avance. Para sumar otro: una linea aca, una linea en
+ * la ruta /api/hospitales/sigma y sus dos variables en Vercel.
+ */
+const HOSPITALES_EXTERNOS = [
+  { id: "psiquiatrico", corto: "Psiquiátrico", nombre: "Hospital Nacional Psiquiátrico" },
+  { id: "suchitoto", corto: "Suchitoto", nombre: "Hospital Nacional de Suchitoto" },
+] as const;
+
 const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   direccion: "dep.direccion",
   vacunacion: "dep.vacunacion",
@@ -5206,16 +5216,18 @@ export default function Home() {
   >({});
   // HOSPITALES: monitoreo de SIGMA (Hospital Nacional Psiquiatrico). Llega por
   // nuestra propia ruta de servidor; la llave nunca toca el navegador.
-  const [sigmaMonitoreo, setSigmaMonitoreo] = useState<{
+  type MonitoreoSigma = {
     configurado: boolean;
     hospital?: string;
     mesEtiqueta?: string;
     perc?: { total: number; completos: number; pendientes: number; pct: number; items: { id: string; nombre: string; completo: boolean }[] };
     insumos?: { completo: boolean };
     error?: string;
-  } | null>(null);
-  const [sigmaCargando, setSigmaCargando] = useState(false);
-  const [sigmaMes, setSigmaMes] = useState("");
+  };
+  // Un registro por hospital: cada uno se consulta y se recuerda por separado.
+  const [sigmaMonitoreo, setSigmaMonitoreo] = useState<Record<string, MonitoreoSigma>>({});
+  const [sigmaCargando, setSigmaCargando] = useState<string | null>(null);
+  const [sigmaMes, setSigmaMes] = useState<Record<string, string>>({});
   // Verificacion de sumas: produccion de TODOS los servicios del mes elegido.
   const [verifSumasData, setVerifSumasData] = useState<AdminOverviewEntry[] | null>(null);
   const [verifSumasPeriodo, setVerifSumasPeriodo] = useState("");
@@ -6413,12 +6425,11 @@ export default function Home() {
   // Monitoreo del Psiquiatrico: se pide al abrir la seccion, no antes, para no
   // gastar cuota de Apps Script en cada visita a PULSO.
   useEffect(() => {
-    if (
-      activeSidebarSection !== "panel-hospital-psiquiatrico" &&
-      mobileView !== "panel-hospital-psiquiatrico"
-    ) return;
-    if (sigmaMonitoreo || sigmaCargando) return;
-    void loadSigmaMonitoreo();
+    const vista = activeSidebarSection || mobileView || "";
+    const hospital = HOSPITALES_EXTERNOS.find((h) => vista === `panel-hospital-${h.id}`);
+    if (!hospital) return;
+    if (sigmaMonitoreo[hospital.id] || sigmaCargando) return;
+    void loadSigmaMonitoreo(hospital.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSidebarSection, mobileView]);
 
@@ -7911,22 +7922,24 @@ export default function Home() {
    * Trae el monitoreo del Psiquiatrico. Si SIGMA no esta configurado o no
    * responde, la tarjeta lo dice y PULSO sigue igual: nunca lo rompe.
    */
-  async function loadSigmaMonitoreo(mes?: string, refrescar?: boolean) {
-    const objetivo = mes || sigmaMes || "";
-    setSigmaMes(objetivo);
-    setSigmaCargando(true);
+  async function loadSigmaMonitoreo(hospitalId: string, mes?: string, refrescar?: boolean) {
+    const objetivo = mes !== undefined ? mes : (sigmaMes[hospitalId] || "");
+    setSigmaMes((previo) => ({ ...previo, [hospitalId]: objetivo }));
+    setSigmaCargando(hospitalId);
+    const guardar = (datos: MonitoreoSigma) =>
+      setSigmaMonitoreo((previo) => ({ ...previo, [hospitalId]: datos }));
     try {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ hospital: hospitalId });
       if (objetivo) params.set("mes", objetivo);
       if (refrescar) params.set("refrescar", "1");
       const respuesta = await fetch(`/api/hospitales/sigma?${params.toString()}`, { cache: "no-store" });
       const datos = await respuesta.json();
       if (datos?.configurado === false) {
-        setSigmaMonitoreo({ configurado: false, error: datos?.mensaje });
+        guardar({ configurado: false, error: datos?.mensaje });
       } else if (!datos?.ok) {
-        setSigmaMonitoreo({ configurado: true, error: datos?.error || "SIGMA no respondio." });
+        guardar({ configurado: true, error: datos?.error || "SIGMA no respondio." });
       } else {
-        setSigmaMonitoreo({
+        guardar({
           configurado: true,
           hospital: datos.hospital,
           mesEtiqueta: datos.mesEtiqueta,
@@ -7935,9 +7948,9 @@ export default function Home() {
         });
       }
     } catch {
-      setSigmaMonitoreo({ configurado: true, error: "No pudimos contactar a SIGMA." });
+      guardar({ configurado: true, error: "No pudimos contactar a SIGMA." });
     } finally {
-      setSigmaCargando(false);
+      setSigmaCargando(null);
     }
   }
 
@@ -17063,15 +17076,13 @@ export default function Home() {
               label: "Hospitales",
               detail: "Monitoreo de otros hospitales",
               badge: "HO",
-              children: [
-                {
-                  id: "panel-hospital-psiquiatrico",
-                  label: "Psiquiátrico",
-                  detail: "Avance mensual en SIGMA",
-                  badge: "PS",
-                  icon: "monitor",
-                },
-              ],
+              children: HOSPITALES_EXTERNOS.map((h) => ({
+                id: `panel-hospital-${h.id}`,
+                label: h.corto,
+                detail: "Avance mensual en SIGMA",
+                badge: h.corto.slice(0, 2).toUpperCase(),
+                icon: "monitor",
+              })),
             },
           ]
         : []),
@@ -18592,127 +18603,132 @@ export default function Home() {
             <div data-view="panel-capture-toggle">{captureToggleSection}</div>
           ) : null}
 
-          {/* HOSPITALES · PSIQUIÁTRICO: el monitoreo de SIGMA, el sistema del
-              Hospital Nacional Psiquiátrico. Solo avance: cuántos servicios
-              entregaron y cuáles faltan. Ninguna cifra de producción cruza. */}
-          {(isAdmin || isDirector || isSupervisor) &&
-          (activeSidebarSection === "panel-hospital-psiquiatrico" ||
-            mobileView === "panel-hospital-psiquiatrico") ? (
-            <section
-              id="panel-hospital-psiquiatrico"
-              data-view="panel-hospital-psiquiatrico"
-              className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
-                isLightPanelTheme
-                  ? "border border-slate-200 bg-white text-slate-900"
-                  : "border border-white/10 bg-[#202c41] text-slate-100"
-              }`}
-            >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-teal-300/90">
-                    Hospitales
-                  </p>
-                  <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                    Hospital Nacional Psiquiátrico
-                  </h2>
-                  <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                    Avance de la producción distribuida e insumos, tal como lo reporta SIGMA.
-                    Es solo lectura: acá no se digita nada.
-                  </p>
+          {/* HOSPITALES: el monitoreo de los SIGMA de los otros hospitales que
+              ESDOMED acompaña. Solo avance: cuántos servicios entregaron y
+              cuáles faltan. Ninguna cifra de producción cruza entre sistemas.
+              Es una sola pantalla que se adapta al hospital elegido. */}
+          {(() => {
+            if (!isAdmin && !isDirector && !isSupervisor) return null;
+            const vista = activeSidebarSection || mobileView || "";
+            const hospital = HOSPITALES_EXTERNOS.find((h) => vista === `panel-hospital-${h.id}`);
+            if (!hospital) return null;
+            const datos = sigmaMonitoreo[hospital.id];
+            const mes = sigmaMes[hospital.id] || "";
+            const cargando = sigmaCargando === hospital.id;
+            return (
+              <section
+                id={`panel-hospital-${hospital.id}`}
+                data-view={`panel-hospital-${hospital.id}`}
+                className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
+                  isLightPanelTheme
+                    ? "border border-slate-200 bg-white text-slate-900"
+                    : "border border-white/10 bg-[#202c41] text-slate-100"
+                }`}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-teal-300/90">
+                      Hospitales
+                    </p>
+                    <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                      {hospital.nombre}
+                    </h2>
+                    <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                      Avance de la producción distribuida e insumos, tal como lo reporta SIGMA.
+                      Es solo lectura: acá no se digita nada.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+                      <span className="font-semibold uppercase tracking-wide">Mes</span>
+                      <input
+                        type="month"
+                        value={mes}
+                        onChange={(event) => void loadSigmaMonitoreo(hospital.id, event.target.value, true)}
+                        className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-900" : "text-white [color-scheme:dark]"}`}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void loadSigmaMonitoreo(hospital.id, mes, true)}
+                      disabled={cargando}
+                      className="rounded-xl bg-gradient-to-r from-teal-400 to-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-900 disabled:opacity-50"
+                    >
+                      {cargando ? "Consultando…" : "Actualizar"}
+                    </button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
-                    <span className="font-semibold uppercase tracking-wide">Mes</span>
-                    <input
-                      type="month"
-                      value={sigmaMes}
-                      onChange={(event) => void loadSigmaMonitoreo(event.target.value, true)}
-                      className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-900" : "text-white [color-scheme:dark]"}`}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => void loadSigmaMonitoreo(sigmaMes, true)}
-                    disabled={sigmaCargando}
-                    className="rounded-xl bg-gradient-to-r from-teal-400 to-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-900 disabled:opacity-50"
-                  >
-                    {sigmaCargando ? "Consultando…" : "Actualizar"}
-                  </button>
-                </div>
-              </div>
 
-              {!sigmaMonitoreo ? (
-                <p className={`mt-6 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-                  Consultando a SIGMA…
-                </p>
-              ) : !sigmaMonitoreo.configurado ? (
-                <div className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200">
-                  <p className="font-semibold">SIGMA todavía no está conectado.</p>
-                  <p className="mt-1 leading-6 text-amber-200/80">
-                    Faltan las variables <strong>SIGMA_URL</strong> y <strong>SIGMA_API_KEY</strong> en
-                    Vercel. La llave se genera en SIGMA con la función <code>crearLlaveApi()</code>.
+                {!datos ? (
+                  <p className={`mt-6 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                    Consultando a SIGMA…
                   </p>
-                </div>
-              ) : sigmaMonitoreo.error ? (
-                <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-200">
-                  <p className="font-semibold">No pudimos leer el monitoreo del Psiquiátrico.</p>
-                  <p className="mt-1 text-rose-200/80">{sigmaMonitoreo.error}</p>
-                </div>
-              ) : (
-                <>
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <div className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                        Producción distribuida
-                      </p>
-                      <p className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                        {sigmaMonitoreo.perc?.completos ?? 0} de {sigmaMonitoreo.perc?.total ?? 0}
-                      </p>
-                      <p className={`text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
-                        {sigmaMonitoreo.mesEtiqueta} · {sigmaMonitoreo.perc?.pct ?? 0}% entregado
-                      </p>
-                      <div className={`mt-3 h-2.5 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
+                ) : !datos.configurado ? (
+                  <div className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200">
+                    <p className="font-semibold">Este hospital todavía no está conectado.</p>
+                    <p className="mt-1 leading-6 text-amber-200/80">{datos.error}</p>
+                  </div>
+                ) : datos.error ? (
+                  <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-200">
+                    <p className="font-semibold">No pudimos leer el monitoreo de este hospital.</p>
+                    <p className="mt-1 text-rose-200/80">{datos.error}</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <div className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                          Producción distribuida
+                        </p>
+                        <p className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                          {datos.perc?.completos ?? 0} de {datos.perc?.total ?? 0}
+                        </p>
+                        <p className={`text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
+                          {datos.mesEtiqueta} · {datos.perc?.pct ?? 0}% entregado
+                        </p>
+                        <div className={`mt-3 h-2.5 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500"
+                            style={{ width: `${datos.perc?.pct ?? 0}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                          Insumos de almacén
+                        </p>
+                        <p className={`mt-1 text-2xl font-bold ${datos.insumos?.completo ? "text-emerald-300" : "text-amber-300"}`}>
+                          {datos.insumos?.completo ? "Entregado" : "Pendiente"}
+                        </p>
+                        <p className={`text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
+                          Una sola tabla, la llena Almacén.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-1.5 sm:grid-cols-2">
+                      {(datos.perc?.items ?? []).map((item) => (
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500"
-                          style={{ width: `${sigmaMonitoreo.perc?.pct ?? 0}%` }}
-                        />
-                      </div>
+                          key={item.id}
+                          className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-sm ${
+                            isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#1b2537]"
+                          }`}
+                        >
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.completo ? "bg-emerald-400" : "bg-amber-400"}`}
+                            aria-label={item.completo ? "Entregado" : "Pendiente"}
+                          />
+                          <span className={`min-w-0 flex-1 truncate ${isLightPanelTheme ? "text-slate-700" : "text-slate-300"}`}>
+                            {item.nombre}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                    <div className={`rounded-2xl border p-4 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-[#1b2537]"}`}>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                        Insumos de almacén
-                      </p>
-                      <p className={`mt-1 text-2xl font-bold ${sigmaMonitoreo.insumos?.completo ? "text-emerald-300" : "text-amber-300"}`}>
-                        {sigmaMonitoreo.insumos?.completo ? "Entregado" : "Pendiente"}
-                      </p>
-                      <p className={`text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
-                        Una sola tabla, la llena Almacén.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 grid gap-1.5 sm:grid-cols-2">
-                    {(sigmaMonitoreo.perc?.items ?? []).map((item) => (
-                      <div
-                        key={item.id}
-                        className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-sm ${
-                          isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#1b2537]"
-                        }`}
-                      >
-                        <span
-                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.completo ? "bg-emerald-400" : "bg-amber-400"}`}
-                          aria-label={item.completo ? "Entregado" : "Pendiente"}
-                        />
-                        <span className={`min-w-0 flex-1 truncate ${isLightPanelTheme ? "text-slate-700" : "text-slate-300"}`}>
-                          {item.nombre}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </section>
-          ) : null}
+                  </>
+                )}
+              </section>
+            );
+          })()}
 
           {/* VERIFICAR SUMAS: los pares de servicios que capturan lo mismo y que en el
               consolidado caen en un solo bloque. El monitoreo los muestra por
