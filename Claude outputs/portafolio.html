@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Desarrollo de aplicaciones web y moviles: apps de pedidos, portales de colegios, sistemas de hoteles y paneles de control.">
+<title>Software que se usa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+
+<style>
+/* ===========================================================================
+   Identidad: papel cálido y tinta casi negra, con dos acentos que trabajan
+   juntos — coral (acción, pedidos, urgencia) y verde azulado (estado, dato).
+   Las pantallas de producto son el argumento; el texto solo las acompaña.
+   =========================================================================== */
+:root {
+  --ground: #f7f3ee;
+  --surface: #ffffff;
+  --surface-2: #efe9e1;
+  --ink: #16110f;
+  --ink-2: #574d47;
+  --ink-3: #8a7d75;
+  --rule: rgba(22, 17, 15, 0.12);
+  --rule-2: rgba(22, 17, 15, 0.24);
+  --coral: #e04a24;
+  --coral-soft: rgba(224, 74, 36, 0.10);
+  --teal: #0d7b74;
+  --teal-soft: rgba(13, 123, 116, 0.10);
+  --lift: 0 24px 60px rgba(22, 17, 15, 0.13);
+  --lift-sm: 0 8px 22px rgba(22, 17, 15, 0.09);
+  --chrome: #ded6cc;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #131110;
+    --surface: #1e1a18;
+    --surface-2: #272220;
+    --ink: #f6f0ea;
+    --ink-2: #b6aca4;
+    --ink-3: #877d76;
+    --rule: rgba(255, 255, 255, 0.11);
+    --rule-2: rgba(255, 255, 255, 0.24);
+    --coral: #ff7a52;
+    --coral-soft: rgba(255, 122, 82, 0.14);
+    --teal: #35c9b4;
+    --teal-soft: rgba(53, 201, 180, 0.13);
+    --lift: 0 26px 70px rgba(0, 0, 0, 0.55);
+    --lift-sm: 0 10px 26px rgba(0, 0, 0, 0.4);
+    --chrome: #332c28;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground: #131110;
+  --surface: #1e1a18;
+  --surface-2: #272220;
+  --ink: #f6f0ea;
+  --ink-2: #b6aca4;
+  --ink-3: #877d76;
+  --rule: rgba(255, 255, 255, 0.11);
+  --rule-2: rgba(255, 255, 255, 0.24);
+  --coral: #ff7a52;
+  --coral-soft: rgba(255, 122, 82, 0.14);
+  --teal: #35c9b4;
+  --teal-soft: rgba(53, 201, 180, 0.13);
+  --lift: 0 26px 70px rgba(0, 0, 0, 0.55);
+  --lift-sm: 0 10px 26px rgba(0, 0, 0, 0.4);
+  --chrome: #332c28;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  font-size: 16.5px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.marco { max-width: 1140px; margin: 0 auto; padding: 0 26px; }
+
+h1, h2, h3 {
+  font-family: "Newsreader", Georgia, serif;
+  font-weight: 500;
+  margin: 0;
+  text-wrap: balance;
+  letter-spacing: -0.015em;
+}
+
+.etiqueta {
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+a { color: inherit; }
+
+/* -------------------------------------------------------------- barra fija */
+.barra {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--ground) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--rule);
+}
+.barra .interior {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 0;
+}
+.logo { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.01em; }
+.logo .glifo {
+  width: 30px; height: 30px; border-radius: 9px;
+  background: linear-gradient(135deg, var(--coral), #f4a02c);
+  display: grid; place-items: center;
+  color: #fff; font-family: "DM Mono", monospace; font-size: 15px; font-weight: 500;
+}
+.acciones-barra { display: flex; align-items: center; gap: 10px; }
+
+.btn {
+  font-family: "Archivo", sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 9px 18px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.15s, filter 0.15s, border-color 0.15s;
+}
+.btn:focus-visible { outline: 2px solid var(--coral); outline-offset: 3px; }
+.btn.primario { background: var(--coral); color: #fff; }
+.btn.primario:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.btn.borde { background: transparent; border-color: var(--rule-2); color: var(--ink); }
+.btn.borde:hover { border-color: var(--ink-3); }
+.btn.chico { padding: 7px 13px; font-size: 12.5px; }
+
+/* ------------------------------------------------------------------- portada */
+.portada { padding: 62px 0 20px; }
+.portada .rejilla {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 46px;
+  align-items: center;
+}
+.portada h1 {
+  font-size: clamp(40px, 5.6vw, 66px);
+  line-height: 1.03;
+  max-width: 13ch;
+}
+.portada h1 .subrayado {
+  background: linear-gradient(transparent 62%, var(--coral-soft) 62%);
+  padding: 0 2px;
+}
+.portada .bajada {
+  margin: 20px 0 0;
+  font-size: clamp(16.5px, 1.6vw, 18.5px);
+  color: var(--ink-2);
+  max-width: 46ch;
+}
+.portada .botonera { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+
+.credenciales {
+  display: flex;
+  gap: 26px;
+  margin-top: 34px;
+  padding-top: 22px;
+  border-top: 1px solid var(--rule);
+  flex-wrap: wrap;
+}
+.credencial .n {
+  font-family: "Newsreader", serif;
+  font-size: 30px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.credencial .t { font-size: 12.5px; color: var(--ink-3); margin-top: 5px; max-width: 17ch; line-height: 1.35; }
+
+/* ------------------------------------------------------------------ teléfono */
+.escena-telefono { display: flex; justify-content: center; position: relative; }
+
+.telefono {
+  width: 300px;
+  border-radius: 40px;
+  background: var(--chrome);
+  padding: 10px;
+  box-shadow: var(--lift);
+  position: relative;
+}
+.pantalla {
+  border-radius: 32px;
+  background: var(--surface);
+  overflow: hidden;
+  border: 1px solid var(--rule);
+}
+.status {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 18px 4px;
+  font-family: "DM Mono", monospace; font-size: 10.5px; color: var(--ink-3);
+}
+.app-cab { padding: 6px 16px 12px; }
+.app-cab .lugar { font-size: 11px; color: var(--ink-3); font-family: "DM Mono", monospace; }
+.app-cab .direccion { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.buscador {
+  margin: 10px 16px 0;
+  background: var(--surface-2);
+  border-radius: 11px;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  display: flex; align-items: center; gap: 8px;
+}
+.fichas { display: flex; gap: 7px; padding: 12px 16px 4px; overflow: hidden; }
+.ficha {
+  font-size: 11.5px; padding: 5px 11px; border-radius: 999px;
+  border: 1px solid var(--rule); color: var(--ink-2); white-space: nowrap;
+}
+.ficha.activa { background: var(--coral); border-color: var(--coral); color: #fff; font-weight: 600; }
+
+.tarjeta-local { margin: 12px 16px 0; }
+.foto {
+  height: 92px; border-radius: 13px;
+  background:
+    radial-gradient(circle at 22% 30%, rgba(255,255,255,0.35), transparent 45%),
+    linear-gradient(128deg, #f0873a, #e04a24 55%, #a8321c);
+  position: relative;
+  overflow: hidden;
+}
+.foto .sello {
+  position: absolute; left: 9px; bottom: 9px;
+  background: rgba(255,255,255,0.94); color: #16110f;
+  font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
+}
+.tarjeta-local .titulo { font-weight: 700; font-size: 14.5px; margin-top: 9px; }
+.tarjeta-local .meta {
+  display: flex; align-items: center; gap: 8px; margin-top: 3px;
+  font-size: 11.5px; color: var(--ink-3); font-family: "DM Mono", monospace;
+}
+.estrella { color: var(--coral); }
+
+.pedido {
+  margin: 14px 12px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 15px;
+  padding: 13px 14px;
+  background: var(--surface);
+  box-shadow: var(--lift-sm);
+}
+.pedido .fila-top { display: flex; justify-content: space-between; align-items: baseline; }
+.pedido .cod { font-family: "DM Mono", monospace; font-size: 11px; color: var(--ink-3); }
+.pedido .eta { font-size: 12px; font-weight: 700; color: var(--teal); }
+.pedido h4 { margin: 5px 0 11px; font-size: 14px; font-family: "Archivo", sans-serif; font-weight: 600; }
+
+.barra-progreso { height: 5px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.barra-progreso span {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--coral), #f4a02c);
+  width: 68%;
+  animation: avanzar 4.5s ease-in-out infinite alternate;
+}
+@keyframes avanzar { from { width: 58%; } to { width: 76%; } }
+
+.pasos-pedido { display: flex; justify-content: space-between; margin-top: 9px; }
+.paso-p { font-size: 9.5px; color: var(--ink-3); font-family: "DM Mono", monospace; letter-spacing: 0.02em; }
+.paso-p.hecho { color: var(--ink); font-weight: 500; }
+.paso-p.hecho::before { content: "● "; color: var(--coral); }
+.paso-p:not(.hecho)::before { content: "○ "; }
+
+.pie-app {
+  display: flex; justify-content: space-around; padding: 11px 0 13px;
+  border-top: 1px solid var(--rule); margin-top: 4px;
+}
+.icono-pie { width: 20px; height: 20px; border-radius: 6px; background: var(--surface-2); }
+.icono-pie.on { background: var(--coral); }
+
+.leyenda-mock {
+  text-align: center;
+  margin-top: 14px;
+  font-family: "DM Mono", monospace;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
+}
+
+/* ------------------------------------------------------------------ secciones */
+section { padding: 74px 0; border-top: 1px solid var(--rule); }
+.cabeza { max-width: 60ch; margin-bottom: 40px; }
+.cabeza h2 { font-size: clamp(28px, 3.6vw, 40px); margin-top: 10px; }
+.cabeza p { margin: 14px 0 0; color: var(--ink-2); }
+
+/* -------------------------------------------------------------- qué construyo */
+.tipos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.tipo {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+.tipo:hover { transform: translateY(-3px); box-shadow: var(--lift-sm); }
+.vitrina {
+  height: 152px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--rule);
+  padding: 14px;
+  display: grid;
+  place-items: center;
+}
+.tipo .texto { padding: 18px 20px 22px; display: flex; flex-direction: column; gap: 8px; }
+.tipo h3 { font-size: 20px; }
+.tipo p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+.tipo .ejemplos {
+  margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px;
+}
+.tag {
+  font-family: "DM Mono", monospace; font-size: 10.5px;
+  padding: 3px 8px; border-radius: 5px;
+  background: var(--teal-soft); color: var(--teal);
+}
+
+/* mini interfaces dentro de las vitrinas */
+.mini { width: 100%; }
+.mini-fila { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; }
+.mini-bloque { background: var(--surface); border: 1px solid var(--rule); border-radius: 7px; }
+.mini-alto { height: 9px; }
+.mini-punto { width: 9px; height: 9px; border-radius: 50%; }
+
+/* --------------------------------------------------- rack de hotel (escritorio) */
+.rack { width: 100%; overflow-x: auto; }
+.rack table { border-collapse: collapse; width: 100%; min-width: 460px; font-size: 11.5px; }
+.rack th {
+  font-family: "DM Mono", monospace; font-size: 9.5px; letter-spacing: 0.08em;
+  color: var(--ink-3); font-weight: 400; padding: 0 0 8px; text-align: center;
+}
+.rack th.hab { text-align: left; width: 84px; }
+.rack td { padding: 3px 2px; height: 26px; }
+.rack td.hab {
+  font-family: "DM Mono", monospace; font-size: 11px; color: var(--ink-2);
+  padding-right: 8px; white-space: nowrap;
+}
+.rack .celda { background: var(--surface-2); border-radius: 4px; height: 20px; }
+.reserva {
+  height: 20px; border-radius: 5px; display: flex; align-items: center;
+  padding: 0 7px; font-size: 9.5px; font-weight: 600; color: #fff;
+  font-family: "DM Mono", monospace; white-space: nowrap; overflow: hidden;
+}
+.reserva.confirmada { background: var(--teal); }
+.reserva.entrando { background: var(--coral); }
+.reserva.bloqueo { background: var(--rule-2); color: var(--ink-2); }
+
+.leyenda-rack { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
+.leyenda-rack span { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-2); }
+.leyenda-rack i { width: 11px; height: 11px; border-radius: 3px; display: block; }
+
+/* --------------------------------------------------------- teléfono de colegio */
+.telefono.chico { width: 258px; }
+.cab-colegio {
+  padding: 14px 16px 16px;
+  background: linear-gradient(140deg, #17527a, #0d7b74);
+  color: #fff;
+}
+.cab-colegio .curso { font-family: "DM Mono", monospace; font-size: 10px; opacity: 0.82; letter-spacing: 0.1em; }
+.cab-colegio .alumna { font-size: 16px; font-weight: 700; margin-top: 3px; }
+.cab-colegio .promedio {
+  display: flex; align-items: baseline; gap: 7px; margin-top: 12px;
+}
+.cab-colegio .promedio b { font-family: "Newsreader", serif; font-size: 30px; font-weight: 500; line-height: 1; }
+.cab-colegio .promedio small { font-size: 11px; opacity: 0.85; }
+
+.notas { padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 9px; }
+.nota {
+  display: grid; grid-template-columns: 1fr auto; align-items: center;
+  gap: 8px; font-size: 12.5px;
+}
+.nota .materia { color: var(--ink-2); }
+.nota .valor {
+  font-family: "DM Mono", monospace; font-size: 12px; font-weight: 500;
+  padding: 2px 8px; border-radius: 6px;
+}
+.nota .valor.alta { background: var(--teal-soft); color: var(--teal); }
+.nota .valor.media { background: var(--surface-2); color: var(--ink-2); }
+.nota .valor.baja { background: var(--coral-soft); color: var(--coral); }
+.nota .riel-n { grid-column: 1 / -1; height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.nota .riel-n i { display: block; height: 100%; background: var(--teal); border-radius: 999px; }
+.nota .riel-n i.bajo { background: var(--coral); }
+
+.aviso-cole {
+  margin: 12px 14px; padding: 11px 12px; border-radius: 11px;
+  background: var(--coral-soft); border: 1px solid var(--coral-soft);
+}
+.aviso-cole .t { font-size: 10px; font-family: "DM Mono", monospace; color: var(--coral); letter-spacing: 0.1em; }
+.aviso-cole .m { font-size: 12.5px; margin-top: 3px; color: var(--ink); line-height: 1.4; }
+
+/* ------------------------------------------------------------ dupla dispositivos */
+.dupla { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; align-items: stretch; }
+.pieza { display: flex; flex-direction: column; gap: 16px; }
+.pieza .encabeza { display: flex; flex-direction: column; gap: 7px; }
+.pieza h3 { font-size: 22px; }
+.pieza p { margin: 0; color: var(--ink-2); font-size: 15px; }
+.centrar-disp { display: flex; justify-content: center; }
+
+/* ---------------------------------------------------------------- panel demo */
+.demo-panel {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  box-shadow: var(--lift);
+  overflow: hidden;
+}
+.cromo {
+  display: flex; align-items: center; gap: 7px;
+  padding: 11px 15px; border-bottom: 1px solid var(--rule); background: var(--surface-2);
+}
+.cromo .luz { width: 10px; height: 10px; border-radius: 50%; background: var(--rule-2); }
+.cromo .url {
+  margin-left: 10px; font-family: "DM Mono", monospace; font-size: 11px; color: var(--ink-3);
+}
+.cuerpo-panel { padding: 20px; display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; }
+
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+.kpi { border: 1px solid var(--rule); border-radius: 11px; padding: 12px 13px; }
+.kpi .k { font-family: "DM Mono", monospace; font-size: 10px; color: var(--ink-3); letter-spacing: 0.1em; text-transform: uppercase; }
+.kpi .v { font-family: "Newsreader", serif; font-size: 25px; line-height: 1.1; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kpi .d { font-size: 11.5px; margin-top: 2px; font-family: "DM Mono", monospace; }
+.sube { color: var(--teal); }
+.baja { color: var(--coral); }
+
+.grafico { width: 100%; height: 132px; display: block; }
+
+.tabla-demo { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tabla-demo th {
+  text-align: left; font-family: "DM Mono", monospace; font-size: 10px;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3);
+  padding: 0 0 8px; font-weight: 400;
+}
+.tabla-demo td { padding: 9px 0; border-top: 1px solid var(--rule); }
+.tabla-demo td:last-child { text-align: right; }
+.pastilla {
+  font-size: 10.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  font-family: "DM Mono", monospace;
+}
+.pastilla.ok { background: var(--teal-soft); color: var(--teal); }
+.pastilla.camino { background: var(--coral-soft); color: var(--coral); }
+.pastilla.espera { background: var(--surface-2); color: var(--ink-3); }
+
+/* ------------------------------------------------------------------- proceso */
+.proceso { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+.etapa { display: flex; flex-direction: column; gap: 9px; }
+.etapa .num {
+  font-family: "DM Mono", monospace; font-size: 12px; color: var(--coral);
+  border-top: 2px solid var(--coral); padding-top: 12px; font-weight: 500;
+}
+.etapa h3 { font-size: 18.5px; }
+.etapa p { margin: 0; font-size: 14px; color: var(--ink-2); }
+
+/* ---------------------------------------------------------------- caso real */
+.caso { display: grid; grid-template-columns: 0.95fr 1.05fr; gap: 40px; align-items: center; }
+.sello-vivo {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: "DM Mono", monospace; font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--teal);
+  background: var(--teal-soft); padding: 5px 11px; border-radius: 999px;
+}
+.sello-vivo .latido {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--teal);
+  animation: latir 2s ease-in-out infinite;
+}
+@keyframes latir { 0%, 100% { opacity: 1; } 50% { opacity: 0.32; } }
+
+.caso h2 { font-size: clamp(26px, 3.2vw, 36px); margin-top: 14px; }
+.caso p { color: var(--ink-2); }
+.logros { margin: 18px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 11px; }
+.logros li { display: flex; gap: 11px; font-size: 15px; }
+.logros .marca-check { color: var(--teal); font-weight: 700; }
+
+.monitor-demo { display: flex; flex-direction: column; gap: 12px; }
+.linea-mon { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+.linea-mon .nom { font-size: 13px; }
+.linea-mon .cifra { font-family: "DM Mono", monospace; font-size: 12px; color: var(--ink-3); }
+.riel { grid-column: 1 / -1; height: 7px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.riel i { display: block; height: 100%; border-radius: 999px; background: var(--teal); }
+.riel i.parcial { background: var(--coral); }
+
+/* --------------------------------------------------------------------- stack */
+.stack { display: flex; flex-wrap: wrap; gap: 9px; }
+.chip-tec {
+  font-family: "DM Mono", monospace; font-size: 12.5px;
+  border: 1px solid var(--rule); border-radius: 8px;
+  padding: 7px 12px; color: var(--ink-2);
+  background: var(--surface);
+}
+.chip-tec strong { color: var(--ink); font-weight: 500; }
+
+/* --------------------------------------------------------------------- cierre */
+.cierre {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 22px;
+  padding: 44px;
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 34px;
+  align-items: center;
+  box-shadow: var(--lift);
+}
+.cierre h2 { font-size: clamp(26px, 3.4vw, 38px); }
+.cierre p { color: var(--ink-2); margin: 14px 0 0; }
+.cierre .contacto { display: flex; flex-direction: column; gap: 12px; }
+.dato-contacto {
+  display: flex; justify-content: space-between; align-items: center; gap: 14px;
+  border: 1px solid var(--rule); border-radius: 12px; padding: 13px 16px;
+}
+.dato-contacto .q { font-family: "DM Mono", monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+.dato-contacto .r { font-size: 14.5px; font-weight: 600; }
+
+footer {
+  padding: 30px 0 54px;
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  font-size: 13px; color: var(--ink-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barra-progreso span, .sello-vivo .latido { animation: none; }
+  * { transition: none !important; }
+}
+
+@media (max-width: 940px) {
+  .portada .rejilla { grid-template-columns: 1fr; gap: 40px; }
+  .portada h1 { max-width: 18ch; }
+  .tipos { grid-template-columns: 1fr 1fr; }
+  .dupla { grid-template-columns: 1fr; gap: 44px; }
+  .cuerpo-panel { grid-template-columns: 1fr; }
+  .proceso { grid-template-columns: 1fr 1fr; }
+  .caso { grid-template-columns: 1fr; gap: 30px; }
+  .cierre { grid-template-columns: 1fr; padding: 30px; }
+  section { padding: 56px 0; }
+}
+
+@media (max-width: 620px) {
+  .marco { padding: 0 18px; }
+  .tipos { grid-template-columns: 1fr; }
+  .proceso { grid-template-columns: 1fr; }
+  .kpis { grid-template-columns: 1fr; }
+  .credenciales { gap: 18px; }
+}
+</style>
+</head>
+<body>
+<div class="barra">
+  <div class="marco interior">
+    <div class="logo">
+      <span class="glifo" aria-hidden="true">&lt;/&gt;</span>
+      <span>Estudio de software</span>
+    </div>
+    <div class="acciones-barra">
+      <button class="btn borde chico" id="btnTema" type="button">Tema</button>
+      <a class="btn primario chico" href="#hablemos">Cotizar un proyecto</a>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="marco">
+
+    <!-- ============================================================ PORTADA -->
+    <div class="portada">
+      <div class="rejilla">
+        <div>
+          <p class="etiqueta">Aplicaciones web y móviles a medida</p>
+          <h1>Hago software que la gente <span class="subrayado">sí usa</span> todos los días</h1>
+          <p class="bajada">
+            Apps de pedidos, sistemas internos, paneles de control. Del boceto a producción,
+            con el mismo cuidado en la pantalla que en lo que pasa detrás.
+          </p>
+          <div class="botonera">
+            <a class="btn primario" href="#hablemos">Conversemos tu idea</a>
+            <a class="btn borde" href="#caso">Ver un caso real</a>
+          </div>
+
+          <div class="credenciales">
+            <div class="credencial">
+              <div class="n">2</div>
+              <div class="t">sistemas corriendo hoy en instituciones públicas</div>
+            </div>
+            <div class="credencial">
+              <div class="n">40+</div>
+              <div class="t">áreas usando la misma app cada mes</div>
+            </div>
+            <div class="credencial">
+              <div class="n">7 días</div>
+              <div class="t">de la idea a un prototipo que se puede tocar</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="escena-telefono">
+            <div class="telefono">
+              <div class="pantalla">
+                <div class="status"><span>9:41</span><span>▮▮▮ ⌁ 100%</span></div>
+
+                <div class="app-cab">
+                  <div class="lugar">ENTREGAR EN</div>
+                  <div class="direccion">Col. Escalón, San Salvador ▾</div>
+                </div>
+
+                <div class="buscador"><span>⌕</span><span>Buscar pupusas, pizza, sushi…</span></div>
+
+                <div class="fichas">
+                  <span class="ficha activa">Todo</span>
+                  <span class="ficha">Típica</span>
+                  <span class="ficha">Pizza</span>
+                  <span class="ficha">Postres</span>
+                </div>
+
+                <div class="tarjeta-local">
+                  <div class="foto"><span class="sello">Envío gratis</span></div>
+                  <div class="titulo">Comedor La Cañada</div>
+                  <div class="meta">
+                    <span class="estrella">★ 4,8</span><span>·</span><span>25–35 min</span><span>·</span><span>$2,50</span>
+                  </div>
+                </div>
+
+                <div class="pedido">
+                  <div class="fila-top">
+                    <span class="cod">PEDIDO #4821</span>
+                    <span class="eta">Llega 7:42 pm</span>
+                  </div>
+                  <h4>Tu pedido va en camino</h4>
+                  <div class="barra-progreso"><span></span></div>
+                  <div class="pasos-pedido">
+                    <span class="paso-p hecho">Recibido</span>
+                    <span class="paso-p hecho">Cocina</span>
+                    <span class="paso-p hecho">Camino</span>
+                    <span class="paso-p">Entregado</span>
+                  </div>
+                </div>
+
+                <div class="pie-app">
+                  <span class="icono-pie on"></span>
+                  <span class="icono-pie"></span>
+                  <span class="icono-pie"></span>
+                  <span class="icono-pie"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="leyenda-mock">Interfaz de muestra · app de pedidos</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====================================================== QUÉ CONSTRUYO -->
+    <section>
+      <div class="cabeza">
+        <p class="etiqueta">Lo que construyo</p>
+        <h2>Seis formas de resolver el mismo problema: que el trabajo fluya</h2>
+        <p>
+          No vendo plantillas. Cada proyecto arranca entendiendo cómo trabaja tu equipo hoy,
+          incluidas las excepciones que nadie escribe en el requerimiento.
+        </p>
+      </div>
+
+      <div class="tipos">
+
+        <article class="tipo">
+          <div class="vitrina">
+            <div class="mini" style="max-width:190px">
+              <div class="mini-fila">
+                <span class="mini-bloque mini-alto" style="width:38%; background:var(--coral); border-color:var(--coral)"></span>
+                <span class="mini-bloque mini-alto" style="flex:1"></span>
+              </div>
+              <div class="mini-bloque" style="height:52px; margin-bottom:8px; background:linear-gradient(120deg,#f0873a,#e04a24); border:none"></div>
+              <div class="mini-fila"><span class="mini-bloque mini-alto" style="width:70%"></span></div>
+              <div class="mini-fila"><span class="mini-bloque mini-alto" style="width:46%"></span></div>
+              <div class="mini-fila" style="margin-top:12px; gap:8px">
+                <span class="mini-punto" style="background:var(--coral)"></span>
+                <span class="mini-punto" style="background:var(--coral)"></span>
+                <span class="mini-punto" style="background:var(--rule-2)"></span>
+                <span class="mini-bloque mini-alto" style="flex:1"></span>
+              </div>
+            </div>
+          </div>
+          <div class="texto">
+            <h3>Apps de pedidos y delivery</h3>
+            <p>
+              Catálogo, carrito, pago, seguimiento en vivo del repartidor y panel para el negocio.
+              Todo en una sola app que se instala desde el navegador, sin pasar por las tiendas.
+            </p>
+            <div class="ejemplos">
+              <span class="tag">restaurantes</span>
+              <span class="tag">farmacias</span>
+              <span class="tag">distribuidoras</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="tipo">
+          <div class="vitrina">
+            <div class="mini" style="max-width:190px">
+              <div class="mini-fila" style="gap:6px">
+                <span class="mini-bloque" style="flex:1; height:30px"></span>
+                <span class="mini-bloque" style="flex:1; height:30px"></span>
+                <span class="mini-bloque" style="flex:1; height:30px"></span>
+              </div>
+              <svg viewBox="0 0 190 54" style="width:100%; height:54px; margin-top:8px" aria-hidden="true">
+                <polyline points="4,44 30,34 56,38 82,22 108,26 134,12 160,18 186,6"
+                          fill="none" stroke="var(--teal)" stroke-width="2.4"
+                          stroke-linecap="round" stroke-linejoin="round"></polyline>
+                <circle cx="186" cy="6" r="3.6" fill="var(--teal)"></circle>
+              </svg>
+              <div class="mini-fila" style="margin-top:8px"><span class="mini-bloque mini-alto" style="width:82%"></span></div>
+              <div class="mini-fila"><span class="mini-bloque mini-alto" style="width:60%"></span></div>
+            </div>
+          </div>
+          <div class="texto">
+            <h3>Paneles de control</h3>
+            <p>
+              Los números de tu negocio en una pantalla que se entiende sin explicación:
+              qué va bien, qué va mal y qué hay que hacer hoy.
+            </p>
+            <div class="ejemplos">
+              <span class="tag">ventas</span>
+              <span class="tag">inventario</span>
+              <span class="tag">indicadores</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="tipo">
+          <div class="vitrina">
+            <div class="mini" style="max-width:190px">
+              <div class="mini-fila" style="gap:5px">
+                <span class="mini-bloque" style="width:34px; height:44px"></span>
+                <div style="flex:1">
+                  <div class="mini-fila"><span class="mini-bloque mini-alto" style="width:100%"></span></div>
+                  <div class="mini-fila"><span class="mini-bloque mini-alto" style="width:74%"></span></div>
+                  <div class="mini-fila"><span class="mini-bloque mini-alto" style="width:88%; background:var(--teal); border-color:var(--teal)"></span></div>
+                </div>
+              </div>
+              <div class="mini-fila" style="margin-top:10px; gap:5px">
+                <span class="mini-bloque mini-alto" style="flex:1"></span>
+                <span class="mini-bloque mini-alto" style="flex:1"></span>
+                <span class="mini-bloque mini-alto" style="flex:1; background:var(--coral); border-color:var(--coral)"></span>
+              </div>
+              <div class="mini-fila" style="margin-top:9px"><span class="mini-bloque mini-alto" style="width:52%"></span></div>
+            </div>
+          </div>
+          <div class="texto">
+            <h3>Sistemas internos</h3>
+            <p>
+              Eso que hoy vive en un WhatsApp, tres Excel y la memoria de alguien: convertido en un
+              flujo con roles, permisos, plazos y un registro de quién hizo qué.
+            </p>
+            <div class="ejemplos">
+              <span class="tag">reportes</span>
+              <span class="tag">aprobaciones</span>
+              <span class="tag">expedientes</span>
+            </div>
+          </div>
+        </article>
+
+
+        <article class="tipo">
+          <div class="vitrina">
+            <div class="mini" style="max-width:190px">
+              <div class="mini-bloque" style="height:34px; margin-bottom:8px; background:linear-gradient(135deg,#17527a,#0d7b74); border:none"></div>
+              <div class="mini-fila" style="gap:6px">
+                <span class="mini-bloque" style="flex:1; height:22px"></span>
+                <span class="mini-bloque" style="flex:1; height:22px"></span>
+                <span class="mini-bloque" style="flex:1; height:22px; background:var(--teal); border-color:var(--teal)"></span>
+              </div>
+              <div class="mini-fila" style="margin-top:9px"><span class="mini-bloque mini-alto" style="width:88%"></span></div>
+              <div class="mini-fila"><span class="mini-bloque mini-alto" style="width:64%"></span></div>
+              <div class="mini-fila"><span class="mini-bloque mini-alto" style="width:76%"></span></div>
+            </div>
+          </div>
+          <div class="texto">
+            <h3>Sitios y portales de colegios</h3>
+            <p>
+              La página que ven los papás cuando buscan dónde matricular, y detrás el portal donde
+              consultan notas, asistencia, circulares y colegiaturas sin llamar a la secretaría.
+            </p>
+            <div class="ejemplos">
+              <span class="tag">matrícula en línea</span>
+              <span class="tag">boletines</span>
+              <span class="tag">circulares</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="tipo">
+          <div class="vitrina">
+            <div class="mini" style="max-width:190px">
+              <div class="mini-fila" style="gap:4px">
+                <span class="mini-bloque mini-alto" style="width:34px; background:transparent; border:none"></span>
+                <span class="mini-bloque mini-alto" style="flex:1; background:var(--teal); border-color:var(--teal)"></span>
+                <span class="mini-bloque mini-alto" style="flex:1"></span>
+              </div>
+              <div class="mini-fila" style="gap:4px">
+                <span class="mini-bloque mini-alto" style="width:34px; background:transparent; border:none"></span>
+                <span class="mini-bloque mini-alto" style="flex:1"></span>
+                <span class="mini-bloque mini-alto" style="flex:1; background:var(--coral); border-color:var(--coral)"></span>
+              </div>
+              <div class="mini-fila" style="gap:4px">
+                <span class="mini-bloque mini-alto" style="width:34px; background:transparent; border:none"></span>
+                <span class="mini-bloque mini-alto" style="flex:1; background:var(--teal); border-color:var(--teal)"></span>
+                <span class="mini-bloque mini-alto" style="flex:1; background:var(--teal); border-color:var(--teal)"></span>
+              </div>
+              <div class="mini-fila" style="gap:4px">
+                <span class="mini-bloque mini-alto" style="width:34px; background:transparent; border:none"></span>
+                <span class="mini-bloque mini-alto" style="flex:1"></span>
+                <span class="mini-bloque mini-alto" style="flex:1"></span>
+              </div>
+              <div class="mini-bloque" style="height:24px; margin-top:10px"></div>
+            </div>
+          </div>
+          <div class="texto">
+            <h3>Sistemas para hoteles</h3>
+            <p>
+              Reservas desde la web del hotel, calendario de habitaciones, check-in y check-out,
+              tarifas por temporada y el reporte de ocupación que se pide cada mes.
+            </p>
+            <div class="ejemplos">
+              <span class="tag">reservas</span>
+              <span class="tag">ocupación</span>
+              <span class="tag">tarifas</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="tipo">
+          <div class="vitrina">
+            <div class="mini" style="max-width:190px">
+              <div class="mini-fila" style="gap:7px; align-items:flex-end">
+                <span class="mini-bloque" style="width:56px; height:78px; border-radius:9px"></span>
+                <span class="mini-bloque" style="flex:1; height:52px; border-radius:5px"></span>
+              </div>
+              <div class="mini-fila" style="margin-top:9px; gap:6px">
+                <span class="mini-bloque mini-alto" style="width:56px; background:var(--coral); border-color:var(--coral)"></span>
+                <span class="mini-bloque mini-alto" style="flex:1"></span>
+              </div>
+            </div>
+          </div>
+          <div class="texto">
+            <h3>App móvil y sistema web, a la vez</h3>
+            <p>
+              La misma información en el teléfono del cliente y en el escritorio de quien opera.
+              Una sola base de datos, dos pantallas pensadas para usos distintos.
+            </p>
+            <div class="ejemplos">
+              <span class="tag">PWA instalable</span>
+              <span class="tag">multiusuario</span>
+              <span class="tag">tiempo real</span>
+            </div>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ================================================= MÓVIL Y ESCRITORIO -->
+    <section>
+      <div class="cabeza">
+        <p class="etiqueta">Móvil y escritorio</p>
+        <h2>La misma información, dos pantallas con oficios distintos</h2>
+        <p>
+          El papá quiere ver la nota de su hija en treinta segundos desde el teléfono. La recepcionista
+          necesita el mes entero de habitaciones frente a los ojos. Son necesidades opuestas, y por eso
+          no se resuelven con la misma pantalla encogida.
+        </p>
+      </div>
+
+      <div class="dupla">
+
+        <div class="pieza">
+          <div class="encabeza">
+            <span class="etiqueta">Portal de colegio · teléfono</span>
+            <h3>Notas y circulares, sin llamar a la secretaría</h3>
+            <p>
+              El padre entra con su código, ve el promedio del período, las materias en riesgo y los
+              avisos del colegio. La secretaría deja de contestar las mismas veinte llamadas.
+            </p>
+          </div>
+          <div class="centrar-disp">
+            <div class="telefono chico">
+              <div class="pantalla">
+                <div class="status"><span>7:15</span><span>▮▮▮ ⌁ 84%</span></div>
+                <div class="cab-colegio">
+                  <div class="curso">8.º GRADO · SECCIÓN B</div>
+                  <div class="alumna">Valeria Menjívar</div>
+                  <div class="promedio"><b>8,7</b><small>promedio del II período</small></div>
+                </div>
+
+                <div class="notas">
+                  <div class="nota">
+                    <span class="materia">Matemática</span>
+                    <span class="valor alta">9,2</span>
+                    <span class="riel-n"><i style="width:92%"></i></span>
+                  </div>
+                  <div class="nota">
+                    <span class="materia">Lenguaje</span>
+                    <span class="valor alta">8,9</span>
+                    <span class="riel-n"><i style="width:89%"></i></span>
+                  </div>
+                  <div class="nota">
+                    <span class="materia">Ciencias</span>
+                    <span class="valor media">8,1</span>
+                    <span class="riel-n"><i style="width:81%"></i></span>
+                  </div>
+                  <div class="nota">
+                    <span class="materia">Sociales</span>
+                    <span class="valor baja">6,4</span>
+                    <span class="riel-n"><i class="bajo" style="width:64%"></i></span>
+                  </div>
+                </div>
+
+                <div class="aviso-cole">
+                  <div class="t">CIRCULAR · 12 SEP</div>
+                  <div class="m">Reunión de padres el viernes 19 a las 3:00 pm en el salón de actos.</div>
+                </div>
+
+                <div class="pie-app">
+                  <span class="icono-pie on"></span>
+                  <span class="icono-pie"></span>
+                  <span class="icono-pie"></span>
+                  <span class="icono-pie"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="leyenda-mock">Interfaz de muestra · portal para padres</p>
+        </div>
+
+        <div class="pieza">
+          <div class="encabeza">
+            <span class="etiqueta">Sistema de hotel · escritorio</span>
+            <h3>El mes completo de habitaciones, de un vistazo</h3>
+            <p>
+              Cada barra es una reserva. Se arrastra para cambiar fechas, se toca para ver al huésped
+              y el sistema no deja sobrevender una habitación. La ocupación se calcula sola.
+            </p>
+          </div>
+
+          <div class="demo-panel">
+            <div class="cromo">
+              <span class="luz"></span><span class="luz"></span><span class="luz"></span>
+              <span class="url">hotel.com/recepcion/calendario</span>
+            </div>
+            <div style="padding:20px">
+              <div class="kpis" style="grid-template-columns:repeat(3,1fr); margin-bottom:16px">
+                <div class="kpi">
+                  <div class="k">Ocupación</div>
+                  <div class="v">78%</div>
+                  <div class="d sube">▲ 9 pts</div>
+                </div>
+                <div class="kpi">
+                  <div class="k">Entran hoy</div>
+                  <div class="v">6</div>
+                  <div class="d">2 sin pagar</div>
+                </div>
+                <div class="kpi">
+                  <div class="k">Tarifa media</div>
+                  <div class="v">$62</div>
+                  <div class="d sube">▲ 3%</div>
+                </div>
+              </div>
+
+              <div class="rack">
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="hab">Habitación</th>
+                      <th>Lu 15</th><th>Ma 16</th><th>Mi 17</th><th>Ju 18</th><th>Vi 19</th><th>Sá 20</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="hab">101 · Doble</td>
+                      <td colspan="3"><div class="reserva confirmada">Alvarenga</div></td>
+                      <td><div class="celda"></div></td>
+                      <td colspan="2"><div class="reserva entrando">Cruz · entra</div></td>
+                    </tr>
+                    <tr>
+                      <td class="hab">102 · Doble</td>
+                      <td><div class="celda"></div></td>
+                      <td colspan="4"><div class="reserva confirmada">Grupo Turismo Sur</div></td>
+                      <td><div class="celda"></div></td>
+                    </tr>
+                    <tr>
+                      <td class="hab">103 · Sencilla</td>
+                      <td colspan="2"><div class="reserva bloqueo">Mantenimiento</div></td>
+                      <td colspan="2"><div class="reserva confirmada">Portillo</div></td>
+                      <td><div class="celda"></div></td>
+                      <td><div class="celda"></div></td>
+                    </tr>
+                    <tr>
+                      <td class="hab">201 · Suite</td>
+                      <td colspan="2"><div class="reserva confirmada">Hernández</div></td>
+                      <td><div class="celda"></div></td>
+                      <td colspan="3"><div class="reserva entrando">Mejía · entra</div></td>
+                    </tr>
+                    <tr>
+                      <td class="hab">202 · Suite</td>
+                      <td><div class="celda"></div></td>
+                      <td><div class="celda"></div></td>
+                      <td colspan="4"><div class="reserva confirmada">Escobar</div></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="leyenda-rack">
+                <span><i style="background:var(--teal)"></i> Confirmada</span>
+                <span><i style="background:var(--coral)"></i> Entra hoy</span>
+                <span><i style="background:var(--rule-2)"></i> Bloqueada</span>
+              </div>
+              <p class="leyenda-mock" style="text-align:left; margin-top:14px">Datos de muestra</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ======================================================== PANEL DEMO -->
+    <section>
+      <div class="cabeza">
+        <p class="etiqueta">Cómo se ve por dentro</p>
+        <h2>El dueño del negocio ve lo mismo que el cliente, pero al revés</h2>
+        <p>
+          Mientras el cliente sigue su pedido en el teléfono, del otro lado hay un panel que muestra
+          la operación completa. Este es el tipo de tablero que entrego con cada app.
+        </p>
+      </div>
+
+      <div class="demo-panel">
+        <div class="cromo">
+          <span class="luz"></span><span class="luz"></span><span class="luz"></span>
+          <span class="url">panel.tunegocio.com/operacion</span>
+        </div>
+        <div class="cuerpo-panel">
+          <div>
+            <div class="kpis">
+              <div class="kpi">
+                <div class="k">Pedidos hoy</div>
+                <div class="v">148</div>
+                <div class="d sube">▲ 12% vs. ayer</div>
+              </div>
+              <div class="kpi">
+                <div class="k">Ticket promedio</div>
+                <div class="v">$14,20</div>
+                <div class="d sube">▲ 4%</div>
+              </div>
+              <div class="kpi">
+                <div class="k">Entrega media</div>
+                <div class="v">31 min</div>
+                <div class="d baja">▼ 3 min</div>
+              </div>
+            </div>
+
+            <svg class="grafico" viewBox="0 0 520 132" role="img"
+                 aria-label="Pedidos por hora: sube desde las 11 de la mañana y llega al máximo a las 7 de la noche con 34 pedidos.">
+              <line x1="34" y1="14" x2="512" y2="14" stroke="var(--rule)" stroke-width="1"></line>
+              <line x1="34" y1="52" x2="512" y2="52" stroke="var(--rule)" stroke-width="1"></line>
+              <line x1="34" y1="90" x2="512" y2="90" stroke="var(--rule)" stroke-width="1"></line>
+              <line x1="34" y1="104" x2="512" y2="104" stroke="var(--rule-2)" stroke-width="1"></line>
+              <text x="6" y="18" font-size="9" fill="var(--ink-3)" font-family="DM Mono, monospace">36</text>
+              <text x="6" y="56" font-size="9" fill="var(--ink-3)" font-family="DM Mono, monospace">24</text>
+              <text x="6" y="94" font-size="9" fill="var(--ink-3)" font-family="DM Mono, monospace">12</text>
+              <g fill="var(--coral)">
+                <rect x="44" y="88" width="26" height="16" rx="3"></rect>
+                <rect x="82" y="78" width="26" height="26" rx="3"></rect>
+                <rect x="120" y="62" width="26" height="42" rx="3"></rect>
+                <rect x="158" y="40" width="26" height="64" rx="3"></rect>
+                <rect x="196" y="52" width="26" height="52" rx="3"></rect>
+                <rect x="234" y="70" width="26" height="34" rx="3"></rect>
+                <rect x="272" y="66" width="26" height="38" rx="3"></rect>
+                <rect x="310" y="48" width="26" height="56" rx="3"></rect>
+                <rect x="348" y="26" width="26" height="78" rx="3"></rect>
+                <rect x="386" y="14" width="26" height="90" rx="3"></rect>
+                <rect x="424" y="34" width="26" height="70" rx="3"></rect>
+                <rect x="462" y="60" width="26" height="44" rx="3"></rect>
+              </g>
+              <g font-size="9" fill="var(--ink-3)" font-family="DM Mono, monospace">
+                <text x="46" y="120">10a</text>
+                <text x="160" y="120">1p</text>
+                <text x="274" y="120">4p</text>
+                <text x="388" y="120">7p</text>
+                <text x="464" y="120">9p</text>
+              </g>
+            </svg>
+          </div>
+
+          <div>
+            <table class="tabla-demo">
+              <thead>
+                <tr><th>Pedido</th><th>Repartidor</th><th>Estado</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>#4821</td><td>M. Rivas</td><td><span class="pastilla camino">En camino</span></td></tr>
+                <tr><td>#4820</td><td>J. Portillo</td><td><span class="pastilla ok">Entregado</span></td></tr>
+                <tr><td>#4819</td><td>—</td><td><span class="pastilla espera">En cocina</span></td></tr>
+                <tr><td>#4818</td><td>A. Cruz</td><td><span class="pastilla ok">Entregado</span></td></tr>
+                <tr><td>#4817</td><td>M. Rivas</td><td><span class="pastilla ok">Entregado</span></td></tr>
+              </tbody>
+            </table>
+            <p class="leyenda-mock" style="text-align:left; margin-top:16px">Datos de muestra</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================== PROCESO -->
+    <section>
+      <div class="cabeza">
+        <p class="etiqueta">Cómo trabajamos</p>
+        <h2>Ves algo funcionando antes de pagar el proyecto completo</h2>
+        <p>
+          Este orden importa: cada etapa termina en algo que podés abrir y probar, no en un documento
+          que hay que imaginarse.
+        </p>
+      </div>
+
+      <div class="proceso">
+        <div class="etapa">
+          <span class="num">Etapa 1</span>
+          <h3>Entender</h3>
+          <p>Una conversación de una hora sobre cómo trabajan hoy. Salgo con el flujo real dibujado, excepciones incluidas.</p>
+        </div>
+        <div class="etapa">
+          <span class="num">Etapa 2</span>
+          <h3>Prototipo</h3>
+          <p>En una semana tenés un enlace que abre en tu teléfono. Se navega, se toca, se critica.</p>
+        </div>
+        <div class="etapa">
+          <span class="num">Etapa 3</span>
+          <h3>Construir</h3>
+          <p>Entregas parciales cada semana. Nada de desaparecer dos meses y volver con una sorpresa.</p>
+        </div>
+        <div class="etapa">
+          <span class="num">Etapa 4</span>
+          <h3>Acompañar</h3>
+          <p>Los primeros meses son los que definen si el sistema se adopta. Ahí es donde hay que estar.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================= CASO REAL -->
+    <section id="caso">
+      <div class="caso">
+        <div>
+          <span class="sello-vivo"><span class="latido"></span> En producción</span>
+          <h2>PULSO — el cierre mensual de un hospital, sin correos</h2>
+          <p style="margin-top:16px">
+            Más de 40 áreas del Hospital Nacional El Salvador capturan cada mes su producción, sus
+            insumos y sus horas en una sola aplicación. Antes era una cadena de correos, hojas sueltas
+            y llamadas para saber quién había entregado.
+          </p>
+          <ul class="logros">
+            <li><span class="marca-check">✓</span><span>La consolidación mensual pasó de días de trabajo a un botón.</span></li>
+            <li><span class="marca-check">✓</span><span>Cada dato queda firmado: quién lo escribió y a qué hora.</span></li>
+            <li><span class="marca-check">✓</span><span>Los plazos se calculan solos, contando días hábiles y feriados.</span></li>
+            <li><span class="marca-check">✓</span><span>El reporte oficial se descarga con el formato exacto que exige el ministerio.</span></li>
+          </ul>
+          <div class="botonera" style="margin-top:26px">
+            <a class="btn borde" href="#hablemos">Quiero algo así para mi organización</a>
+          </div>
+        </div>
+
+        <div class="demo-panel">
+          <div class="cromo">
+            <span class="luz"></span><span class="luz"></span><span class="luz"></span>
+            <span class="url">monitoreo del mes</span>
+          </div>
+          <div style="padding:22px">
+            <div class="monitor-demo">
+              <div class="linea-mon">
+                <span class="nom">Producción distribuida</span>
+                <span class="cifra">27 / 27</span>
+                <span class="riel"><i style="width:100%"></i></span>
+              </div>
+              <div class="linea-mon">
+                <span class="nom">Estadística de servicios</span>
+                <span class="cifra">20 / 22</span>
+                <span class="riel"><i class="parcial" style="width:91%"></i></span>
+              </div>
+              <div class="linea-mon">
+                <span class="nom">Distribución de horas</span>
+                <span class="cifra">43 / 43</span>
+                <span class="riel"><i style="width:100%"></i></span>
+              </div>
+              <div class="linea-mon">
+                <span class="nom">Insumos de almacén</span>
+                <span class="cifra">entregado</span>
+                <span class="riel"><i style="width:100%"></i></span>
+              </div>
+            </div>
+            <p class="leyenda-mock" style="text-align:left; margin-top:18px">
+              Avance de un mes real, sin datos sensibles
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= STACK -->
+    <section>
+      <div class="cabeza">
+        <p class="etiqueta">Con qué está hecho</p>
+        <h2>Herramientas conocidas, elegidas para durar</h2>
+        <p>
+          Nada exótico: tecnología que cualquier desarrollador puede retomar si mañana yo no estoy.
+          Eso también es parte de entregar bien.
+        </p>
+      </div>
+      <div class="stack">
+        <span class="chip-tec"><strong>Next.js</strong> · React</span>
+        <span class="chip-tec"><strong>TypeScript</strong></span>
+        <span class="chip-tec"><strong>Tailwind CSS</strong></span>
+        <span class="chip-tec"><strong>Firebase</strong> · Firestore</span>
+        <span class="chip-tec"><strong>Google Apps Script</strong></span>
+        <span class="chip-tec"><strong>Vercel</strong> · despliegue continuo</span>
+        <span class="chip-tec"><strong>PWA</strong> · se instala como app</span>
+        <span class="chip-tec"><strong>Excel</strong> · importar y exportar</span>
+        <span class="chip-tec"><strong>APIs</strong> · integración entre sistemas</span>
+      </div>
+    </section>
+
+    <!-- ============================================================ CIERRE -->
+    <section id="hablemos" style="border-top:none; padding-top:20px">
+      <div class="cierre">
+        <div>
+          <p class="etiqueta">Siguiente paso</p>
+          <h2>Contame qué es lo que hoy te quita tiempo</h2>
+          <p>
+            La primera conversación no cuesta nada y sirve igual: salís con el flujo de tu operación
+            dibujado, lo hagamos juntos o no. Si seguimos, en una semana tenés un prototipo en el
+            teléfono.
+          </p>
+          <div class="botonera" style="margin-top:24px">
+            <a class="btn primario" href="#hablemos">Escribime</a>
+          </div>
+        </div>
+        <div class="contacto">
+          <div class="dato-contacto">
+            <span class="q">Ubicación</span>
+            <span class="r">San Salvador, El Salvador</span>
+          </div>
+          <div class="dato-contacto">
+            <span class="q">Modalidad</span>
+            <span class="r">Presencial o remoto</span>
+          </div>
+          <div class="dato-contacto">
+            <span class="q">Respuesta</span>
+            <span class="r">Mismo día hábil</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="marco" style="display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; width:100%">
+    <span>Desarrollo de aplicaciones web y móviles · El Salvador</span>
+    <span>Las pantallas de muestra son ilustrativas; el caso de PULSO está en operación.</span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var raiz = document.documentElement;
+    document.getElementById("btnTema").addEventListener("click", function () {
+      var oscuro =
+        raiz.getAttribute("data-theme") === "dark" ||
+        (!raiz.getAttribute("data-theme") &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches);
+      raiz.setAttribute("data-theme", oscuro ? "light" : "dark");
+    });
+  })();
+</script>
+</body>
+</html>

@@ -6425,8 +6425,13 @@ export default function Home() {
   // Monitoreo del Psiquiatrico: se pide al abrir la seccion, no antes, para no
   // gastar cuota de Apps Script en cada visita a PULSO.
   useEffect(() => {
-    const vista = activeSidebarSection || mobileView || "";
-    const hospital = HOSPITALES_EXTERNOS.find((h) => vista === `panel-hospital-${h.id}`);
+    // En celular la navegacion guarda la vista en mobileView y activeSidebarSection
+    // se queda con la anterior, asi que hay que mirar las DOS, no una u otra.
+    const hospital = HOSPITALES_EXTERNOS.find(
+      (h) =>
+        activeSidebarSection === `panel-hospital-${h.id}` ||
+        mobileView === `panel-hospital-${h.id}`,
+    );
     if (!hospital) return;
     if (sigmaMonitoreo[hospital.id] || sigmaCargando) return;
     void loadSigmaMonitoreo(hospital.id);
@@ -18609,8 +18614,11 @@ export default function Home() {
               Es una sola pantalla que se adapta al hospital elegido. */}
           {(() => {
             if (!isAdmin && !isDirector && !isSupervisor) return null;
-            const vista = activeSidebarSection || mobileView || "";
-            const hospital = HOSPITALES_EXTERNOS.find((h) => vista === `panel-hospital-${h.id}`);
+            const hospital = HOSPITALES_EXTERNOS.find(
+              (h) =>
+                activeSidebarSection === `panel-hospital-${h.id}` ||
+                mobileView === `panel-hospital-${h.id}`,
+            );
             if (!hospital) return null;
             const datos = sigmaMonitoreo[hospital.id];
             const mes = sigmaMes[hospital.id] || "";
