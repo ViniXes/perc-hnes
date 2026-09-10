@@ -1,0 +1,88 @@
+/*****************************************************************
+ *  AVANCE MENSUAL DE LA MATRIZ DE PRODUCCION DISTRIBUIDA
+ *  Publica, en un enlace, el avance mensual de la matriz de
+ *  produccion distribuida de este hospital.
+ *
+ *  Devuelve UNICAMENTE el nombre de cada servicio y si esta
+ *  COMPLETO o PENDIENTE. No expone cifras ni datos de pacientes.
+ *  No escribe nada: solo lee la hoja.
+ *****************************************************************/
+
+/* ====== CONFIGURACION — lo unico que usted cambia ====== */
+
+var HOJA            = 'Monitoreo';  // nombre exacto de la pestana
+var FILA_ENCABEZADO = 1;             // fila de los titulos
+var COL_SERVICIO    = 'A';         // columna del centro / servicio
+var COL_PRODUCTO    = 'B';         // columna del producto ('' si no tiene)
+var COL_ESTADO      = '';          // columna COMPLETO/PENDIENTE si ya existe
+var COL_DATOS_INI   = 'C';         // primera columna de cifras del mes
+var COL_DATOS_FIN   = 'N';         // ultima columna de cifras del mes
+var REGLA           = 'ALGUNO';    // 'ALGUNO' o 'TODOS'
+
+/* ====== De aqui para abajo NO se toca nada ====== */
+
+/** Lo que responde el enlace publico. */
+function doGet() {
+  var datos = construirMonitoreo_();
+  return ContentService
+    .createTextOutput(JSON.stringify(datos))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/** Ejecute esta funcion desde el editor para probar antes de publicar. */
+function probar() {
+  var datos = construirMonitoreo_();
+  Logger.log('Filas leidas: ' + datos.length);
+  Logger.log(JSON.stringify(datos, null, 2));
+}
+
+/** Recorre la hoja y arma la lista de servicios con su estado. */
+function construirMonitoreo_() {
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA);
+  if (!hoja) throw new Error('No existe la pestana "' + HOJA + '".');
+
+  var valores   = hoja.getDataRange().getValues();
+  var iServicio = letraANumero_(COL_SERVICIO) - 1;
+  var iProducto = COL_PRODUCTO ? letraANumero_(COL_PRODUCTO) - 1 : -1;
+  var iEstado   = COL_ESTADO   ? letraANumero_(COL_ESTADO)   - 1 : -1;
+  var iIni      = letraANumero_(COL_DATOS_INI) - 1;
+  var iFin      = letraANumero_(COL_DATOS_FIN) - 1;
+
+  var salida = [];
+  for (var f = FILA_ENCABEZADO; f < valores.length; f++) {
+    var fila     = valores[f];
+    var servicio = String(fila[iServicio] || '').trim();
+    if (!servicio) continue;  // filas vacias: se saltan
+
+    var completo;
+    if (iEstado >= 0) {
+      var texto = String(fila[iEstado] || '').toUpperCase();
+      completo = texto.indexOf('COMPLET') === 0;
+    } else {
+      var conDato = 0, celdas = 0;
+      for (var c = iIni; c <= iFin && c < fila.length; c++) {
+        celdas++;
+        var v = fila[c];
+        if (v !== '' && v !== null && v !== undefined) conDato++;
+      }
+      completo = (REGLA === 'TODOS')
+        ? (celdas > 0 && conDato === celdas)
+        : (conDato > 0);
+    }
+
+    salida.push({
+      'CENTRO DE PRODUCCION / PRODUCTO': servicio,
+      'PRODUCTO': iProducto >= 0 ? String(fila[iProducto] || '') : '',
+      'ESTADO': completo ? 'COMPLETO' : 'PENDIENTE'
+    });
+  }
+  return salida;
+}
+
+/** Convierte 'A' en 1, 'B' en 2, 'AA' en 27... */
+function letraANumero_(letra) {
+  var s = String(letra).toUpperCase().replace(/[^A-Z]/g, '');
+  var n = 0;
+  for (var i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64);
+  return n;
+}

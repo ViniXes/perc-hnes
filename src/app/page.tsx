@@ -132,6 +132,9 @@ type ManagedUser = {
   // Se usa para jefes de division que ademas capturan su propio servicio.
   monitorDivision: string | null;
   isDirector: boolean;
+  // Cuenta MINSAL: solo ve el monitoreo nacional de hospitales. No captura, no
+  // consulta tabuladores del HNES y no aparece en ningun otro menu.
+  isMinsal: boolean;
   mustChangePassword: boolean;
   isActive: boolean;
   // Correo de ACCESO real de la cuenta (usuario@perc-hnes.app). Es la identidad con
@@ -639,6 +642,10 @@ const SIGNUP_DIVISIONS: { key: string; label: string; jefeLabel: string | null }
   { key: "enfermeria", label: "Division de Enfermeria", jefeLabel: null },
   { key: "administrativa", label: "Subdireccion Administrativa", jefeLabel: "Subdireccion Administrativa" },
   { key: "direccion", label: "Direccion", jefeLabel: null },
+  // MINSAL: no es una division del hospital, es el nivel ministerial. Se registra
+  // por aca porque es la misma puerta de entrada, pero su cuenta solo abre el
+  // monitoreo nacional de hospitales.
+  { key: "minsal", label: "MINSAL (nivel nacional)", jefeLabel: null },
 ];
 
 // Terminos extra de busqueda por servicio (p.ej. siglas), en minusculas. Permiten
@@ -904,6 +911,9 @@ const HOSPITALES_EXTERNOS: {
   lugar?: string;
   conectado?: boolean;
   soloAvance?: boolean;
+  // local = es el propio HNES: su avance sale del monitoreo que PULSO ya calcula,
+  // no de un enlace externo. Solo produccion distribuida.
+  local?: boolean;
 }[] = [
   // --- Occidental ---------------------------------------------------------
   { id: "ahuachapan", corto: "Ahuachapán", nombre: 'Hospital Nacional "Dr. Francisco Menéndez"', region: "occidental", lugar: "Ahuachapán" },
@@ -924,6 +934,7 @@ const HOSPITALES_EXTERNOS: {
   { id: "zacamil", corto: "Zacamil", nombre: 'Hospital Nacional "Dr. Juan José Fernández"', region: "metropolitana", lugar: "Mejicanos, San Salvador" },
   { id: "saldana", corto: "Saldaña", nombre: 'Hospital Nacional de Neumología "Dr. José Antonio Saldaña"', region: "metropolitana", lugar: "San Salvador" },
   { id: "sanbartolo", corto: "San Bartolo", nombre: 'Hospital Nacional "Enf. Angélica Vidal de Najarro"', region: "metropolitana", lugar: "Ilopango, San Salvador" },
+  { id: "hnes", corto: "El Salvador", nombre: "Hospital Nacional El Salvador", region: "metropolitana", lugar: "San Salvador", conectado: true, soloAvance: true, local: true },
   { id: "psiquiatrico", corto: "Psiquiátrico", nombre: 'Hospital Nacional Psiquiátrico "Dr. José Molina Martínez"', region: "metropolitana", lugar: "Soyapango, San Salvador", conectado: true },
   // --- Paracentral --------------------------------------------------------
   { id: "sanvicente", corto: "San Vicente", nombre: 'Hospital Nacional "Santa Gertrudis"', region: "paracentral", lugar: "San Vicente" },
@@ -1848,7 +1859,7 @@ type SignupRequest = {
   serviceName: string;
   status: "pending" | "approved" | "rejected";
   createdUsername?: string;
-  requestType?: "service" | "division" | "department" | "department-editor" | "director" | "subdirector";
+  requestType?: "service" | "division" | "department" | "department-editor" | "director" | "subdirector" | "minsal";
   isChief?: boolean;
   captureModules?: ModuleId[];
   division?: string;
@@ -3387,6 +3398,7 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     department: typeof data.department === "string" ? data.department : null,
     monitorDivision: typeof data.monitorDivision === "string" && data.monitorDivision ? data.monitorDivision : null,
     isDirector: data.isDirector === true,
+    isMinsal: data.isMinsal === true,
     mustChangePassword: data.mustChangePassword !== false,
     isActive: data.isActive !== false,
     menuGrants: Array.isArray(data.menuGrants)
@@ -4710,6 +4722,71 @@ async function createDepartmentChiefAccount(
   return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
 }
 
+/**
+ * Crea una cuenta MINSAL. Es la cuenta mas cerrada del sistema: entra, ve el
+ * monitoreo nacional de hospitales y nada mas. Sin servicio, sin modulos, sin
+ * permisos y con noCapture, de modo que ninguna pantalla del HNES se le arma.
+ */
+async function createMinsalAccount(
+  creationAuth: Auth,
+  {
+    contactEmail,
+    firstName,
+    lastName,
+  }: { contactEmail: string; firstName: string; lastName: string },
+) {
+  const etiqueta = "MINSAL";
+  const base = buildChiefUsername(firstName, lastName);
+  const displayName = buildFullName(firstName.trim(), lastName.trim(), etiqueta);
+  let username = base;
+  let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    username = attempt === 0 ? base : `${base}${attempt + 1}`;
+    if (isReservedUsername(username)) continue;
+    const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+    try {
+      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, CHIEF_TEMP_PASSWORD);
+      break;
+    } catch (err) {
+      if ((err as { code?: string })?.code === "auth/email-already-in-use") continue;
+      throw err;
+    }
+  }
+  if (!credential) throw new Error("username-unavailable");
+  const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+  await updateProfile(credential.user, { displayName });
+  await setDoc(doc(db, "serviceUsers", credential.user.uid), {
+    serviceId: null,
+    serviceName: etiqueta,
+    email: contactEmail.trim(),
+    contactEmail: contactEmail.trim(),
+    loginEmail,
+    username,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    name: displayName,
+    role: "service",
+    isActive: true,
+    mustChangePassword: true,
+    isChief: false,
+    isDirector: false,
+    isMinsal: true,
+    noCapture: true,
+    captureModules: [],
+    supervisorModules: [],
+    menuGrants: [],
+    viewPerc: [],
+    viewSeps: [],
+    viewHoras: [],
+    division: null,
+    department: null,
+    permissions: { canEdit: false, canManageUsers: false, canToggleCapture: false },
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+}
+
 // Crea la cuenta de la DIRECTORA: ve TODO el hospital (todos los servicios y modulos,
 // monitoreo), pero SIN permisos de gestion (no edita, no habilita/reinicia tableros,
 // no gestiona usuarios, no aprueba solicitudes).
@@ -4995,7 +5072,7 @@ export default function Home() {
     email: string;
     serviceId: string;
     acceptPrivacy: boolean;
-    accessType: "service" | "division" | "department" | "department-editor" | "director" | "subdirector";
+    accessType: "service" | "division" | "department" | "department-editor" | "director" | "subdirector" | "minsal";
     isChief: boolean;
     captureModules: ModuleId[];
     division: string;
@@ -6090,6 +6167,9 @@ export default function Home() {
   const isSupervisor = serviceProfile?.role === "supervisor" || isSepsStaff;
   // Directora: usa la vista de supervisor (ve todo) pero SIN permisos de gestion.
   const isDirector = serviceProfile?.isDirector === true;
+  // Cuenta MINSAL: entra solo al menu Hospitales. Ni PERC, ni SEPS, ni Horas, ni
+  // nada del HNES: unicamente el avance de la red nacional.
+  const isMinsal = serviceProfile?.isMinsal === true;
   // Monitor de RRHH (aamaya): SOLO monitorea horas y descarga; no habilita tableros.
   const isHorasMonitor = normalizeKey(serviceProfile?.username || "") === normalizeKey("aamaya");
   // Jefe de division que ADEMAS captura su propio servicio (p. ej. Enfermeria):
@@ -6495,6 +6575,8 @@ export default function Home() {
   // el viaje.
   useEffect(() => {
     if (!hospitalSel) return;
+    // El HNES no se consulta afuera: su avance ya esta en pantalla.
+    if (HOSPITALES_EXTERNOS.find((h) => h.id === hospitalSel)?.local) return;
     if (sigmaMonitoreo[hospitalSel] || sigmaCargando) return;
     void loadSigmaMonitoreo(hospitalSel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -7247,7 +7329,9 @@ export default function Home() {
                       ? "director"
                       : d.requestType === "subdirector"
                         ? "subdirector"
-                        : "service",
+                        : d.requestType === "minsal"
+                          ? "minsal"
+                          : "service",
             isChief: d.isChief === true,
             captureModules: Array.isArray(d.captureModules)
               ? (d.captureModules.filter((v): v is ModuleId => MODULE_ORDER.includes(v as ModuleId)) as ModuleId[])
@@ -9747,6 +9831,7 @@ export default function Home() {
     const isDivision = signupForm.accessType === "division";
     const isDepartment = signupForm.accessType === "department";
     const isDirector = signupForm.accessType === "director";
+    const isMinsalReq = signupForm.accessType === "minsal";
     // Subdireccion Medica: mismos alcances que la Direccion (ve todo, no captura).
     const isSubdirector = signupForm.accessType === "subdirector";
     const isDeptEditor = signupForm.accessType === "department-editor";
@@ -9770,7 +9855,7 @@ export default function Home() {
         setError("Elegí tu departamento.");
         return;
       }
-    } else if (!isDirector && !isSubdirector) {
+    } else if (!isDirector && !isSubdirector && !isMinsalReq) {
       if (!service) {
         setError("Elegí tu servicio.");
         return;
@@ -9814,7 +9899,7 @@ export default function Home() {
         lastName: signupForm.lastName.trim(),
         email: signupForm.email.trim(),
         serviceId:
-          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector
+          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector || isMinsalReq
             ? ""
             : service?.id ?? "",
         serviceName: isDivision
@@ -9827,7 +9912,9 @@ export default function Home() {
                 ? "Directora"
                 : isSubdirector
                   ? "Subdirección Médica"
-                  : service?.name ?? "",
+                  : isMinsalReq
+                    ? "MINSAL"
+                    : service?.name ?? "",
         requestType: isDivision
           ? "division"
           : isDepartment
@@ -9838,13 +9925,15 @@ export default function Home() {
                 ? "director"
                 : isSubdirector
                   ? "subdirector"
-                  : "service",
+                  : isMinsalReq
+                    ? "minsal"
+                    : "service",
         isChief:
-          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector
+          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector || isMinsalReq
             ? false
             : signupForm.isChief,
         captureModules:
-          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector
+          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector || isMinsalReq
             ? []
             : signupForm.captureModules,
         division: isDivision ? signupForm.division : "",
@@ -10006,6 +10095,56 @@ export default function Home() {
         }
         try {
           await secondaryDiv.dispose();
+        } catch {
+          // ignore
+        }
+        setSignupBusyId("");
+      }
+      return;
+    }
+
+    // --- MINSAL (solo el monitoreo nacional de hospitales) ---
+    if (req.requestType === "minsal") {
+      const secondaryMin = createSecondaryAuth();
+      try {
+        const { username, credential } = await createMinsalAccount(secondaryMin.auth, {
+          contactEmail: req.email,
+          firstName: req.firstName,
+          lastName: req.lastName,
+        });
+        if (credential?.user?.uid) {
+          await setDoc(
+            doc(db, "serviceUsers", credential.user.uid),
+            { docType: req.docType ?? "", docNumber: (req.docNumber ?? "").trim() },
+            { merge: true },
+          ).catch(() => {});
+        }
+        await setDoc(
+          doc(db, "signupRequests", req.id),
+          { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
+          { merge: true },
+        );
+        const mailed = await notifySignupDecision({
+          to: req.email,
+          name: `${req.firstName} ${req.lastName}`.trim(),
+          status: "approved",
+          username,
+          password: CHIEF_TEMP_PASSWORD,
+          roleLabel: "MINSAL",
+        });
+        setMessage(
+          `Cuenta MINSAL creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
+        );
+      } catch (approveError) {
+        setError(getAuthErrorMessage(approveError));
+      } finally {
+        try {
+          await signOut(secondaryMin.auth);
+        } catch {
+          // ignore
+        }
+        try {
+          await secondaryMin.dispose();
         } catch {
           // ignore
         }
@@ -12970,6 +13109,14 @@ export default function Home() {
   function handleTogglePanelTheme() {
     setPanelTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
   }
+
+  // Una cuenta MINSAL entra directo al monitoreo de hospitales: no tiene otra
+  // pantalla a donde ir.
+  useEffect(() => {
+    if (!isMinsal) return;
+    setActiveSidebarSection("panel-hospitales");
+    setMobileView("panel-hospitales");
+  }, [isMinsal]);
 
   const isLoadingSession = !authReady || (user !== null && !profileReady);
 
@@ -17139,7 +17286,7 @@ export default function Home() {
       // HOSPITALES: la red de hospitales que ESDOMED monitorea. No lleva submenu:
       // abre una pantalla que entra por region, porque son 30 y una lista plana
       // en el menu no se puede leer.
-      ...(isAdmin || isDirector || isSupervisor
+      ...(isAdmin || isDirector || isSupervisor || isMinsal
         ? [
             {
               id: "panel-hospitales",
@@ -17472,7 +17619,10 @@ export default function Home() {
             </div>
 
             <nav className="mt-5 grid grid-cols-3 gap-2 desk:mt-3 desk:block desk:space-y-0.5">
-              {sidebarItems.map((item) => {
+              {(isMinsal
+                ? sidebarItems.filter((item) => item.id === "panel-hospitales")
+                : sidebarItems
+              ).map((item) => {
                 const isActive = activeSidebarSection === item.id;
                 // Alerta roja cuando hay solicitudes pendientes, o cuando el SERVICIO
                 // tiene comentarios de revision sin leer en su SEPS.
@@ -18099,7 +18249,7 @@ export default function Home() {
 
             {/* Barra de "volver a Inicio" — SOLO movil, en cualquier vista que no sea Inicio. */}
             <div
-              data-view="panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-depreciacion-perc panel-calendar panel-admin-export panel-capture-toggle panel-hospitales"
+              data-view={isMinsal ? "" : "panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-depreciacion-perc panel-calendar panel-admin-export panel-capture-toggle panel-hospitales"}
               className="flex items-center gap-3 desk:hidden"
             >
               <button
@@ -18182,7 +18332,7 @@ export default function Home() {
 
             <section
               id="panel-overview"
-              className={`relative hidden overflow-hidden rounded-[22px] px-5 py-4 shadow-[0_24px_80px_rgba(3,7,18,0.45)] desk:block ${
+              className={`relative hidden overflow-hidden rounded-[22px] px-5 py-4 shadow-[0_24px_80px_rgba(3,7,18,0.45)] ${isMinsal ? "" : "desk:block"} ${
                 isLightPanelTheme
                   ? "border border-slate-200 bg-white text-slate-900"
                   : "border border-white/10 bg-gradient-to-br from-[#233152] via-[#1b2740] to-[#141d2f] text-white"
@@ -18673,11 +18823,15 @@ export default function Home() {
               acompaña. Se entra por región para que la lista siga siendo legible
               cuando estén los 30. Solo avance: ninguna cifra de producción ni de
               insumos cruza entre sistemas. */}
-          {(isAdmin || isDirector || isSupervisor) &&
-          (activeSidebarSection === "panel-hospitales" || mobileView === "panel-hospitales") ? (
+          {(isAdmin || isDirector || isSupervisor || isMinsal) &&
+          (activeSidebarSection === "panel-hospitales" ||
+            mobileView === "panel-hospitales" ||
+            (isMinsal && mobileView === "home")) ? (
             <section
               id="panel-hospitales"
-              data-view="panel-hospitales"
+              // Para MINSAL esta pantalla ES el inicio: lleva tambien la vista "home"
+              // para que el celular la muestre desde que entra.
+              data-view={isMinsal ? "panel-hospitales home" : "panel-hospitales"}
               className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
                 isLightPanelTheme
                   ? "border border-slate-200 bg-white text-slate-900"
@@ -18687,7 +18841,31 @@ export default function Home() {
               {(() => {
                 const hospital = HOSPITALES_EXTERNOS.find((h) => h.id === hospitalSel) || null;
                 const region = REGIONES_SALUD.find((r) => r.id === regionSel) || null;
-                const datos = hospital ? sigmaMonitoreo[hospital.id] : undefined;
+                // El HNES no viaja a ningun lado: su avance es el mismo del
+                // Monitoreo de PERC, para que los dos numeros nunca se contradigan.
+                const propio = hospital?.local ? computeMonitorStats("PERC") : null;
+                const datos: MonitoreoSigma | undefined = propio
+                  ? {
+                      configurado: true,
+                      hospital: hospital?.nombre,
+                      mesEtiqueta: periodLabel,
+                      perc: {
+                        total: propio.total,
+                        completos: propio.completos,
+                        pendientes: propio.pendientes,
+                        pct: propio.pct,
+                        items: propio.items.map((it) => ({
+                          id: it.id,
+                          nombre: it.name,
+                          completo: it.done,
+                        })),
+                      },
+                      sinInsumos: true,
+                      sinMes: true,
+                    }
+                  : hospital
+                    ? sigmaMonitoreo[hospital.id]
+                    : undefined;
                 const mes = hospital ? sigmaMes[hospital.id] || "" : "";
                 const cargando = hospital ? sigmaCargando === hospital.id : false;
                 const suave = isLightPanelTheme ? "text-slate-600" : "text-slate-300";
@@ -18697,7 +18875,48 @@ export default function Home() {
 
                 return (
                   <>
-                    {/* Cabecera: siempre dice dónde está parado y cómo volver. */}
+                    {/* Volver: va ARRIBA de todo y en su propia linea, con el texto
+                        completo de a donde lleva. Es el unico camino de regreso, asi
+                        que tiene que verse antes que cualquier otra cosa. */}
+                    {hospital || region ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (hospital) setHospitalSel("");
+                          else setRegionSel("");
+                        }}
+                        className={`mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-bold transition ${
+                          isLightPanelTheme
+                            ? "border-teal-600/30 bg-teal-50 text-teal-800 hover:bg-teal-100"
+                            : "border-teal-400/40 bg-teal-400/10 text-teal-200 hover:bg-teal-400/20"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                            isLightPanelTheme ? "bg-teal-600/15" : "bg-teal-400/20"
+                          }`}
+                          aria-hidden="true"
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            width="14"
+                            height="14"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M15 18 9 12l6-6" />
+                          </svg>
+                        </span>
+                        {hospital
+                          ? `Volver a la región ${region ? region.nombre : ""}`.trim()
+                          : "Volver a las regiones"}
+                      </button>
+                    ) : null}
+
+                    {/* Cabecera: siempre dice dónde está parado. */}
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-teal-300/90">
@@ -18718,22 +18937,6 @@ export default function Home() {
                         </p>
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-2">
-                        {hospital || region ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (hospital) setHospitalSel("");
-                              else setRegionSel("");
-                            }}
-                            className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
-                              isLightPanelTheme
-                                ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                                : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
-                            }`}
-                          >
-                            ‹ {hospital ? `Región ${region ? region.nombre : ""}`.trim() : "Regiones"}
-                          </button>
-                        ) : null}
                         {hospital && !hospital.soloAvance ? (
                           <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
                             <span className="font-semibold uppercase tracking-wide">Mes</span>
@@ -18745,7 +18948,7 @@ export default function Home() {
                             />
                           </label>
                         ) : null}
-                        {hospital ? (
+                        {hospital && !hospital.local ? (
                           <button
                             type="button"
                             onClick={() => void loadSigmaMonitoreo(hospital.id, mes, true)}
@@ -24994,7 +25197,9 @@ export default function Home() {
                             ? signupForm.department
                               ? `dept:${signupForm.department}`
                               : ""
-                            : signupForm.accessType === "director"
+                            : signupForm.accessType === "minsal"
+                            ? "minsal:main"
+                          : signupForm.accessType === "director"
                               ? "director:main"
                               : signupForm.accessType === "subdirector"
                                 ? "subdirector:medica"
@@ -25014,6 +25219,8 @@ export default function Home() {
                           setSignupForm((f) => ({ ...f, accessType: "department", department: v.slice(5).split("#")[0], serviceId: "", isChief: false, division: "", captureModules: [] }));
                         } else if (v.startsWith("subdirector:")) {
                           setSignupForm((f) => ({ ...f, accessType: "subdirector", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
+                        } else if (v.startsWith("minsal:")) {
+                          setSignupForm((f) => ({ ...f, accessType: "minsal", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
                         } else if (v.startsWith("director:")) {
                           setSignupForm((f) => ({ ...f, accessType: "director", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
                         } else if (v.startsWith("asis:")) {
@@ -25030,6 +25237,14 @@ export default function Home() {
                     >
                       <option value="">Elegí tu cargo o servicio…</option>
                       {(() => {
+                        // MINSAL no tiene servicios que elegir: es un solo cargo.
+                        if (signupDivView === "minsal") {
+                          return (
+                            <option value="minsal:main" className="bg-[#1b2537] text-teal-200">
+                              Monitoreo nacional de hospitales (MINSAL)
+                            </option>
+                          );
+                        }
                         const d = SIGNUP_DIVISIONS.find((x) => x.key === signupDivView);
                         const svcs = SERVICE_DEFINITIONS.filter(
                           (s) => (SERVICE_GROUP_BY_ID[s.id] || "apoyo") === signupDivView && !getSepsTemplate(s.id)?.consolidatesFrom,
