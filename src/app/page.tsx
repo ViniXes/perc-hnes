@@ -891,6 +891,17 @@ const REGIONES_SALUD = [
 ];
 
 /**
+ * Color del avance: UN solo tono que se va oscureciendo. Una escala de magnitud
+ * se lee sola; un arcoiris (rojo-amarillo-verde) obliga a mirar la leyenda y
+ * ademas se le pierde a quien no distingue el rojo del verde. El numero siempre
+ * va escrito al lado, para que el color nunca sea el unico dato.
+ */
+function tonoAvance(pct: number) {
+  const p = Math.max(0, Math.min(100, pct));
+  return `rgba(16,185,129,${(0.14 + (p / 100) * 0.76).toFixed(3)})`;
+}
+
+/**
  * La red de hospitales nacionales, agrupada por region. Estan TODOS, aunque
  * todavia no reporten: los que no estan conectados se ven apagados y sirven de
  * mapa de avance del proyecto.
@@ -5372,6 +5383,9 @@ export default function Home() {
   // Navegacion de la pantalla de hospitales: primero region, luego hospital.
   const [regionSel, setRegionSel] = useState("");
   const [hospitalSel, setHospitalSel] = useState("");
+  // Consulta de todos los hospitales a la vez (resumen nacional).
+  const [sigmaTodos, setSigmaTodos] = useState(false);
+  const [sigmaConsultadoEn, setSigmaConsultadoEn] = useState("");
   // Verificacion de sumas: produccion de TODOS los servicios del mes elegido.
   const [verifSumasData, setVerifSumasData] = useState<AdminOverviewEntry[] | null>(null);
   const [verifSumasPeriodo, setVerifSumasPeriodo] = useState("");
@@ -8073,6 +8087,26 @@ export default function Home() {
    * Trae el monitoreo del Psiquiatrico. Si SIGMA no esta configurado o no
    * responde, la tarjeta lo dice y PULSO sigue igual: nunca lo rompe.
    */
+  /**
+   * Consulta de una sola vez a todos los hospitales conectados, para llenar el
+   * resumen nacional. No se dispara al entrar: cada consulta viaja al sistema de
+   * otro hospital, asi que la pide el usuario cuando la quiere.
+   */
+  async function consultarTodosLosHospitales() {
+    const pendientes = HOSPITALES_EXTERNOS.filter((h) => h.conectado && !h.local);
+    setSigmaTodos(true);
+    try {
+      await Promise.all(
+        pendientes.map((h) => loadSigmaMonitoreo(h.id, sigmaMes[h.id] || "", true)),
+      );
+      setSigmaConsultadoEn(
+        new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
+      );
+    } finally {
+      setSigmaTodos(false);
+    }
+  }
+
   async function loadSigmaMonitoreo(hospitalId: string, mes?: string, refrescar?: boolean) {
     const objetivo = mes !== undefined ? mes : (sigmaMes[hospitalId] || "");
     setSigmaMes((previo) => ({ ...previo, [hospitalId]: objetivo }));
@@ -18841,9 +18875,47 @@ export default function Home() {
               {(() => {
                 const hospital = HOSPITALES_EXTERNOS.find((h) => h.id === hospitalSel) || null;
                 const region = REGIONES_SALUD.find((r) => r.id === regionSel) || null;
+                // Avance de cada hospital: el HNES sale del monitoreo propio que
+                // PULSO ya calcula; los demas, de lo que respondio su sistema.
+                // null = conectado pero todavia sin datos de este mes.
+                const propioResumen = computeMonitorStats("PERC");
+                const avanceDe = (h: (typeof HOSPITALES_EXTERNOS)[number]) => {
+                  if (h.local) {
+                    return {
+                      total: propioResumen.total,
+                      completos: propioResumen.completos,
+                      pct: propioResumen.pct,
+                    };
+                  }
+                  const d = sigmaMonitoreo[h.id];
+                  if (!d || !d.configurado || d.error || !d.perc) return null;
+                  return { total: d.perc.total, completos: d.perc.completos, pct: d.perc.pct };
+                };
+                const sumar = (lista: typeof HOSPITALES_EXTERNOS) => {
+                  let total = 0;
+                  let completos = 0;
+                  let conDatos = 0;
+                  for (const h of lista) {
+                    const a = avanceDe(h);
+                    if (!a) continue;
+                    total += a.total;
+                    completos += a.completos;
+                    conDatos += 1;
+                  }
+                  return {
+                    total,
+                    completos,
+                    conDatos,
+                    pct: total > 0 ? Math.round((completos / total) * 100) : 0,
+                  };
+                };
+                const conectadosTotal = HOSPITALES_EXTERNOS.filter((h) => h.conectado).length;
+                const nacional = sumar(HOSPITALES_EXTERNOS.filter((h) => h.conectado));
+                const resumenRegion = (idRegion: string) =>
+                  sumar(HOSPITALES_EXTERNOS.filter((h) => h.conectado && h.region === idRegion));
                 // El HNES no viaja a ningun lado: su avance es el mismo del
                 // Monitoreo de PERC, para que los dos numeros nunca se contradigan.
-                const propio = hospital?.local ? computeMonitorStats("PERC") : null;
+                const propio = hospital?.local ? propioResumen : null;
                 const datos: MonitoreoSigma | undefined = propio
                   ? {
                       configurado: true,
@@ -18963,43 +19035,256 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* NIVEL 1: las cinco regiones de salud. */}
+                    {/* NIVEL 1: el pais completo. Resumen, mapa por region, las
+                        cinco regiones y la tabla de los que ya reportan. */}
                     {!region && !hospital ? (
-                      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        {REGIONES_SALUD.map((r) => {
-                          const lista = HOSPITALES_EXTERNOS.filter((h) => h.region === r.id);
-                          const conectados = lista.filter((h) => h.conectado).length;
-                          const pct = lista.length ? Math.round((conectados / lista.length) * 100) : 0;
-                          return (
-                            <button
-                              key={r.id}
-                              type="button"
-                              onClick={() => {
-                                setRegionSel(r.id);
-                                setHospitalSel("");
-                              }}
-                              className={`rounded-2xl border p-4 text-left transition hover:border-teal-400/50 ${tarjeta}`}
-                            >
+                      <>
+                        {/* Resumen nacional. Los numeros grandes van arriba porque
+                            son la respuesta a "¿cómo va el país?"; el detalle viene
+                            despues. */}
+                        <div className={`mt-5 rounded-2xl border p-4 ${tarjeta}`}>
+                          <div className="flex flex-wrap items-end justify-between gap-3">
+                            <div>
                               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                                Región
+                                Resumen nacional · {periodLabel}
                               </p>
-                              <p className={`mt-1 text-xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                                {r.nombre}
+                              <p className={`mt-1 text-4xl font-bold leading-none ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                {nacional.conDatos > 0 ? `${nacional.pct}%` : "—"}
                               </p>
-                              <p className={`mt-0.5 text-xs ${suave}`}>{r.detalle}</p>
-                              <p className={`mt-3 text-sm font-semibold ${conectados ? "text-emerald-300" : "text-slate-400"}`}>
-                                {conectados} de {lista.length} conectados
+                              <p className={`mt-1.5 text-sm ${suave}`}>
+                                {nacional.conDatos > 0
+                                  ? `${nacional.completos} de ${nacional.total} servicios entregados, en ${nacional.conDatos} ${nacional.conDatos === 1 ? "hospital" : "hospitales"}.`
+                                  : "Todavía no se ha consultado a los hospitales de este mes."}
                               </p>
-                              <div className={`mt-2 h-2 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
-                                <div
-                                  className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500"
-                                  style={{ width: `${pct}%` }}
+                            </div>
+                            <div className="flex flex-col items-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => void consultarTodosLosHospitales()}
+                                disabled={sigmaTodos}
+                                className="rounded-xl bg-gradient-to-r from-teal-400 to-emerald-500 px-4 py-2 text-xs font-bold text-slate-900 transition disabled:opacity-50"
+                              >
+                                {sigmaTodos ? "Consultando…" : "Consultar hospitales"}
+                              </button>
+                              <p className="text-[11px] text-slate-500">
+                                {sigmaConsultadoEn
+                                  ? `Actualizado a las ${sigmaConsultadoEn}`
+                                  : "Sin consultar todavía"}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Barra del avance nacional. Fina, pegada a su base y con
+                              el numero al lado: el color nunca es el unico dato. */}
+                          <div className={`mt-4 h-2.5 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500 transition-all"
+                              style={{ width: `${nacional.conDatos > 0 ? nacional.pct : 0}%` }}
+                            />
+                          </div>
+
+                          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                                Hospitales conectados
+                              </p>
+                              <p className={`mt-0.5 text-xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                {conectadosTotal} <span className="text-sm font-medium text-slate-400">de {HOSPITALES_EXTERNOS.length}</span>
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                                Ya reportaron el mes
+                              </p>
+                              <p className={`mt-0.5 text-xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                {nacional.conDatos} <span className="text-sm font-medium text-slate-400">de {conectadosTotal}</span>
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                                Servicios pendientes
+                              </p>
+                              <p className={`mt-0.5 text-xl font-bold ${nacional.total - nacional.completos > 0 ? "text-amber-300" : isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                {nacional.conDatos > 0 ? nacional.total - nacional.completos : "—"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Mapa de calor: las cinco regiones en una sola linea, del
+                            occidente al oriente del pais. Un solo tono que se va
+                            oscureciendo con el avance; gris = sin datos. */}
+                        <div className="mt-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                              Avance por región
+                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-slate-500">0%</span>
+                              {[15, 40, 65, 85, 100].map((paso) => (
+                                <span
+                                  key={paso}
+                                  className="h-2.5 w-4 rounded-[3px]"
+                                  style={{ background: tonoAvance(paso) }}
                                 />
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                              ))}
+                              <span className="text-[10px] text-slate-500">100%</span>
+                            </div>
+                          </div>
+                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                            {REGIONES_SALUD.map((r) => {
+                              const res = resumenRegion(r.id);
+                              const hay = res.conDatos > 0;
+                              return (
+                                <button
+                                  key={r.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setRegionSel(r.id);
+                                    setHospitalSel("");
+                                  }}
+                                  className={`rounded-xl border p-2.5 text-left transition ${
+                                    isLightPanelTheme ? "border-slate-200" : "border-white/10"
+                                  } hover:border-teal-400/50`}
+                                  style={{ background: hay ? tonoAvance(res.pct) : "transparent" }}
+                                >
+                                  <p
+                                    className="text-[10px] font-semibold uppercase tracking-wide"
+                                    style={{ color: hay && res.pct >= 55 ? "rgba(255,255,255,0.85)" : undefined }}
+                                  >
+                                    <span className={hay && res.pct >= 55 ? "" : "text-slate-400"}>{r.nombre}</span>
+                                  </p>
+                                  <p
+                                    className="mt-0.5 text-lg font-bold"
+                                    style={{
+                                      color: hay
+                                        ? res.pct >= 55
+                                          ? "#ffffff"
+                                          : isLightPanelTheme
+                                            ? "#0f172a"
+                                            : "#e2e8f0"
+                                        : undefined,
+                                    }}
+                                  >
+                                    <span className={hay ? "" : "text-slate-500"}>{hay ? `${res.pct}%` : "—"}</span>
+                                  </p>
+                                  <p
+                                    className="text-[10px]"
+                                    style={{ color: hay && res.pct >= 55 ? "rgba(255,255,255,0.8)" : undefined }}
+                                  >
+                                    <span className={hay && res.pct >= 55 ? "" : "text-slate-500"}>
+                                      {hay ? `${res.completos}/${res.total} servicios` : "sin datos"}
+                                    </span>
+                                  </p>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Las cinco regiones, ahora con su avance real. */}
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                          {REGIONES_SALUD.map((r) => {
+                            const lista = HOSPITALES_EXTERNOS.filter((h) => h.region === r.id);
+                            const conectados = lista.filter((h) => h.conectado).length;
+                            const res = resumenRegion(r.id);
+                            return (
+                              <button
+                                key={r.id}
+                                type="button"
+                                onClick={() => {
+                                  setRegionSel(r.id);
+                                  setHospitalSel("");
+                                }}
+                                className={`rounded-2xl border p-4 text-left transition hover:border-teal-400/50 ${tarjeta}`}
+                              >
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                                  Región
+                                </p>
+                                <p className={`mt-1 text-xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                  {r.nombre}
+                                </p>
+                                <p className={`mt-0.5 text-xs ${suave}`}>{r.detalle}</p>
+                                <p className={`mt-3 text-sm font-semibold ${conectados ? "text-emerald-300" : "text-slate-400"}`}>
+                                  {conectados} de {lista.length} conectados
+                                </p>
+                                {res.conDatos > 0 ? (
+                                  <>
+                                    <div className={`mt-2 h-2 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
+                                      <div
+                                        className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500"
+                                        style={{ width: `${res.pct}%` }}
+                                      />
+                                    </div>
+                                    <p className={`mt-1.5 text-xs ${suave}`}>
+                                      {res.completos} de {res.total} servicios entregados · {res.pct}%
+                                    </p>
+                                  </>
+                                ) : (
+                                  <p className="mt-2 text-xs text-slate-500">
+                                    {conectados ? "Sin consultar este mes." : "Aún sin reportar al monitoreo."}
+                                  </p>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Tabla nacional: los que ya reportan, del que más entregó
+                            al que menos. Sirve para ver de un vistazo quién va atrás. */}
+                        <div className="mt-6">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                            Hospitales que reportan al monitoreo
+                          </p>
+                          <div className="mt-2 space-y-1.5">
+                            {[...HOSPITALES_EXTERNOS.filter((h) => h.conectado)]
+                              .map((h) => ({ h, a: avanceDe(h) }))
+                              .sort((x, y) => (y.a?.pct ?? -1) - (x.a?.pct ?? -1))
+                              .map(({ h, a }) => (
+                                <button
+                                  key={h.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setRegionSel(h.region);
+                                    setHospitalSel(h.id);
+                                  }}
+                                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition hover:border-teal-400/50 ${tarjeta}`}
+                                >
+                                  <span className="min-w-0 flex-1">
+                                    <span className={`block truncate text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                      {h.corto}
+                                    </span>
+                                    <span className="block truncate text-[11px] text-slate-500">
+                                      {REGIONES_SALUD.find((r) => r.id === h.region)?.nombre} · {h.lugar}
+                                    </span>
+                                  </span>
+                                  <span className="hidden w-40 shrink-0 sm:block">
+                                    <span className={`block h-2 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
+                                      <span
+                                        className="block h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500"
+                                        style={{ width: `${a?.pct ?? 0}%` }}
+                                      />
+                                    </span>
+                                  </span>
+                                  <span className="w-28 shrink-0 text-right">
+                                    {a ? (
+                                      <>
+                                        <span className={`block text-sm font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                          {a.pct}%
+                                        </span>
+                                        <span className="block text-[11px] text-slate-500">
+                                          {a.completos} de {a.total}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="block text-[11px] text-slate-500">sin consultar</span>
+                                    )}
+                                  </span>
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      </>
                     ) : null}
 
                     {/* NIVEL 2: los hospitales de la región elegida. Los que aún no
