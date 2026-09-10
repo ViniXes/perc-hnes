@@ -1,0 +1,208 @@
+rules_version = '2';
+// =============================================================================
+// Reglas de seguridad de Firestore para PERC-HNES.
+// -----------------------------------------------------------------------------
+// Pegalas en: Firebase Console > Firestore Database > Reglas > Publicar.
+//
+// CAMBIOS DE ESTA VERSION
+//  1) Cuentas MINSAL: solo pueden leer lo que alimenta el monitoreo nacional de
+//     hospitales (serviceTabulators, calendario y overrides) y su propio perfil.
+//     Todo lo demas del HNES (SEPS, Horas, POA, Censo, Insumos, matrices) les
+//     queda cerrado desde el servidor, no solo escondido en la pantalla.
+//  2) Nadie puede ascenderse solo: un usuario ya no puede tocar su propio rol,
+//     permisos, servicio ni la marca isMinsal de su documento. Antes podia.
+// =============================================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn()
+        && (request.auth.token.email == 'hcardoza.admin@perc-hnes.app'
+            || request.auth.token.email == 'ffuentes@perc-hnes.app'
+            || request.auth.token.email == 'amontes@perc-hnes.app'
+            || request.auth.token.email == 'jcmiranda@perc-hnes.app'
+            || request.auth.token.email == 'dalvarez@perc-hnes.app'
+            || request.auth.token.email == 'jhernandez@perc-hnes.app'
+            || request.auth.token.email == 'vhernandez@perc-hnes.app'
+            || request.auth.token.email == 'rcenteno@perc-hnes.app');
+    }
+    function userProfile() {
+      return get(/databases/$(database)/documents/serviceUsers/$(request.auth.uid)).data;
+    }
+    function isSupervisor() {
+      return isSignedIn() && userProfile().role == 'supervisor';
+    }
+
+    // --- MINSAL ---------------------------------------------------------------
+    // Cuenta del nivel ministerial: entra solo al monitoreo nacional de
+    // hospitales. Se comprueba con exists() antes de leer para que una cuenta
+    // recien creada, o sin documento de perfil, no rompa la evaluacion.
+    function tienePerfil() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/serviceUsers/$(request.auth.uid));
+    }
+    function esMinsal() {
+      return tienePerfil() && userProfile().get('isMinsal', false) == true;
+    }
+    // Se usa en todo lo que NO le corresponde ver ni tocar a una cuenta MINSAL.
+    function noEsMinsal() {
+      return !esMinsal();
+    }
+
+    // Campos del perfil que SOLO un administrador puede escribir. Son los que
+    // definen quien es cada quien: si un usuario pudiera tocarlos, se daria a si
+    // mismo el rol que quisiera. Lo demas de su documento (contrasena cambiada,
+    // aceptacion de politicas, documento de identidad) si lo escribe el mismo.
+    function camposDePrivilegio() {
+      return [
+        'role', 'permissions', 'isDirector', 'isMinsal', 'isActive', 'isChief',
+        'serviceId', 'serviceName', 'menuGrants', 'noCapture', 'supervisorModules',
+        'captureModules', 'viewPerc', 'viewSeps', 'viewHoras', 'division',
+        'department', 'monitorDivision', 'username', 'loginEmail', 'sepsTables'
+      ];
+    }
+    function noTocaPrivilegios() {
+      return !request.resource.data.diff(resource.data)
+        .affectedKeys().hasAny(camposDePrivilegio());
+    }
+
+    match /serviceUsers/{uid} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      // Crear cuentas es cosa del administrador (es quien aprueba las solicitudes).
+      allow create: if isAdmin();
+      // El propio usuario actualiza su documento, pero sin tocar su privilegio.
+      allow update: if isAdmin()
+        || (isSignedIn() && request.auth.uid == uid && noTocaPrivilegios());
+      allow delete: if isAdmin();
+    }
+    match /serviceAssignments/{serviceId} {
+      allow read, write: if isAdmin();
+    }
+    // PRODUCCION DISTRIBUIDA (PERC). Es lo unico del HNES que una cuenta MINSAL
+    // puede LEER: de aca sale el avance del Hospital Nacional El Salvador dentro
+    // del monitoreo de hospitales. Escribir, nunca.
+    match /serviceTabulators/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin()
+        || (isSignedIn() && noEsMinsal()
+            && request.resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+    match /sepsTabulators/{docId} {
+      allow read: if isSignedIn() && noEsMinsal();
+      allow create, update: if isAdmin()
+        || (isSignedIn() && noEsMinsal()
+            && request.resource.data.userId == request.auth.uid)
+        || request.auth.token.email == 'jcmiranda@perc-hnes.app';
+      allow delete: if isAdmin();
+    }
+    match /horasTabulators/{docId} {
+      allow read: if isSignedIn() && noEsMinsal();
+      allow create, update: if isAdmin()
+        || (isSignedIn() && noEsMinsal()
+            && request.resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+    // El calendario si lo lee MINSAL: el tablero lo necesita para saber de que
+    // mes esta hablando. No trae ninguna cifra.
+    match /captureCalendar/{periodId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    match /captureOverrides/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin()
+        || (isSupervisor()
+            && userProfile().supervisorModules.hasAny([request.resource.data.moduleId]));
+      allow delete: if isAdmin()
+        || (isSupervisor()
+            && userProfile().supervisorModules.hasAny([resource.data.moduleId]));
+    }
+    match /captureRequests/{docId} {
+      allow read: if isSignedIn() && noEsMinsal();
+      allow create: if isSignedIn() && noEsMinsal()
+        && request.resource.data.requestedByUid == request.auth.uid;
+      allow update: if isAdmin()
+        || (isSupervisor()
+            && userProfile().supervisorModules.hasAny([resource.data.moduleId]))
+        || (isSignedIn() && resource.data.requestedByUid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+    match /documentControl/{year} {
+      allow read: if isSignedIn() && noEsMinsal();
+      allow write: if isAdmin();
+    }
+    // Estructura (matriz) de los tabuladores SEPS: un documento por servicio con
+    // las tablas y filas agregadas, ocultas o renombradas. La LEE cualquier usuario
+    // autenticado que no sea MINSAL; la ESCRIBEN los administradores y el revisor.
+    match /sepsLayouts/{serviceId} {
+      allow read: if isSignedIn() && noEsMinsal();
+      allow write: if isAdmin()
+        || request.auth.token.email == 'jcmiranda@perc-hnes.app'
+        || (isSignedIn() && userProfile().role == 'admin');
+    }
+    // POA - Plan Anual Operativo por servicio y año.
+    match /poaDocuments/{docId} {
+      allow read: if isSignedIn() && noEsMinsal();
+      allow write: if isSignedIn()
+        && (isAdmin()
+            || userProfile().role == 'admin'
+            || userProfile().serviceId == 'esdomed');
+    }
+    // Censo Diario de Pacientes (id = "<periodo>", p.ej. "2026-06").
+    match /censoDiario/{periodId} {
+      allow read: if isSignedIn() && noEsMinsal()
+        && (isAdmin()
+            || userProfile().role == 'admin'
+            || userProfile().role == 'supervisor');
+      allow write: if isSignedIn()
+        && (isAdmin()
+            || userProfile().role == 'admin'
+            || request.auth.token.email == 'amontes@perc-hnes.app');
+    }
+    // Insumos de Almacen (id = "<periodo>", p.ej. "2026-06"). Guardado por mes.
+    match /insumosAlmacen/{periodId} {
+      allow read: if isSignedIn() && noEsMinsal()
+        && (isAdmin()
+            || userProfile().role == 'admin'
+            || userProfile().role == 'supervisor'
+            || userProfile().serviceId == 'almacen');
+      allow write: if isSignedIn()
+        && (isAdmin()
+            || userProfile().role == 'admin'
+            || userProfile().serviceId == 'almacen');
+    }
+    // Solicitudes de registro (jefes de servicio, direccion y MINSAL).
+    match /signupRequests/{id} {
+      allow read: if isAdmin();
+      allow create: if request.resource.data.status == 'pending'
+        && request.resource.data.firstName is string
+        && request.resource.data.lastName is string
+        && request.resource.data.email is string
+        && request.resource.data.serviceId is string
+        && request.resource.data.serviceName is string;
+      allow update, delete: if isAdmin();
+    }
+    // Centro de Soporte. Una cuenta MINSAL SI puede abrir un ticket (tiene el
+    // boton de Soporte en su menu), pero no puede leer los de nadie.
+    match /supportTickets/{ticketId} {
+      allow read: if isAdmin() || isSupervisor();
+      allow create: if isSignedIn()
+        && request.resource.data.status == 'pendiente'
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0;
+      allow update: if isAdmin() || isSupervisor();
+      allow delete: if isAdmin();
+    }
+    // Registro global de documentos de identidad (DUI/pasaporte/carne).
+    match /documentRegistry/{docId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

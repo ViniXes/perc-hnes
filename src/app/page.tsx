@@ -18885,15 +18885,17 @@ export default function Home() {
                           if (hospital) setHospitalSel("");
                           else setRegionSel("");
                         }}
-                        className={`mb-4 inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-bold transition ${
+                        className={`group mb-4 inline-flex items-center gap-2.5 rounded-full border px-4 py-2 text-sm font-semibold transition ${
                           isLightPanelTheme
-                            ? "border-teal-600/30 bg-teal-50 text-teal-800 hover:bg-teal-100"
-                            : "border-teal-400/40 bg-teal-400/10 text-teal-200 hover:bg-teal-400/20"
+                            ? "border-slate-200 bg-white text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)] hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                            : "border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
                         }`}
                       >
                         <span
-                          className={`flex h-6 w-6 items-center justify-center rounded-full ${
-                            isLightPanelTheme ? "bg-teal-600/15" : "bg-teal-400/20"
+                          className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
+                            isLightPanelTheme
+                              ? "bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-800"
+                              : "bg-white/10 text-amber-200/80 group-hover:bg-white/15 group-hover:text-amber-200"
                           }`}
                           aria-hidden="true"
                         >
@@ -18903,7 +18905,7 @@ export default function Home() {
                             height="14"
                             fill="none"
                             stroke="currentColor"
-                            strokeWidth="3"
+                            strokeWidth="2.4"
                             strokeLinecap="round"
                             strokeLinejoin="round"
                           >
