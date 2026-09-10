@@ -943,7 +943,7 @@ const HOSPITALES_EXTERNOS: {
   { id: "bloom", corto: "Bloom", nombre: 'Hospital Nacional de Niños "Benjamín Bloom"', region: "metropolitana", lugar: "San Salvador" },
   { id: "mujer", corto: "La Mujer", nombre: 'Hospital Nacional de la Mujer "Dra. María Isabel Rodríguez"', region: "metropolitana", lugar: "San Salvador" },
   { id: "zacamil", corto: "Zacamil", nombre: 'Hospital Nacional "Dr. Juan José Fernández"', region: "metropolitana", lugar: "Mejicanos, San Salvador" },
-  { id: "saldana", corto: "Saldaña", nombre: 'Hospital Nacional de Neumología "Dr. José Antonio Saldaña"', region: "metropolitana", lugar: "San Salvador" },
+  { id: "saldana", corto: "Saldaña", nombre: 'Hospital Nacional de Neumología "Dr. José Antonio Saldaña"', region: "metropolitana", lugar: "San Salvador", conectado: true },
   { id: "sanbartolo", corto: "San Bartolo", nombre: 'Hospital Nacional "Enf. Angélica Vidal de Najarro"', region: "metropolitana", lugar: "Ilopango, San Salvador" },
   { id: "hnes", corto: "El Salvador", nombre: "Hospital Nacional El Salvador", region: "metropolitana", lugar: "San Salvador", conectado: true, soloAvance: true, local: true },
   { id: "psiquiatrico", corto: "Psiquiátrico", nombre: 'Hospital Nacional Psiquiátrico "Dr. José Molina Martínez"', region: "metropolitana", lugar: "Soyapango, San Salvador", conectado: true },

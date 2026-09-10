@@ -19,6 +19,7 @@ import { NextResponse } from "next/server";
 // Variables (Vercel > Settings > Environment Variables):
 //   SIGMA_URL / SIGMA_API_KEY                        -> Psiquiatrico
 //   SIGMA_SUCHITOTO_URL / SIGMA_SUCHITOTO_API_KEY    -> Suchitoto
+//   SIGMA_SALDANA_URL / SIGMA_SALDANA_API_KEY        -> Saldana (Neumologia)
 //   SAN_MIGUEL_URL                                   -> San Miguel (sin llave)
 // =============================================================================
 
@@ -44,6 +45,12 @@ const HOSPITALES: Record<string, Hospital> = {
     url: "SIGMA_SUCHITOTO_URL",
     llave: "SIGMA_SUCHITOTO_API_KEY",
     nombre: "Hospital Nacional de Suchitoto",
+  },
+  saldana: {
+    tipo: "sigma",
+    url: "SIGMA_SALDANA_URL",
+    llave: "SIGMA_SALDANA_API_KEY",
+    nombre: 'Hospital Nacional de Neumología "Dr. José Antonio Saldaña"',
   },
   sanmiguel: {
     tipo: "lista",
