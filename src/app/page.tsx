@@ -48,6 +48,7 @@ import {
 } from "@/lib/modules";
 import {
   CEC_TEMPLATES,
+  CEC_BY_SERVICE,
   type CecBloque,
   type CecTemplate,
 } from "@/lib/cec-templates";
@@ -140,8 +141,12 @@ type ManagedUser = {
   // Cuenta MINSAL: solo ve el monitoreo nacional de hospitales. No captura, no
   // consulta tabuladores del HNES y no aparece en ningun otro menu.
   isMinsal: boolean;
-  // Miembro del Comite de Expediente Clinico: llena las 13 listas de monitoreo.
+  // Miembro del Comite de Expediente Clinico. VE las 13 listas; EDITA solo las
+  // que se le asignen en cecServicios.
   cec: boolean;
+  // Listas del comite que esta persona puede LLENAR (ids de CEC_TEMPLATES).
+  // Vacio = solo lectura: entra al modulo, mira todo, pero no escribe nada.
+  cecServicios: string[];
   mustChangePassword: boolean;
   isActive: boolean;
   // Correo de ACCESO real de la cuenta (usuario@perc-hnes.app). Es la identidad con
@@ -181,6 +186,8 @@ type AdminDraft = {
   monitorDivision: string;
   // Miembro del Comite de Expediente Clinico: le carga el menu "C.E. Clinico".
   cec: boolean;
+  // Listas del comite que puede LLENAR (las demas las ve en solo lectura).
+  cecServicios: string[];
   sepsTables: string[];
   viewPerc: string[];
   viewSeps: string[];
@@ -3428,6 +3435,9 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     isDirector: data.isDirector === true,
     isMinsal: data.isMinsal === true,
     cec: data.cec === true,
+    cecServicios: Array.isArray(data.cecServicios)
+      ? data.cecServicios.filter((x): x is string => typeof x === "string")
+      : [],
     mustChangePassword: data.mustChangePassword !== false,
     isActive: data.isActive !== false,
     menuGrants: Array.isArray(data.menuGrants)
@@ -3470,6 +3480,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         isChief: managedUser.isChief,
         monitorDivision: managedUser.monitorDivision || "",
         cec: managedUser.cec === true,
+        cecServicios: managedUser.cecServicios ?? [],
         sepsTables: managedUser.sepsTables,
         viewPerc: managedUser.viewPerc,
         viewSeps: managedUser.viewSeps,
@@ -3494,6 +3505,7 @@ type UserAccessView = {
   soloAccesos: boolean;
   monitoreaDivision: string;
   comiteExpediente: boolean;
+  comiteLlena: string[];
   capturaModulos: { id: ModuleId; label: string; tabulador: string }[];
   submenus: string[];
   consultaPerc: string[];
@@ -3541,6 +3553,9 @@ function buildUserAccessView(u: ManagedUser): UserAccessView {
       ? SERVICE_GROUP_LABELS[u.monitorDivision] || u.monitorDivision
       : "",
     comiteExpediente: u.cec === true,
+    comiteLlena: (u.cecServicios || []).map(
+      (id) => CEC_BY_SERVICE[id]?.nombre || id,
+    ),
     capturaModulos,
     submenus: (u.menuGrants || []).map(
       (id) => GRANTABLE_MENUS.find((g) => g.id === id)?.label || id,
@@ -6238,7 +6253,13 @@ export default function Home() {
   // administradores); lo VEN ademas la Direccion, los supervisores y cada jefe
   // de division, limitado a los servicios de su division.
   const esComiteCec = serviceProfile?.cec === true;
-  const puedeCapturarCec = isAdmin || esComiteCec;
+  // Listas que ESTA cuenta puede llenar. El comite VE las 13, pero escribe
+  // unicamente las de su servicio: es lo que el admin le asigna al marcarlo.
+  const cecServiciosPropios = serviceProfile?.cecServicios ?? [];
+  const puedeCapturarCec = isAdmin || (esComiteCec && cecServiciosPropios.length > 0);
+  /** ¿Puede LLENAR la lista de este servicio? El admin todas; el comite las suyas. */
+  const puedeEditarCecServicio = (serviceId: string) =>
+    isAdmin || (esComiteCec && cecServiciosPropios.includes(serviceId));
   const divisionCec = monitorDivision || serviceProfile?.division || "";
   const veTodoCec = isAdmin || isDirector || isSupervisor || esComiteCec;
   const puedeVerCec = veTodoCec || !!divisionCec;
@@ -8311,7 +8332,11 @@ export default function Home() {
   /** Guarda la lista del servicio abierto. */
   async function handleSaveCec() {
     const plantilla = CEC_TEMPLATES.find((t) => t.serviceId === cecServicio);
-    if (!plantilla || !cecDoc || !puedeCapturarCec) return;
+    if (!plantilla || !cecDoc) return;
+    if (!puedeEditarCecServicio(plantilla.serviceId)) {
+      setError("Esta lista no le corresponde: solo puede llenar la de su servicio.");
+      return;
+    }
     if (!cecAbierto) {
       setError("La captura del Comité de Expediente Clínico está cerrada este mes.");
       return;
@@ -13146,6 +13171,7 @@ export default function Home() {
               department: deptKey,
               monitorDivision: draft.monitorDivision || null,
               cec: draft.cec === true,
+              cecServicios: draft.cec ? draft.cecServicios : [],
               captureModules: [],
               supervisorModules: ["perc", "sesps", "distribucion"],
               permissions: { canEdit: true, canManageUsers: false, canToggleCapture: false },
@@ -13165,6 +13191,7 @@ export default function Home() {
               department: null,
               monitorDivision: draft.monitorDivision || null,
               cec: draft.cec === true,
+              cecServicios: draft.cec ? draft.cecServicios : [],
               sepsTables: draft.sepsTables,
               captureModules: draft.captureModules,
               menuGrants: draft.menuGrants,
@@ -19739,6 +19766,10 @@ export default function Home() {
               {(() => {
                 const plantillas = cecPlantillasVisibles;
                 const plantilla = plantillas.find((t) => t.serviceId === cecServicio) || null;
+                // Se VE todo; se ESCRIBE solo la lista asignada. Un mismo control
+                // manda en los botones, las casillas y el boton de guardar.
+                const cecEditable = !!plantilla && puedeEditarCecServicio(plantilla.serviceId);
+                const cecBloqueado = !cecEditable || !cecAbierto;
                 const suave = isLightPanelTheme ? "text-slate-600" : "text-slate-300";
                 const marco = isLightPanelTheme
                   ? "border-slate-200 bg-slate-50"
@@ -19756,9 +19787,13 @@ export default function Home() {
                           Lista de monitoreo · {periodLabel}
                         </h2>
                         <p className={`mt-1 text-sm ${suave}`}>
-                          {puedeCapturarCec
+                          {isAdmin
                             ? "Elegí el servicio y llená su lista. Es la misma del Excel del comité: 1 si cumple, 0 si no, N/A si no aplica."
-                            : "Solo lectura: acá ves cómo va el llenado de los servicios de tu división."}
+                            : esComiteCec
+                              ? cecServiciosPropios.length > 0
+                                ? "Podés ver las listas de todos los servicios, pero solo llenar la que te asignaron. 1 si cumple, 0 si no, N/A si no aplica."
+                                : "Todavía no te han asignado ningún servicio del comité: por ahora solo podés mirar las listas."
+                              : "Solo lectura: acá ves cómo va el llenado de los servicios de tu división."}
                         </p>
                       </div>
                       <div className={`shrink-0 rounded-2xl border px-4 py-3 text-center ${marco}`}>
@@ -19802,6 +19837,11 @@ export default function Home() {
                                 {t.bloques.length === 1 ? "tabla" : "tablas"}
                               </span>
                             </span>
+                            {esComiteCec && !isAdmin && cecServiciosPropios.includes(t.serviceId) ? (
+                              <span className="shrink-0 rounded-full bg-cyan-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-200">
+                                La suya
+                              </span>
+                            ) : null}
                           </button>
                         );
                       })}
@@ -19820,7 +19860,7 @@ export default function Home() {
                                 : "Todavía nadie ha guardado esta lista este mes."}
                             </p>
                           </div>
-                          {puedeCapturarCec ? (
+                          {cecEditable ? (
                             <button
                               type="button"
                               onClick={() => void handleSaveCec()}
@@ -19832,7 +19872,19 @@ export default function Home() {
                           ) : null}
                         </div>
 
-                        {!cecAbierto && puedeCapturarCec ? (
+                        {/* Lista de otro servicio: se lee completa, no se escribe. */}
+                        {!cecEditable ? (
+                          <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
+                            isLightPanelTheme
+                              ? "border-slate-200 bg-slate-50 text-slate-600"
+                              : "border-white/10 bg-white/[0.04] text-slate-300"
+                          }`}>
+                            Solo lectura. Esta lista la llena el personal asignado a{" "}
+                            <strong>{plantilla.nombre}</strong>.
+                          </div>
+                        ) : null}
+
+                        {!cecAbierto && cecEditable ? (
                           <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
                             La captura de {periodLabel} está cerrada. Se abre los primeros{" "}
                             {captureWindow.totalDays} días hábiles de cada mes.
@@ -19875,7 +19927,7 @@ export default function Home() {
                                             <input
                                               value={cecDoc?.expedientes[bloque.id]?.[i] ?? ""}
                                               onChange={(e) => setCecExpediente(bloque.id, i, e.target.value)}
-                                              disabled={!puedeCapturarCec || !cecAbierto}
+                                              disabled={cecBloqueado}
                                               placeholder="0000-26"
                                               className={`mt-0.5 w-20 rounded border px-1 py-0.5 text-center text-[11px] outline-none ${
                                                 isLightPanelTheme
@@ -19887,7 +19939,7 @@ export default function Home() {
                                               <input
                                                 value={cecDoc?.fechas[bloque.id]?.[i] ?? ""}
                                                 onChange={(e) => setCecFecha(bloque.id, i, e.target.value)}
-                                                disabled={!puedeCapturarCec || !cecAbierto}
+                                                disabled={cecBloqueado}
                                                 placeholder="fecha"
                                                 className={`mt-0.5 w-20 rounded border px-1 py-0.5 text-center text-[10px] outline-none ${
                                                   isLightPanelTheme
@@ -19937,7 +19989,7 @@ export default function Home() {
                                                 <select
                                                   value={cecDoc?.valores[bloque.id]?.[fila.key]?.[col] ?? ""}
                                                   onChange={(e) => setCecValor(bloque.id, fila.key, col, e.target.value)}
-                                                  disabled={!puedeCapturarCec || !cecAbierto}
+                                                  disabled={cecBloqueado}
                                                   className={`w-full rounded border px-1 py-1 text-center text-xs outline-none ${
                                                     isLightPanelTheme
                                                       ? "border-slate-200 bg-white text-slate-900"
@@ -19962,7 +20014,7 @@ export default function Home() {
                                               <input
                                                 value={cecDoc?.acciones[bloque.id]?.[fila.key] ?? ""}
                                                 onChange={(e) => setCecTexto("acciones", bloque.id, fila.key, e.target.value)}
-                                                disabled={!puedeCapturarCec || !cecAbierto}
+                                                disabled={cecBloqueado}
                                                 className={`w-full min-w-[180px] rounded border px-1.5 py-1 text-xs outline-none ${
                                                   isLightPanelTheme
                                                     ? "border-slate-200 bg-white text-slate-900"
@@ -19980,7 +20032,7 @@ export default function Home() {
                                                   ""
                                                 }
                                                 onChange={(e) => setCecTexto("responsables", bloque.id, fila.key, e.target.value)}
-                                                disabled={!puedeCapturarCec || !cecAbierto}
+                                                disabled={cecBloqueado}
                                                 className={`w-full min-w-[150px] rounded border px-1.5 py-1 text-xs outline-none ${
                                                   isLightPanelTheme
                                                     ? "border-slate-200 bg-white text-slate-700"
@@ -19999,7 +20051,7 @@ export default function Home() {
                           ))
                         )}
 
-                        {puedeCapturarCec ? (
+                        {cecEditable ? (
                           <div className="mt-6 flex justify-end">
                             <button
                               type="button"
@@ -22586,7 +22638,10 @@ export default function Home() {
                             <button
                               type="button"
                               onClick={() =>
-                                updateAdminDraft(selectedUser.uid, { cec: !draft.cec })
+                                updateAdminDraft(selectedUser.uid, {
+                                  cec: !draft.cec,
+                                  ...(draft.cec ? { cecServicios: [] } : {}),
+                                })
                               }
                               className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                                 draft.cec
@@ -22597,6 +22652,64 @@ export default function Home() {
                               {draft.cec ? "✓ Es del comité" : "Agregar al comité"}
                             </button>
                           </div>
+
+                          {/* A QUE SERVICIO PERTENECE. Ve las 13 listas, pero solo
+                              llena la que se le marque aca. Sin nada marcado entra
+                              en solo lectura: mira el comite completo y no escribe. */}
+                          {draft.cec ? (
+                            <div className="mt-3.5 border-t border-amber-400/20 pt-3.5">
+                              <p className="text-[11px] font-semibold text-slate-300">
+                                ¿Qué lista llena esta persona?
+                              </p>
+                              <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                                Ve las {CEC_TEMPLATES.length} listas del comité, pero solo escribe
+                                en las que marqués. Normalmente es una: la del servicio al que
+                                pertenece. Sin marcar ninguna queda en <strong>solo lectura</strong>.
+                              </p>
+                              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                {CEC_TEMPLATES.map((plantillaCec) => {
+                                  const marcado = (draft.cecServicios ?? []).includes(
+                                    plantillaCec.serviceId,
+                                  );
+                                  return (
+                                    <button
+                                      key={plantillaCec.serviceId}
+                                      type="button"
+                                      title={`${CEC_DIVISION_LABEL[plantillaCec.division]} · ${plantillaCec.nombre}`}
+                                      onClick={() =>
+                                        updateAdminDraft(selectedUser.uid, {
+                                          cecServicios: marcado
+                                            ? (draft.cecServicios ?? []).filter(
+                                                (x) => x !== plantillaCec.serviceId,
+                                              )
+                                            : [...(draft.cecServicios ?? []), plantillaCec.serviceId],
+                                        })
+                                      }
+                                      className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${
+                                        marcado
+                                          ? "bg-amber-400/20 text-amber-100"
+                                          : "bg-white/5 text-slate-400 hover:bg-white/10"
+                                      }`}
+                                    >
+                                      {marcado ? "✓ " : ""}
+                                      {plantillaCec.nombre}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {(draft.cecServicios ?? []).length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateAdminDraft(selectedUser.uid, { cecServicios: [] })
+                                  }
+                                  className="mt-2.5 text-[11px] font-semibold text-cyan-300 transition hover:text-cyan-200"
+                                >
+                                  Quitar todas (dejarla solo de lectura)
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="mt-4 flex flex-wrap gap-2">
@@ -23327,8 +23440,16 @@ export default function Home() {
                             </span>
                           ) : null}
                           {a.comiteExpediente ? (
-                            <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-[11px] font-semibold text-amber-200">
+                            <span
+                              className="rounded-full bg-amber-400/15 px-2.5 py-1 text-[11px] font-semibold text-amber-200"
+                              title={
+                                a.comiteLlena.length > 0
+                                  ? `Llena: ${a.comiteLlena.join(", ")}`
+                                  : "Solo lectura: no tiene ninguna lista asignada"
+                              }
+                            >
                               Comité de Expediente Clínico
+                              {a.comiteLlena.length > 0 ? ` · llena ${a.comiteLlena.length}` : " · solo lectura"}
                             </span>
                           ) : null}
                           <span

@@ -11,11 +11,14 @@ rules_version = '2';
 //     queda cerrado desde el servidor, no solo escondido en la pantalla.
 //  2) Nadie puede ascenderse solo: un usuario ya no puede tocar su propio rol,
 //     permisos, servicio ni la marca isMinsal de su documento. Antes podia.
-//  3) Comite de Expediente Clinico: nueva coleccion cecTabulators. La LLENAN los
-//     miembros del comite (marca 'cec' en su perfil) y los administradores; la
-//     LEEN ademas Direccion, supervisores y los jefes de division. La marca 'cec'
-//     queda entre los campos que solo un administrador puede escribir, para que
-//     nadie se agregue solo al comite.
+//  3) Comite de Expediente Clinico: coleccion cecTabulators. La LEEN los miembros
+//     del comite completa (las 13 listas), mas Direccion, supervisores y los jefes
+//     de division. La ESCRIBEN solo los administradores y el miembro del comite AL
+//     QUE SE LE ASIGNO ESA LISTA: el campo 'cecServicios' de su perfil dice cuales
+//     puede llenar; si intenta guardar otra, el servidor se lo rechaza aunque la
+//     pantalla se lo permitiera. 'cec' y 'cecServicios' son campos que solo un
+//     administrador puede escribir, para que nadie se agregue solo al comite ni se
+//     asigne listas ajenas.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -69,6 +72,14 @@ service cloud.firestore {
     function esDireccion() {
       return tienePerfil() && userProfile().get('isDirector', false) == true;
     }
+    // El comite VE las 13 listas, pero cada quien LLENA solo la de su servicio.
+    // 'cecServicios' es la lista de ids que el administrador le asigno. Si esta
+    // vacia, la cuenta entra en solo lectura.
+    function llenaListaDelComite() {
+      return esComite()
+        && userProfile().get('cecServicios', [])
+             .hasAny([request.resource.data.serviceId]);
+    }
 
     // Campos del perfil que SOLO un administrador puede escribir. Son los que
     // definen quien es cada quien: si un usuario pudiera tocarlos, se daria a si
@@ -80,7 +91,7 @@ service cloud.firestore {
         'serviceId', 'serviceName', 'menuGrants', 'noCapture', 'supervisorModules',
         'captureModules', 'viewPerc', 'viewSeps', 'viewHoras', 'division',
         'department', 'monitorDivision', 'username', 'loginEmail', 'sepsTables',
-        'cec'
+        'cec', 'cecServicios'
       ];
     }
     function noTocaPrivilegios() {
@@ -202,9 +213,10 @@ service cloud.firestore {
         || esDireccion()
         || esJefeDivision()
         || isSupervisor();
-      // Solo el comite (y los administradores) llenan estas listas.
+      // Escribe el administrador, o el miembro del comite al que se le asigno
+      // ESTA lista. Guardar la de otro servicio se rechaza desde el servidor.
       allow create, update: if isAdmin()
-        || (esComite() && request.resource.data.userId == request.auth.uid);
+        || (llenaListaDelComite() && request.resource.data.userId == request.auth.uid);
       allow delete: if isAdmin();
     }
     // Solicitudes de registro (jefes de servicio, direccion, MINSAL y comite).
