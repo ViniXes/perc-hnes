@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PULSO · Splash de inicio de sesión</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background:
+      radial-gradient(900px 500px at 20% 0%, rgba(34,211,238,.10), transparent 60%),
+      radial-gradient(700px 500px at 85% 100%, rgba(124,58,237,.12), transparent 60%),
+      #060a13;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .overlay {
+    position: relative;
+    width: 100%; max-width: 680px;
+    display: flex; flex-direction: column; align-items: center; gap: 22px;
+  }
+  .nota {
+    color: #64748b; font-size: 12px; text-align: center; line-height: 1.7;
+    max-width: 30rem;
+  }
+  .nota b { color: #94a3b8; font-weight: 600; }
+  .btn {
+    appearance: none; border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.04); color: #cbd5e1;
+    padding: 9px 18px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; transition: background .15s ease;
+  }
+  .btn:hover { background: rgba(255,255,255,.09); }
+
+  /* ---------------- la tarjeta ---------------- */
+  .card {
+    position: relative; width: 100%; max-width: 25rem;
+    overflow: hidden; border-radius: 28px;
+    border: 1px solid rgba(255,255,255,.07);
+    background: #070d18;
+    box-shadow: 0 32px 90px -24px rgba(0,0,0,.95);
+    animation: pop 200ms cubic-bezier(.16,1,.3,1);
+  }
+  @keyframes pop { from { opacity:0; transform: translateY(8px) scale(.98); } to { opacity:1; transform:none; } }
+  .glowA, .glowB { position:absolute; border-radius:9999px; pointer-events:none; }
+  .glowA { top:-128px; left:50%; transform:translateX(-50%); width:256px; height:256px;
+           background: rgba(6,182,212,.18); filter: blur(70px); }
+  .glowB { bottom:-112px; right:-64px; width:208px; height:208px;
+           background: rgba(124,58,237,.14); filter: blur(70px); }
+  .hairline { position:absolute; inset-inline:0; top:0; height:1px;
+    background: linear-gradient(90deg, transparent, rgba(103,232,249,.7), transparent); }
+  .inner { position: relative; padding: 40px 32px 32px; text-align: center; }
+
+  .logoWrap { position: relative; margin: 0 auto; width: 92px; height: 92px;
+              display:flex; align-items:center; justify-content:center; }
+  .halo { position:absolute; inset:18px; border-radius:20px;
+          background: linear-gradient(135deg, #22d3ee, #7c3aed); filter: blur(16px);
+          animation: login-halo 2.6s ease-in-out infinite; }
+  .ringSvg { position:absolute; inset:0; width:100%; height:100%; }
+  .logoSvg { position:relative; width:54px; height:54px; filter: drop-shadow(0 4px 8px rgba(0,0,0,.4)); }
+
+  h1.nombre {
+    margin: 0; font-size: 27px; font-weight: 700; line-height: 1;
+    letter-spacing: .34em; text-indent: .34em;
+  }
+  .descriptor {
+    margin: 10px auto 0; max-width: 17rem;
+    font-size: 12px; font-weight: 500; line-height: 1.65; color: #94a3b8;
+  }
+  .ekgBox {
+    margin-top: 28px;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+            mask-image: linear-gradient(90deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+  }
+  .ekgBox svg { width: 100%; height: 36px; display: block; }
+  .estado { margin-top: 20px; }
+  .estado .t1 { margin:0; font-size:13.5px; font-weight:600; color:#f1f5f9; }
+  .estado .t2 { margin:4px 0 0; font-size:11.5px; color:#64748b; }
+  .barra { margin-top:16px; height:3px; width:100%; overflow:hidden; border-radius:999px;
+           background: rgba(255,255,255,.07); }
+  .barra > i { display:block; height:100%; width:100%; border-radius:999px;
+    background: linear-gradient(90deg, #22d3ee, #38bdf8, #8b5cf6); }
+  .firma { margin: 28px 0 0; font-size: 9.5px; font-weight: 600;
+           text-transform: uppercase; letter-spacing: .24em; color: #475569; }
+
+  /* ---------------- animaciones (copia exacta de globals.css) ---------------- */
+  @keyframes login-rise { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform:none; } }
+  .login-rise { animation: login-rise 620ms cubic-bezier(.16,1,.3,1) both; }
+  @keyframes login-spin { to { transform: rotate(360deg); } }
+  .login-ring { transform-origin: 50% 50%; animation: login-spin 2.6s linear infinite; }
+  @keyframes login-halo { 0%,100% { opacity:.32; transform: scale(1); } 50% { opacity:.68; transform: scale(1.14); } }
+  .login-halo { animation: login-halo 2.6s ease-in-out infinite; }
+  @keyframes login-progress { from { transform: scaleX(.04); } to { transform: scaleX(1); } }
+  .login-progress { transform-origin: left center; animation: login-progress 2.1s cubic-bezier(.33,.9,.3,1) forwards; }
+  @keyframes login-sheen { from { background-position: -140% 0; } to { background-position: 240% 0; } }
+  .login-sheen {
+    background-image: linear-gradient(100deg, #cbd5e1 36%, #a5f3fc 46%, #ffffff 52%, #a5f3fc 58%, #cbd5e1 68%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: login-sheen 2.6s ease-out 260ms both;
+  }
+  .heartbeat { animation: heartbeat 1.4s ease-in-out infinite; }
+  @keyframes heartbeat { 0%,100% { transform: scale(1); } 15% { transform: scale(1.12); } 30% { transform: scale(1); } 45% { transform: scale(1.08); } }
+  .ekg-track { stroke: rgba(255,255,255,.12); }
+  .ekg-pulse { stroke-dasharray: 18 100; filter: drop-shadow(0 0 5px rgba(34,211,238,.9));
+               animation: ekg-run 1.4s linear infinite; }
+  @keyframes ekg-run { from { stroke-dashoffset: 118; } to { stroke-dashoffset: 0; } }
+</style>
+</head>
+<body>
+  <div class="overlay">
+    <div id="host"></div>
+    <button class="btn" id="replay">Ver la animación otra vez</button>
+    <p class="nota">
+      Así se ve el modal que aparece al entrar a PULSO, durante los ~2 segundos que
+      tarda en armarse el panel. <b>El anillo gira, el logo late, el electro corre y la
+      barra se llena una sola vez.</b> Es una vista previa: en el sistema real sale sobre
+      el fondo difuminado de la pantalla de ingreso.
+    </p>
+  </div>
+
+<script>
+const EKG = "M0 22 H62 L70 22 L78 8 L88 38 L98 10 L106 22 H150 L158 22 L165 15 L173 30 L181 22 H220";
+function tarjeta() {
+  return `
+  <div class="card">
+    <div class="glowA"></div>
+    <div class="glowB"></div>
+    <div class="hairline"></div>
+    <div class="inner">
+      <span class="logoWrap">
+        <span class="halo login-halo"></span>
+        <svg class="ringSvg" viewBox="0 0 100 100" aria-hidden="true">
+          <defs>
+            <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#8b5cf6"/>
+            </linearGradient>
+          </defs>
+          <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="2"/>
+          <g class="login-ring">
+            <circle cx="50" cy="50" r="46" fill="none" stroke="url(#ringGrad)" stroke-width="2"
+                    stroke-linecap="round" stroke-dasharray="76 213"/>
+          </g>
+        </svg>
+        <svg class="logoSvg heartbeat" viewBox="0 0 48 48" aria-hidden="true">
+          <defs>
+            <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#7c3aed"/>
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#logoGrad)"/>
+          <path d="M7 25 H16 L19.5 15 L25 35 L29 25 H41" fill="none" stroke="#fff"
+                stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+
+      <div class="login-rise" style="margin-top:24px">
+        <h1 class="nombre login-sheen">PULSO</h1>
+      </div>
+      <p class="descriptor login-rise" style="animation-delay:110ms">
+        Plataforma Única de Logística y Servicios Operativos
+      </p>
+
+      <div class="ekgBox login-rise" style="animation-delay:200ms">
+        <svg viewBox="0 0 220 44" preserveAspectRatio="none" aria-hidden="true">
+          <path class="ekg-track" d="${EKG}" fill="none" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"/>
+          <path class="ekg-pulse" pathLength="100" d="${EKG}" fill="none" stroke="#22d3ee"
+                stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+
+      <div class="estado login-rise" style="animation-delay:290ms">
+        <p class="t1">Iniciando sesión</p>
+        <p class="t2">Preparando tu panel…</p>
+        <div class="barra"><i class="login-progress"></i></div>
+      </div>
+
+      <p class="firma login-rise" style="animation-delay:400ms">
+        Hospital Nacional El Salvador · ESDOMED
+      </p>
+    </div>
+  </div>`;
+}
+const host = document.getElementById("host");
+function pintar() { host.innerHTML = tarjeta(); }
+pintar();
+document.getElementById("replay").addEventListener("click", pintar);
+</script>
+</body>
+</html>
