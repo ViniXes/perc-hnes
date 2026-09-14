@@ -179,6 +179,8 @@ type AdminDraft = {
   noCapture: boolean;
   isChief: boolean;
   monitorDivision: string;
+  // Miembro del Comite de Expediente Clinico: le carga el menu "C.E. Clinico".
+  cec: boolean;
   sepsTables: string[];
   viewPerc: string[];
   viewSeps: string[];
@@ -3467,6 +3469,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         noCapture: managedUser.noCapture,
         isChief: managedUser.isChief,
         monitorDivision: managedUser.monitorDivision || "",
+        cec: managedUser.cec === true,
         sepsTables: managedUser.sepsTables,
         viewPerc: managedUser.viewPerc,
         viewSeps: managedUser.viewSeps,
@@ -3490,6 +3493,7 @@ type UserAccessView = {
   esJefe: boolean;
   soloAccesos: boolean;
   monitoreaDivision: string;
+  comiteExpediente: boolean;
   capturaModulos: { id: ModuleId; label: string; tabulador: string }[];
   submenus: string[];
   consultaPerc: string[];
@@ -3536,6 +3540,7 @@ function buildUserAccessView(u: ManagedUser): UserAccessView {
     monitoreaDivision: u.monitorDivision
       ? SERVICE_GROUP_LABELS[u.monitorDivision] || u.monitorDivision
       : "",
+    comiteExpediente: u.cec === true,
     capturaModulos,
     submenus: (u.menuGrants || []).map(
       (id) => GRANTABLE_MENUS.find((g) => g.id === id)?.label || id,
@@ -13140,6 +13145,7 @@ export default function Home() {
               division: null,
               department: deptKey,
               monitorDivision: draft.monitorDivision || null,
+              cec: draft.cec === true,
               captureModules: [],
               supervisorModules: ["perc", "sesps", "distribucion"],
               permissions: { canEdit: true, canManageUsers: false, canToggleCapture: false },
@@ -13158,6 +13164,7 @@ export default function Home() {
               mustChangePassword: draft.mustChangePassword,
               department: null,
               monitorDivision: draft.monitorDivision || null,
+              cec: draft.cec === true,
               sepsTables: draft.sepsTables,
               captureModules: draft.captureModules,
               menuGrants: draft.menuGrants,
@@ -22560,6 +22567,38 @@ export default function Home() {
                           </span>
                         </label>
 
+                        {/* COMITE DE EXPEDIENTE CLINICO. Para las personas que YA tienen
+                            cuenta en PULSO por su servicio: con esta casilla se les agrega
+                            el menu "C.E. Clinico" encima de lo que ya hacen. Quien se
+                            registra directamente como comite ya entra con la marca puesta. */}
+                        <div className="mt-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-amber-200">
+                                Comité de Expediente Clínico
+                              </p>
+                              <p className="mt-1 text-[11px] leading-5 text-slate-400">
+                                Le agrega el menú <strong>C.E. Clínico</strong> con las 13 listas de
+                                monitoreo y se las deja llenar durante los primeros 5 días hábiles.
+                                No le quita ni le cambia nada de lo que ya tiene en su servicio.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateAdminDraft(selectedUser.uid, { cec: !draft.cec })
+                              }
+                              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                                draft.cec
+                                  ? "bg-amber-400/20 text-amber-200"
+                                  : "bg-white/5 text-slate-400 hover:bg-white/10"
+                              }`}
+                            >
+                              {draft.cec ? "✓ Es del comité" : "Agregar al comité"}
+                            </button>
+                          </div>
+                        </div>
+
                         <div className="mt-4 flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -23285,6 +23324,11 @@ export default function Home() {
                           {a.monitoreaDivision ? (
                             <span className="rounded-full bg-cyan-500/15 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
                               Monitorea: {a.monitoreaDivision}
+                            </span>
+                          ) : null}
+                          {a.comiteExpediente ? (
+                            <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-[11px] font-semibold text-amber-200">
+                              Comité de Expediente Clínico
                             </span>
                           ) : null}
                           <span
