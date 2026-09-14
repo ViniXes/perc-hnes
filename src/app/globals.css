@@ -93,6 +93,9 @@ body {
   html:not(.forzar-escritorio) [data-mview="panel-hospitales"] > [data-view~="panel-hospitales"] {
     display: block !important;
   }
+  html:not(.forzar-escritorio) [data-mview="panel-cec"] > [data-view~="panel-cec"] {
+    display: block !important;
+  }
 }
 
 /* Con la vista de escritorio forzada no hace falta ninguna regla extra: al quedar

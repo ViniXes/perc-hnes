@@ -11,6 +11,11 @@ rules_version = '2';
 //     queda cerrado desde el servidor, no solo escondido en la pantalla.
 //  2) Nadie puede ascenderse solo: un usuario ya no puede tocar su propio rol,
 //     permisos, servicio ni la marca isMinsal de su documento. Antes podia.
+//  3) Comite de Expediente Clinico: nueva coleccion cecTabulators. La LLENAN los
+//     miembros del comite (marca 'cec' en su perfil) y los administradores; la
+//     LEEN ademas Direccion, supervisores y los jefes de division. La marca 'cec'
+//     queda entre los campos que solo un administrador puede escribir, para que
+//     nadie se agregue solo al comite.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -51,6 +56,20 @@ service cloud.firestore {
       return !esMinsal();
     }
 
+    // --- Comite de Expediente Clinico ----------------------------------------
+    function esComite() {
+      return tienePerfil() && userProfile().get('cec', false) == true;
+    }
+    // Jefe de division: tiene division asignada, o una division que monitorea.
+    function esJefeDivision() {
+      return tienePerfil()
+        && (userProfile().get('division', '') != ''
+            || userProfile().get('monitorDivision', '') != '');
+    }
+    function esDireccion() {
+      return tienePerfil() && userProfile().get('isDirector', false) == true;
+    }
+
     // Campos del perfil que SOLO un administrador puede escribir. Son los que
     // definen quien es cada quien: si un usuario pudiera tocarlos, se daria a si
     // mismo el rol que quisiera. Lo demas de su documento (contrasena cambiada,
@@ -60,7 +79,8 @@ service cloud.firestore {
         'role', 'permissions', 'isDirector', 'isMinsal', 'isActive', 'isChief',
         'serviceId', 'serviceName', 'menuGrants', 'noCapture', 'supervisorModules',
         'captureModules', 'viewPerc', 'viewSeps', 'viewHoras', 'division',
-        'department', 'monitorDivision', 'username', 'loginEmail', 'sepsTables'
+        'department', 'monitorDivision', 'username', 'loginEmail', 'sepsTables',
+        'cec'
       ];
     }
     function noTocaPrivilegios() {
@@ -174,7 +194,20 @@ service cloud.firestore {
             || userProfile().role == 'admin'
             || userProfile().serviceId == 'almacen');
     }
-    // Solicitudes de registro (jefes de servicio, direccion y MINSAL).
+    // COMITE DE EXPEDIENTE CLINICO. Un documento por mes y por servicio
+    // ("<periodo>__<servicio>"): las listas de monitoreo del comite.
+    match /cecTabulators/{docId} {
+      allow read: if isAdmin()
+        || esComite()
+        || esDireccion()
+        || esJefeDivision()
+        || isSupervisor();
+      // Solo el comite (y los administradores) llenan estas listas.
+      allow create, update: if isAdmin()
+        || (esComite() && request.resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+    // Solicitudes de registro (jefes de servicio, direccion, MINSAL y comite).
     match /signupRequests/{id} {
       allow read: if isAdmin();
       allow create: if request.resource.data.status == 'pending'

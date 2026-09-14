@@ -46,6 +46,11 @@ import {
   type ModuleDefinition,
   type ModuleId,
 } from "@/lib/modules";
+import {
+  CEC_TEMPLATES,
+  type CecBloque,
+  type CecTemplate,
+} from "@/lib/cec-templates";
 import { calcularMatriz, indiceALetra } from "@/lib/seps-formula";
 import {
   getDayColumns,
@@ -135,6 +140,8 @@ type ManagedUser = {
   // Cuenta MINSAL: solo ve el monitoreo nacional de hospitales. No captura, no
   // consulta tabuladores del HNES y no aparece en ningun otro menu.
   isMinsal: boolean;
+  // Miembro del Comite de Expediente Clinico: llena las 13 listas de monitoreo.
+  cec: boolean;
   mustChangePassword: boolean;
   isActive: boolean;
   // Correo de ACCESO real de la cuenta (usuario@perc-hnes.app). Es la identidad con
@@ -877,6 +884,14 @@ function isServiceInChiefScope(
   if (div) return (SERVICE_GROUP_BY_ID[serviceId] || "apoyo") === div;
   return true;
 }
+
+/** Como se llama cada division en la pantalla del comite. */
+const CEC_DIVISION_LABEL: Record<string, string> = {
+  direccion: "Dirección",
+  medica: "División Médica",
+  apoyo: "División de Apoyo",
+  administrativa: "Subdirección Administrativa",
+};
 
 /**
  * Las cinco regiones de salud del MINSAL. El menu de hospitales entra por aca:
@@ -3410,6 +3425,7 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     monitorDivision: typeof data.monitorDivision === "string" && data.monitorDivision ? data.monitorDivision : null,
     isDirector: data.isDirector === true,
     isMinsal: data.isMinsal === true,
+    cec: data.cec === true,
     mustChangePassword: data.mustChangePassword !== false,
     isActive: data.isActive !== false,
     menuGrants: Array.isArray(data.menuGrants)
@@ -5383,6 +5399,22 @@ export default function Home() {
   // Navegacion de la pantalla de hospitales: primero region, luego hospital.
   const [regionSel, setRegionSel] = useState("");
   const [hospitalSel, setHospitalSel] = useState("");
+  // --- Comite de Expediente Clinico -------------------------------------
+  type CecDoc = {
+    expedientes: Record<string, string[]>;
+    fechas: Record<string, string[]>;
+    valores: Record<string, Record<string, string[]>>;
+    acciones: Record<string, Record<string, string>>;
+    responsables: Record<string, Record<string, string>>;
+  };
+  const [cecServicio, setCecServicio] = useState("");
+  const [cecDoc, setCecDoc] = useState<CecDoc | null>(null);
+  const [cecCargando, setCecCargando] = useState(false);
+  const [cecGuardando, setCecGuardando] = useState(false);
+  const [cecAutoria, setCecAutoria] = useState<{ usuario: string; fecha: string } | null>(null);
+  // Que servicios ya entregaron su lista este mes (para el semaforo y el monitoreo).
+  const [cecEstados, setCecEstados] = useState<Record<string, { usuario?: string; fecha?: string }>>({});
+
   // Consulta de todos los hospitales a la vez (resumen nacional).
   const [sigmaTodos, setSigmaTodos] = useState(false);
   const [sigmaConsultadoEn, setSigmaConsultadoEn] = useState("");
@@ -6197,6 +6229,17 @@ export default function Home() {
     monitorDivision && !serviceProfile?.division && !serviceProfile?.department
       ? { division: monitorDivision, department: null }
       : serviceProfile;
+  // COMITE DE EXPEDIENTE CLINICO. Lo LLENAN los miembros del comite (y los
+  // administradores); lo VEN ademas la Direccion, los supervisores y cada jefe
+  // de division, limitado a los servicios de su division.
+  const esComiteCec = serviceProfile?.cec === true;
+  const puedeCapturarCec = isAdmin || esComiteCec;
+  const divisionCec = monitorDivision || serviceProfile?.division || "";
+  const veTodoCec = isAdmin || isDirector || isSupervisor || esComiteCec;
+  const puedeVerCec = veTodoCec || !!divisionCec;
+  const cecPlantillasVisibles = veTodoCec
+    ? CEC_TEMPLATES
+    : CEC_TEMPLATES.filter((t) => t.division === divisionCec);
   // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
   // y los administradores (por temas de calidad y control).
   const hasGrant = (id: string) => (serviceProfile?.menuGrants ?? []).includes(id);
@@ -8087,6 +8130,214 @@ export default function Home() {
    * Trae el monitoreo del Psiquiatrico. Si SIGMA no esta configurado o no
    * responde, la tarjeta lo dice y PULSO sigue igual: nunca lo rompe.
    */
+  // La ventana del comite es la misma de Horas: los 5 primeros dias habiles del
+  // mes, con el ultimo dia cerrando a las 2:30 p.m.
+  const cecAbierto = captureWindow.isOpen;
+
+  /** Estructura vacia de una plantilla, con sus columnas ya dimensionadas. */
+  function cecVacio(plantilla: CecTemplate): CecDoc {
+    const doc: CecDoc = { expedientes: {}, fechas: {}, valores: {}, acciones: {}, responsables: {} };
+    for (const bloque of plantilla.bloques) {
+      const columnas = bloque.tipo === "expedientes" ? bloque.columnas : 1;
+      doc.expedientes[bloque.id] = new Array(columnas).fill("");
+      doc.fechas[bloque.id] = new Array(columnas).fill("");
+      doc.valores[bloque.id] = {};
+      doc.acciones[bloque.id] = {};
+      doc.responsables[bloque.id] = {};
+      for (const fila of bloque.filas) {
+        doc.valores[bloque.id][fila.key] = new Array(columnas).fill("");
+        doc.acciones[bloque.id][fila.key] = "";
+        doc.responsables[bloque.id][fila.key] = fila.responsable ?? "";
+      }
+    }
+    return doc;
+  }
+
+  /** Lo guardado se acomoda a la plantilla actual: si el Excel cambio, no se rompe. */
+  function cecMezclar(plantilla: CecTemplate, guardado: Partial<CecDoc> | null): CecDoc {
+    const base = cecVacio(plantilla);
+    if (!guardado) return base;
+    for (const bloque of plantilla.bloques) {
+      const columnas = bloque.tipo === "expedientes" ? bloque.columnas : 1;
+      const exp = guardado.expedientes?.[bloque.id];
+      const fec = guardado.fechas?.[bloque.id];
+      for (let i = 0; i < columnas; i += 1) {
+        if (Array.isArray(exp) && typeof exp[i] === "string") base.expedientes[bloque.id][i] = exp[i];
+        if (Array.isArray(fec) && typeof fec[i] === "string") base.fechas[bloque.id][i] = fec[i];
+      }
+      for (const fila of bloque.filas) {
+        const v = guardado.valores?.[bloque.id]?.[fila.key];
+        if (Array.isArray(v)) {
+          for (let i = 0; i < columnas; i += 1) {
+            if (typeof v[i] === "string") base.valores[bloque.id][fila.key][i] = v[i];
+          }
+        }
+        const a = guardado.acciones?.[bloque.id]?.[fila.key];
+        if (typeof a === "string") base.acciones[bloque.id][fila.key] = a;
+        const r = guardado.responsables?.[bloque.id]?.[fila.key];
+        if (typeof r === "string" && r) base.responsables[bloque.id][fila.key] = r;
+      }
+    }
+    return base;
+  }
+
+  /**
+   * Porcentaje de cumplimiento de una fila: cuantos "1" sobre los que si
+   * aplican. Las casillas en N/A y las vacias no cuentan, igual que en el Excel.
+   */
+  function cecTotalFila(bloque: CecBloque, filaKey: string): number | null {
+    const celdas = cecDoc?.valores[bloque.id]?.[filaKey] ?? [];
+    let aplican = 0;
+    let cumple = 0;
+    for (const celda of celdas) {
+      if (celda === "1") { aplican += 1; cumple += 1; }
+      else if (celda === "0") { aplican += 1; }
+    }
+    if (aplican === 0) return null;
+    return Math.round((cumple / aplican) * 100);
+  }
+
+  /** Cumplimiento de un bloque entero. */
+  function cecPctBloque(bloque: CecBloque): number {
+    let aplican = 0;
+    let cumple = 0;
+    for (const fila of bloque.filas) {
+      for (const celda of cecDoc?.valores[bloque.id]?.[fila.key] ?? []) {
+        if (celda === "1") { aplican += 1; cumple += 1; }
+        else if (celda === "0") { aplican += 1; }
+      }
+    }
+    if (aplican === 0) return 0;
+    return Math.round((cumple / aplican) * 100);
+  }
+
+  function setCecValor(bloqueId: string, filaKey: string, col: number, valor: string) {
+    setCecDoc((previo) => {
+      if (!previo) return previo;
+      const filas = { ...previo.valores[bloqueId] };
+      const celdas = [...(filas[filaKey] ?? [])];
+      celdas[col] = valor;
+      filas[filaKey] = celdas;
+      return { ...previo, valores: { ...previo.valores, [bloqueId]: filas } };
+    });
+  }
+
+  function setCecExpediente(bloqueId: string, col: number, valor: string) {
+    setCecDoc((previo) => {
+      if (!previo) return previo;
+      const lista = [...(previo.expedientes[bloqueId] ?? [])];
+      lista[col] = valor;
+      return { ...previo, expedientes: { ...previo.expedientes, [bloqueId]: lista } };
+    });
+  }
+
+  function setCecFecha(bloqueId: string, col: number, valor: string) {
+    setCecDoc((previo) => {
+      if (!previo) return previo;
+      const lista = [...(previo.fechas[bloqueId] ?? [])];
+      lista[col] = valor;
+      return { ...previo, fechas: { ...previo.fechas, [bloqueId]: lista } };
+    });
+  }
+
+  function setCecTexto(campo: "acciones" | "responsables", bloqueId: string, filaKey: string, valor: string) {
+    setCecDoc((previo) => {
+      if (!previo) return previo;
+      const bloque = { ...previo[campo][bloqueId], [filaKey]: valor };
+      return { ...previo, [campo]: { ...previo[campo], [bloqueId]: bloque } };
+    });
+  }
+
+  /** Abre un servicio del comite y trae lo guardado del mes. */
+  async function abrirCecServicio(serviceId: string) {
+    setCecServicio(serviceId);
+    const plantilla = CEC_TEMPLATES.find((t) => t.serviceId === serviceId);
+    if (!plantilla) return;
+    setCecCargando(true);
+    setCecAutoria(null);
+    try {
+      const snap = await getDoc(doc(db, "cecTabulators", `${periodId}__${serviceId}`));
+      const datos = snap.exists() ? (snap.data() as Record<string, unknown>) : null;
+      setCecDoc(cecMezclar(plantilla, (datos as Partial<CecDoc> | null) ?? null));
+      if (datos && typeof datos.userEmail === "string") {
+        setCecAutoria({
+          usuario: String(datos.userEmail),
+          fecha: fechaLegible(datos.updatedAt as never) || "",
+        });
+      }
+    } catch (error) {
+      if (await handleFirestoreError(error)) return;
+      setCecDoc(cecVacio(plantilla));
+      setError("No pudimos abrir la lista de ese servicio.");
+    } finally {
+      setCecCargando(false);
+    }
+  }
+
+  /** Guarda la lista del servicio abierto. */
+  async function handleSaveCec() {
+    const plantilla = CEC_TEMPLATES.find((t) => t.serviceId === cecServicio);
+    if (!plantilla || !cecDoc || !puedeCapturarCec) return;
+    if (!cecAbierto) {
+      setError("La captura del Comité de Expediente Clínico está cerrada este mes.");
+      return;
+    }
+    setCecGuardando(true);
+    setError("");
+    setMessage("");
+    try {
+      await setDoc(
+        doc(db, "cecTabulators", `${periodId}__${plantilla.serviceId}`),
+        {
+          periodId,
+          periodLabel,
+          serviceId: plantilla.serviceId,
+          serviceName: plantilla.nombre,
+          division: plantilla.division,
+          userId: user?.uid ?? "",
+          userEmail: serviceProfile?.username || user?.email || "",
+          expedientes: cecDoc.expedientes,
+          fechas: cecDoc.fechas,
+          valores: cecDoc.valores,
+          acciones: cecDoc.acciones,
+          responsables: cecDoc.responsables,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      setMessage(`Lista de ${plantilla.nombre} guardada.`);
+      setCecEstados((previo) => ({
+        ...previo,
+        [plantilla.serviceId]: { usuario: serviceProfile?.username || "", fecha: "" },
+      }));
+    } catch (error) {
+      if (await handleFirestoreError(error)) return;
+      setError("No pudimos guardar la lista. Volvé a intentarlo.");
+    } finally {
+      setCecGuardando(false);
+    }
+  }
+
+  /** Que servicios del comite ya entregaron el mes (semaforo y monitoreo). */
+  async function loadCecEstados() {
+    if (firestoreUnavailable) return;
+    try {
+      const snap = await getDocs(
+        query(collection(db, "cecTabulators"), where("periodId", "==", periodId)),
+      );
+      const estados: Record<string, { usuario?: string; fecha?: string }> = {};
+      snap.forEach((item) => {
+        const d = item.data() as { serviceId?: string; userEmail?: string };
+        if (typeof d.serviceId === "string") {
+          estados[d.serviceId] = { usuario: d.userEmail ?? "" };
+        }
+      });
+      setCecEstados(estados);
+    } catch {
+      // El semaforo es un extra: si no se puede leer, la captura sigue.
+    }
+  }
+
   /**
    * Consulta de una sola vez a todos los hospitales conectados, para llenar el
    * resumen nacional. No se dispara al entrar: cada consulta viaja al sistema de
@@ -13144,6 +13395,13 @@ export default function Home() {
     setPanelTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
   }
 
+  // El semaforo del comite se lee al ENTRAR a su pantalla, no antes.
+  useEffect(() => {
+    if (activeSidebarSection !== "panel-cec" && mobileView !== "panel-cec") return;
+    void loadCecEstados();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSidebarSection, mobileView, periodId]);
+
   // Una cuenta MINSAL entra directo al monitoreo de hospitales: no tiene otra
   // pantalla a donde ir.
   useEffect(() => {
@@ -17330,6 +17588,18 @@ export default function Home() {
             },
           ]
         : []),
+      // COMITE DE EXPEDIENTE CLINICO: va debajo de Hospitales. Lo llena el comite;
+      // cada jefe de division ve los servicios que le tocan.
+      ...(puedeVerCec && !isMinsal
+        ? [
+            {
+              id: "panel-cec",
+              label: "C.E. Clínico",
+              detail: "Comité de Expediente Clínico",
+              badge: "CE",
+            },
+          ]
+        : []),
       {
         id: "panel-docs",
         label: "DOCS-POA/MOF",
@@ -17703,6 +17973,7 @@ export default function Home() {
                                 "panel-capture-toggle",
                                 "panel-poa",
                                 "panel-hospitales",
+                                "panel-cec",
                               ].includes(item.id)
                             ? item.id
                             : null;
@@ -18283,7 +18554,7 @@ export default function Home() {
 
             {/* Barra de "volver a Inicio" — SOLO movil, en cualquier vista que no sea Inicio. */}
             <div
-              data-view={isMinsal ? "" : "panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-depreciacion-perc panel-calendar panel-admin-export panel-capture-toggle panel-hospitales"}
+              data-view={isMinsal ? "" : "panel-services panel-tabulator panel-seps panel-horas panel-censo panel-insumos panel-gastos-perc panel-depreciacion-perc panel-calendar panel-admin-export panel-capture-toggle panel-hospitales panel-cec"}
               className="flex items-center gap-3 desk:hidden"
             >
               <button
@@ -18314,7 +18585,9 @@ export default function Home() {
                             ? "Habilitar tableros"
                             : mobileView === "panel-hospitales"
                               ? "Hospitales"
-                              : ""}
+                              : mobileView === "panel-cec"
+                                ? "Comité de Expediente Clínico"
+                                : ""}
               </span>
             </div>
 
@@ -19405,6 +19678,309 @@ export default function Home() {
                         </>
                       )
                     ) : null}
+                  </>
+                );
+              })()}
+            </section>
+          ) : null}
+
+          {/* COMITÉ DE EXPEDIENTE CLÍNICO (CEC). Trece listas de monitoreo, una por
+              servicio, idénticas al Excel del comité: aspectos por categoría y una
+              casilla Sí(1)/No(0)/N/A. Los bloques de expedientes llevan además el
+              número de expediente por columna y su fecha. Se llena por mes, en los
+              mismos 5 primeros días hábiles que los demás tableros. */}
+          {puedeVerCec &&
+          (activeSidebarSection === "panel-cec" || mobileView === "panel-cec") ? (
+            <section
+              id="panel-cec"
+              data-view="panel-cec"
+              className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
+                isLightPanelTheme
+                  ? "border border-slate-200 bg-white text-slate-900"
+                  : "border border-white/10 bg-[#202c41] text-slate-100"
+              }`}
+            >
+              {(() => {
+                const plantillas = cecPlantillasVisibles;
+                const plantilla = plantillas.find((t) => t.serviceId === cecServicio) || null;
+                const suave = isLightPanelTheme ? "text-slate-600" : "text-slate-300";
+                const marco = isLightPanelTheme
+                  ? "border-slate-200 bg-slate-50"
+                  : "border-white/10 bg-[#1b2537]";
+                const entregados = plantillas.filter((t) => cecEstados[t.serviceId]).length;
+
+                return (
+                  <>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300/90">
+                          Comité de Expediente Clínico
+                        </p>
+                        <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                          Lista de monitoreo · {periodLabel}
+                        </h2>
+                        <p className={`mt-1 text-sm ${suave}`}>
+                          {puedeCapturarCec
+                            ? "Elegí el servicio y llená su lista. Es la misma del Excel del comité: 1 si cumple, 0 si no, N/A si no aplica."
+                            : "Solo lectura: acá ves cómo va el llenado de los servicios de tu división."}
+                        </p>
+                      </div>
+                      <div className={`shrink-0 rounded-2xl border px-4 py-3 text-center ${marco}`}>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                          Entregados
+                        </p>
+                        <p className={`mt-0.5 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                          {entregados} <span className="text-sm font-medium text-slate-400">de {plantillas.length}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Los servicios: verde el que ya entregó este mes. */}
+                    <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {plantillas.map((t) => {
+                        const listo = !!cecEstados[t.serviceId];
+                        const activo = t.serviceId === cecServicio;
+                        return (
+                          <button
+                            key={t.serviceId}
+                            type="button"
+                            onClick={() => void abrirCecServicio(t.serviceId)}
+                            className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm transition ${
+                              activo
+                                ? "border-cyan-400/60 bg-cyan-400/10"
+                                : isLightPanelTheme
+                                  ? "border-slate-200 bg-white hover:bg-slate-50"
+                                  : "border-white/10 bg-[#1b2537] hover:bg-[#223048]"
+                            }`}
+                          >
+                            <span
+                              className={`h-2.5 w-2.5 shrink-0 rounded-full ${listo ? "bg-emerald-400" : "bg-amber-400"}`}
+                              aria-label={listo ? "Entregado" : "Pendiente"}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className={`block truncate font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                {t.nombre}
+                              </span>
+                              <span className="block truncate text-[11px] text-slate-500">
+                                {CEC_DIVISION_LABEL[t.division]} · {t.bloques.length}{" "}
+                                {t.bloques.length === 1 ? "tabla" : "tablas"}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {plantilla ? (
+                      <div className="mt-6">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className={`text-xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                              {plantilla.nombre}
+                            </h3>
+                            <p className={`text-xs ${suave}`}>
+                              {cecAutoria
+                                ? `Último guardado por ${cecAutoria.usuario} el ${cecAutoria.fecha}`
+                                : "Todavía nadie ha guardado esta lista este mes."}
+                            </p>
+                          </div>
+                          {puedeCapturarCec ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveCec()}
+                              disabled={cecGuardando || cecCargando || !cecAbierto}
+                              className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-4 py-2 text-sm font-bold text-slate-900 transition disabled:opacity-50"
+                            >
+                              {cecGuardando ? "Guardando…" : "Guardar lista"}
+                            </button>
+                          ) : null}
+                        </div>
+
+                        {!cecAbierto && puedeCapturarCec ? (
+                          <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+                            La captura de {periodLabel} está cerrada. Se abre los primeros{" "}
+                            {captureWindow.totalDays} días hábiles de cada mes.
+                          </div>
+                        ) : null}
+
+                        {cecCargando ? (
+                          <p className={`mt-6 text-sm ${suave}`}>Cargando la lista…</p>
+                        ) : (
+                          plantilla.bloques.map((bloque) => (
+                            <div key={bloque.id} className="mt-6">
+                              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                <h4 className={`text-sm font-bold uppercase tracking-wide ${isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>
+                                  {bloque.titulo}
+                                </h4>
+                                <span className={`text-xs ${suave}`}>
+                                  Cumplimiento del bloque:{" "}
+                                  <strong className={cecPctBloque(bloque) >= 80 ? "text-emerald-300" : "text-amber-300"}>
+                                    {cecPctBloque(bloque)}%
+                                  </strong>
+                                </span>
+                              </div>
+
+                              <div className="mt-2 overflow-x-auto">
+                                <table className="w-full min-w-[820px] border-collapse text-sm">
+                                  <thead>
+                                    <tr className={isLightPanelTheme ? "bg-slate-100" : "bg-[#1b2537]"}>
+                                      <th className={`border px-2 py-2 text-left text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
+                                        Categoría
+                                      </th>
+                                      <th className={`border px-2 py-2 text-left text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
+                                        Aspecto a evaluar
+                                      </th>
+                                      {bloque.tipo === "expedientes" ? (
+                                        Array.from({ length: bloque.columnas }, (_, i) => (
+                                          <th key={i} className={`border px-1 py-1 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+                                            <span className="block text-[9px] uppercase tracking-wide text-slate-400">
+                                              Expediente
+                                            </span>
+                                            <input
+                                              value={cecDoc?.expedientes[bloque.id]?.[i] ?? ""}
+                                              onChange={(e) => setCecExpediente(bloque.id, i, e.target.value)}
+                                              disabled={!puedeCapturarCec || !cecAbierto}
+                                              placeholder="0000-26"
+                                              className={`mt-0.5 w-20 rounded border px-1 py-0.5 text-center text-[11px] outline-none ${
+                                                isLightPanelTheme
+                                                  ? "border-slate-200 bg-white text-slate-900"
+                                                  : "border-white/10 bg-[#141c2b] text-white"
+                                              }`}
+                                            />
+                                            {bloque.fecha ? (
+                                              <input
+                                                value={cecDoc?.fechas[bloque.id]?.[i] ?? ""}
+                                                onChange={(e) => setCecFecha(bloque.id, i, e.target.value)}
+                                                disabled={!puedeCapturarCec || !cecAbierto}
+                                                placeholder="fecha"
+                                                className={`mt-0.5 w-20 rounded border px-1 py-0.5 text-center text-[10px] outline-none ${
+                                                  isLightPanelTheme
+                                                    ? "border-slate-200 bg-white text-slate-700"
+                                                    : "border-white/10 bg-[#141c2b] text-slate-300"
+                                                }`}
+                                              />
+                                            ) : null}
+                                          </th>
+                                        ))
+                                      ) : (
+                                        <th className={`border px-2 py-2 text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
+                                          Sí 1 · No 0 · N/A
+                                        </th>
+                                      )}
+                                      <th className={`border px-2 py-2 text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
+                                        Total
+                                      </th>
+                                      {bloque.acciones ? (
+                                        <th className={`border px-2 py-2 text-left text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
+                                          Cantidades, acciones o puntos de mejora
+                                        </th>
+                                      ) : null}
+                                      {bloque.responsable ? (
+                                        <th className={`border px-2 py-2 text-left text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
+                                          Responsable
+                                        </th>
+                                      ) : null}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {bloque.filas.map((fila, indice) => {
+                                      const previa = indice > 0 ? bloque.filas[indice - 1].categoria : "";
+                                      const total = cecTotalFila(bloque, fila.key);
+                                      return (
+                                        <tr key={fila.key}>
+                                          <td className={`border px-2 py-1.5 align-top text-xs ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-400"}`}>
+                                            {fila.categoria === previa ? "" : fila.categoria}
+                                          </td>
+                                          <td className={`border px-2 py-1.5 align-top ${isLightPanelTheme ? "border-slate-200 text-slate-800" : "border-white/10 text-slate-200"}`}>
+                                            {fila.aspecto}
+                                          </td>
+                                          {Array.from(
+                                            { length: bloque.tipo === "expedientes" ? bloque.columnas : 1 },
+                                            (_, col) => (
+                                              <td key={col} className={`border p-0.5 text-center ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+                                                <select
+                                                  value={cecDoc?.valores[bloque.id]?.[fila.key]?.[col] ?? ""}
+                                                  onChange={(e) => setCecValor(bloque.id, fila.key, col, e.target.value)}
+                                                  disabled={!puedeCapturarCec || !cecAbierto}
+                                                  className={`w-full rounded border px-1 py-1 text-center text-xs outline-none ${
+                                                    isLightPanelTheme
+                                                      ? "border-slate-200 bg-white text-slate-900"
+                                                      : "border-white/10 bg-[#141c2b] text-white"
+                                                  }`}
+                                                >
+                                                  <option value="">—</option>
+                                                  <option value="1">1</option>
+                                                  <option value="0">0</option>
+                                                  <option value="NA">N/A</option>
+                                                </select>
+                                              </td>
+                                            ),
+                                          )}
+                                          <td className={`border px-2 py-1.5 text-center text-xs font-bold ${isLightPanelTheme ? "border-slate-200" : "border-white/10"} ${
+                                            total === null ? "text-slate-500" : total >= 80 ? "text-emerald-300" : "text-amber-300"
+                                          }`}>
+                                            {total === null ? "—" : `${total}%`}
+                                          </td>
+                                          {bloque.acciones ? (
+                                            <td className={`border p-0.5 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+                                              <input
+                                                value={cecDoc?.acciones[bloque.id]?.[fila.key] ?? ""}
+                                                onChange={(e) => setCecTexto("acciones", bloque.id, fila.key, e.target.value)}
+                                                disabled={!puedeCapturarCec || !cecAbierto}
+                                                className={`w-full min-w-[180px] rounded border px-1.5 py-1 text-xs outline-none ${
+                                                  isLightPanelTheme
+                                                    ? "border-slate-200 bg-white text-slate-900"
+                                                    : "border-white/10 bg-[#141c2b] text-white"
+                                                }`}
+                                              />
+                                            </td>
+                                          ) : null}
+                                          {bloque.responsable ? (
+                                            <td className={`border p-0.5 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+                                              <input
+                                                value={
+                                                  cecDoc?.responsables[bloque.id]?.[fila.key] ??
+                                                  fila.responsable ??
+                                                  ""
+                                                }
+                                                onChange={(e) => setCecTexto("responsables", bloque.id, fila.key, e.target.value)}
+                                                disabled={!puedeCapturarCec || !cecAbierto}
+                                                className={`w-full min-w-[150px] rounded border px-1.5 py-1 text-xs outline-none ${
+                                                  isLightPanelTheme
+                                                    ? "border-slate-200 bg-white text-slate-700"
+                                                    : "border-white/10 bg-[#141c2b] text-slate-300"
+                                                }`}
+                                              />
+                                            </td>
+                                          ) : null}
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          ))
+                        )}
+
+                        {puedeCapturarCec ? (
+                          <div className="mt-6 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveCec()}
+                              disabled={cecGuardando || cecCargando || !cecAbierto}
+                              className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-2.5 text-sm font-bold text-slate-900 transition disabled:opacity-50"
+                            >
+                              {cecGuardando ? "Guardando…" : "Guardar lista"}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className={`mt-6 text-sm ${suave}`}>
+                        Elegí un servicio de la lista para abrir su monitoreo.
+                      </p>
+                    )}
                   </>
                 );
               })()}
