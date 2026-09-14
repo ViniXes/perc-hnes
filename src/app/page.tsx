@@ -6240,6 +6240,33 @@ export default function Home() {
   const cecPlantillasVisibles = veTodoCec
     ? CEC_TEMPLATES
     : CEC_TEMPLATES.filter((t) => t.division === divisionCec);
+  // Avance del comite para el "Monitoreo general". No sale del tablero publico
+  // (las listas del comite no son servicios de PULSO) sino de cecTabulators: un
+  // servicio esta COMPLETO cuando ya tiene su documento del mes guardado. La lista
+  // ya viene recortada por division, asi que cada jefe ve unicamente lo suyo.
+  const cecMonitorStats = (() => {
+    const items: {
+      id: string;
+      name: string;
+      done: boolean;
+      family?: { done: number; total: number; pct: number };
+    }[] = cecPlantillasVisibles.map((plantilla) => ({
+      id: plantilla.serviceId,
+      name: plantilla.nombre,
+      done: !!cecEstados[plantilla.serviceId],
+    }));
+    const total = items.length;
+    const completos = items.filter((item) => item.done).length;
+    return {
+      items: [...items].sort((a, b) =>
+        a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+      ),
+      total,
+      completos,
+      pendientes: total - completos,
+      pct: total > 0 ? Math.round((completos / total) * 100) : 0,
+    };
+  })();
   // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
   // y los administradores (por temas de calidad y control).
   const hasGrant = (id: string) => (serviceProfile?.menuGrants ?? []).includes(id);
@@ -6844,6 +6871,8 @@ export default function Home() {
 
     void refreshPublicDashboard(false);
     void loadRecibidosExternos();
+    // El comite no viaja en el tablero publico: su avance se lee aparte.
+    if (showGeneralMonitorModal) void loadCecEstados();
     // refreshPublicDashboard se declara mas abajo en el componente (hoisted).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showStatsModal, showBoardModal, showGeneralMonitorModal, firestoreUnavailable, firestoreStatusReady]);
@@ -22525,7 +22554,7 @@ export default function Home() {
                             ))}
                           </select>
                           <span className="mt-1 block text-[11px] text-slate-500">
-                            Le agrega el menú &quot;Monitoreo general&quot; (PERC, SEPS y Horas) con
+                            Le agrega el menú &quot;Monitoreo general&quot; (PERC, SEPS, Horas y C.E. Clínico) con
                             los servicios de esa división únicamente. No le da permiso de abrir
                             tableros ni de modificar nada.
                           </span>
@@ -23521,15 +23550,31 @@ export default function Home() {
               Los monitoreos por modulo siguen funcionando por separado. */}
           {(isAdmin || isDirector || isSupervisor || monitorDivision) && showGeneralMonitorModal
             ? (() => {
-                const columnas = [
+                const columnasBase = [
                   { key: "PERC" as const, titulo: "PERC", periodo: periodId, color: "#38bdf8" },
                   { key: "SEPS" as const, titulo: "SEPS", periodo: sepsPeriodId, color: "#a78bfa" },
                   { key: "Horas" as const, titulo: "Distribución de Horas", periodo: periodId, color: "#34d399" },
                 ].map((col) => ({
                   ...col,
+                  titulo: col.titulo as string,
                   stats: computeMonitorStats(col.key),
                   cerrado: isMonitorPeriodClosed(col.key),
                 }));
+                // C.E. Clínico: mismo cierre que Horas (los 5 días hábiles) y la
+                // lista ya recortada a la división de quien esté mirando.
+                const columnas = puedeVerCec
+                  ? [
+                      ...columnasBase,
+                      {
+                        key: "CEC" as const,
+                        titulo: "C.E. Clínico",
+                        periodo: periodId,
+                        color: "#fbbf24",
+                        stats: cecMonitorStats,
+                        cerrado: !captureWindow.isOpen,
+                      },
+                    ]
+                  : columnasBase;
 
                 return (
                   <div
@@ -23586,7 +23631,11 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto px-5 pb-5 sm:px-7 sm:pb-7 lg:grid-cols-3">
+                      <div
+                        className={`grid min-h-0 flex-1 gap-3 overflow-y-auto px-5 pb-5 sm:px-7 sm:pb-7 sm:grid-cols-2 ${
+                          columnas.length > 3 ? "lg:grid-cols-4" : "lg:grid-cols-3"
+                        }`}
+                      >
                         {columnas.map((col) => (
                           <div
                             key={col.key}
