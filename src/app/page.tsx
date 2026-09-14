@@ -662,6 +662,9 @@ const SIGNUP_DIVISIONS: { key: string; label: string; jefeLabel: string | null }
   // por aca porque es la misma puerta de entrada, pero su cuenta solo abre el
   // monitoreo nacional de hospitales.
   { key: "minsal", label: "MINSAL (nivel nacional)", jefeLabel: null },
+  // Comite de Expediente Clinico: tampoco es una division, es un comite que
+  // atraviesa todo el hospital. Al elegirlo se pide a que lista pertenece.
+  { key: "comite", label: "Comité de Expediente Clínico", jefeLabel: null },
 ];
 
 // Terminos extra de busqueda por servicio (p.ej. siglas), en minusculas. Permiten
@@ -1894,7 +1897,9 @@ type SignupRequest = {
   serviceName: string;
   status: "pending" | "approved" | "rejected";
   createdUsername?: string;
-  requestType?: "service" | "division" | "department" | "department-editor" | "director" | "subdirector" | "minsal";
+  requestType?: "service" | "division" | "department" | "department-editor" | "director" | "subdirector" | "minsal" | "comite";
+  // Listas del comite que pidio llenar (normalmente una).
+  cecServicios?: string[];
   isChief?: boolean;
   captureModules?: ModuleId[];
   division?: string;
@@ -4834,6 +4839,77 @@ async function createMinsalAccount(
   return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
 }
 
+// Crea la cuenta de un miembro del COMITE DE EXPEDIENTE CLINICO que no tenia
+// cuenta en PULSO. No captura PERC, SEPS ni Horas: entra unicamente al modulo del
+// comite, ve las 13 listas y llena la del servicio al que pertenece.
+async function createComiteAccount(
+  creationAuth: Auth,
+  {
+    contactEmail,
+    firstName,
+    lastName,
+    cecServicios,
+  }: {
+    contactEmail: string;
+    firstName: string;
+    lastName: string;
+    cecServicios: string[];
+  },
+) {
+  const etiqueta = "Comité de Expediente Clínico";
+  const base = buildChiefUsername(firstName, lastName);
+  const displayName = buildFullName(firstName.trim(), lastName.trim(), etiqueta);
+  let username = base;
+  let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    username = attempt === 0 ? base : `${base}${attempt + 1}`;
+    if (isReservedUsername(username)) continue;
+    const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+    try {
+      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, CHIEF_TEMP_PASSWORD);
+      break;
+    } catch (err) {
+      if ((err as { code?: string })?.code === "auth/email-already-in-use") continue;
+      throw err;
+    }
+  }
+  if (!credential) throw new Error("username-unavailable");
+  const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
+  await updateProfile(credential.user, { displayName });
+  await setDoc(doc(db, "serviceUsers", credential.user.uid), {
+    serviceId: null,
+    serviceName: etiqueta,
+    email: contactEmail.trim(),
+    contactEmail: contactEmail.trim(),
+    loginEmail,
+    username,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    name: displayName,
+    role: "service",
+    isActive: true,
+    mustChangePassword: true,
+    isChief: false,
+    isDirector: false,
+    isMinsal: false,
+    cec: true,
+    cecServicios,
+    noCapture: true,
+    captureModules: [],
+    supervisorModules: [],
+    menuGrants: [],
+    viewPerc: [],
+    viewSeps: [],
+    viewHoras: [],
+    division: null,
+    department: null,
+    permissions: { canEdit: false, canManageUsers: false, canToggleCapture: false },
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+}
+
 // Crea la cuenta de la DIRECTORA: ve TODO el hospital (todos los servicios y modulos,
 // monitoreo), pero SIN permisos de gestion (no edita, no habilita/reinicia tableros,
 // no gestiona usuarios, no aprueba solicitudes).
@@ -5119,7 +5195,9 @@ export default function Home() {
     email: string;
     serviceId: string;
     acceptPrivacy: boolean;
-    accessType: "service" | "division" | "department" | "department-editor" | "director" | "subdirector" | "minsal";
+    accessType: "service" | "division" | "department" | "department-editor" | "director" | "subdirector" | "minsal" | "comite";
+    // Lista del Comite de Expediente Clinico que va a llenar (id de CEC_TEMPLATES).
+    cecServicio: string;
     isChief: boolean;
     captureModules: ModuleId[];
     division: string;
@@ -5133,6 +5211,7 @@ export default function Home() {
     serviceId: "",
     acceptPrivacy: false,
     accessType: "service",
+    cecServicio: "",
     isChief: false,
     captureModules: [],
     division: "",
@@ -6263,6 +6342,18 @@ export default function Home() {
   const divisionCec = monitorDivision || serviceProfile?.division || "";
   const veTodoCec = isAdmin || isDirector || isSupervisor || esComiteCec;
   const puedeVerCec = veTodoCec || !!divisionCec;
+  // Cuenta creada exclusivamente para el comite: no tiene servicio, division ni
+  // jefatura. Para ella el modulo del comite ES su pantalla de inicio.
+  const esSoloComite =
+    esComiteCec &&
+    !isAdmin &&
+    !isSupervisor &&
+    !isDirector &&
+    !isMinsal &&
+    !serviceProfile?.serviceId &&
+    !serviceProfile?.division &&
+    !serviceProfile?.department &&
+    !monitorDivision;
   const cecPlantillasVisibles = veTodoCec
     ? CEC_TEMPLATES
     : CEC_TEMPLATES.filter((t) => t.division === divisionCec);
@@ -7443,7 +7534,12 @@ export default function Home() {
                         ? "subdirector"
                         : d.requestType === "minsal"
                           ? "minsal"
-                          : "service",
+                          : d.requestType === "comite"
+                            ? "comite"
+                            : "service",
+            cecServicios: Array.isArray(d.cecServicios)
+              ? d.cecServicios.filter((x): x is string => typeof x === "string")
+              : [],
             isChief: d.isChief === true,
             captureModules: Array.isArray(d.captureModules)
               ? (d.captureModules.filter((v): v is ModuleId => MODULE_ORDER.includes(v as ModuleId)) as ModuleId[])
@@ -10176,6 +10272,8 @@ export default function Home() {
     const isDepartment = signupForm.accessType === "department";
     const isDirector = signupForm.accessType === "director";
     const isMinsalReq = signupForm.accessType === "minsal";
+    const isComiteReq = signupForm.accessType === "comite";
+    const plantillaComite = isComiteReq ? CEC_BY_SERVICE[signupForm.cecServicio] : undefined;
     // Subdireccion Medica: mismos alcances que la Direccion (ve todo, no captura).
     const isSubdirector = signupForm.accessType === "subdirector";
     const isDeptEditor = signupForm.accessType === "department-editor";
@@ -10197,6 +10295,11 @@ export default function Home() {
     } else if (isDepartment || isDeptEditor) {
       if (!signupForm.department || !DEPARTMENT_LABELS[signupForm.department]) {
         setError("Elegí tu departamento.");
+        return;
+      }
+    } else if (isComiteReq) {
+      if (!plantillaComite) {
+        setError("Elegí el servicio del comité que vas a llenar.");
         return;
       }
     } else if (!isDirector && !isSubdirector && !isMinsalReq) {
@@ -10243,7 +10346,7 @@ export default function Home() {
         lastName: signupForm.lastName.trim(),
         email: signupForm.email.trim(),
         serviceId:
-          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector || isMinsalReq
+          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector || isMinsalReq || isComiteReq
             ? ""
             : service?.id ?? "",
         serviceName: isDivision
@@ -10258,7 +10361,9 @@ export default function Home() {
                   ? "Subdirección Médica"
                   : isMinsalReq
                     ? "MINSAL"
-                    : service?.name ?? "",
+                    : isComiteReq
+                      ? `Comité de Expediente Clínico — ${plantillaComite?.nombre ?? ""}`
+                      : service?.name ?? "",
         requestType: isDivision
           ? "division"
           : isDepartment
@@ -10271,13 +10376,16 @@ export default function Home() {
                   ? "subdirector"
                   : isMinsalReq
                     ? "minsal"
-                    : "service",
+                    : isComiteReq
+                      ? "comite"
+                      : "service",
+        cecServicios: isComiteReq && plantillaComite ? [plantillaComite.serviceId] : [],
         isChief:
-          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector || isMinsalReq
+          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector || isMinsalReq || isComiteReq
             ? false
             : signupForm.isChief,
         captureModules:
-          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector || isMinsalReq
+          isDivision || isDepartment || isDeptEditor || isDirector || isSubdirector || isMinsalReq || isComiteReq
             ? []
             : signupForm.captureModules,
         division: isDivision ? signupForm.division : "",
@@ -10306,6 +10414,7 @@ export default function Home() {
         serviceId: "",
         acceptPrivacy: false,
         accessType: "service",
+        cecServicio: "",
         isChief: false,
         captureModules: [],
         division: "",
@@ -10489,6 +10598,61 @@ export default function Home() {
         }
         try {
           await secondaryMin.dispose();
+        } catch {
+          // ignore
+        }
+        setSignupBusyId("");
+      }
+      return;
+    }
+
+    // --- COMITE DE EXPEDIENTE CLINICO (solo ese modulo) ---
+    if (req.requestType === "comite") {
+      const secondaryCec = createSecondaryAuth();
+      try {
+        const listas = (req.cecServicios ?? []).filter((id) => !!CEC_BY_SERVICE[id]);
+        const { username, credential } = await createComiteAccount(secondaryCec.auth, {
+          contactEmail: req.email,
+          firstName: req.firstName,
+          lastName: req.lastName,
+          cecServicios: listas,
+        });
+        if (credential?.user?.uid) {
+          await setDoc(
+            doc(db, "serviceUsers", credential.user.uid),
+            { docType: req.docType ?? "", docNumber: (req.docNumber ?? "").trim() },
+            { merge: true },
+          ).catch(() => {});
+        }
+        await setDoc(
+          doc(db, "signupRequests", req.id),
+          { status: "approved", createdUsername: username, updatedAt: serverTimestamp() },
+          { merge: true },
+        );
+        const mailed = await notifySignupDecision({
+          to: req.email,
+          name: `${req.firstName} ${req.lastName}`.trim(),
+          status: "approved",
+          username,
+          password: CHIEF_TEMP_PASSWORD,
+          roleLabel: "Comité de Expediente Clínico",
+        });
+        const nombres = listas.map((id) => CEC_BY_SERVICE[id]?.nombre ?? id).join(", ");
+        setMessage(
+          `Cuenta del Comité creada para ${req.firstName} ${req.lastName}${
+            nombres ? ` (llena: ${nombres})` : " (solo lectura: sin lista asignada)"
+          }. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
+        );
+      } catch (approveError) {
+        setError(getAuthErrorMessage(approveError));
+      } finally {
+        try {
+          await signOut(secondaryCec.auth);
+        } catch {
+          // ignore
+        }
+        try {
+          await secondaryCec.dispose();
         } catch {
           // ignore
         }
@@ -13472,6 +13636,13 @@ export default function Home() {
     setActiveSidebarSection("panel-hospitales");
     setMobileView("panel-hospitales");
   }, [isMinsal]);
+
+  // Lo mismo para quien solo pertenece al Comite de Expediente Clinico.
+  useEffect(() => {
+    if (!esSoloComite) return;
+    setActiveSidebarSection("panel-cec");
+    setMobileView("panel-cec");
+  }, [esSoloComite]);
 
   const isLoadingSession = !authReady || (user !== null && !profileReady);
 
@@ -19756,7 +19927,7 @@ export default function Home() {
           (activeSidebarSection === "panel-cec" || mobileView === "panel-cec") ? (
             <section
               id="panel-cec"
-              data-view="panel-cec"
+              data-view={esSoloComite ? "panel-cec home" : "panel-cec"}
               className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
                 isLightPanelTheme
                   ? "border border-slate-200 bg-white text-slate-900"
@@ -26248,7 +26419,7 @@ export default function Home() {
                     value={signupDivView}
                     onChange={(e) => {
                       setSignupDivView(e.target.value);
-                      setSignupForm((f) => ({ ...f, accessType: "service", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
+                      setSignupForm((f) => ({ ...f, accessType: "service", cecServicio: "", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
                     }}
                     className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-400"
                   >
@@ -26276,6 +26447,10 @@ export default function Home() {
                               : ""
                             : signupForm.accessType === "minsal"
                             ? "minsal:main"
+                          : signupForm.accessType === "comite"
+                            ? signupForm.cecServicio
+                              ? `comite:${signupForm.cecServicio}`
+                              : ""
                           : signupForm.accessType === "director"
                               ? "director:main"
                               : signupForm.accessType === "subdirector"
@@ -26296,6 +26471,8 @@ export default function Home() {
                           setSignupForm((f) => ({ ...f, accessType: "department", department: v.slice(5).split("#")[0], serviceId: "", isChief: false, division: "", captureModules: [] }));
                         } else if (v.startsWith("subdirector:")) {
                           setSignupForm((f) => ({ ...f, accessType: "subdirector", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
+                        } else if (v.startsWith("comite:")) {
+                          setSignupForm((f) => ({ ...f, accessType: "comite", cecServicio: v.slice(7), serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
                         } else if (v.startsWith("minsal:")) {
                           setSignupForm((f) => ({ ...f, accessType: "minsal", serviceId: "", isChief: false, division: "", department: "", captureModules: [] }));
                         } else if (v.startsWith("director:")) {
@@ -26320,6 +26497,23 @@ export default function Home() {
                             <option value="minsal:main" className="bg-[#1b2537] text-teal-200">
                               Monitoreo nacional de hospitales (MINSAL)
                             </option>
+                          );
+                        }
+                        // COMITE: aca se elige a que servicio pertenece la persona.
+                        // Va a VER las listas de todos, pero llenar solo la suya.
+                        if (signupDivView === "comite") {
+                          return (
+                            <>
+                              {CEC_TEMPLATES.map((t) => (
+                                <option
+                                  key={`comite:${t.serviceId}`}
+                                  value={`comite:${t.serviceId}`}
+                                  className="bg-[#1b2537] text-amber-200"
+                                >
+                                  {t.nombre} · {CEC_DIVISION_LABEL[t.division]}
+                                </option>
+                              ))}
+                            </>
                           );
                         }
                         const d = SIGNUP_DIVISIONS.find((x) => x.key === signupDivView);
