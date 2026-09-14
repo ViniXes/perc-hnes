@@ -6340,7 +6340,11 @@ export default function Home() {
   const puedeEditarCecServicio = (serviceId: string) =>
     isAdmin || (esComiteCec && cecServiciosPropios.includes(serviceId));
   const divisionCec = monitorDivision || serviceProfile?.division || "";
-  const veTodoCec = isAdmin || isDirector || isSupervisor || esComiteCec;
+  // QUIEN VE LAS 13 LISTAS: solo Direccion y Subdireccion Medica (isDirector), los
+  // administradores y los miembros del comite. Un jefe de division —Apoyo, Medica,
+  // Subdireccion Administrativa— es supervisor, pero del comite ve UNICAMENTE los
+  // servicios de SU division. Por eso aca no entra isSupervisor.
+  const veTodoCec = isAdmin || isDirector || esComiteCec;
   const puedeVerCec = veTodoCec || !!divisionCec;
   // Cuenta creada exclusivamente para el comite: no tiene servicio, division ni
   // jefatura. Para ella el modulo del comite ES su pantalla de inicio.
