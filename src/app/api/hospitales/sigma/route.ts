@@ -21,6 +21,7 @@ import { NextResponse } from "next/server";
 //   SIGMA_SUCHITOTO_URL / SIGMA_SUCHITOTO_API_KEY    -> Suchitoto
 //   SIGMA_SALDANA_URL / SIGMA_SALDANA_API_KEY        -> Saldana (Neumologia)
 //   SAN_MIGUEL_URL                                   -> San Miguel (sin llave)
+//   SAN_BARTOLO_URL                                  -> San Bartolo (sin llave)
 // =============================================================================
 
 export const runtime = "nodejs";
@@ -51,6 +52,11 @@ const HOSPITALES: Record<string, Hospital> = {
     url: "SIGMA_SALDANA_URL",
     llave: "SIGMA_SALDANA_API_KEY",
     nombre: 'Hospital Nacional de Neumología "Dr. José Antonio Saldaña"',
+  },
+  sanbartolo: {
+    tipo: "lista",
+    url: "SAN_BARTOLO_URL",
+    nombre: 'Hospital Nacional "Enf. Angélica Vidal de Najarro"',
   },
   sanmiguel: {
     tipo: "lista",

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="512" height="512">
+  <title>Miko's Dev - D mascota</title>
+  <circle cx="42" cy="78" r="24" fill="#151109"/>
+  <circle cx="158" cy="78" r="24" fill="#151109"/>
+  <circle cx="42" cy="78" r="11" fill="#B8862B"/>
+  <circle cx="158" cy="78" r="11" fill="#B8862B"/>
+  <circle cx="100" cy="104" r="50" fill="#151109"/>
+  <ellipse cx="100" cy="94" rx="40" ry="18" fill="#B8862B"/>
+  <ellipse cx="100" cy="132" rx="32" ry="19" fill="#B8862B"/>
+  <circle cx="84" cy="94" r="7.5" fill="#151109"/>
+  <circle cx="116" cy="94" r="7.5" fill="#151109"/>
+  <circle cx="93" cy="126" r="3" fill="#151109"/>
+  <circle cx="107" cy="126" r="3" fill="#151109"/>
+  <path d="M89 138 Q100 146 111 138" fill="none" stroke="#151109" stroke-width="5" stroke-linecap="round"/>
+</svg>

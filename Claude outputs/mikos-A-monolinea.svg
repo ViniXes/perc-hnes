@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="512" height="512">
+  <title>Miko's Dev - A monolinea</title>
+  <mask id="m">
+    <rect width="200" height="200" fill="black"/>
+    <g fill="white"><circle cx="100" cy="106" r="46"/><circle cx="52" cy="84" r="19"/><circle cx="148" cy="84" r="19"/></g>
+    <g fill="black"><circle cx="100" cy="106" r="37"/><circle cx="52" cy="84" r="10"/><circle cx="148" cy="84" r="10"/></g>
+  </mask>
+  <rect width="200" height="200" fill="#151109" mask="url(#m)"/>
+  <circle cx="52" cy="84" r="5" fill="#B8862B"/>
+  <circle cx="148" cy="84" r="5" fill="#B8862B"/>
+  <circle cx="85" cy="99" r="5.5" fill="#151109"/>
+  <circle cx="115" cy="99" r="5.5" fill="#151109"/>
+  <path d="M79 120 Q100 137 121 120" fill="none" stroke="#151109" stroke-width="7" stroke-linecap="round"/>
+</svg>
