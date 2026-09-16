@@ -223,7 +223,7 @@ export async function GET(request: Request) {
         ok: false,
         configurado: true,
         error:
-          "El enlace devolvió una página de Google en vez de datos. Suele pasar cuando el enlace venció o pide iniciar sesión: pedí el enlace que termina en /exec.",
+          "El enlace devolvió una página de Google en vez de datos: pide iniciar sesión o ya venció. El hospital debe usar el enlace que termina en /exec y, en Apps Script (Implementar > Gestionar implementaciones), dejar \"Quién tiene acceso: Cualquier persona\".",
       });
     }
 
