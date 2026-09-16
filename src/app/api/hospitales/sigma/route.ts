@@ -22,6 +22,7 @@ import { NextResponse } from "next/server";
 //   SIGMA_SALDANA_URL / SIGMA_SALDANA_API_KEY        -> Saldana (Neumologia)
 //   SAN_MIGUEL_URL                                   -> San Miguel (sin llave)
 //   SAN_BARTOLO_URL                                  -> San Bartolo (sin llave)
+//   COJUTEPEQUE_URL                                  -> Cojutepeque (sin llave)
 // =============================================================================
 
 export const runtime = "nodejs";
@@ -57,6 +58,11 @@ const HOSPITALES: Record<string, Hospital> = {
     tipo: "lista",
     url: "SAN_BARTOLO_URL",
     nombre: 'Hospital Nacional "Enf. Angélica Vidal de Najarro"',
+  },
+  cojutepeque: {
+    tipo: "lista",
+    url: "COJUTEPEQUE_URL",
+    nombre: 'Hospital Nacional "Nuestra Señora de Fátima", Cojutepeque',
   },
   sanmiguel: {
     tipo: "lista",

@@ -968,7 +968,7 @@ const HOSPITALES_EXTERNOS: {
   { id: "santatecla", corto: "Santa Tecla", nombre: 'Hospital Nacional "San Rafael"', region: "central", lugar: "Santa Tecla, La Libertad" },
   { id: "chalatenango", corto: "Chalatenango", nombre: 'Hospital Nacional "Dr. Luis Edmundo Vásquez"', region: "central", lugar: "Chalatenango" },
   { id: "nuevaconcepcion", corto: "Nueva Concepción", nombre: "Hospital Nacional de Nueva Concepción", region: "central", lugar: "Chalatenango" },
-  { id: "cojutepeque", corto: "Cojutepeque", nombre: 'Hospital Nacional "Nuestra Señora de Fátima"', region: "central", lugar: "Cojutepeque, Cuscatlán" },
+  { id: "cojutepeque", corto: "Cojutepeque", nombre: 'Hospital Nacional "Nuestra Señora de Fátima"', region: "central", lugar: "Cojutepeque, Cuscatlán", conectado: true, soloAvance: true },
   { id: "suchitoto", corto: "Suchitoto", nombre: "Hospital Nacional de Suchitoto", region: "central", lugar: "Cuscatlán", conectado: true },
   // --- Metropolitana ------------------------------------------------------
   { id: "rosales", corto: "Rosales", nombre: 'Hospital Nacional "Rosales"', region: "metropolitana", lugar: "San Salvador" },
