@@ -19988,7 +19988,13 @@ export default function Home() {
                                         </span>
                                       </>
                                     ) : (
-                                      <span className="block text-[11px] text-slate-500">sin consultar</span>
+                                      sigmaMonitoreo[h.id]?.error ? (
+                                        <span className="block text-[11px] font-semibold text-amber-300" title={sigmaMonitoreo[h.id]?.error}>
+                                          sin conexión
+                                        </span>
+                                      ) : (
+                                        <span className="block text-[11px] text-slate-500">sin consultar</span>
+                                      )
                                     )}
                                   </span>
                                 </button>
