@@ -6404,6 +6404,8 @@ export default function Home() {
   // Cuenta MINSAL: entra solo al menu Hospitales. Ni PERC, ni SEPS, ni Horas, ni
   // nada del HNES: unicamente el avance de la red nacional.
   const isMinsal = serviceProfile?.isMinsal === true;
+  // Menu HOSPITALES: admin, Direccion/Subdireccion y MINSAL. Nadie mas.
+  const puedeVerHospitales = isAdmin || isDirector || isMinsal;
   // Monitor de RRHH (aamaya): SOLO monitorea horas y descarga; no habilita tableros.
   const isHorasMonitor = normalizeKey(serviceProfile?.username || "") === normalizeKey("aamaya");
   // Jefe de division que ADEMAS captura su propio servicio (p. ej. Enfermeria):
@@ -18015,8 +18017,10 @@ export default function Home() {
       ...moduleSidebarItems,
       // HOSPITALES: la red de hospitales que ESDOMED monitorea. No lleva submenu:
       // abre una pantalla que entra por region, porque son 30 y una lista plana
-      // en el menu no se puede leer.
-      ...(isAdmin || isDirector || isSupervisor || isMinsal
+      // en el menu no se puede leer. Solo lo ven administradores, Direccion y
+      // Subdireccion (isDirector) y las cuentas MINSAL. Los jefes de division
+      // (supervisores) NO.
+      ...(puedeVerHospitales
         ? [
             {
               id: "panel-hospitales",
@@ -19568,7 +19572,7 @@ export default function Home() {
               acompaña. Se entra por región para que la lista siga siendo legible
               cuando estén los 30. Solo avance: ninguna cifra de producción ni de
               insumos cruza entre sistemas. */}
-          {(isAdmin || isDirector || isSupervisor || isMinsal) &&
+          {puedeVerHospitales &&
           (activeSidebarSection === "panel-hospitales" ||
             mobileView === "panel-hospitales" ||
             (isMinsal && mobileView === "home")) ? (
