@@ -19,6 +19,9 @@ rules_version = '2';
 //     pantalla se lo permitiera. 'cec' y 'cecServicios' son campos que solo un
 //     administrador puede escribir, para que nadie se agregue solo al comite ni se
 //     asigne listas ajenas.
+//  4) Gestor del comite: si el perfil tiene cec == true y cecGestor == true, puede
+//     desbloquear y bloquear las listas del comite fuera de fecha (documento
+//     documentControl/cecDesbloqueos). 'cecGestor' solo lo escribe un admin.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
