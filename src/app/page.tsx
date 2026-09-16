@@ -8522,6 +8522,22 @@ export default function Home() {
    * Porcentaje de cumplimiento de una fila: cuantos "1" sobre los que si
    * aplican. Las casillas en N/A y las vacias no cuentan, igual que en el Excel.
    */
+  /**
+   * Total POR COLUMNA (por expediente): de los criterios que aplican a ese
+   * expediente, que porcentaje cumple. Null si la columna aun no tiene datos.
+   */
+  function cecTotalColumna(bloque: CecBloque, col: number): number | null {
+    let aplican = 0;
+    let cumple = 0;
+    for (const fila of bloque.filas) {
+      const celda = cecDoc?.valores[bloque.id]?.[fila.key]?.[col];
+      if (celda === "1") { aplican += 1; cumple += 1; }
+      else if (celda === "0") { aplican += 1; }
+    }
+    if (aplican === 0) return null;
+    return Math.round((cumple / aplican) * 100);
+  }
+
   function cecTotalFila(bloque: CecBloque, filaKey: string): number | null {
     const celdas = cecDoc?.valores[bloque.id]?.[filaKey] ?? [];
     let aplican = 0;
@@ -20469,6 +20485,48 @@ export default function Home() {
                                       );
                                     })}
                                   </tbody>
+                                  {/* TOTAL POR EXPEDIENTE: cuanto de los criterios cumple cada
+                                      expediente de la muestra (la fila mide el criterio; la
+                                      columna mide el expediente). */}
+                                  {bloque.tipo === "expedientes" ? (
+                                    <tfoot>
+                                      <tr className={isLightPanelTheme ? "bg-slate-100" : "bg-[#1b2537]"}>
+                                        <td
+                                          colSpan={2}
+                                          className={`border px-2 py-2 text-right text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}
+                                        >
+                                          Total por expediente
+                                        </td>
+                                        {Array.from({ length: bloque.columnas }, (_, col) => {
+                                          const totalCol = cecTotalColumna(bloque, col);
+                                          return (
+                                            <td
+                                              key={col}
+                                              className={`border px-1 py-2 text-center text-xs font-bold ${isLightPanelTheme ? "border-slate-200" : "border-white/10"} ${
+                                                totalCol === null ? "text-slate-500" : totalCol >= 80 ? "text-emerald-300" : "text-amber-300"
+                                              }`}
+                                            >
+                                              {totalCol === null ? "—" : `${totalCol}%`}
+                                            </td>
+                                          );
+                                        })}
+                                        <td
+                                          className={`border px-2 py-2 text-center text-xs font-bold ${isLightPanelTheme ? "border-slate-200" : "border-white/10"} ${
+                                            cecPctBloque(bloque) >= 80 ? "text-emerald-300" : "text-amber-300"
+                                          }`}
+                                          title="Cumplimiento del bloque"
+                                        >
+                                          {cecPctBloque(bloque)}%
+                                        </td>
+                                        {bloque.acciones ? (
+                                          <td className={`border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`} />
+                                        ) : null}
+                                        {bloque.responsable ? (
+                                          <td className={`border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`} />
+                                        ) : null}
+                                      </tr>
+                                    </tfoot>
+                                  ) : null}
                                 </table>
                               </div>
                             </div>
