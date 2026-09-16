@@ -147,6 +147,9 @@ type ManagedUser = {
   // Listas del comite que esta persona puede LLENAR (ids de CEC_TEMPLATES).
   // Vacio = solo lectura: entra al modulo, mira todo, pero no escribe nada.
   cecServicios: string[];
+  // Gestor del comite: puede DESBLOQUEAR y BLOQUEAR las listas fuera de fecha
+  // (todas o una por una). No le da ningun otro permiso de administrador.
+  cecGestor: boolean;
   mustChangePassword: boolean;
   isActive: boolean;
   // Correo de ACCESO real de la cuenta (usuario@perc-hnes.app). Es la identidad con
@@ -188,6 +191,8 @@ type AdminDraft = {
   cec: boolean;
   // Listas del comite que puede LLENAR (las demas las ve en solo lectura).
   cecServicios: string[];
+  // Gestor del comite: desbloquea y bloquea las listas fuera de fecha.
+  cecGestor: boolean;
   sepsTables: string[];
   viewPerc: string[];
   viewSeps: string[];
@@ -3518,6 +3523,7 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     cecServicios: Array.isArray(data.cecServicios)
       ? data.cecServicios.filter((x): x is string => typeof x === "string")
       : [],
+    cecGestor: data.cec === true && data.cecGestor === true,
     mustChangePassword: data.mustChangePassword !== false,
     isActive: data.isActive !== false,
     menuGrants: Array.isArray(data.menuGrants)
@@ -3561,6 +3567,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         monitorDivision: managedUser.monitorDivision || "",
         cec: managedUser.cec === true,
         cecServicios: managedUser.cecServicios ?? [],
+        cecGestor: managedUser.cecGestor === true,
         sepsTables: managedUser.sepsTables,
         viewPerc: managedUser.viewPerc,
         viewSeps: managedUser.viewSeps,
@@ -6417,6 +6424,8 @@ export default function Home() {
   // Listas que ESTA cuenta puede llenar. El comite VE las 13, pero escribe
   // unicamente las de su servicio: es lo que el admin le asigna al marcarlo.
   const cecServiciosPropios = serviceProfile?.cecServicios ?? [];
+  // Gestor del comite (o admin): desbloquea/bloquea listas fuera de fecha.
+  const puedeGestionarCec = isAdmin || (esComiteCec && serviceProfile?.cecGestor === true);
   const puedeCapturarCec = isAdmin || (esComiteCec && cecServiciosPropios.length > 0);
   /** ¿Puede LLENAR la lista de este servicio? El admin todas; el comite las suyas. */
   const puedeEditarCecServicio = (serviceId: string) =>
@@ -8385,6 +8394,39 @@ export default function Home() {
     return isAdmin || cecAbierto || cecDesbloqueada(serviceId);
   }
 
+  /** Desbloquea (true) o bloquea (false) TODAS las listas del comite este mes. */
+  async function setCecDesbloqueoTodas(desbloquear: boolean) {
+    if (!puedeGestionarCec || firestoreUnavailable) return;
+    if (blockedByGhost()) return;
+    const previo = cecDesbloqueos;
+    const siguiente = { ...cecDesbloqueos };
+    const marca = {
+      por: usuarioDeCorreo(user?.email || ""),
+      fecha: new Date().toLocaleString("es-SV", { dateStyle: "short", timeStyle: "short" }),
+    };
+    for (const t of CEC_TEMPLATES) {
+      const clave = `${periodId}__${t.serviceId}`;
+      if (desbloquear) {
+        if (!siguiente[clave]) siguiente[clave] = marca;
+      } else {
+        delete siguiente[clave];
+      }
+    }
+    setCecDesbloqueos(siguiente);
+    try {
+      await setDoc(doc(db, "documentControl", "cecDesbloqueos"), siguiente);
+      setMessage(
+        desbloquear
+          ? `Todas las listas del comité quedaron desbloqueadas para ${periodLabel}.`
+          : `Todas las listas del comité quedaron bloqueadas para ${periodLabel}.`,
+      );
+    } catch (desbloqueoError) {
+      setCecDesbloqueos(previo);
+      if (await handleFirestoreError(desbloqueoError)) return;
+      setError("No pudimos cambiar el bloqueo de las listas.");
+    }
+  }
+
   /** Lee del servidor las listas del comite desbloqueadas a mano. */
   async function loadCecDesbloqueos() {
     if (firestoreUnavailable) return;
@@ -8401,7 +8443,7 @@ export default function Home() {
 
   /** Desbloquea o vuelve a bloquear la lista de un servicio para este mes. Solo admin. */
   async function toggleCecDesbloqueo(serviceId: string, nombre: string) {
-    if (!isAdmin || firestoreUnavailable) return;
+    if (!puedeGestionarCec || firestoreUnavailable) return;
     if (blockedByGhost()) return;
     const clave = `${periodId}__${serviceId}`;
     const estaba = !!cecDesbloqueos[clave];
@@ -13480,6 +13522,7 @@ export default function Home() {
               monitorDivision: draft.monitorDivision || null,
               cec: draft.cec === true,
               cecServicios: draft.cec ? draft.cecServicios : [],
+              cecGestor: draft.cec === true && draft.cecGestor === true,
               captureModules: [],
               supervisorModules: ["perc", "sesps", "distribucion"],
               permissions: { canEdit: true, canManageUsers: false, canToggleCapture: false },
@@ -13500,6 +13543,7 @@ export default function Home() {
               monitorDivision: draft.monitorDivision || null,
               cec: draft.cec === true,
               cecServicios: draft.cec ? draft.cecServicios : [],
+              cecGestor: draft.cec === true && draft.cecGestor === true,
               sepsTables: draft.sepsTables,
               captureModules: draft.captureModules,
               menuGrants: draft.menuGrants,
@@ -20164,6 +20208,37 @@ export default function Home() {
                       })}
                     </div>
 
+                    {/* Desbloqueo/bloqueo de TODAS las listas (admin o gestor), solo
+                        cuando la ventana de captura ya cerro. */}
+                    {puedeGestionarCec && !cecAbierto ? (
+                      <div className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-2.5 ${marco}`}>
+                        <p className={`text-xs ${suave}`}>
+                          Captura cerrada ·{" "}
+                          <strong>
+                            {plantillas.filter((t) => cecDesbloqueada(t.serviceId)).length} de{" "}
+                            {plantillas.length}
+                          </strong>{" "}
+                          listas desbloqueadas
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void setCecDesbloqueoTodas(true)}
+                            className="rounded-lg border border-emerald-400/40 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+                          >
+                            Desbloquear todas
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void setCecDesbloqueoTodas(false)}
+                            className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-400/20"
+                          >
+                            Bloquear todas
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
                     {plantilla ? (
                       <div className="mt-6">
                         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -20180,7 +20255,7 @@ export default function Home() {
                           <div className="flex flex-wrap items-center gap-2">
                             {/* Fuera de la ventana, el admin desbloquea la lista para
                                 que el comite la llene tarde (o la vuelve a bloquear). */}
-                            {isAdmin && !cecAbierto ? (
+                            {puedeGestionarCec && !cecAbierto ? (
                               <button
                                 type="button"
                                 onClick={() => void toggleCecDesbloqueo(plantilla.serviceId, plantilla.nombre)}
@@ -20226,7 +20301,7 @@ export default function Home() {
                           </div>
                         ) : null}
 
-                        {!cecAbierto && (cecListaDesbloqueada || isAdmin) ? (
+                        {!cecAbierto && (cecListaDesbloqueada || puedeGestionarCec) ? (
                           <div className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-200">
                             {cecListaDesbloqueada
                               ? `Desbloqueada fuera de fecha${
@@ -20234,7 +20309,9 @@ export default function Home() {
                                     ? ` por ${cecDesbloqueos[`${periodId}__${plantilla.serviceId}`]?.por}`
                                     : ""
                                 }: el comité puede llenarla.`
-                              : "La captura está cerrada, pero como administrador puede editar esta lista. Use «Desbloquear para el comité» si el servicio debe llenarla."}
+                              : isAdmin
+                                ? "La captura está cerrada, pero como administrador puede editar esta lista. Use «Desbloquear para el comité» si el servicio debe llenarla."
+                                : "La captura está cerrada. Use «Desbloquear para el comité» si el servicio debe llenarla."}
                           </div>
                         ) : null}
 
@@ -22987,7 +23064,7 @@ export default function Home() {
                               onClick={() =>
                                 updateAdminDraft(selectedUser.uid, {
                                   cec: !draft.cec,
-                                  ...(draft.cec ? { cecServicios: [] } : {}),
+                                  ...(draft.cec ? { cecServicios: [], cecGestor: false } : {}),
                                 })
                               }
                               className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
@@ -23055,6 +23132,33 @@ export default function Home() {
                                   Quitar todas (dejarla solo de lectura)
                                 </button>
                               ) : null}
+
+                              {/* GESTOR: desbloquea y bloquea las listas fuera de fecha. */}
+                              <div className="mt-3.5 flex items-start justify-between gap-3 border-t border-amber-400/20 pt-3.5">
+                                <div className="min-w-0">
+                                  <p className="text-[11px] font-semibold text-slate-300">
+                                    Gestor del comité
+                                  </p>
+                                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                                    Puede <strong>desbloquear y bloquear</strong> las listas del comité
+                                    cuando la captura ya cerró (todas o una por una). No le da ningún
+                                    otro permiso de administrador.
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateAdminDraft(selectedUser.uid, { cecGestor: !draft.cecGestor })
+                                  }
+                                  className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                                    draft.cecGestor
+                                      ? "bg-amber-400/20 text-amber-200"
+                                      : "bg-white/5 text-slate-400 hover:bg-white/10"
+                                  }`}
+                                >
+                                  {draft.cecGestor ? "✓ Es gestor" : "Hacer gestor"}
+                                </button>
+                              </div>
                             </div>
                           ) : null}
                         </div>

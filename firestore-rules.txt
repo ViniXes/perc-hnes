@@ -91,7 +91,7 @@ service cloud.firestore {
         'serviceId', 'serviceName', 'menuGrants', 'noCapture', 'supervisorModules',
         'captureModules', 'viewPerc', 'viewSeps', 'viewHoras', 'division',
         'department', 'monitorDivision', 'username', 'loginEmail', 'sepsTables',
-        'cec', 'cecServicios'
+        'cec', 'cecServicios', 'cecGestor'
       ];
     }
     function noTocaPrivilegios() {
@@ -160,6 +160,13 @@ service cloud.firestore {
             && userProfile().supervisorModules.hasAny([resource.data.moduleId]))
         || (isSignedIn() && resource.data.requestedByUid == request.auth.uid);
       allow delete: if isAdmin();
+    }
+    // Desbloqueos del Comite de Expediente Clinico: los escribe el admin o el
+    // gestor del comite (cec == true y cecGestor == true).
+    match /documentControl/cecDesbloqueos {
+      allow read: if isSignedIn() && noEsMinsal();
+      allow write: if isAdmin()
+        || (esComite() && userProfile().get('cecGestor', false) == true);
     }
     match /documentControl/{year} {
       allow read: if isSignedIn() && noEsMinsal();
