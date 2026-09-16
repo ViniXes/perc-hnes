@@ -4612,6 +4612,8 @@ async function createServiceUserAccount(
 
 // Contrasena generica para las cuentas de jefes creadas por aprobacion.
 const CHIEF_TEMP_PASSWORD = "123456";
+// Cargo "DIMES" del Comite de Expediente Clinico (no es una de las 13 listas).
+const CEC_CARGO_DIMES = "dimes";
 
 function stripAccents(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -4931,14 +4933,16 @@ async function createComiteAccount(
     firstName,
     lastName,
     cecServicios,
+    cargo,
   }: {
     contactEmail: string;
     firstName: string;
     lastName: string;
     cecServicios: string[];
+    cargo?: string;
   },
 ) {
-  const etiqueta = "Comité de Expediente Clínico";
+  const etiqueta = cargo ? `Comité de Expediente Clínico — ${cargo}` : "Comité de Expediente Clínico";
   const base = buildChiefUsername(firstName, lastName);
   const displayName = buildFullName(firstName.trim(), lastName.trim(), etiqueta);
   let username = base;
@@ -10478,6 +10482,9 @@ export default function Home() {
     const isMinsalReq = signupForm.accessType === "minsal";
     const isComiteReq = signupForm.accessType === "comite";
     const plantillaComite = isComiteReq ? CEC_BY_SERVICE[signupForm.cecServicio] : undefined;
+    // DIMES: cargo del comite sin lista propia. Entra solo al comite (ve las 13
+    // listas en lectura); el admin puede asignarle listas o hacerlo gestor.
+    const esDimesReq = isComiteReq && signupForm.cecServicio === CEC_CARGO_DIMES;
     // Subdireccion Medica: mismos alcances que la Direccion (ve todo, no captura).
     const isSubdirector = signupForm.accessType === "subdirector";
     const isDeptEditor = signupForm.accessType === "department-editor";
@@ -10502,7 +10509,7 @@ export default function Home() {
         return;
       }
     } else if (isComiteReq) {
-      if (!plantillaComite) {
+      if (!plantillaComite && !esDimesReq) {
         setError("Elegí el servicio del comité que vas a llenar.");
         return;
       }
@@ -10566,7 +10573,7 @@ export default function Home() {
                   : isMinsalReq
                     ? "MINSAL"
                     : isComiteReq
-                      ? `Comité de Expediente Clínico — ${plantillaComite?.nombre ?? ""}`
+                      ? `Comité de Expediente Clínico — ${esDimesReq ? "DIMES" : plantillaComite?.nombre ?? ""}`
                       : service?.name ?? "",
         requestType: isDivision
           ? "division"
@@ -10820,6 +10827,7 @@ export default function Home() {
           firstName: req.firstName,
           lastName: req.lastName,
           cecServicios: listas,
+          cargo: (req.serviceName ?? "").endsWith("— DIMES") ? "DIMES" : undefined,
         });
         if (credential?.user?.uid) {
           await setDoc(
@@ -10839,7 +10847,9 @@ export default function Home() {
           status: "approved",
           username,
           password: CHIEF_TEMP_PASSWORD,
-          roleLabel: "Comité de Expediente Clínico",
+          roleLabel: (req.serviceName ?? "").endsWith("— DIMES")
+            ? "Comité de Expediente Clínico — DIMES"
+            : "Comité de Expediente Clínico",
         });
         const nombres = listas.map((id) => CEC_BY_SERVICE[id]?.nombre ?? id).join(", ");
         setMessage(
@@ -26852,6 +26862,12 @@ export default function Home() {
                         if (signupDivView === "comite") {
                           return (
                             <>
+                              <option
+                                value={`comite:${CEC_CARGO_DIMES}`}
+                                className="bg-[#1b2537] text-amber-200"
+                              >
+                                DIMES (solo Comité de Expediente Clínico)
+                              </option>
                               {CEC_TEMPLATES.map((t) => (
                                 <option
                                   key={`comite:${t.serviceId}`}
