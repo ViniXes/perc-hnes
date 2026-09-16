@@ -5553,6 +5553,13 @@ export default function Home() {
   const [cierresManuales, setCierresManuales] = useState<
     Record<string, { por?: string; fecha?: string }>
   >({});
+  // DESBLOQUEO de listas del Comite de Expediente Clinico. Cuando la ventana de
+  // captura ya cerro, el admin puede desbloquear la lista de UN servicio para UN
+  // mes, y el miembro del comite asignado vuelve a poder llenarla.
+  // Clave: "periodo__servicio". Vive en documentControl/cecDesbloqueos.
+  const [cecDesbloqueos, setCecDesbloqueos] = useState<
+    Record<string, { por?: string; fecha?: string }>
+  >({});
   // HOSPITALES: monitoreo de SIGMA (Hospital Nacional Psiquiatrico). Llega por
   // nuestra propia ruta de servidor; la llave nunca toca el navegador.
   type MonitoreoSigma = {
@@ -6869,6 +6876,7 @@ export default function Home() {
     if (!user || firestoreUnavailable || !firestoreStatusReady) return;
     void loadRecibidosExternos();
     void loadCierresManuales();
+    void loadCecDesbloqueos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, firestoreUnavailable, firestoreStatusReady]);
 
@@ -8364,6 +8372,63 @@ export default function Home() {
   // mes, con el ultimo dia cerrando a las 2:30 p.m.
   const cecAbierto = captureWindow.isOpen;
 
+  /** ¿La lista de ese servicio fue desbloqueada por un admin para este mes? */
+  function cecDesbloqueada(serviceId: string) {
+    return !!cecDesbloqueos[`${periodId}__${serviceId}`];
+  }
+
+  /**
+   * ¿Se puede escribir la lista de ese servicio este mes? El admin siempre; los
+   * demas, dentro de la ventana o si el admin la desbloqueo.
+   */
+  function cecAbiertoPara(serviceId: string) {
+    return isAdmin || cecAbierto || cecDesbloqueada(serviceId);
+  }
+
+  /** Lee del servidor las listas del comite desbloqueadas a mano. */
+  async function loadCecDesbloqueos() {
+    if (firestoreUnavailable) return;
+    try {
+      const snapshot = await getDoc(doc(db, "documentControl", "cecDesbloqueos"));
+      const data = snapshot.exists()
+        ? (snapshot.data() as Record<string, { por?: string; fecha?: string }>)
+        : {};
+      setCecDesbloqueos(data || {});
+    } catch {
+      // Silencioso: si falla, las listas siguen la ventana normal.
+    }
+  }
+
+  /** Desbloquea o vuelve a bloquear la lista de un servicio para este mes. Solo admin. */
+  async function toggleCecDesbloqueo(serviceId: string, nombre: string) {
+    if (!isAdmin || firestoreUnavailable) return;
+    if (blockedByGhost()) return;
+    const clave = `${periodId}__${serviceId}`;
+    const estaba = !!cecDesbloqueos[clave];
+    const previo = cecDesbloqueos;
+    const siguiente = { ...cecDesbloqueos };
+    if (estaba) delete siguiente[clave];
+    else {
+      siguiente[clave] = {
+        por: usuarioDeCorreo(user?.email || ""),
+        fecha: new Date().toLocaleString("es-SV", { dateStyle: "short", timeStyle: "short" }),
+      };
+    }
+    setCecDesbloqueos(siguiente);
+    try {
+      await setDoc(doc(db, "documentControl", "cecDesbloqueos"), siguiente);
+      setMessage(
+        estaba
+          ? `Lista de ${nombre} bloqueada de nuevo para ${periodLabel}.`
+          : `Lista de ${nombre} desbloqueada para ${periodLabel}: el comité ya puede llenarla.`,
+      );
+    } catch (desbloqueoError) {
+      setCecDesbloqueos(previo);
+      if (await handleFirestoreError(desbloqueoError)) return;
+      setError("No pudimos cambiar el bloqueo de la lista.");
+    }
+  }
+
   /** Estructura vacia de una plantilla, con sus columnas ya dimensionadas. */
   function cecVacio(plantilla: CecTemplate): CecDoc {
     const doc: CecDoc = { expedientes: {}, fechas: {}, valores: {}, acciones: {}, responsables: {} };
@@ -8512,7 +8577,7 @@ export default function Home() {
       setError("Esta lista no le corresponde: solo puede llenar la de su servicio.");
       return;
     }
-    if (!cecAbierto) {
+    if (!cecAbiertoPara(plantilla.serviceId)) {
       setError("La captura del Comité de Expediente Clínico está cerrada este mes.");
       return;
     }
@@ -20019,7 +20084,9 @@ export default function Home() {
                 // Se VE todo; se ESCRIBE solo la lista asignada. Un mismo control
                 // manda en los botones, las casillas y el boton de guardar.
                 const cecEditable = !!plantilla && puedeEditarCecServicio(plantilla.serviceId);
-                const cecBloqueado = !cecEditable || !cecAbierto;
+                const cecAbiertoLista = !!plantilla && cecAbiertoPara(plantilla.serviceId);
+                const cecListaDesbloqueada = !!plantilla && cecDesbloqueada(plantilla.serviceId);
+                const cecBloqueado = !cecEditable || !cecAbiertoLista;
                 const suave = isLightPanelTheme ? "text-slate-600" : "text-slate-300";
                 const marco = isLightPanelTheme
                   ? "border-slate-200 bg-slate-50"
@@ -20110,16 +20177,33 @@ export default function Home() {
                                 : "Todavía nadie ha guardado esta lista este mes."}
                             </p>
                           </div>
-                          {cecEditable ? (
-                            <button
-                              type="button"
-                              onClick={() => void handleSaveCec()}
-                              disabled={cecGuardando || cecCargando || !cecAbierto}
-                              className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-4 py-2 text-sm font-bold text-slate-900 transition disabled:opacity-50"
-                            >
-                              {cecGuardando ? "Guardando…" : "Guardar lista"}
-                            </button>
-                          ) : null}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Fuera de la ventana, el admin desbloquea la lista para
+                                que el comite la llene tarde (o la vuelve a bloquear). */}
+                            {isAdmin && !cecAbierto ? (
+                              <button
+                                type="button"
+                                onClick={() => void toggleCecDesbloqueo(plantilla.serviceId, plantilla.nombre)}
+                                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                                  cecListaDesbloqueada
+                                    ? "border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20"
+                                    : "border-emerald-400/40 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20"
+                                }`}
+                              >
+                                {cecListaDesbloqueada ? "Bloquear de nuevo" : "Desbloquear para el comité"}
+                              </button>
+                            ) : null}
+                            {cecEditable ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleSaveCec()}
+                                disabled={cecGuardando || cecCargando || !cecAbiertoLista}
+                                className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-4 py-2 text-sm font-bold text-slate-900 transition disabled:opacity-50"
+                              >
+                                {cecGuardando ? "Guardando…" : "Guardar lista"}
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
 
                         {/* Lista de otro servicio: se lee completa, no se escribe. */}
@@ -20134,10 +20218,23 @@ export default function Home() {
                           </div>
                         ) : null}
 
-                        {!cecAbierto && cecEditable ? (
+                        {!cecAbiertoLista && cecEditable ? (
                           <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
                             La captura de {periodLabel} está cerrada. Se abre los primeros{" "}
-                            {captureWindow.totalDays} días hábiles de cada mes.
+                            {captureWindow.totalDays} días hábiles de cada mes. Si necesita
+                            llenarla, pida al administrador que la desbloquee.
+                          </div>
+                        ) : null}
+
+                        {!cecAbierto && (cecListaDesbloqueada || isAdmin) ? (
+                          <div className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-200">
+                            {cecListaDesbloqueada
+                              ? `Desbloqueada fuera de fecha${
+                                  cecDesbloqueos[`${periodId}__${plantilla.serviceId}`]?.por
+                                    ? ` por ${cecDesbloqueos[`${periodId}__${plantilla.serviceId}`]?.por}`
+                                    : ""
+                                }: el comité puede llenarla.`
+                              : "La captura está cerrada, pero como administrador puede editar esta lista. Use «Desbloquear para el comité» si el servicio debe llenarla."}
                           </div>
                         ) : null}
 
@@ -20306,7 +20403,7 @@ export default function Home() {
                             <button
                               type="button"
                               onClick={() => void handleSaveCec()}
-                              disabled={cecGuardando || cecCargando || !cecAbierto}
+                              disabled={cecGuardando || cecCargando || !cecAbiertoLista}
                               className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-2.5 text-sm font-bold text-slate-900 transition disabled:opacity-50"
                             >
                               {cecGuardando ? "Guardando…" : "Guardar lista"}
