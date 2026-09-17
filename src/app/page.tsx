@@ -4668,6 +4668,8 @@ const BTN_EXCEL = "border border-emerald-400/25 bg-emerald-400/[0.08] text-emera
 const BTN_PDF = "border border-sky-300/25 bg-sky-300/[0.08] text-sky-100 hover:bg-sky-300/[0.15]";
 const BTN_DESBLOQUEAR = "border border-indigo-300/25 bg-indigo-300/[0.08] text-indigo-100 hover:bg-indigo-300/[0.15]";
 const BTN_BLOQUEAR = "border border-amber-300/25 bg-amber-300/[0.08] text-amber-100 hover:bg-amber-300/[0.15]";
+// Version visible de PULSO (formato dd.mm.aa de la fecha de publicacion).
+const APP_VERSION = "17.09.26";
 const CHIEF_TEMP_PASSWORD = "123456";
 // Cargo "DIMES" del Comite de Expediente Clinico (no es una de las 13 listas).
 const CEC_CARGO_DIMES = "dimes";
@@ -5161,8 +5163,8 @@ function PrivacyPolicyBody() {
                 <p>
                   <strong className="text-white">1. Desarrollo y versión.</strong> PULSO fue
                   desarrollado por el servicio de <strong className="text-cyan-200">ESDOMED</strong>{" "}
-                  (Estadística y Documentos Médicos) del Hospital Nacional, El Salvador. Versión
-                  1.6.2.6.
+                  (Estadística y Documentos Médicos) del Hospital Nacional, El Salvador. Versión{" "}
+                  {APP_VERSION}.
                 </p>
                 <p>
                   <strong className="text-white">2. Qué es PULSO.</strong> Plataforma institucional
@@ -18827,6 +18829,29 @@ export default function Home() {
                 </span>
                 <span>Cerrar sesion</span>
               </button>
+
+              {/* PIE DEL MENU: quien lo hizo y que version esta corriendo. */}
+              <div
+                className={`mt-auto hidden w-full flex-col items-center gap-0.5 border-t pt-3 text-center desk:flex ${
+                  isLightPanelTheme ? "border-slate-200" : "border-white/10"
+                }`}
+              >
+                <span className="text-[9px] font-medium uppercase tracking-[0.2em] text-slate-500">
+                  Desarrollado por
+                </span>
+                <span className={`text-[11px] font-bold tracking-[0.12em] ${isLightPanelTheme ? "text-teal-700" : "text-teal-200"}`}>
+                  ESDOMED
+                </span>
+                <span
+                  className={`mt-1 rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${
+                    isLightPanelTheme
+                      ? "border-slate-200 bg-slate-50 text-slate-500"
+                      : "border-white/10 bg-white/[0.03] text-slate-400"
+                  }`}
+                >
+                  Versión {APP_VERSION}
+                </span>
+              </div>
             </div>
           </aside>
 
@@ -26862,7 +26887,7 @@ export default function Home() {
                 className="mx-auto my-1.5 h-px w-16 bg-gradient-to-r from-transparent via-blue-400/60 to-transparent"
               />
               <p className="text-[10px] font-light uppercase tracking-[0.4em] text-slate-500">
-                Versión 1.6.2.6
+                Versión {APP_VERSION}
               </p>
             </div>
           </div>
@@ -26931,7 +26956,7 @@ export default function Home() {
                 ESDOMED
               </p>
               <p className="mt-2 text-[9px] font-light uppercase tracking-[0.34em] text-slate-600">
-                Versión 1.6.2.6
+                Versión {APP_VERSION}
               </p>
             </div>
           </aside>

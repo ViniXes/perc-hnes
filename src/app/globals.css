@@ -972,3 +972,47 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
 @media (prefers-reduced-motion: reduce) {
   .shooting-star::after { animation: none; opacity: 0; }
 }
+
+/* ===========================================================================
+   RELIEVE (3D). Las tarjetas y los modales tienen GROSOR: canto superior
+   iluminado, laterales oscuros y un canto inferior solido que hace de "pared".
+   Solo aplica al tema oscuro; el claro usa una sombra suave equivalente.
+   =========================================================================== */
+body[data-panel-theme="dark"] [class*="bg-[#202c41]"],
+body[data-panel-theme="dark"] [class*="bg-[#1b2537]"][class*="rounded-2xl"],
+body[data-panel-theme="dark"] [class*="bg-[#1b2537]"][class*="rounded-[24px]"],
+body[data-panel-theme="dark"] .relieve {
+  border-top-color: rgba(255, 255, 255, 0.22) !important;
+  box-shadow:
+    0 8px 0 -1px #0a1122,
+    0 10px 0 -1px rgba(255, 255, 255, 0.04),
+    0 26px 38px -20px rgba(0, 0, 0, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -16px 26px -24px rgba(0, 0, 0, 1) !important;
+}
+/* Modales: el mismo canto, mas profundo, y el fondo detras se oscurece. */
+body[data-panel-theme="dark"] .modal-pop-in {
+  border-top-color: rgba(255, 255, 255, 0.24) !important;
+  box-shadow:
+    0 12px 0 -1px #080e1c,
+    0 14px 0 -1px rgba(255, 255, 255, 0.05),
+    0 48px 64px -28px rgba(0, 0, 0, 1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
+}
+body[data-panel-theme="light"] [class*="bg-[#202c41]"],
+body[data-panel-theme="light"] .relieve,
+body[data-panel-theme="light"] .modal-pop-in {
+  box-shadow:
+    0 6px 0 -1px rgba(148, 163, 184, 0.30),
+    0 18px 30px -18px rgba(15, 23, 42, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+/* Las filas/botones de grupo dentro de un modal tambien se levantan. */
+body[data-panel-theme="dark"] .modal-pop-in [class*="bg-[#1b2537]"]:not([class*="rounded-lg"]),
+body[data-panel-theme="dark"] .relieve-fila {
+  border-top-color: rgba(255, 255, 255, 0.18) !important;
+  box-shadow:
+    0 5px 0 -1px #0a1122,
+    0 12px 16px -12px rgba(0, 0, 0, 1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
