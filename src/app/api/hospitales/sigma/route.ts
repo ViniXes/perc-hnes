@@ -27,6 +27,9 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// SIGMA (Apps Script) a veces tarda mas de 10 s en responder. Sin esto Vercel
+// corta la funcion y el navegador recibe una pagina de error en vez de JSON.
+export const maxDuration = 60;
 
 type Hospital = {
   tipo: "sigma" | "lista";
@@ -205,7 +208,7 @@ export async function GET(request: Request) {
       // Apps Script responde con una redireccion a googleusercontent: hay que seguirla.
       redirect: "follow",
       cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(50_000),
     });
     if (!respuesta.ok) {
       return NextResponse.json({
@@ -253,7 +256,12 @@ export async function GET(request: Request) {
     cache.set(clave, { en: Date.now(), datos });
     return NextResponse.json({ ok: true, configurado: true, cacheado: false, ...datos });
   } catch (error) {
-    const detalle = error instanceof Error ? error.message : "error de red";
+    const detalle =
+      error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+        ? "El sistema del hospital tardó demasiado en responder. Intentá de nuevo en unos minutos."
+        : error instanceof Error
+          ? error.message
+          : "error de red";
     return NextResponse.json({ ok: false, configurado: true, error: detalle });
   }
 }

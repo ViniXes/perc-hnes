@@ -8845,7 +8845,22 @@ export default function Home() {
       if (objetivo) params.set("mes", objetivo);
       if (refrescar) params.set("refrescar", "1");
       const respuesta = await fetch(`/api/hospitales/sigma?${params.toString()}`, { cache: "no-store" });
-      const datos = await respuesta.json();
+      const texto = await respuesta.text();
+      // JSON.parse devuelve any, igual que respuesta.json() antes.
+      let datos;
+      try {
+        datos = JSON.parse(texto);
+      } catch {
+        // Vercel devolvio una pagina de error (p. ej. tiempo agotado): se dice claro.
+        guardar({
+          configurado: true,
+          error:
+            respuesta.status === 504
+              ? "El hospital tardó demasiado en responder. Intentá de nuevo en unos minutos."
+              : `El servidor respondió ${respuesta.status} sin datos del hospital.`,
+        });
+        return;
+      }
       if (datos?.configurado === false) {
         guardar({ configurado: false, error: datos?.mensaje });
       } else if (!datos?.ok) {
