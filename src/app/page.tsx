@@ -19744,22 +19744,42 @@ export default function Home() {
                   if (!d || !d.configurado || d.error || !d.perc) return null;
                   return { total: d.perc.total, completos: d.perc.completos, pct: d.perc.pct };
                 };
+                // Resumen POR HOSPITAL: el porcentaje es el PROMEDIO del avance de
+                // cada hospital, para que uno con 50 servicios no pese mas que uno
+                // con 15. Los servicios se siguen sumando solo como dato de apoyo.
                 const sumar = (lista: typeof HOSPITALES_EXTERNOS) => {
                   let total = 0;
                   let completos = 0;
                   let conDatos = 0;
+                  let sumaPct = 0;
+                  const alCien: string[] = [];
+                  const enProceso: string[] = [];
+                  const sinAvance: string[] = [];
+                  const sinConexion: string[] = [];
                   for (const h of lista) {
                     const a = avanceDe(h);
-                    if (!a) continue;
+                    if (!a) {
+                      sinConexion.push(h.corto);
+                      continue;
+                    }
                     total += a.total;
                     completos += a.completos;
                     conDatos += 1;
+                    sumaPct += a.pct;
+                    if (a.pct >= 100) alCien.push(h.corto);
+                    else if (a.pct > 0) enProceso.push(h.corto);
+                    else sinAvance.push(h.corto);
                   }
                   return {
                     total,
                     completos,
                     conDatos,
-                    pct: total > 0 ? Math.round((completos / total) * 100) : 0,
+                    hospitales: lista.length,
+                    pct: conDatos > 0 ? Math.round(sumaPct / conDatos) : 0,
+                    alCien,
+                    enProceso,
+                    sinAvance,
+                    sinConexion,
                   };
                 };
                 const conectadosTotal = HOSPITALES_EXTERNOS.filter((h) => h.conectado).length;
@@ -19906,7 +19926,7 @@ export default function Home() {
                               </p>
                               <p className={`mt-1.5 text-sm ${suave}`}>
                                 {nacional.conDatos > 0
-                                  ? `${nacional.completos} de ${nacional.total} servicios entregados, en ${nacional.conDatos} ${nacional.conDatos === 1 ? "hospital" : "hospitales"}.`
+                                  ? `Avance promedio de ${nacional.conDatos} ${nacional.conDatos === 1 ? "hospital" : "hospitales"} (cada hospital pesa igual).`
                                   : "Todavía no se ha consultado a los hospitales de este mes."}
                               </p>
                             </div>
@@ -19915,7 +19935,7 @@ export default function Home() {
                                 type="button"
                                 onClick={() => void consultarTodosLosHospitales()}
                                 disabled={sigmaTodos}
-                                className="rounded-xl bg-gradient-to-r from-teal-400 to-emerald-500 px-4 py-2 text-xs font-bold text-slate-900 transition disabled:opacity-50"
+                                className="rounded-xl border border-teal-300/25 bg-teal-300/[0.08] px-4 py-2 text-xs font-semibold text-teal-100 transition hover:bg-teal-300/[0.15] disabled:opacity-50"
                               >
                                 {sigmaTodos ? "Consultando…" : "Consultar hospitales"}
                               </button>
@@ -19936,32 +19956,39 @@ export default function Home() {
                             />
                           </div>
 
-                          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                                Hospitales conectados
-                              </p>
-                              <p className={`mt-0.5 text-xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                                {conectadosTotal} <span className="text-sm font-medium text-slate-400">de {HOSPITALES_EXTERNOS.length}</span>
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                                Ya reportaron el mes
-                              </p>
-                              <p className={`mt-0.5 text-xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                                {nacional.conDatos} <span className="text-sm font-medium text-slate-400">de {conectadosTotal}</span>
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                                Servicios pendientes
-                              </p>
-                              <p className={`mt-0.5 text-xl font-bold ${nacional.total - nacional.completos > 0 ? "text-amber-300" : isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                                {nacional.conDatos > 0 ? nacional.total - nacional.completos : "—"}
-                              </p>
-                            </div>
+                          {/* Estado por HOSPITAL: cuantos van completos, en proceso,
+                              sin avance o sin conexion, con sus nombres. */}
+                          <div className="mt-4 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+                            {[
+                              { titulo: "Al 100%", lista: nacional.alCien, punto: "bg-emerald-400", valor: isLightPanelTheme ? "text-emerald-700" : "text-emerald-200" },
+                              { titulo: "En proceso", lista: nacional.enProceso, punto: "bg-amber-300", valor: isLightPanelTheme ? "text-amber-700" : "text-amber-100" },
+                              { titulo: "Sin avance", lista: nacional.sinAvance, punto: "bg-slate-400", valor: isLightPanelTheme ? "text-slate-700" : "text-slate-200" },
+                              { titulo: sigmaTodos ? "Consultando…" : "Sin conexión", lista: nacional.sinConexion, punto: "bg-slate-600", valor: isLightPanelTheme ? "text-slate-500" : "text-slate-400" },
+                            ].map((c) => (
+                              <div
+                                key={c.titulo}
+                                className={`rounded-xl border px-3 py-2.5 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-white/[0.03]"}`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                    <span className={`h-2 w-2 rounded-full ${c.punto}`} />
+                                    {c.titulo}
+                                  </p>
+                                  <p className={`text-2xl font-bold leading-none ${c.valor}`}>
+                                    {c.lista.length}
+                                    <span className="ml-1 text-xs font-medium text-slate-500">de {conectadosTotal}</span>
+                                  </p>
+                                </div>
+                                <p className="mt-1.5 line-clamp-2 min-h-[2rem] text-[11px] leading-4 text-slate-500">
+                                  {c.lista.length > 0 ? c.lista.join(" · ") : "Ninguno"}
+                                </p>
+                              </div>
+                            ))}
                           </div>
+                          <p className="mt-3 text-[11px] text-slate-500">
+                            {conectadosTotal} de {HOSPITALES_EXTERNOS.length} hospitales conectados al monitoreo
+                            {nacional.conDatos > 0 ? ` · ${nacional.completos} de ${nacional.total} servicios entregados en total` : ""}.
+                          </p>
                         </div>
 
                         {/* Mapa de calor: las cinco regiones en una sola linea, del
@@ -20026,7 +20053,9 @@ export default function Home() {
                                     style={{ color: hay && res.pct >= 55 ? "rgba(255,255,255,0.8)" : undefined }}
                                   >
                                     <span className={hay && res.pct >= 55 ? "" : "text-slate-500"}>
-                                      {hay ? `${res.completos}/${res.total} servicios` : "sin datos"}
+                                      {hay
+                                        ? `${res.alCien.length} de ${res.conDatos} ${res.conDatos === 1 ? "hospital" : "hospitales"} al 100%`
+                                        : "sin datos"}
                                     </span>
                                   </p>
                                 </button>
@@ -20070,7 +20099,8 @@ export default function Home() {
                                       />
                                     </div>
                                     <p className={`mt-1.5 text-xs ${suave}`}>
-                                      {res.completos} de {res.total} servicios entregados · {res.pct}%
+                                      Promedio {res.pct}% · {res.alCien.length} de {res.conDatos} al 100%
+                                      {res.enProceso.length ? ` · ${res.enProceso.length} en proceso` : ""}
                                     </p>
                                   </>
                                 ) : (
