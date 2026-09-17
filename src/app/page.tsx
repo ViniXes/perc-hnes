@@ -64,6 +64,7 @@ import {
   type SepsTemplate,
 } from "@/lib/seps-templates";
 import { downloadSepsTemplate } from "@/lib/seps-download";
+import { descargarCecExcel, mostrarCecReporte, type CecEntrada } from "@/lib/cec-export";
 import { importSepsWorkbookByLabels } from "@/lib/seps-import";
 import {
   applySepsLayout,
@@ -5598,8 +5599,12 @@ export default function Home() {
     valores: Record<string, Record<string, string[]>>;
     acciones: Record<string, Record<string, string>>;
     responsables: Record<string, Record<string, string>>;
+    // Bloques cuya columna Responsable esta UNIFICADA (una sola celda, como
+    // "combinar celdas" en Excel).
+    unificados: Record<string, boolean>;
   };
   const [cecServicio, setCecServicio] = useState("");
+  const [cecDescargando, setCecDescargando] = useState<"" | "excel" | "pdf">("");
   const [cecDoc, setCecDoc] = useState<CecDoc | null>(null);
   const [cecCargando, setCecCargando] = useState(false);
   const [cecGuardando, setCecGuardando] = useState(false);
@@ -8479,7 +8484,7 @@ export default function Home() {
 
   /** Estructura vacia de una plantilla, con sus columnas ya dimensionadas. */
   function cecVacio(plantilla: CecTemplate): CecDoc {
-    const doc: CecDoc = { expedientes: {}, fechas: {}, valores: {}, acciones: {}, responsables: {} };
+    const doc: CecDoc = { expedientes: {}, fechas: {}, valores: {}, acciones: {}, responsables: {}, unificados: {} };
     for (const bloque of plantilla.bloques) {
       const columnas = bloque.tipo === "expedientes" ? bloque.columnas : 1;
       doc.expedientes[bloque.id] = new Array(columnas).fill("");
@@ -8487,6 +8492,7 @@ export default function Home() {
       doc.valores[bloque.id] = {};
       doc.acciones[bloque.id] = {};
       doc.responsables[bloque.id] = {};
+      doc.unificados[bloque.id] = false;
       for (const fila of bloque.filas) {
         doc.valores[bloque.id][fila.key] = new Array(columnas).fill("");
         doc.acciones[bloque.id][fila.key] = "";
@@ -8502,6 +8508,7 @@ export default function Home() {
     if (!guardado) return base;
     for (const bloque of plantilla.bloques) {
       const columnas = bloque.tipo === "expedientes" ? bloque.columnas : 1;
+      base.unificados[bloque.id] = guardado.unificados?.[bloque.id] === true;
       const exp = guardado.expedientes?.[bloque.id];
       const fec = guardado.fechas?.[bloque.id];
       for (let i = 0; i < columnas; i += 1) {
@@ -8599,6 +8606,86 @@ export default function Home() {
     });
   }
 
+  /** Unifica (o separa) la columna Responsable de un bloque, como combinar celdas. */
+  function toggleCecUnificado(bloque: CecBloque) {
+    setCecDoc((previo) => {
+      if (!previo) return previo;
+      const activo = !previo.unificados[bloque.id];
+      let responsables = previo.responsables;
+      if (activo) {
+        // Al unir, todas las filas toman el primer responsable escrito.
+        const actual = previo.responsables[bloque.id] ?? {};
+        const primero =
+          bloque.filas.map((f) => actual[f.key] ?? f.responsable ?? "").find((v) => v.trim()) ?? "";
+        const todas: Record<string, string> = {};
+        for (const f of bloque.filas) todas[f.key] = primero;
+        responsables = { ...previo.responsables, [bloque.id]: todas };
+      }
+      return { ...previo, responsables, unificados: { ...previo.unificados, [bloque.id]: activo } };
+    });
+  }
+
+  /** Escribe el responsable unificado en todas las filas del bloque. */
+  function setCecResponsableUnico(bloque: CecBloque, valor: string) {
+    setCecDoc((previo) => {
+      if (!previo) return previo;
+      const todas: Record<string, string> = {};
+      for (const f of bloque.filas) todas[f.key] = valor;
+      return { ...previo, responsables: { ...previo.responsables, [bloque.id]: todas } };
+    });
+  }
+
+  /**
+   * Consolidado del mes: trae las listas guardadas de los servicios que esta
+   * cuenta puede ver y las baja en Excel o las abre como reporte PDF.
+   */
+  async function descargarCecConsolidado(formato: "excel" | "pdf") {
+    if (firestoreUnavailable || cecDescargando) return;
+    // La ventana se abre ANTES de esperar datos: si no, el navegador la bloquea.
+    const ventana = formato === "pdf" ? window.open("", "_blank") : null;
+    if (formato === "pdf" && !ventana) {
+      setError("El navegador bloqueó la ventana del reporte. Permití ventanas emergentes para PULSO.");
+      return;
+    }
+    if (ventana) {
+      ventana.document.write(
+        '<p style="font-family:sans-serif;padding:24px;color:#0B2C4D">Generando el reporte del Comité…</p>',
+      );
+    }
+    setCecDescargando(formato);
+    setError("");
+    try {
+      const snap = await getDocs(
+        query(collection(db, "cecTabulators"), where("periodId", "==", periodId)),
+      );
+      const guardados = new Map<string, Record<string, unknown>>();
+      snap.forEach((item) => {
+        const d = item.data() as Record<string, unknown>;
+        if (typeof d.serviceId === "string") guardados.set(d.serviceId, d);
+      });
+      const entradas: CecEntrada[] = cecPlantillasVisibles.map((plantilla) => {
+        const d = guardados.get(plantilla.serviceId);
+        return {
+          plantilla,
+          datos: d ? cecMezclar(plantilla, d as Partial<CecDoc>) : null,
+          autor: d && typeof d.userEmail === "string" ? d.userEmail : undefined,
+          divisionLabel: CEC_DIVISION_LABEL[plantilla.division],
+        };
+      });
+      if (formato === "excel") {
+        await descargarCecExcel(periodId, periodLabel, entradas);
+      } else if (ventana) {
+        mostrarCecReporte(ventana, periodLabel, entradas);
+      }
+    } catch (descargaError) {
+      ventana?.close();
+      if (await handleFirestoreError(descargaError)) return;
+      setError("No pudimos armar el consolidado del comité.");
+    } finally {
+      setCecDescargando("");
+    }
+  }
+
   function setCecTexto(campo: "acciones" | "responsables", bloqueId: string, filaKey: string, valor: string) {
     setCecDoc((previo) => {
       if (!previo) return previo;
@@ -8664,6 +8751,7 @@ export default function Home() {
           valores: cecDoc.valores,
           acciones: cecDoc.acciones,
           responsables: cecDoc.responsables,
+          unificados: cecDoc.unificados,
           updatedAt: serverTimestamp(),
         },
         { merge: true },
@@ -20354,203 +20442,223 @@ export default function Home() {
                         {cecCargando ? (
                           <p className={`mt-6 text-sm ${suave}`}>Cargando la lista…</p>
                         ) : (
-                          plantilla.bloques.map((bloque) => (
-                            <div key={bloque.id} className="mt-6">
-                              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                                <h4 className={`text-sm font-bold uppercase tracking-wide ${isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>
-                                  {bloque.titulo}
-                                </h4>
-                                <span className={`text-xs ${suave}`}>
-                                  Cumplimiento del bloque:{" "}
-                                  <strong className={cecPctBloque(bloque) >= 80 ? "text-emerald-300" : "text-amber-300"}>
-                                    {cecPctBloque(bloque)}%
-                                  </strong>
-                                </span>
-                              </div>
+                          plantilla.bloques.map((bloque) => {
+                            const L = isLightPanelTheme;
+                            const cols = bloque.tipo === "expedientes" ? bloque.columnas : 1;
+                            const unido = cecDoc?.unificados[bloque.id] === true;
+                            const pctBloque = cecPctBloque(bloque);
+                            // Clases compartidas de la tabla (una sola fuente de estilo).
+                            const th = `px-2.5 py-2.5 text-[10.5px] font-bold uppercase tracking-[0.08em] ${
+                              L ? "bg-slate-100 text-slate-600" : "bg-[#223252] text-slate-200"
+                            }`;
+                            const td = `border-t ${L ? "border-slate-100" : "border-white/[0.06]"}`;
+                            const campo = `w-full rounded-lg border px-2 py-1.5 text-xs outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-70 ${
+                              L
+                                ? "border-slate-200 bg-white text-slate-900 shadow-sm"
+                                : "border-white/10 bg-[#111a2a] text-white shadow-inner shadow-black/30"
+                            }`;
+                            const colorValor = (v: string) =>
+                              v === "1"
+                                ? L ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-emerald-400/40 bg-emerald-400/15 text-emerald-200"
+                                : v === "0"
+                                  ? L ? "border-rose-300 bg-rose-50 text-rose-700" : "border-rose-400/40 bg-rose-400/15 text-rose-200"
+                                  : v === "NA"
+                                    ? L ? "border-slate-300 bg-slate-100 text-slate-600" : "border-slate-400/30 bg-slate-400/10 text-slate-300"
+                                    : L ? "border-slate-200 bg-white text-slate-400" : "border-white/10 bg-[#111a2a] text-slate-500";
+                            const colorPct = (p: number | null) =>
+                              p === null
+                                ? "text-slate-500"
+                                : p >= 80
+                                  ? L ? "text-emerald-600" : "text-emerald-300"
+                                  : L ? "text-amber-600" : "text-amber-300";
+                            return (
+                              <div
+                                key={bloque.id}
+                                className={`mt-6 overflow-hidden rounded-2xl border shadow-[0_18px_40px_-22px_rgba(0,0,0,0.75)] ${
+                                  L
+                                    ? "border-slate-200 bg-white"
+                                    : "border-white/10 bg-gradient-to-b from-[#1d2a42] to-[#162034] ring-1 ring-inset ring-white/[0.04]"
+                                }`}
+                              >
+                                {/* Encabezado del bloque */}
+                                <div className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 ${L ? "border-b border-slate-200 bg-slate-50" : "border-b border-white/10 bg-white/[0.03]"}`}>
+                                  <div className="flex min-w-0 items-center gap-2.5">
+                                    <span className="h-5 w-1.5 shrink-0 rounded-full bg-gradient-to-b from-teal-300 to-cyan-500" />
+                                    <h4 className={`truncate text-sm font-bold uppercase tracking-wide ${L ? "text-slate-800" : "text-white"}`}>
+                                      {bloque.titulo}
+                                    </h4>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {bloque.responsable ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleCecUnificado(bloque)}
+                                        disabled={cecBloqueado}
+                                        title="Combina las celdas de Responsable en una sola, como en Excel"
+                                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                          unido
+                                            ? "border-teal-400/50 bg-teal-400/15 text-teal-200"
+                                            : L
+                                              ? "border-slate-300 bg-white text-slate-600 hover:bg-slate-100"
+                                              : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10"
+                                        }`}
+                                      >
+                                        {unido ? "⧉ Responsable unificado · separar" : "⧉ Unificar responsable"}
+                                      </button>
+                                    ) : null}
+                                    <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${L ? "bg-white shadow-sm ring-1 ring-slate-200" : "bg-black/20 ring-1 ring-white/10"}`}>
+                                      <span className={suave}>Cumplimiento </span>
+                                      <strong className={colorPct(pctBloque)}>{pctBloque}%</strong>
+                                    </span>
+                                  </div>
+                                </div>
 
-                              <div className="mt-2 overflow-x-auto">
-                                <table className="w-full min-w-[820px] border-collapse text-sm">
-                                  <thead>
-                                    <tr className={isLightPanelTheme ? "bg-slate-100" : "bg-[#1b2537]"}>
-                                      <th className={`border px-2 py-2 text-left text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
-                                        Categoría
-                                      </th>
-                                      <th className={`border px-2 py-2 text-left text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
-                                        Aspecto a evaluar
-                                      </th>
-                                      {bloque.tipo === "expedientes" ? (
-                                        Array.from({ length: bloque.columnas }, (_, i) => (
-                                          <th key={i} className={`border px-1 py-1 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
-                                            <span className="block text-[9px] uppercase tracking-wide text-slate-400">
-                                              Expediente
-                                            </span>
-                                            <input
-                                              value={cecDoc?.expedientes[bloque.id]?.[i] ?? ""}
-                                              onChange={(e) => setCecExpediente(bloque.id, i, e.target.value)}
-                                              disabled={cecBloqueado}
-                                              placeholder="0000-26"
-                                              className={`mt-0.5 w-20 rounded border px-1 py-0.5 text-center text-[11px] outline-none ${
-                                                isLightPanelTheme
-                                                  ? "border-slate-200 bg-white text-slate-900"
-                                                  : "border-white/10 bg-[#141c2b] text-white"
-                                              }`}
-                                            />
-                                            {bloque.fecha ? (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full min-w-[820px] border-separate border-spacing-0 text-sm">
+                                    <thead>
+                                      <tr>
+                                        <th className={`${th} text-left`}>Categoría</th>
+                                        <th className={`${th} text-left`}>Aspecto a evaluar</th>
+                                        {bloque.tipo === "expedientes" ? (
+                                          Array.from({ length: cols }, (_, i) => (
+                                            <th key={i} className={`${th} px-1 text-center`}>
+                                              <span className="block text-[9px] text-slate-400">Exp. {i + 1}</span>
                                               <input
-                                                value={cecDoc?.fechas[bloque.id]?.[i] ?? ""}
-                                                onChange={(e) => setCecFecha(bloque.id, i, e.target.value)}
+                                                value={cecDoc?.expedientes[bloque.id]?.[i] ?? ""}
+                                                onChange={(e) => setCecExpediente(bloque.id, i, e.target.value)}
                                                 disabled={cecBloqueado}
-                                                placeholder="fecha"
-                                                className={`mt-0.5 w-20 rounded border px-1 py-0.5 text-center text-[10px] outline-none ${
-                                                  isLightPanelTheme
-                                                    ? "border-slate-200 bg-white text-slate-700"
-                                                    : "border-white/10 bg-[#141c2b] text-slate-300"
-                                                }`}
+                                                placeholder="0000-26"
+                                                className={`${campo} mt-1 w-[76px] text-center text-[11px] font-semibold normal-case tracking-normal`}
                                               />
-                                            ) : null}
-                                          </th>
-                                        ))
-                                      ) : (
-                                        <th className={`border px-2 py-2 text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
-                                          Sí 1 · No 0 · N/A
-                                        </th>
-                                      )}
-                                      <th className={`border px-2 py-2 text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
-                                        Total
-                                      </th>
-                                      {bloque.acciones ? (
-                                        <th className={`border px-2 py-2 text-left text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
-                                          Cantidades, acciones o puntos de mejora
-                                        </th>
-                                      ) : null}
-                                      {bloque.responsable ? (
-                                        <th className={`border px-2 py-2 text-left text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}>
-                                          Responsable
-                                        </th>
-                                      ) : null}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {bloque.filas.map((fila, indice) => {
-                                      const previa = indice > 0 ? bloque.filas[indice - 1].categoria : "";
-                                      const total = cecTotalFila(bloque, fila.key);
-                                      return (
-                                        <tr key={fila.key}>
-                                          <td className={`border px-2 py-1.5 align-top text-xs ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-400"}`}>
-                                            {fila.categoria === previa ? "" : fila.categoria}
-                                          </td>
-                                          <td className={`border px-2 py-1.5 align-top ${isLightPanelTheme ? "border-slate-200 text-slate-800" : "border-white/10 text-slate-200"}`}>
-                                            {fila.aspecto}
-                                          </td>
-                                          {Array.from(
-                                            { length: bloque.tipo === "expedientes" ? bloque.columnas : 1 },
-                                            (_, col) => (
-                                              <td key={col} className={`border p-0.5 text-center ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
-                                                <select
-                                                  value={cecDoc?.valores[bloque.id]?.[fila.key]?.[col] ?? ""}
-                                                  onChange={(e) => setCecValor(bloque.id, fila.key, col, e.target.value)}
+                                              {bloque.fecha ? (
+                                                <input
+                                                  value={cecDoc?.fechas[bloque.id]?.[i] ?? ""}
+                                                  onChange={(e) => setCecFecha(bloque.id, i, e.target.value)}
                                                   disabled={cecBloqueado}
-                                                  className={`w-full rounded border px-1 py-1 text-center text-xs outline-none ${
-                                                    isLightPanelTheme
-                                                      ? "border-slate-200 bg-white text-slate-900"
-                                                      : "border-white/10 bg-[#141c2b] text-white"
-                                                  }`}
-                                                >
-                                                  <option value="">—</option>
-                                                  <option value="1">1</option>
-                                                  <option value="0">0</option>
-                                                  <option value="NA">N/A</option>
-                                                </select>
-                                              </td>
-                                            ),
-                                          )}
-                                          <td className={`border px-2 py-1.5 text-center text-xs font-bold ${isLightPanelTheme ? "border-slate-200" : "border-white/10"} ${
-                                            total === null ? "text-slate-500" : total >= 80 ? "text-emerald-300" : "text-amber-300"
-                                          }`}>
-                                            {total === null ? "—" : `${total}%`}
-                                          </td>
-                                          {bloque.acciones ? (
-                                            <td className={`border p-0.5 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
-                                              <input
-                                                value={cecDoc?.acciones[bloque.id]?.[fila.key] ?? ""}
-                                                onChange={(e) => setCecTexto("acciones", bloque.id, fila.key, e.target.value)}
-                                                disabled={cecBloqueado}
-                                                className={`w-full min-w-[180px] rounded border px-1.5 py-1 text-xs outline-none ${
-                                                  isLightPanelTheme
-                                                    ? "border-slate-200 bg-white text-slate-900"
-                                                    : "border-white/10 bg-[#141c2b] text-white"
-                                                }`}
-                                              />
-                                            </td>
-                                          ) : null}
-                                          {bloque.responsable ? (
-                                            <td className={`border p-0.5 ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
-                                              <input
-                                                value={
-                                                  cecDoc?.responsables[bloque.id]?.[fila.key] ??
-                                                  fila.responsable ??
-                                                  ""
-                                                }
-                                                onChange={(e) => setCecTexto("responsables", bloque.id, fila.key, e.target.value)}
-                                                disabled={cecBloqueado}
-                                                className={`w-full min-w-[150px] rounded border px-1.5 py-1 text-xs outline-none ${
-                                                  isLightPanelTheme
-                                                    ? "border-slate-200 bg-white text-slate-700"
-                                                    : "border-white/10 bg-[#141c2b] text-slate-300"
-                                                }`}
-                                              />
-                                            </td>
-                                          ) : null}
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                  {/* TOTAL POR EXPEDIENTE: cuanto de los criterios cumple cada
-                                      expediente de la muestra (la fila mide el criterio; la
-                                      columna mide el expediente). */}
-                                  {bloque.tipo === "expedientes" ? (
-                                    <tfoot>
-                                      <tr className={isLightPanelTheme ? "bg-slate-100" : "bg-[#1b2537]"}>
-                                        <td
-                                          colSpan={2}
-                                          className={`border px-2 py-2 text-right text-[11px] font-bold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 text-slate-600" : "border-white/10 text-slate-300"}`}
-                                        >
-                                          Total por expediente
-                                        </td>
-                                        {Array.from({ length: bloque.columnas }, (_, col) => {
-                                          const totalCol = cecTotalColumna(bloque, col);
-                                          return (
-                                            <td
-                                              key={col}
-                                              className={`border px-1 py-2 text-center text-xs font-bold ${isLightPanelTheme ? "border-slate-200" : "border-white/10"} ${
-                                                totalCol === null ? "text-slate-500" : totalCol >= 80 ? "text-emerald-300" : "text-amber-300"
-                                              }`}
-                                            >
-                                              {totalCol === null ? "—" : `${totalCol}%`}
-                                            </td>
-                                          );
-                                        })}
-                                        <td
-                                          className={`border px-2 py-2 text-center text-xs font-bold ${isLightPanelTheme ? "border-slate-200" : "border-white/10"} ${
-                                            cecPctBloque(bloque) >= 80 ? "text-emerald-300" : "text-amber-300"
-                                          }`}
-                                          title="Cumplimiento del bloque"
-                                        >
-                                          {cecPctBloque(bloque)}%
-                                        </td>
+                                                  placeholder="fecha"
+                                                  className={`${campo} mt-1 w-[76px] text-center text-[10px] font-normal normal-case tracking-normal`}
+                                                />
+                                              ) : null}
+                                            </th>
+                                          ))
+                                        ) : (
+                                          <th className={`${th} text-center`}>Sí 1 · No 0 · N/A</th>
+                                        )}
+                                        <th className={`${th} text-center`}>Total</th>
                                         {bloque.acciones ? (
-                                          <td className={`border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`} />
+                                          <th className={`${th} text-left`}>Cantidades, acciones o puntos de mejora</th>
                                         ) : null}
                                         {bloque.responsable ? (
-                                          <td className={`border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`} />
+                                          <th className={`${th} text-left`}>Responsable</th>
                                         ) : null}
                                       </tr>
-                                    </tfoot>
-                                  ) : null}
-                                </table>
+                                    </thead>
+                                    <tbody>
+                                      {bloque.filas.map((fila, indice) => {
+                                        const previa = indice > 0 ? bloque.filas[indice - 1].categoria : "";
+                                        const total = cecTotalFila(bloque, fila.key);
+                                        const zebra = indice % 2 === 1 ? (L ? "bg-slate-50/70" : "bg-white/[0.02]") : "";
+                                        return (
+                                          <tr key={fila.key} className={`transition-colors ${zebra} ${L ? "hover:bg-cyan-50/60" : "hover:bg-cyan-400/[0.04]"}`}>
+                                            <td className={`${td} px-3 py-2 align-top text-[11px] font-medium ${L ? "text-slate-500" : "text-slate-400"}`}>
+                                              {fila.categoria === previa ? "" : fila.categoria}
+                                            </td>
+                                            <td className={`${td} px-3 py-2 align-top leading-snug ${L ? "text-slate-800" : "text-slate-100"}`}>
+                                              {fila.aspecto}
+                                            </td>
+                                            {Array.from({ length: cols }, (_, col) => {
+                                              const v = cecDoc?.valores[bloque.id]?.[fila.key]?.[col] ?? "";
+                                              return (
+                                                <td key={col} className={`${td} px-1 py-1.5 text-center`}>
+                                                  <select
+                                                    value={v}
+                                                    onChange={(e) => setCecValor(bloque.id, fila.key, col, e.target.value)}
+                                                    disabled={cecBloqueado}
+                                                    className={`w-full min-w-[62px] cursor-pointer rounded-lg border px-1 py-1.5 text-center text-xs font-bold outline-none transition focus:ring-2 focus:ring-cyan-400/30 disabled:cursor-not-allowed ${colorValor(v)}`}
+                                                  >
+                                                    <option value="">—</option>
+                                                    <option value="1">1</option>
+                                                    <option value="0">0</option>
+                                                    <option value="NA">N/A</option>
+                                                  </select>
+                                                </td>
+                                              );
+                                            })}
+                                            <td className={`${td} px-2 py-2 text-center`}>
+                                              <span className={`inline-block min-w-[48px] rounded-full px-2 py-0.5 text-xs font-bold ${L ? "bg-slate-100" : "bg-black/25"} ${colorPct(total)}`}>
+                                                {total === null ? "—" : `${total}%`}
+                                              </span>
+                                            </td>
+                                            {bloque.acciones ? (
+                                              <td className={`${td} px-1.5 py-1.5`}>
+                                                <input
+                                                  value={cecDoc?.acciones[bloque.id]?.[fila.key] ?? ""}
+                                                  onChange={(e) => setCecTexto("acciones", bloque.id, fila.key, e.target.value)}
+                                                  disabled={cecBloqueado}
+                                                  className={`${campo} min-w-[180px]`}
+                                                />
+                                              </td>
+                                            ) : null}
+                                            {bloque.responsable && !unido ? (
+                                              <td className={`${td} px-1.5 py-1.5`}>
+                                                <input
+                                                  value={cecDoc?.responsables[bloque.id]?.[fila.key] ?? fila.responsable ?? ""}
+                                                  onChange={(e) => setCecTexto("responsables", bloque.id, fila.key, e.target.value)}
+                                                  disabled={cecBloqueado}
+                                                  className={`${campo} min-w-[160px]`}
+                                                />
+                                              </td>
+                                            ) : null}
+                                            {bloque.responsable && unido && indice === 0 ? (
+                                              <td
+                                                rowSpan={bloque.filas.length}
+                                                className={`${td} border-l-2 px-2 py-2 align-middle ${L ? "border-l-teal-400 bg-teal-50/60" : "border-l-teal-400/60 bg-teal-400/[0.06]"}`}
+                                              >
+                                                <textarea
+                                                  value={cecDoc?.responsables[bloque.id]?.[fila.key] ?? fila.responsable ?? ""}
+                                                  onChange={(e) => setCecResponsableUnico(bloque, e.target.value)}
+                                                  disabled={cecBloqueado}
+                                                  rows={Math.min(8, Math.max(3, bloque.filas.length))}
+                                                  placeholder="Responsable de todo el bloque"
+                                                  className={`${campo} min-w-[180px] resize-none text-center font-semibold leading-relaxed`}
+                                                />
+                                              </td>
+                                            ) : null}
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                    {/* TOTAL POR EXPEDIENTE: la fila mide el criterio; la columna, el expediente. */}
+                                    {bloque.tipo === "expedientes" ? (
+                                      <tfoot>
+                                        <tr className={L ? "bg-slate-100" : "bg-[#223252]"}>
+                                          <td
+                                            colSpan={2}
+                                            className={`border-t-2 px-3 py-2.5 text-right text-[10.5px] font-bold uppercase tracking-[0.08em] ${L ? "border-slate-300 text-slate-600" : "border-cyan-400/30 text-slate-200"}`}
+                                          >
+                                            Total por expediente
+                                          </td>
+                                          {Array.from({ length: cols }, (_, col) => {
+                                            const totalCol = cecTotalColumna(bloque, col);
+                                            return (
+                                              <td key={col} className={`border-t-2 px-1 py-2.5 text-center text-xs font-bold ${L ? "border-slate-300" : "border-cyan-400/30"} ${colorPct(totalCol)}`}>
+                                                {totalCol === null ? "—" : `${totalCol}%`}
+                                              </td>
+                                            );
+                                          })}
+                                          <td className={`border-t-2 px-2 py-2.5 text-center text-xs font-extrabold ${L ? "border-slate-300" : "border-cyan-400/30"} ${colorPct(pctBloque)}`} title="Cumplimiento del bloque">
+                                            {pctBloque}%
+                                          </td>
+                                          {bloque.acciones ? <td className={`border-t-2 ${L ? "border-slate-300" : "border-cyan-400/30"}`} /> : null}
+                                          {bloque.responsable ? <td className={`border-t-2 ${L ? "border-slate-300" : "border-cyan-400/30"}`} /> : null}
+                                        </tr>
+                                      </tfoot>
+                                    ) : null}
+                                  </table>
+                                </div>
                               </div>
-                            </div>
-                          ))
+                            );
+                          })
                         )}
 
                         {cecEditable ? (
@@ -20571,6 +20679,43 @@ export default function Home() {
                         Elegí un servicio de la lista para abrir su monitoreo.
                       </p>
                     )}
+
+                    {/* CONSOLIDADO DEL MES: todos los servicios, uno debajo del otro. */}
+                    <div
+                      className={`mt-8 flex flex-col gap-4 rounded-2xl border p-5 shadow-[0_18px_40px_-20px_rgba(0,0,0,0.6)] sm:flex-row sm:items-center sm:justify-between ${
+                        isLightPanelTheme
+                          ? "border-slate-200 bg-gradient-to-br from-white to-slate-50"
+                          : "border-white/10 bg-gradient-to-br from-[#223250] to-[#18233a]"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-300">
+                          Consolidado · {periodLabel}
+                        </p>
+                        <p className={`mt-1 text-sm ${suave}`}>
+                          Descargá todas las listas del mes, una debajo de otra y separadas por servicio
+                          ({plantillas.length} {plantillas.length === 1 ? "servicio" : "servicios"}).
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void descargarCecConsolidado("excel")}
+                          disabled={!!cecDescargando}
+                          className="rounded-xl bg-gradient-to-r from-emerald-400 to-teal-500 px-4 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-emerald-500/20 transition hover:brightness-110 disabled:opacity-50"
+                        >
+                          {cecDescargando === "excel" ? "Generando…" : "Descargar Excel"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void descargarCecConsolidado("pdf")}
+                          disabled={!!cecDescargando}
+                          className="rounded-xl bg-gradient-to-r from-sky-400 to-indigo-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition hover:brightness-110 disabled:opacity-50"
+                        >
+                          {cecDescargando === "pdf" ? "Generando…" : "Reporte PDF"}
+                        </button>
+                      </div>
+                    </div>
                   </>
                 );
               })()}
