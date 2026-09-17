@@ -21157,13 +21157,13 @@ export default function Home() {
               className={`rounded-[24px] p-5 shadow-[0_24px_80px_rgba(3,7,18,0.35)] ${
                 isLightPanelTheme
                   ? "border border-slate-200 bg-white text-slate-900"
-                  : "border border-cyan-400/20 bg-[#202c41]"
+                  : "border border-white/10 bg-[#202c41]"
               }`}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <p className={`text-sm uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-sky-700" : "text-cyan-200/80"}`}>
-                    Exportacion mensual
+                  <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${isLightPanelTheme ? "text-sky-700" : "text-slate-400"}`}>
+                    Exportación mensual
                   </p>
                   <h2 className="mt-2 text-2xl font-semibold">Descargar consolidado en Excel</h2>
                   <p className={`mt-2 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
@@ -21174,7 +21174,7 @@ export default function Home() {
               </div>
 
               <div className="mt-5 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-                <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#1b2537] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">
@@ -21192,7 +21192,7 @@ export default function Home() {
                         onChange={(event) =>
                           setAvancePeriod(event.target.value === periodId ? "" : event.target.value)
                         }
-                        className="rounded-lg border border-white/10 bg-[#141d2e] px-2 py-1 text-[11px] font-semibold text-slate-200 outline-none transition focus:border-cyan-400"
+                        className="rounded-lg border border-white/[0.08] bg-[#141d2e] px-2 py-1 text-[11px] font-medium text-slate-300 outline-none transition focus:border-teal-400/60"
                       >
                         {buildAvancePeriods(periodId).map((option) => (
                           <option key={option} value={option}>
@@ -21202,21 +21202,21 @@ export default function Home() {
                         ))}
                       </select>
                       {avanceLoading ? (
-                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/15 border-t-cyan-400" />
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/15 border-t-teal-300" />
                       ) : null}
                     </div>
                   </div>
                   {isAvanceHistory ? (
-                    <p className="mt-2 text-[11px] text-amber-200/80">
+                    <p className="mt-2 text-[11px] text-slate-400">
                       Estás viendo {getPeriodLabel(avanceActivePeriod)}, un mes distinto al que está en cierre.
                     </p>
                   ) : null}
                   <div className="mt-4 space-y-5">
                     {(
                       [
-                        { key: "PERC", modulo: "perc", label: "PERC", color: "text-cyan-300", bar: "from-cyan-400 to-cyan-500" },
-                        { key: "SEPS", modulo: "sesps", label: "SEPS (monitoreo)", color: "text-blue-300", bar: "from-blue-400 to-blue-500" },
-                        { key: "Horas", modulo: "distribucion", label: "Distribución de Horas", color: "text-amber-300", bar: "from-amber-400 to-amber-500" },
+                        { key: "PERC", modulo: "perc", label: "PERC" },
+                        { key: "SEPS", modulo: "sesps", label: "SEPS (monitoreo)" },
+                        { key: "Horas", modulo: "distribucion", label: "Distribución de Horas" },
                       ] as const
                     ).map((m) => {
                       const stat = avanceStats[m.key];
@@ -21245,15 +21245,29 @@ export default function Home() {
                             title="Ver el monitoreo de este módulo"
                             className="flex w-full items-center justify-between text-left text-sm transition hover:opacity-80"
                           >
-                            <span className={`font-semibold ${m.color}`}>{m.label}</span>
-                            <span className="font-bold text-white">
-                              {stat.done} de {stat.total}
+                            <span className={`text-[12.5px] font-medium ${isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>
+                              {m.label}
+                            </span>
+                            <span className="flex items-baseline gap-2">
+                              <span className={`text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
+                                {stat.done} de {stat.total}
+                              </span>
+                              <span className={`text-[12.5px] font-bold tabular-nums ${
+                                pct >= 100
+                                  ? isLightPanelTheme ? "text-teal-700" : "text-teal-200"
+                                  : isLightPanelTheme ? "text-slate-800" : "text-white"
+                              }`}>
+                                {pct}%
+                              </span>
                             </span>
                           </button>
-                          <div className={`mt-2 h-4 overflow-hidden rounded-full ring-1 ${isLightPanelTheme ? "bg-slate-200 ring-slate-300/70" : "bg-white/10 ring-white/5"}`}>
+                          {/* Barra fina, un solo acento: el color no compite con el dato. */}
+                          <div className={`mt-2 h-1.5 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/[0.07]"}`}>
                             <div
-                              className={`h-full rounded-full bg-gradient-to-r ${m.bar}`}
-                              style={{ width: pct > 0 ? `max(${pct}%, 0.75rem)` : "0%" }}
+                              className={`h-full rounded-full transition-all ${
+                                pct >= 100 ? "bg-teal-300" : isLightPanelTheme ? "bg-slate-500" : "bg-slate-400/70"
+                              }`}
+                              style={{ width: pct > 0 ? `max(${pct}%, 0.5rem)` : "0%" }}
                             />
                           </div>
                           {faltan.length > 0 ? (
@@ -21266,7 +21280,7 @@ export default function Home() {
                             </p>
                           ) : null}
                           {porCorreo > 0 ? (
-                            <p className="mt-0.5 text-[11px] leading-4 text-emerald-300/80">
+                            <p className="mt-0.5 text-[11px] leading-4 text-slate-400">
                               ✉ Incluye {porCorreo} recibido{porCorreo === 1 ? "" : "s"} fuera de PULSO.
                             </p>
                           ) : null}
@@ -21279,7 +21293,7 @@ export default function Home() {
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-4">
+                <div className="rounded-2xl border border-white/[0.07] bg-[#1b2537] p-4">
                   <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">Descargas</p>
                   <h3 className="mt-2 text-xl font-semibold text-white">Consolidados del periodo {periodLabel}</h3>
                   <p className="mt-2 text-sm text-slate-300">
@@ -21289,7 +21303,7 @@ export default function Home() {
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
                     {/* Cada consolidado ofrece las dos acciones: bajar el Excel tal
                         cual, o mirar en pantalla como va quedando la tabla. */}
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
                       <p className="text-sm font-bold text-white">Producción Distribuida</p>
                       <p className="mt-0.5 text-[11px] leading-5 text-slate-400">
                         Matriz por centros de costo, sumando todos los servicios.
@@ -21299,7 +21313,7 @@ export default function Home() {
                           type="button"
                           onClick={() => void handleExportMonthlyReport()}
                           disabled={isExportingMonthlyReport}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-cyan-500 px-3.5 py-2 text-xs font-bold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+                          className={`${BTN_GUARDAR} inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-60`}
                         >
                           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M12 3v12" /><path d="m7 12 5 5 5-5" /><path d="M5 21h14" />
@@ -21309,7 +21323,7 @@ export default function Home() {
                         <button
                           type="button"
                           onClick={() => void handlePreviewMonthlyReport()}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3.5 py-2 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.09] bg-white/[0.03] px-3.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
                         >
                           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
@@ -21320,7 +21334,7 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
                       <p className="text-sm font-bold text-white">Producción de Servicio</p>
                       <p className="mt-0.5 text-[11px] leading-5 text-slate-400">
                         Plantilla completa por centro de producción, con el Censo integrado.
@@ -21330,7 +21344,7 @@ export default function Home() {
                           type="button"
                           onClick={() => void downloadServiceProductionNow()}
                           disabled={isExportingServiceProduction}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-cyan-500 px-3.5 py-2 text-xs font-bold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+                          className={`${BTN_GUARDAR} inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-60`}
                         >
                           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M12 3v12" /><path d="m7 12 5 5 5-5" /><path d="M5 21h14" />
@@ -21340,7 +21354,7 @@ export default function Home() {
                         <button
                           type="button"
                           onClick={() => void handleExportServiceProduction()}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3.5 py-2 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.09] bg-white/[0.03] px-3.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
                         >
                           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
