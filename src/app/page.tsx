@@ -14440,7 +14440,7 @@ export default function Home() {
                   isLightPanelTheme
                     ? "border-slate-200"
                     : groupOpen
-                      ? "border-cyan-400/30 bg-[#1b2537]"
+                      ? "border-white/15 bg-[#1b2537]"
                       : "border-white/10 bg-[#1b2537]"
                 }`}
               >
@@ -14465,34 +14465,7 @@ export default function Home() {
                     style={{ backgroundColor: groupOpen ? groupAccent.open : groupAccent.closed }}
                   />
                   <h3 className="shrink-0 text-sm font-semibold uppercase tracking-wide">{group.title}</h3>
-                  {group.id === "direccion" ? (
-                    <div className="hidden min-w-0 flex-1 items-center px-4 lg:flex">
-                      <svg viewBox="0 0 200 24" preserveAspectRatio="none" className="h-6 w-full" aria-hidden="true">
-                        <path
-                          className="ekg-track"
-                          d="M0 12 H15 L18 9 L21 12 L24 3 L28 21 L31 12 H62 L65 9 L68 12 L71 3 L75 21 L78 12 H109 L112 9 L115 12 L118 3 L122 21 L125 12 H156 L159 9 L162 12 L165 3 L169 21 L172 12 H200"
-                          fill="none"
-                          strokeWidth="0.75"
-                          vectorEffect="non-scaling-stroke"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <path
-                          className="ekg-pulse-soft"
-                          pathLength={100}
-                          d="M0 12 H15 L18 9 L21 12 L24 3 L28 21 L31 12 H62 L65 9 L68 12 L71 3 L75 21 L78 12 H109 L112 9 L115 12 L118 3 L122 21 L125 12 H156 L159 9 L162 12 L165 3 L169 21 L172 12 H200"
-                          fill="none"
-                          stroke="#67e8f9"
-                          strokeWidth="1.25"
-                          vectorEffect="non-scaling-stroke"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </div>
-                  ) : (
-                    <span className="hidden flex-1 lg:block" />
-                  )}
+                  <span className="hidden flex-1 lg:block" />
                   <span className={`hidden text-xs sm:inline ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
                     {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
                   </span>
@@ -14517,23 +14490,30 @@ export default function Home() {
                       return (
                       <div
                         key={service.id}
-                        className={`group rounded-2xl border p-3 text-center transition ${
+                        className={`group relieve-fila rounded-2xl border p-3 text-center transition ${
                           servicioConPedido.has(service.id)
-                            ? "border-rose-400/70 bg-rose-500/10 ring-2 ring-rose-400/40"
+                            ? "border-rose-400/40 bg-rose-500/[0.07]"
                             : isLightPanelTheme
-                              ? "border-slate-200 bg-white shadow-sm hover:border-cyan-300 hover:shadow-md"
-                              : "border-white/10 bg-gradient-to-b from-[#212d45] to-[#1a2334] hover:border-cyan-400/30"
+                              ? "border-slate-200 bg-white hover:border-slate-300"
+                              : "border-white/[0.07] bg-gradient-to-b from-[#1e2941] to-[#182031] hover:border-white/15"
                         }`}
                       >
                         {servicioConPedido.has(service.id) ? (
-                          <p className="mb-1.5 rounded-full bg-rose-500/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rose-200">
+                          <p className="mb-1.5 rounded-full bg-rose-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-rose-200/90 ring-1 ring-inset ring-rose-400/25">
                             Solicitó habilitación
                           </p>
                         ) : null}
-                        <span className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm ring-1 ring-white/15 transition group-hover:scale-105">
+                        {/* Icono discreto: el color lo aporta el estado, no el adorno. */}
+                        <span
+                          className={`mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl transition group-hover:scale-105 ${
+                            isLightPanelTheme
+                              ? "bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-200"
+                              : "bg-white/[0.06] text-slate-300 ring-1 ring-inset ring-white/[0.08]"
+                          }`}
+                        >
                           <ServiceIcon serviceId={service.id} className="h-[18px] w-[18px]" />
                         </span>
-                        <p className="truncate text-[11px] font-semibold leading-tight" title={service.name}>
+                        <p className="truncate text-[11px] font-semibold leading-tight text-slate-100" title={service.name}>
                           {service.name}
                         </p>
                         <div className={`my-2.5 h-px ${isLightPanelTheme ? "bg-slate-100" : "bg-white/10"}`} />
@@ -14551,22 +14531,22 @@ export default function Home() {
                               }
                               className={`flex items-center justify-between gap-1.5 rounded-lg px-2 py-1 ${
                                 pedido
-                                  ? "bg-emerald-500/15 ring-1 ring-emerald-400/50"
+                                  ? "bg-teal-300/[0.08] ring-1 ring-inset ring-teal-300/25"
                                   : isLightPanelTheme
                                     ? "bg-slate-50"
-                                    : "bg-white/5"
+                                    : "bg-white/[0.035]"
                               }`}
                             >
                               <span
                                 className={`flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide ${
                                   pedido
-                                    ? "text-emerald-200"
+                                    ? "text-teal-100"
                                     : isLightPanelTheme
                                       ? "text-slate-500"
                                       : "text-slate-400"
                                 }`}
                               >
-                                {pedido ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> : null}
+                                {pedido ? <span className="h-1.5 w-1.5 rounded-full bg-teal-300" /> : null}
                                 {MODULE_BY_ID[moduleId].shortName}
                               </span>
                               {overrideStateChip(service, moduleId)}
