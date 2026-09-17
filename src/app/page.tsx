@@ -20498,7 +20498,9 @@ export default function Home() {
                                         title="Combina las celdas de Responsable en una sola, como en Excel"
                                         className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                                           unido
-                                            ? "border-teal-400/50 bg-teal-400/15 text-teal-200"
+                                            ? L
+                                              ? "border-slate-400 bg-slate-200 text-slate-800"
+                                              : "border-slate-400/40 bg-slate-500/20 text-slate-100"
                                             : L
                                               ? "border-slate-300 bg-white text-slate-600 hover:bg-slate-100"
                                               : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10"
@@ -20615,7 +20617,7 @@ export default function Home() {
                                             {bloque.responsable && unido && indice === 0 ? (
                                               <td
                                                 rowSpan={bloque.filas.length}
-                                                className={`${td} border-l-2 px-2 py-2 align-middle ${L ? "border-l-teal-400 bg-teal-50/60" : "border-l-teal-400/60 bg-teal-400/[0.06]"}`}
+                                                className={`${td} border-l px-2 py-2 align-middle ${L ? "border-l-slate-200 bg-white" : "border-l-white/[0.06] bg-transparent"}`}
                                               >
                                                 <textarea
                                                   value={cecDoc?.responsables[bloque.id]?.[fila.key] ?? fila.responsable ?? ""}
