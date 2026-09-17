@@ -6889,6 +6889,23 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hospitalSel]);
 
+  // HOSPITALES: al ENTRAR al menu se consultan todos solos. Usa la copia de 5
+  // minutos del servidor (sin forzar), para no gastar cuota de los otros
+  // hospitales en cada visita. El boton "Consultar hospitales" sigue forzando.
+  const enHospitales =
+    activeSidebarSection === "panel-hospitales" || mobileView === "panel-hospitales";
+  const hospitalesAutoRef = useRef(false);
+  useEffect(() => {
+    if (!enHospitales) {
+      hospitalesAutoRef.current = false;
+      return;
+    }
+    if (hospitalesAutoRef.current || !user || !puedeVerHospitales || sigmaTodos) return;
+    hospitalesAutoRef.current = true;
+    void consultarTodosLosHospitales(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enHospitales, user, puedeVerHospitales]);
+
   // Tableros dados por recibidos fuera de PULSO: se leen al ENTRAR. Antes solo se
   // leian al abrir un monitoreo, y por eso la pantalla de inicio mostraba menos
   // completos que el monitoreo (el mismo mes daba dos numeros distintos).
@@ -8794,12 +8811,12 @@ export default function Home() {
    * resumen nacional. No se dispara al entrar: cada consulta viaja al sistema de
    * otro hospital, asi que la pide el usuario cuando la quiere.
    */
-  async function consultarTodosLosHospitales() {
+  async function consultarTodosLosHospitales(refrescar = true) {
     const pendientes = HOSPITALES_EXTERNOS.filter((h) => h.conectado && !h.local);
     setSigmaTodos(true);
     try {
       await Promise.all(
-        pendientes.map((h) => loadSigmaMonitoreo(h.id, sigmaMes[h.id] || "", true)),
+        pendientes.map((h) => loadSigmaMonitoreo(h.id, sigmaMes[h.id] || "", refrescar)),
       );
       setSigmaConsultadoEn(
         new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" }),
