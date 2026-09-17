@@ -1222,6 +1222,24 @@ function Aviso({
   );
 }
 
+// MODULO DE USUARIOS: paleta contenida. Un solo acento (verde azulado de la
+// marca) para lo que esta encendido; todo lo demas en grises.
+const UM_ON = "bg-teal-400/[0.12] text-teal-50 ring-1 ring-inset ring-teal-300/30";
+const UM_OFF = "bg-white/[0.04] text-slate-400 ring-1 ring-inset ring-white/[0.06] hover:bg-white/[0.08] hover:text-slate-200";
+const UM_GRUPO = "border-white/10 bg-white/[0.04] text-slate-300";
+const UM_SECUNDARIO =
+  "rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] font-semibold text-slate-300 transition hover:bg-white/[0.08] hover:text-white";
+
+/** Titulo de seccion del modulo de usuarios: etiqueta sobria + linea. */
+function SeccionUm({ titulo, detalle }: { titulo: string; detalle?: string }) {
+  return (
+    <div className="mt-6 flex items-baseline gap-3 border-b border-white/[0.07] pb-1.5">
+      <p className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{titulo}</p>
+      {detalle ? <p className="truncate text-[11px] text-slate-500">{detalle}</p> : null}
+    </div>
+  );
+}
+
 function ServiceIcon({
   serviceId,
   className = "h-4 w-4",
@@ -22978,7 +22996,7 @@ export default function Home() {
                             value={adminUserQuery}
                             onChange={(event) => setAdminUserQuery(event.target.value)}
                             placeholder="Buscar usuario o servicio…"
-                            className="w-full rounded-xl border border-white/10 bg-[#2a3448] py-2.5 pl-9 pr-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-amber-400"
+                            className="w-full rounded-xl border border-white/10 bg-[#2a3448] py-2.5 pl-9 pr-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-teal-400/60"
                           />
                         </div>
                       </div>
@@ -22999,12 +23017,12 @@ export default function Home() {
                                 onClick={() => setAdminSelectedUserUid(u.uid)}
                                 className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${
                                   isSel
-                                    ? "bg-amber-500/[0.14] ring-1 ring-amber-400/30 shadow-sm shadow-black/20"
+                                    ? "bg-white/[0.06] ring-1 ring-inset ring-white/10"
                                     : "hover:bg-white/5"
                                 }`}
                               >
                                 <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold transition ${
-                                  isSel ? "bg-gradient-to-br from-amber-400 to-amber-600 text-slate-900 shadow-sm shadow-amber-500/30" : "bg-white/10 text-slate-200"
+                                  isSel ? "bg-teal-400/15 text-teal-100 ring-1 ring-inset ring-teal-300/30" : "bg-white/[0.06] text-slate-300"
                                 }`}>
                                   {initials(d.name || d.username)}
                                 </span>
@@ -23017,7 +23035,7 @@ export default function Home() {
                                       <>
                                         <ServiceIcon
                                           serviceId={d.serviceId}
-                                          className="mr-1 inline h-3.5 w-3.5 align-[-2px] text-cyan-300/90"
+                                          className="mr-1 inline h-3.5 w-3.5 align-[-2px] text-slate-500"
                                         />
                                         {getServiceById(d.serviceId)?.name}
                                       </>
@@ -23030,7 +23048,7 @@ export default function Home() {
                                 </span>
                                 <span
                                   className={`h-2 w-2 shrink-0 rounded-full ${
-                                    d.isActive ? "bg-emerald-400" : "bg-slate-600"
+                                    d.isActive ? "bg-teal-400/80" : "bg-slate-600"
                                   }`}
                                 />
                               </button>
@@ -23044,7 +23062,7 @@ export default function Home() {
                     {draft && selectedUser ? (
                       <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-5">
                         <div className="flex items-start gap-3 border-b border-white/10 pb-4">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-base font-bold text-amber-200">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-base font-semibold text-slate-100 ring-1 ring-inset ring-white/10">
                             {initials(draft.name || draft.username)}
                           </div>
                           <div className="min-w-0 flex-1">
@@ -23056,14 +23074,14 @@ export default function Home() {
                                   value={renameValue}
                                   onChange={(event) => setRenameValue(event.target.value)}
                                   placeholder="nvarela"
-                                  className="w-40 rounded-lg border border-cyan-400/40 bg-[#0e1626] px-2 py-1 font-mono text-xs text-white outline-none"
+                                  className="w-40 rounded-lg border border-white/15 bg-[#0e1626] px-2 py-1 font-mono text-xs text-white outline-none focus:border-teal-400/60"
                                 />
                                 <span className="font-mono text-[11px] text-slate-500">@perc-hnes.app</span>
                                 <button
                                   type="button"
                                   disabled={renameBusy}
                                   onClick={() => void handleRenameUser(selectedUser.uid)}
-                                  className="rounded-lg bg-cyan-500 px-2.5 py-1 text-[11px] font-bold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
+                                  className={`${BTN_GUARDAR} rounded-lg px-2.5 py-1 text-[11px] disabled:opacity-50`}
                                 >
                                   {renameBusy ? "…" : "Guardar"}
                                 </button>
@@ -23080,7 +23098,7 @@ export default function Home() {
                               </div>
                             ) : (
                               <p className="flex items-center gap-2">
-                                <span className="truncate font-mono text-xs text-cyan-200">
+                                <span className="truncate font-mono text-xs text-slate-300">
                                   {draft.username}
                                 </span>
                                 <button
@@ -23098,15 +23116,33 @@ export default function Home() {
                             )}
                             <p className="truncate text-xs text-slate-400">{draft.email}</p>
                           </div>
-                          <span
-                            className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                              draft.role === "admin"
-                                ? "bg-blue-500/20 text-blue-200"
-                                : "bg-white/10 text-slate-300"
-                            }`}
-                          >
-                            {draft.role === "admin" ? "Admin" : "Servicio"}
-                          </span>
+                          <div className="flex shrink-0 flex-col items-end gap-2">
+                            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-300">
+                              {draft.role === "admin" ? "Administrador" : "Servicio"}
+                            </span>
+                            <div className="flex gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setAccessViewUid(selectedUser.uid)}
+                                title="Ver, sin poder modificar, todo lo que esta cuenta tiene habilitado"
+                                className={UM_SECUNDARIO}
+                              >
+                                Ver accesos
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => enterGhostMode(selectedUser)}
+                                title="Entrar a PULSO viéndolo como esta persona, sin poder modificar nada"
+                                className={`${UM_SECUNDARIO} inline-flex items-center gap-1.5`}
+                              >
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                                  <circle cx="12" cy="12" r="3" />
+                                </svg>
+                                Verificar
+                              </button>
+                            </div>
+                          </div>
                         </div>
 
                         {(() => {
@@ -23122,21 +23158,19 @@ export default function Home() {
                           const vp = su.viewPerc ?? [];
                           const vs = su.viewSeps ?? [];
                           const vh = su.viewHoras ?? [];
+                          // Chips neutros: el texto dice que es; el color no compite.
                           const chipCls = (tone: string) =>
-                            `inline-flex items-center rounded-lg border px-2 py-0.5 text-[11px] font-medium ${
-                              tone === "emerald" ? "border-emerald-400/30 bg-emerald-500/12 text-emerald-200"
-                              : tone === "cyan" ? "border-cyan-400/30 bg-cyan-500/12 text-cyan-200"
-                              : tone === "violet" ? "border-violet-400/30 bg-violet-500/12 text-violet-200"
-                              : tone === "amber" ? "border-amber-400/30 bg-amber-500/12 text-amber-200"
-                              : tone === "blue" ? "border-blue-400/30 bg-blue-500/12 text-blue-200"
-                              : "border-white/10 bg-white/[0.06] text-slate-200"
+                            `inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+                              tone === "blue" || tone === "emerald"
+                                ? "border-teal-300/20 bg-teal-300/[0.07] text-teal-100"
+                                : "border-white/10 bg-white/[0.04] text-slate-300"
                             }`;
                           const none = <span className="text-[11px] text-slate-500">— ninguno —</span>;
                           return (
-                            <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.04] p-3.5">
+                            <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/15 p-3.5">
                               <div className="flex items-center gap-2">
-                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-emerald-300"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
-                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-200/90">Permisos guardados</p>
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-slate-400"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Permisos guardados</p>
                               </div>
                               <div className="mt-2.5 flex flex-wrap gap-1.5">
                                 <span className={chipCls("blue")}>{roleLbl}</span>
@@ -23155,7 +23189,7 @@ export default function Home() {
                                       TODOS los del servicio. Solo la casilla "No llena
                                       ningun tabulador" deja a la cuenta sin captura. */}
                                   {su.noCapture ? (
-                                    <span className="text-[11px] font-semibold text-amber-300">
+                                    <span className="text-[11px] font-semibold text-slate-300">
                                       — ninguno (solo accesos otorgados) —
                                     </span>
                                   ) : cap.length ? (
@@ -23166,7 +23200,7 @@ export default function Home() {
                                     ))
                                   ) : (
                                     <>
-                                      <span className="text-[11px] text-emerald-300">
+                                      <span className="text-[11px] text-slate-300">
                                         Todos los de su servicio:
                                       </span>
                                       {(getAreaById(su.serviceId)?.modules ?? []).map((m) => (
@@ -23196,7 +23230,8 @@ export default function Home() {
                           );
                         })()}
 
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <SeccionUm titulo="Asignación" detalle="Servicio, rol y alcance de la cuenta." />
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <label className="block">
                             <span className="text-xs font-medium text-slate-400">Servicio</span>
                             <select
@@ -23204,7 +23239,7 @@ export default function Home() {
                               onChange={(event) =>
                                 updateAdminDraft(selectedUser.uid, { serviceId: event.target.value })
                               }
-                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400"
+                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-teal-400/60"
                             >
                               <option value="">Sin servicio</option>
                               {SERVICE_DEFINITIONS.map((service) => {
@@ -23243,7 +23278,7 @@ export default function Home() {
                                   canManageUsers: nextRole === "admin",
                                 });
                               }}
-                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400"
+                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-teal-400/60"
                             >
                               <option value="service">Servicio</option>
                               <option value="admin">Administrador</option>
@@ -23260,7 +23295,7 @@ export default function Home() {
                             onChange={(event) =>
                               updateAdminDraft(selectedUser.uid, { department: event.target.value })
                             }
-                            className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400"
+                            className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-teal-400/60"
                           >
                             <option value="">— Ninguno (un solo servicio) —</option>
                             {Object.keys(DEPARTMENT_SERVICES).map((dep) => (
@@ -23311,8 +23346,8 @@ export default function Home() {
                                       title={tabla.title}
                                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                                         activa
-                                          ? "bg-emerald-500/15 text-emerald-300"
-                                          : "bg-white/5 text-slate-400 hover:bg-white/10"
+                                          ? UM_ON
+                                          : UM_OFF
                                       }`}
                                     >
                                       {activa ? "✓ " : ""}
@@ -23325,7 +23360,7 @@ export default function Home() {
                                 <button
                                   type="button"
                                   onClick={() => updateAdminDraft(selectedUser.uid, { sepsTables: [] })}
-                                  className="mt-2.5 text-[11px] font-semibold text-cyan-300 transition hover:text-cyan-200"
+                                  className="mt-2.5 text-[11px] font-semibold text-slate-400 underline-offset-2 transition hover:text-slate-200 hover:underline"
                                 >
                                   Quitar la restricción (que vea todas)
                                 </button>
@@ -23347,7 +23382,7 @@ export default function Home() {
                             onChange={(event) =>
                               updateAdminDraft(selectedUser.uid, { monitorDivision: event.target.value })
                             }
-                            className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-amber-400"
+                            className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-teal-400/60"
                           >
                             <option value="">— Ninguna —</option>
                             {Object.entries(SERVICE_GROUP_LABELS).map(([key, label]) => (
@@ -23367,11 +23402,12 @@ export default function Home() {
                             cuenta en PULSO por su servicio: con esta casilla se les agrega
                             el menu "C.E. Clinico" encima de lo que ya hacen. Quien se
                             registra directamente como comite ya entra con la marca puesta. */}
-                        <div className="mt-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-4">
+                        <SeccionUm titulo="Comité de Expediente Clínico" detalle="Acceso al menú C.E. Clínico." />
+                        <div className="mt-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <p className="text-xs font-semibold text-amber-200">
-                                Comité de Expediente Clínico
+                              <p className="text-xs font-semibold text-slate-200">
+                                Miembro del comité
                               </p>
                               <p className="mt-1 text-[11px] leading-5 text-slate-400">
                                 Le agrega el menú <strong>C.E. Clínico</strong> con las 13 listas de
@@ -23389,8 +23425,8 @@ export default function Home() {
                               }
                               className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                                 draft.cec
-                                  ? "bg-amber-400/20 text-amber-200"
-                                  : "bg-white/5 text-slate-400 hover:bg-white/10"
+                                  ? UM_ON
+                                  : UM_OFF
                               }`}
                             >
                               {draft.cec ? "✓ Es del comité" : "Agregar al comité"}
@@ -23401,7 +23437,7 @@ export default function Home() {
                               llena la que se le marque aca. Sin nada marcado entra
                               en solo lectura: mira el comite completo y no escribe. */}
                           {draft.cec ? (
-                            <div className="mt-3.5 border-t border-amber-400/20 pt-3.5">
+                            <div className="mt-3.5 border-t border-white/[0.08] pt-3.5">
                               <p className="text-[11px] font-semibold text-slate-300">
                                 ¿Qué lista llena esta persona?
                               </p>
@@ -23431,8 +23467,8 @@ export default function Home() {
                                       }
                                       className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${
                                         marcado
-                                          ? "bg-amber-400/20 text-amber-100"
-                                          : "bg-white/5 text-slate-400 hover:bg-white/10"
+                                          ? UM_ON
+                                          : UM_OFF
                                       }`}
                                     >
                                       {marcado ? "✓ " : ""}
@@ -23447,14 +23483,14 @@ export default function Home() {
                                   onClick={() =>
                                     updateAdminDraft(selectedUser.uid, { cecServicios: [] })
                                   }
-                                  className="mt-2.5 text-[11px] font-semibold text-cyan-300 transition hover:text-cyan-200"
+                                  className="mt-2.5 text-[11px] font-semibold text-slate-400 underline-offset-2 transition hover:text-slate-200 hover:underline"
                                 >
                                   Quitar todas (dejarla solo de lectura)
                                 </button>
                               ) : null}
 
                               {/* GESTOR: desbloquea y bloquea las listas fuera de fecha. */}
-                              <div className="mt-3.5 flex items-start justify-between gap-3 border-t border-amber-400/20 pt-3.5">
+                              <div className="mt-3.5 flex items-start justify-between gap-3 border-t border-white/[0.08] pt-3.5">
                                 <div className="min-w-0">
                                   <p className="text-[11px] font-semibold text-slate-300">
                                     Gestor del comité
@@ -23472,8 +23508,8 @@ export default function Home() {
                                   }
                                   className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                                     draft.cecGestor
-                                      ? "bg-amber-400/20 text-amber-200"
-                                      : "bg-white/5 text-slate-400 hover:bg-white/10"
+                                      ? UM_ON
+                                      : UM_OFF
                                   }`}
                                 >
                                   {draft.cecGestor ? "✓ Es gestor" : "Hacer gestor"}
@@ -23483,12 +23519,13 @@ export default function Home() {
                           ) : null}
                         </div>
 
-                        <div className="mt-4 flex flex-wrap gap-2">
+                        <SeccionUm titulo="Estado y permisos" detalle="Encienda o apague cada permiso; se aplica al guardar." />
+                        <div className="mt-3 flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => updateAdminDraft(selectedUser.uid, { isActive: !draft.isActive })}
                             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                              draft.isActive ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                              draft.isActive ? UM_ON : UM_OFF
                             }`}
                           >
                             {draft.isActive ? "✓ " : ""}Activo
@@ -23497,7 +23534,7 @@ export default function Home() {
                             type="button"
                             onClick={() => updateAdminDraft(selectedUser.uid, { canEdit: !draft.canEdit })}
                             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                              draft.canEdit ? "bg-emerald-500/15 text-emerald-300" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                              draft.canEdit ? UM_ON : UM_OFF
                             }`}
                           >
                             {draft.canEdit ? "✓ " : ""}Captura
@@ -23507,7 +23544,7 @@ export default function Home() {
                             disabled={draft.role !== "admin"}
                             onClick={() => updateAdminDraft(selectedUser.uid, { canManageUsers: !draft.canManageUsers })}
                             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${
-                              draft.canManageUsers ? "bg-blue-500/20 text-blue-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                              draft.canManageUsers ? UM_ON : UM_OFF
                             }`}
                           >
                             {draft.canManageUsers ? "✓ " : ""}Gestiona usuarios
@@ -23516,30 +23553,10 @@ export default function Home() {
                             type="button"
                             onClick={() => updateAdminDraft(selectedUser.uid, { mustChangePassword: !draft.mustChangePassword })}
                             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                              draft.mustChangePassword ? "bg-amber-500/15 text-amber-300" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                              draft.mustChangePassword ? UM_ON : UM_OFF
                             }`}
                           >
                             {draft.mustChangePassword ? "✓ " : ""}Debe cambiar clave
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setAccessViewUid(selectedUser.uid)}
-                            title="Ver, sin poder modificar, todo lo que esta cuenta tiene habilitado"
-                            className="rounded-lg bg-indigo-500/15 px-3 py-1.5 text-xs font-semibold text-indigo-200 transition hover:bg-indigo-500/25"
-                          >
-                            Ver sus accesos
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => enterGhostMode(selectedUser)}
-                            title="Entrar a PULSO viéndolo como esta persona, sin poder modificar nada"
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-500/20 px-3 py-1.5 text-xs font-bold text-violet-200 transition hover:bg-violet-500/30"
-                          >
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
-                              <circle cx="12" cy="12" r="3" />
-                            </svg>
-                            Verificar usuario
                           </button>
                           {draft.role === "service" && draft.serviceId && !draft.department ? (
                             <button
@@ -23548,8 +23565,8 @@ export default function Home() {
                               title="El jefe del servicio ve y llena todos los tableros de su unidad."
                               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                                 draft.isChief
-                                  ? "bg-emerald-500/15 text-emerald-300"
-                                  : "bg-white/5 text-slate-400 hover:bg-white/10"
+                                  ? UM_ON
+                                  : UM_OFF
                               }`}
                             >
                               {draft.isChief ? "✓ " : ""}Jefe del servicio
@@ -23560,8 +23577,8 @@ export default function Home() {
                         {/* DOCUMENTO DE IDENTIDAD: corregirlo o liberarlo. Sirve cuando
                             alguien puso su DUI en la cuenta equivocada y ese numero le
                             queda bloqueado en la suya. */}
-                        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                          <p className="text-xs font-medium text-slate-300">Documento de identidad</p>
+                        <SeccionUm titulo="Documento de identidad" />
+                        <div className="mt-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
                           {docFixUid === selectedUser.uid ? (
                             <div className="mt-2.5 space-y-2">
                               <div className="flex flex-wrap gap-2">
@@ -23580,13 +23597,13 @@ export default function Home() {
                                   value={docFixNumber}
                                   onChange={(event) => setDocFixNumber(event.target.value)}
                                   placeholder={docFixType === "dui" ? "00000000-0" : "N° de documento"}
-                                  className="w-40 rounded-lg border border-white/10 bg-[#0e1626] px-2.5 py-1.5 font-mono text-xs text-white outline-none focus:border-cyan-400"
+                                  className="w-40 rounded-lg border border-white/10 bg-[#0e1626] px-2.5 py-1.5 font-mono text-xs text-white outline-none focus:border-teal-400/60"
                                 />
                                 <button
                                   type="button"
                                   disabled={docFixBusy}
                                   onClick={() => void handleFixUserDocument(selectedUser, false)}
-                                  className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-bold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
+                                  className={`${BTN_GUARDAR} rounded-lg px-3 py-1.5 text-xs disabled:opacity-50`}
                                 >
                                   {docFixBusy ? "…" : "Guardar"}
                                 </button>
@@ -23641,11 +23658,11 @@ export default function Home() {
 
                         {draft.role === "service" && draft.serviceId && !draft.department ? (
                           <div className="mt-4">
-                            <p className="text-xs font-medium text-slate-400">Tableros de su unidad</p>
+                            <SeccionUm titulo="Tableros de su unidad" />
                             <p className="mt-0.5 text-[11px] text-slate-500">
                               El sistema reconoce estos tableros para el servicio elegido. Activá los que debe llenar (uno, dos o los que correspondan).
                             </p>
-                            <p className="mt-1 text-[11px] font-semibold leading-5 text-amber-300/90">
+                            <p className="mt-1 text-[11px] font-semibold leading-5 text-slate-300">
                               Si no marcás ninguno, la persona llena TODOS los de su servicio. Para
                               que no llene nada, usá la casilla de abajo.
                             </p>
@@ -23659,14 +23676,14 @@ export default function Home() {
                               }
                               className={`mt-2.5 flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
                                 draft.noCapture
-                                  ? "border-amber-400/40 bg-amber-500/10"
+                                  ? "border-teal-300/30 bg-teal-300/[0.06]"
                                   : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
                               }`}
                             >
                               <span
                                 className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] font-bold ${
                                   draft.noCapture
-                                    ? "border-amber-400 bg-amber-400 text-slate-900"
+                                    ? "border-teal-400 bg-teal-500 text-white"
                                     : "border-white/25 text-transparent"
                                 }`}
                               >
@@ -23675,7 +23692,7 @@ export default function Home() {
                               <span className="min-w-0">
                                 <span
                                   className={`block text-xs font-semibold ${
-                                    draft.noCapture ? "text-amber-200" : "text-slate-300"
+                                    draft.noCapture ? "text-white" : "text-slate-300"
                                   }`}
                                 >
                                   No llena ningún tabulador
@@ -23709,7 +23726,7 @@ export default function Home() {
                                         })
                                       }
                                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                                        on ? "bg-cyan-500/20 text-cyan-200" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                                        on ? UM_ON : UM_OFF
                                       }`}
                                     >
                                       {on ? "✓ " : ""}
@@ -23722,9 +23739,9 @@ export default function Home() {
                           </div>
                         ) : null}
 
-                        <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                        <div className="mt-5 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
                           <div className="flex items-center gap-2.5">
-                            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-300">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.05] text-slate-300">
                               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <path d="M4 6h16M4 12h16M4 18h10" />
                               </svg>
@@ -23739,10 +23756,10 @@ export default function Home() {
                           <div className="mt-4 space-y-3.5">
                             {(
                               [
-                                { grp: "PERC", chip: "border-cyan-400/30 bg-cyan-500/15 text-cyan-200" },
-                                { grp: "SEPS", chip: "border-violet-400/30 bg-violet-500/15 text-violet-200" },
-                                { grp: "Horas", chip: "border-amber-400/30 bg-amber-500/15 text-amber-200" },
-                                { grp: "General", chip: "border-slate-400/30 bg-slate-500/15 text-slate-200" },
+                                { grp: "PERC", chip: UM_GRUPO },
+                                { grp: "SEPS", chip: UM_GRUPO },
+                                { grp: "Horas", chip: UM_GRUPO },
+                                { grp: "General", chip: UM_GRUPO },
                               ] as const
                             ).map(({ grp, chip }) => {
                               const items = GRANTABLE_MENUS.filter((m) => m.group === grp);
@@ -23768,14 +23785,14 @@ export default function Home() {
                                           }
                                           className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
                                             on
-                                              ? "border-indigo-400/50 bg-indigo-500/15 shadow-[0_0_0_1px_rgba(129,140,248,0.25)]"
+                                              ? "border-teal-300/30 bg-teal-300/[0.07]"
                                               : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
                                           }`}
                                         >
                                           <span
                                             className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${
                                               on
-                                                ? "border-indigo-400 bg-indigo-500 text-white"
+                                                ? "border-teal-400 bg-teal-500 text-white"
                                                 : "border-white/25 text-transparent"
                                             }`}
                                           >
@@ -23796,9 +23813,9 @@ export default function Home() {
                           </div>
                         </div>
 
-                        <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                        <div className="mt-5 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
                           <div className="flex items-center gap-2.5">
-                            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 text-amber-300">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.05] text-slate-300">
                               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9.5h18M9 9.5V20" />
                               </svg>
@@ -23810,9 +23827,9 @@ export default function Home() {
                           </div>
                           <div className="mt-3 space-y-2.5">
                             {([
-                              { key: "perc" as const, label: "PERC", chip: "border-cyan-400/30 bg-cyan-500/15 text-cyan-200", pill: "border-cyan-400/40 bg-cyan-500/15 text-cyan-100", focus: "focus:border-cyan-400", arr: draft.viewPerc },
-                              { key: "seps" as const, label: "SEPS", chip: "border-violet-400/30 bg-violet-500/15 text-violet-200", pill: "border-violet-400/40 bg-violet-500/15 text-violet-100", focus: "focus:border-violet-400", arr: draft.viewSeps },
-                              { key: "horas" as const, label: "Horas", chip: "border-amber-400/30 bg-amber-500/15 text-amber-200", pill: "border-amber-400/40 bg-amber-500/15 text-amber-100", focus: "focus:border-amber-400", arr: draft.viewHoras },
+                              { key: "perc" as const, label: "PERC", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewPerc },
+                              { key: "seps" as const, label: "SEPS", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewSeps },
+                              { key: "horas" as const, label: "Horas", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewHoras },
                             ]).map((mod) => {
                               const q = viewQ[mod.key].trim().toLowerCase();
                               const selected = SERVICE_DEFINITIONS.filter((svc) => mod.arr.includes(svc.id));
@@ -23882,11 +23899,11 @@ export default function Home() {
                                               onClick={() => setArr(on ? mod.arr.filter((x) => x !== svc.id) : [...mod.arr, svc.id])}
                                               className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${on ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/5"}`}
                                             >
-                                              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-emerald-400 bg-emerald-500 text-white" : "border-white/25 text-transparent"}`}>
+                                              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-teal-400 bg-teal-500 text-white" : "border-white/25 text-transparent"}`}>
                                                 <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
                                               </span>
                                               <span className="leading-tight">{svc.name}</span>
-                                              {on ? <span className="ml-auto text-[10px] font-semibold text-emerald-300">Agregado</span> : null}
+                                              {on ? <span className="ml-auto text-[10px] font-semibold text-teal-200">Agregado</span> : null}
                                             </button>
                                           );
                                         })
@@ -23914,7 +23931,7 @@ export default function Home() {
                             onClick={() => void handleAdminSendReset(selectedUser.uid, selectedUser)}
                             disabled={busy}
                             title="Reset de clave a la temporal"
-                            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-blue-400/40 hover:bg-blue-500/10 hover:text-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
                             <span>Reset clave</span>
