@@ -5709,6 +5709,9 @@ export default function Home() {
   // Filtro de la hoja de "Habilitar tableros": todos, solo abiertos, solo
   // cerrados o solo los que pidieron habilitacion.
   const [overrideFiltro, setOverrideFiltro] = useState<"todos" | "open" | "closed" | "pedido">("todos");
+  // Divisiones abiertas en la hoja de "Habilitar tableros". Arrancan cerradas:
+  // se ve el indice de divisiones y se abre la que se necesita.
+  const [openOverrideGroups, setOpenOverrideGroups] = useState<Set<string>>(() => new Set());
   const [activeSidebarSection, setActiveSidebarSection] = useState("panel-overview");
   const [panelTheme, setPanelTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") {
@@ -14433,6 +14436,21 @@ export default function Home() {
               </button>
             );
           })}
+          <button
+            type="button"
+            onClick={() =>
+              setOpenOverrideGroups((prev) =>
+                prev.size > 0 ? new Set() : new Set(overrideGroups.map((g) => g.id)),
+              )
+            }
+            className={`rounded-full border px-3 py-1.5 text-xs transition ${
+              isLightPanelTheme
+                ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                : "border-white/[0.08] bg-white/[0.025] text-slate-400 hover:bg-white/[0.06]"
+            }`}
+          >
+            {openOverrideGroups.size > 0 ? "Contraer todo" : "Expandir todo"}
+          </button>
           <input
             value={overrideServiceQuery}
             onChange={(event) => setOverrideServiceQuery(event.target.value)}
@@ -14463,8 +14481,27 @@ export default function Home() {
             );
           };
           const grupos = overrideGroups
-            .map((g) => ({ ...g, services: g.services.filter(filaVisible) }))
+            .map((g) => {
+              const services = g.services.filter(filaVisible);
+              let abiertos = 0;
+              let cerrados = 0;
+              let pedidos = 0;
+              for (const svc of services) {
+                const svcModuleIds = getAreaById(svc.id)?.modules ?? [];
+                for (const m of columnas) {
+                  if (!svcModuleIds.includes(m)) continue;
+                  const st = captureOverrides[getCaptureOverrideId(overridePanelPeriodId, svc.id, m)];
+                  if (st === "open") abiertos += 1;
+                  else if (st === "closed") cerrados += 1;
+                }
+                if (servicioConPedido.has(svc.id)) pedidos += 1;
+              }
+              return { ...g, services, abiertos, cerrados, pedidos };
+            })
             .filter((g) => g.services.length > 0);
+          // Con busqueda o filtro activo se abren solas: lo filtrado hay que verlo.
+          const abrirTodas = !!overrideQuery || overrideFiltro !== "todos";
+          const grupoAbierto = (id: string) => abrirTodas || openOverrideGroups.has(id);
           const separador = isLightPanelTheme ? "border-slate-100" : "border-white/[0.045]";
           const encabezado = (
             <div
@@ -14497,21 +14534,60 @@ export default function Home() {
                   <div className="min-w-[720px]">
                     {grupos.map((group) => (
                       <Fragment key={group.id}>
-                        <div
-                          className={`flex items-center gap-3 border-t px-4 pb-2 pt-3 ${separador} ${
-                            isLightPanelTheme ? "bg-slate-50" : "bg-white/[0.022]"
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenOverrideGroups((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(group.id)) next.delete(group.id);
+                              else next.add(group.id);
+                              return next;
+                            })
+                          }
+                          className={`flex w-full items-center gap-3 border-t px-4 py-3 text-left transition ${separador} ${
+                            isLightPanelTheme ? "bg-slate-50 hover:bg-slate-100" : "bg-white/[0.022] hover:bg-white/[0.045]"
                           }`}
                         >
                           <span className="h-3 w-[3px] shrink-0 rounded-full bg-teal-300/80" />
                           <h3 className={`text-[10.5px] font-bold uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
                             {group.title}
                           </h3>
+                          {/* Resumen de la division: se ve sin abrirla. */}
+                          {group.abiertos > 0 ? (
+                            <span className="rounded-full border border-teal-300/25 bg-teal-300/[0.08] px-2 py-0.5 text-[10px] font-semibold text-teal-100">
+                              {group.abiertos} abierto{group.abiertos === 1 ? "" : "s"}
+                            </span>
+                          ) : null}
+                          {group.cerrados > 0 ? (
+                            <span className="rounded-full border border-amber-300/25 bg-amber-300/[0.08] px-2 py-0.5 text-[10px] font-semibold text-amber-100">
+                              {group.cerrados} cerrado{group.cerrados === 1 ? "" : "s"}
+                            </span>
+                          ) : null}
+                          {group.pedidos > 0 ? (
+                            <span className="rounded-full border border-rose-400/25 bg-rose-400/[0.08] px-2 py-0.5 text-[10px] font-semibold text-rose-200">
+                              {group.pedidos} solicitud{group.pedidos === 1 ? "" : "es"}
+                            </span>
+                          ) : null}
                           <span className="ml-auto text-[10.5px] text-slate-500">
                             {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
                           </span>
-                        </div>
-                        {encabezado}
-                        {group.services.map((service) => {
+                          <svg
+                            aria-hidden
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform ${
+                              grupoAbierto(group.id) ? "rotate-180" : ""
+                            }`}
+                          >
+                            <path d="m6 9 6 6 6-6" />
+                          </svg>
+                        </button>
+                        {grupoAbierto(group.id) ? encabezado : null}
+                        {(grupoAbierto(group.id) ? group.services : []).map((service) => {
                           const svcModuleIds = getAreaById(service.id)?.modules ?? [];
                           const pidio = servicioConPedido.has(service.id);
                           return (
