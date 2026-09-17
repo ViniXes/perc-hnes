@@ -313,9 +313,9 @@ export function construirCecReporteHtml(periodoLabel: string, entradas: CecEntra
   td.unido { background: #eef7f6 !important; font-weight: 600; color: #0B2C4D; border-left: 3px solid #2FA89A; }
   tfoot td { background: #e9f1f8; font-weight: 700; color: #0B2C4D; border-top: 2px solid #0B2C4D; border-bottom: 0; }
   .chip { display: inline-block; min-width: 26px; padding: 2px 6px; border-radius: 999px; font-weight: 700; font-size: 9px; }
-  .chip.si { background: #dcfce7; color: #166534; } .chip.no { background: #fee2e2; color: #991b1b; } .chip.na { background: #e2e8f0; color: #475569; }
+  .chip.si { background: #dcfce7; color: #166534; } .chip.no { background: #fef3c7; color: #92400e; } .chip.na { background: #e2e8f0; color: #475569; }
   .vacio { color: #cbd5e1; }
-  .pct { font-weight: 700; } .pct.alto { color: #047857; } .pct.medio { color: #b45309; } .pct.bajo { color: #b91c1c; } .pct.nulo { color: #94a3b8; }
+  .pct { font-weight: 700; } .pct.alto { color: #047857; } .pct.medio { color: #b45309; } .pct.bajo { color: #b45309; } .pct.nulo { color: #94a3b8; }
   .pct.grande { font-size: 10px; background: #fff; border-radius: 999px; padding: 3px 10px; box-shadow: 0 0 0 1px #e2e8f0; }
   .estado { border-radius: 999px; padding: 2px 9px; font-weight: 700; font-size: 9px; }
   .estado.ok { background: #dcfce7; color: #166534; } .estado.pend { background: #fef3c7; color: #92400e; }

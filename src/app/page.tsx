@@ -4612,6 +4612,14 @@ async function createServiceUserAccount(
 }
 
 // Contrasena generica para las cuentas de jefes creadas por aprobacion.
+// BOTONES: un solo estilo para TODOS los "Guardar" (sobrio, color de marca) y
+// tonos apagados, distintos por accion, para el resto. Evita el arcoiris.
+const BTN_GUARDAR =
+  "bg-[#1f6f68] text-white font-semibold shadow-md shadow-black/20 ring-1 ring-inset ring-white/10 hover:bg-[#25807a] disabled:hover:bg-[#1f6f68]";
+const BTN_EXCEL = "border border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-100 hover:bg-emerald-400/[0.15]";
+const BTN_PDF = "border border-sky-300/25 bg-sky-300/[0.08] text-sky-100 hover:bg-sky-300/[0.15]";
+const BTN_DESBLOQUEAR = "border border-indigo-300/25 bg-indigo-300/[0.08] text-indigo-100 hover:bg-indigo-300/[0.15]";
+const BTN_BLOQUEAR = "border border-amber-300/25 bg-amber-300/[0.08] text-amber-100 hover:bg-amber-300/[0.15]";
 const CHIEF_TEMP_PASSWORD = "123456";
 // Cargo "DIMES" del Comite de Expediente Clinico (no es una de las 13 listas).
 const CEC_CARGO_DIMES = "dimes";
@@ -14118,7 +14126,7 @@ export default function Home() {
                 type="button"
                 onClick={() => void handleSaveCalendarOverride()}
                 disabled={isSavingCalendar}
-                className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+                className={`${BTN_GUARDAR} rounded-lg px-3 py-1.5 text-xs transition disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 {isSavingCalendar ? "Guardando..." : "Guardar calendario"}
               </button>
@@ -14784,7 +14792,7 @@ export default function Home() {
                     type="button"
                     onClick={() => void handleSaveSepsLayout()}
                     disabled={sepsSavingLayout}
-                    className="rounded-xl bg-amber-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 transition hover:bg-amber-400 disabled:opacity-50"
+                    className={`${BTN_GUARDAR} rounded-xl px-3.5 py-1.5 text-xs transition disabled:opacity-50`}
                   >
                     {sepsSavingLayout ? "Guardando…" : "Guardar estructura"}
                   </button>
@@ -15922,7 +15930,7 @@ export default function Home() {
                 type="button"
                 onClick={() => void handleSaveSeps()}
                 disabled={isSavingSeps || sepsEditingBlocked}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80"
+                className={`${BTN_GUARDAR} inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -16071,7 +16079,7 @@ export default function Home() {
                     type="button"
                     onClick={() => void handleSavePoa()}
                     disabled={poaSaving || !poaDirty}
-                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                    className={`${BTN_GUARDAR} inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none`}
                   >
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
@@ -17123,7 +17131,7 @@ export default function Home() {
                 disabled={isSavingHoras || horasEditingBlocked}
                 title="Guardar Horas"
                 aria-label="Guardar Horas"
-                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 desk:px-4"
+                className={`${BTN_GUARDAR} inline-flex items-center gap-2 rounded-2xl px-2.5 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-60 desk:px-4`}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 desk:h-3.5 desk:w-3.5" aria-hidden="true">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -17566,7 +17574,7 @@ export default function Home() {
               type="button"
               onClick={() => void handleSaveCenso()}
               disabled={isSavingCenso}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
+              className={`${BTN_GUARDAR} inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition disabled:opacity-50`}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -17638,7 +17646,7 @@ export default function Home() {
                 <span className="h-1.5 w-1.5 rounded-full bg-rose-400" /> Mes cerrado
               </span>
             ) : null}
-            <button type="button" onClick={() => void handleSaveGastos()} disabled={gastosSaving || estaCerradoManual("gastos", gastosPeriod)} className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50">{gastosSaving ? "Guardando…" : "Guardar"}</button>
+            <button type="button" onClick={() => void handleSaveGastos()} disabled={gastosSaving || estaCerradoManual("gastos", gastosPeriod)} className={`${BTN_GUARDAR} rounded-xl px-4 py-2 text-sm transition disabled:opacity-50`}>{gastosSaving ? "Guardando…" : "Guardar"}</button>
             <button type="button" onClick={() => downloadGastosExcel()} className="rounded-xl border border-sky-400/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/25">Descargar Excel</button>
           </div>
         </div>
@@ -17736,7 +17744,7 @@ export default function Home() {
                 <span className="h-1.5 w-1.5 rounded-full bg-rose-400" /> Mes cerrado
               </span>
             ) : null}
-            <button type="button" onClick={() => void handleSaveDepre()} disabled={depreSaving || estaCerradoManual("depre", deprePeriod)} className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50">{depreSaving ? "Guardando…" : "Guardar"}</button>
+            <button type="button" onClick={() => void handleSaveDepre()} disabled={depreSaving || estaCerradoManual("depre", deprePeriod)} className={`${BTN_GUARDAR} rounded-xl px-4 py-2 text-sm transition disabled:opacity-50`}>{depreSaving ? "Guardando…" : "Guardar"}</button>
             <button type="button" onClick={() => downloadDepreExcel()} className="rounded-xl border border-sky-400/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-500/25">Descargar Excel</button>
           </div>
         </div>
@@ -18067,7 +18075,7 @@ export default function Home() {
               type="button"
               onClick={() => void handleSaveInsumos()}
               disabled={isSavingInsumos || estaCerradoManual("insumos", insumosPeriod)}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
+              className={`${BTN_GUARDAR} inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition disabled:opacity-50`}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -20365,14 +20373,14 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => void setCecDesbloqueoTodas(true)}
-                            className="rounded-lg border border-emerald-400/40 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+                            className={`${BTN_DESBLOQUEAR} rounded-lg px-3 py-1.5 text-xs font-semibold transition`}
                           >
                             Desbloquear todas
                           </button>
                           <button
                             type="button"
                             onClick={() => void setCecDesbloqueoTodas(false)}
-                            className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-400/20"
+                            className={`${BTN_BLOQUEAR} rounded-lg px-3 py-1.5 text-xs font-semibold transition`}
                           >
                             Bloquear todas
                           </button>
@@ -20400,10 +20408,8 @@ export default function Home() {
                               <button
                                 type="button"
                                 onClick={() => void toggleCecDesbloqueo(plantilla.serviceId, plantilla.nombre)}
-                                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
-                                  cecListaDesbloqueada
-                                    ? "border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20"
-                                    : "border-emerald-400/40 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20"
+                                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                                  cecListaDesbloqueada ? BTN_BLOQUEAR : BTN_DESBLOQUEAR
                                 }`}
                               >
                                 {cecListaDesbloqueada ? "Bloquear de nuevo" : "Desbloquear para el comité"}
@@ -20414,7 +20420,7 @@ export default function Home() {
                                 type="button"
                                 onClick={() => void handleSaveCec()}
                                 disabled={cecGuardando || cecCargando || !cecAbiertoLista}
-                                className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-4 py-2 text-sm font-bold text-slate-900 transition disabled:opacity-50"
+                                className={`${BTN_GUARDAR} rounded-xl px-4 py-2 text-sm transition disabled:opacity-50`}
                               >
                                 {cecGuardando ? "Guardando…" : "Guardar lista"}
                               </button>
@@ -20476,9 +20482,9 @@ export default function Home() {
                             }`;
                             const colorValor = (v: string) =>
                               v === "1"
-                                ? L ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-emerald-400/40 bg-emerald-400/15 text-emerald-200"
+                                ? L ? "border-teal-300 bg-teal-50 text-teal-800" : "border-teal-300/30 bg-teal-300/[0.10] text-teal-100"
                                 : v === "0"
-                                  ? L ? "border-rose-300 bg-rose-50 text-rose-700" : "border-rose-400/40 bg-rose-400/15 text-rose-200"
+                                  ? L ? "border-amber-300 bg-amber-50 text-amber-800" : "border-amber-200/25 bg-amber-200/[0.07] text-amber-100"
                                   : v === "NA"
                                     ? L ? "border-slate-300 bg-slate-100 text-slate-600" : "border-slate-400/30 bg-slate-400/10 text-slate-300"
                                     : L ? "border-slate-200 bg-white text-slate-400" : "border-white/10 bg-[#111a2a] text-slate-500";
@@ -20689,7 +20695,7 @@ export default function Home() {
                               type="button"
                               onClick={() => void handleSaveCec()}
                               disabled={cecGuardando || cecCargando || !cecAbiertoLista}
-                              className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-2.5 text-sm font-bold text-slate-900 transition disabled:opacity-50"
+                              className={`${BTN_GUARDAR} rounded-xl px-5 py-2.5 text-sm transition disabled:opacity-50`}
                             >
                               {cecGuardando ? "Guardando…" : "Guardar lista"}
                             </button>
@@ -20724,7 +20730,7 @@ export default function Home() {
                           type="button"
                           onClick={() => void descargarCecConsolidado("excel")}
                           disabled={!!cecDescargando}
-                          className="rounded-xl bg-gradient-to-r from-emerald-400 to-teal-500 px-4 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-emerald-500/20 transition hover:brightness-110 disabled:opacity-50"
+                          className={`${BTN_EXCEL} rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50`}
                         >
                           {cecDescargando === "excel" ? "Generando…" : "Descargar Excel"}
                         </button>
@@ -20732,7 +20738,7 @@ export default function Home() {
                           type="button"
                           onClick={() => void descargarCecConsolidado("pdf")}
                           disabled={!!cecDescargando}
-                          className="rounded-xl bg-gradient-to-r from-sky-400 to-indigo-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition hover:brightness-110 disabled:opacity-50"
+                          className={`${BTN_PDF} rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50`}
                         >
                           {cecDescargando === "pdf" ? "Generando…" : "Reporte PDF"}
                         </button>
@@ -21664,7 +21670,7 @@ export default function Home() {
                       disabled={isSaving || percEditingBlocked}
                       title="Guardar datos"
                       aria-label="Guardar datos"
-                      className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800/80 desk:px-4"
+                      className={`${BTN_GUARDAR} inline-flex items-center gap-2 rounded-2xl px-2.5 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-60 desk:px-4`}
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 desk:h-3.5 desk:w-3.5" aria-hidden="true">
                         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -22388,7 +22394,7 @@ export default function Home() {
                       type="button"
                       disabled={docGateSaving}
                       onClick={() => { void handleSaveDocGate(); }}
-                      className="w-full rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      className={`${BTN_GUARDAR} w-full rounded-2xl px-4 py-3 text-sm transition disabled:cursor-not-allowed disabled:opacity-50`}
                     >
                       {docGateSaving ? "Guardando…" : "Guardar y continuar"}
                     </button>
@@ -23829,7 +23835,7 @@ export default function Home() {
                             type="button"
                             onClick={() => void handleAdminSave(selectedUser.uid)}
                             disabled={busy}
-                            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-500/25 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                            className={`${BTN_GUARDAR} inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-50`}
                           >
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
                             {busy ? "Guardando..." : "Guardar cambios"}
@@ -26165,7 +26171,7 @@ export default function Home() {
                         type="button"
                         onClick={() => void handleSaveDocs()}
                         disabled={docsSaving || docsLoading}
-                        className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                        className={`${BTN_GUARDAR} inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none`}
                       >
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
