@@ -2403,16 +2403,6 @@ function getDepIcon(name: string) {
 
 // Colores sutiles para la barrita lateral de cada grupo (cerrado = mas tenue,
 // abierto = un poco mas vivo). Se recorren por indice de grupo.
-const OVERRIDE_GROUP_ACCENTS: { closed: string; open: string }[] = [
-  { closed: "rgba(125,179,214,0.45)", open: "rgba(125,179,214,0.95)" }, // azul cielo
-  { closed: "rgba(127,184,154,0.45)", open: "rgba(127,184,154,0.95)" }, // verde salvia
-  { closed: "rgba(167,139,218,0.45)", open: "rgba(167,139,218,0.95)" }, // violeta
-  { closed: "rgba(214,179,112,0.45)", open: "rgba(214,179,112,0.95)" }, // dorado
-  { closed: "rgba(212,154,166,0.45)", open: "rgba(212,154,166,0.95)" }, // rosa
-  { closed: "rgba(120,196,188,0.45)", open: "rgba(120,196,188,0.95)" }, // teal
-  { closed: "rgba(170,178,196,0.45)", open: "rgba(170,178,196,0.95)" }, // gris azulado
-  { closed: "rgba(216,167,128,0.45)", open: "rgba(216,167,128,0.95)" }, // terracota
-];
 
 type DocValues = Record<string, Record<string, DocStatus>>;
 const PERC_SERV_FIELDS: Record<string, { key: string; label: string; placeholder: string }[]> = {
@@ -5472,7 +5462,6 @@ export default function Home() {
   const [openSepsTables, setOpenSepsTables] = useState<Set<string>>(new Set());
   // Grupos de "Habilitar tableros" abiertos (colapsables). Por defecto solo el primero.
   // Todos los bloques arrancan contraidos (incluido el de Direccion).
-  const [openOverrideGroups, setOpenOverrideGroups] = useState<Set<string>>(() => new Set());
   const [horasEmployees, setHorasEmployees] = useState<HorasEmployee[]>([]);
   const [horasEmployeeToRemove, setHorasEmployeeToRemove] = useState<number | null>(null);
   const [isSavingHoras, setIsSavingHoras] = useState(false);
@@ -5717,6 +5706,9 @@ export default function Home() {
   } | null>(null);
   const [captureOpenPeriod, setCaptureOpenPeriod] = useState("");
   const [overrideServiceQuery, setOverrideServiceQuery] = useState("");
+  // Filtro de la hoja de "Habilitar tableros": todos, solo abiertos, solo
+  // cerrados o solo los que pidieron habilitacion.
+  const [overrideFiltro, setOverrideFiltro] = useState<"todos" | "open" | "closed" | "pedido">("todos");
   const [activeSidebarSection, setActiveSidebarSection] = useState("panel-overview");
   const [panelTheme, setPanelTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") {
@@ -14306,44 +14298,69 @@ export default function Home() {
     }
     const overrideAutoCount = overrideTotalCells - overrideOpenCount - overrideClosedCount;
 
-    const overrideStateChip = (service: ServiceDefinition, moduleId: ModuleId) => {
+    /**
+     * Control de tres opciones por modulo: Auto / Abrir / Cerrar. Se ve cual
+     * esta activo y donde hay que tocar; no hay que adivinar el ciclo.
+     */
+    const overrideSegmento = (service: ServiceDefinition, moduleId: ModuleId) => {
       const overrideId = getCaptureOverrideId(overridePanelPeriodId, service.id, moduleId);
       const state = captureOverrides[overrideId];
       const isBusy = overrideBusyKey === overrideId;
-
-      // Un solo chip que cicla directo (sin modal): Auto -> Abrir -> Cerrado -> Auto.
-      // "Abrir" habilita el mes ya seleccionado arriba, en un solo toque.
-      const handleCycle = () => {
-        if (state === "open") {
-          void handleToggleCapture(service.id, moduleId, "closed");
-        } else if (state === "closed") {
-          void handleToggleCapture(service.id, moduleId, null);
-        } else {
-          void handleToggleCapture(service.id, moduleId, "open");
-        }
-      };
-
-      const label = state === "open" ? "Abierto" : state === "closed" ? "Cerrado" : "Auto";
-      const tone =
-        state === "open"
-          ? "bg-emerald-500/10 text-emerald-300"
-          : state === "closed"
-            ? "bg-rose-500/10 text-rose-300"
-            : "bg-white/5 text-slate-400";
-      const dot =
-        state === "open" ? "bg-emerald-400" : state === "closed" ? "bg-rose-400" : "bg-slate-500";
-
+      const opciones: { valor: CaptureOverrideState | null; corto: string; activo: string }[] = [
+        {
+          valor: null,
+          corto: "Auto",
+          activo: isLightPanelTheme ? "bg-slate-200 text-slate-800" : "bg-white/10 text-slate-100",
+        },
+        {
+          valor: "open",
+          corto: state === "open" ? "Abierto" : "Abrir",
+          activo: "bg-teal-300 text-slate-900",
+        },
+        {
+          valor: "closed",
+          corto: state === "closed" ? "Cerrado" : "Cerrar",
+          activo: "bg-amber-300 text-slate-900",
+        },
+      ];
+      const actual = state ?? null;
       return (
-        <button
-          type="button"
-          onClick={handleCycle}
-          disabled={isBusy}
-          title="Clic para cambiar: Auto → Abrir → Cerrar"
-          className={`inline-flex w-[88px] items-center justify-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition hover:brightness-110 disabled:opacity-50 ${tone}`}
+        <span
+          className={`inline-flex overflow-hidden rounded-lg border text-[10px] font-semibold ${
+            isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-black/25"
+          } ${isBusy ? "opacity-50" : ""}`}
         >
-          <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
-          {label}
-        </button>
+          {opciones.map((op, i) => {
+            const on = actual === op.valor;
+            return (
+              <button
+                key={op.corto + i}
+                type="button"
+                disabled={isBusy}
+                title={
+                  op.valor === null
+                    ? "Automático: sigue la ventana de días hábiles"
+                    : op.valor === "open"
+                      ? "Reabrir la captura por 24 horas"
+                      : "Cerrar la captura de este tablero"
+                }
+                onClick={() => {
+                  if (on) return;
+                  void handleToggleCapture(service.id, moduleId, op.valor);
+                }}
+                className={`px-2.5 py-1 transition ${i > 0 ? (isLightPanelTheme ? "border-l border-slate-200" : "border-l border-white/[0.06]") : ""} ${
+                  on
+                    ? op.activo
+                    : isLightPanelTheme
+                      ? "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                      : "text-slate-500 hover:bg-white/[0.06] hover:text-slate-200"
+                }`}
+              >
+                {op.corto}
+              </button>
+            );
+          })}
+        </span>
       );
     };
 
@@ -14367,10 +14384,9 @@ export default function Home() {
             </p>
             <h2 className="mt-1 text-xl font-semibold">Reabrir o cerrar captura por servicio</h2>
             <p className={`mt-1 max-w-3xl text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-              Tocá el estado de cada módulo para cambiarlo (Auto → Abrir → Cerrar).{" "}
-              <strong>Automatico</strong> sigue la ventana normal de dias habiles;{" "}
-              <strong>Abrir</strong> reabre la captura tardia <strong>por 24 horas</strong> (luego
-              vuelve sola a Automatico) y <strong>Cerrar</strong> la bloquea.
+              Cada tablero sigue la ventana normal de días hábiles (<strong>Auto</strong>).{" "}
+              <strong>Abrir</strong> reabre la captura tardía <strong>por 24 horas</strong> y luego
+              vuelve sola a Auto; <strong>Cerrar</strong> la bloquea antes de tiempo.
             </p>
           </div>
           <label className="block shrink-0">
@@ -14390,180 +14406,190 @@ export default function Home() {
           </label>
         </div>
 
-        {/* Resumen de estado + buscador */}
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-2">
-            {[
-              { label: "Automatico", count: overrideAutoCount, dot: "bg-slate-400" },
-              { label: "Abiertos", count: overrideOpenCount, dot: "bg-emerald-500" },
-              { label: "Cerrados", count: overrideClosedCount, dot: "bg-rose-500" },
-            ].map((chip) => (
-              <span
-                key={chip.label}
-                className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
-                  isLightPanelTheme ? "bg-slate-100 text-slate-700" : "bg-white/5 text-slate-200"
+        {/* Filtros + buscador */}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {([
+            { id: "todos", label: "Todos", count: overrideTotalCells },
+            { id: "open", label: "Abiertos", count: overrideOpenCount },
+            { id: "closed", label: "Cerrados", count: overrideClosedCount },
+            { id: "pedido", label: "Con solicitud", count: pedidosPendientes.length },
+          ] as const).map((f) => {
+            const on = overrideFiltro === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setOverrideFiltro(f.id)}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition ${
+                  on
+                    ? "border-teal-300/30 bg-teal-300/[0.10] text-teal-100"
+                    : isLightPanelTheme
+                      ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      : "border-white/[0.08] bg-white/[0.025] text-slate-400 hover:bg-white/[0.06]"
                 }`}
               >
-                <span className={`h-2 w-2 rounded-full ${chip.dot}`} />
-                {chip.label}: {chip.count}
-              </span>
-            ))}
-          </div>
+                {f.label}
+                <span className={`font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{f.count}</span>
+              </button>
+            );
+          })}
           <input
             value={overrideServiceQuery}
             onChange={(event) => setOverrideServiceQuery(event.target.value)}
-            placeholder="Buscar servicio..."
-            className={`w-full rounded-xl px-3 py-2 text-sm outline-none focus:border-cyan-400 sm:w-64 ${
+            placeholder="Buscar servicio…"
+            className={`ml-auto w-full rounded-xl px-3 py-2 text-sm outline-none transition focus:border-teal-400/60 sm:w-64 ${
               isLightPanelTheme
                 ? "border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"
-                : "border border-white/10 bg-[#2a3448] text-white placeholder:text-slate-500"
+                : "border border-white/[0.08] bg-white/[0.025] text-white placeholder:text-slate-500"
             }`}
             type="search"
           />
         </div>
 
-        {/* Grupos por division */}
-        <div className="mt-4 space-y-2.5">
-          {overrideGroups.length === 0 ? (
-            <p className={`rounded-2xl border border-dashed px-4 py-8 text-center text-sm ${isLightPanelTheme ? "border-slate-200 text-slate-500" : "border-white/10 text-slate-400"}`}>
-              Ningun servicio coincide con la busqueda.
-            </p>
-          ) : (
-            overrideGroups.map((group, groupIndex) => {
-              const groupOpen = openOverrideGroups.has(group.id);
-              const groupAccent =
-                OVERRIDE_GROUP_ACCENTS[groupIndex % OVERRIDE_GROUP_ACCENTS.length];
-              return (
-              <div
-                key={group.id}
-                className={`overflow-hidden rounded-2xl border transition ${
-                  isLightPanelTheme
-                    ? "border-slate-200"
-                    : groupOpen
-                      ? "border-white/15 bg-[#1b2537]"
-                      : "border-white/10 bg-[#1b2537]"
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setOpenOverrideGroups((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(group.id)) {
-                        next.delete(group.id);
-                      } else {
-                        next.add(group.id);
-                      }
-                      return next;
-                    })
-                  }
-                  className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${isLightPanelTheme ? "hover:bg-slate-50" : "hover:bg-white/5"}`}
-                >
-                  <span
-                    aria-hidden
-                    className="h-7 w-1 shrink-0 rounded-full transition"
-                    style={{ backgroundColor: groupOpen ? groupAccent.open : groupAccent.closed }}
-                  />
-                  <h3 className="shrink-0 text-sm font-semibold uppercase tracking-wide">{group.title}</h3>
-                  <span className="hidden flex-1 lg:block" />
-                  <span className={`hidden text-xs sm:inline ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-                    {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
-                  </span>
-                  <svg
-                    aria-hidden
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${groupOpen ? "rotate-180" : ""}`}
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-                <div className={groupOpen ? "p-2.5" : "hidden"}>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 desk:grid-cols-5">
-                    {group.services.map((service) => {
-                      const svcModuleIds = getAreaById(service.id)?.modules ?? [];
-                      const svcModules = toggleableModules.filter((m) => svcModuleIds.includes(m));
-                      return (
-                      <div
-                        key={service.id}
-                        className={`group relieve-fila rounded-2xl border p-3 text-center transition ${
-                          servicioConPedido.has(service.id)
-                            ? "border-rose-400/40 bg-rose-500/[0.07]"
-                            : isLightPanelTheme
-                              ? "border-slate-200 bg-white hover:border-slate-300"
-                              : "border-white/[0.07] bg-gradient-to-b from-[#1e2941] to-[#182031] hover:border-white/15"
-                        }`}
-                      >
-                        {servicioConPedido.has(service.id) ? (
-                          <p className="mb-1.5 rounded-full bg-rose-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-rose-200/90 ring-1 ring-inset ring-rose-400/25">
-                            Solicitó habilitación
-                          </p>
-                        ) : null}
-                        {/* Icono discreto: el color lo aporta el estado, no el adorno. */}
-                        <span
-                          className={`mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl transition group-hover:scale-105 ${
-                            isLightPanelTheme
-                              ? "bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-200"
-                              : "bg-white/[0.06] text-slate-300 ring-1 ring-inset ring-white/[0.08]"
+        {/* HOJA CONTINUA: una fila por servicio, sin recuadros. Las divisiones
+            son franjas separadoras y los modulos, columnas fijas. */}
+        {(() => {
+          const columnas = toggleableModules;
+          const anchoFila = `minmax(200px,1fr) repeat(${columnas.length}, 150px)`;
+          const filaVisible = (service: ServiceDefinition) => {
+            if (overrideFiltro === "todos") return true;
+            if (overrideFiltro === "pedido") return servicioConPedido.has(service.id);
+            const svcModuleIds = getAreaById(service.id)?.modules ?? [];
+            return columnas.some(
+              (m) =>
+                svcModuleIds.includes(m) &&
+                captureOverrides[getCaptureOverrideId(overridePanelPeriodId, service.id, m)] ===
+                  overrideFiltro,
+            );
+          };
+          const grupos = overrideGroups
+            .map((g) => ({ ...g, services: g.services.filter(filaVisible) }))
+            .filter((g) => g.services.length > 0);
+          const separador = isLightPanelTheme ? "border-slate-100" : "border-white/[0.045]";
+          const encabezado = (
+            <div
+              className={`grid px-4 pb-1.5 text-[9px] font-bold uppercase tracking-[0.18em] ${
+                isLightPanelTheme ? "text-slate-400" : "text-slate-500"
+              }`}
+              style={{ gridTemplateColumns: anchoFila }}
+            >
+              <span>Servicio</span>
+              {columnas.map((m) => (
+                <span key={m} className="text-center">
+                  {getModuleLabel(m)}
+                </span>
+              ))}
+            </div>
+          );
+
+          return (
+            <div
+              className={`mt-4 overflow-hidden rounded-2xl border ${
+                isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/[0.07] bg-white/[0.02]"
+              }`}
+            >
+              {grupos.length === 0 ? (
+                <p className={`px-4 py-10 text-center text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                  Ningún servicio coincide con la búsqueda o el filtro.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <div className="min-w-[720px]">
+                    {grupos.map((group) => (
+                      <Fragment key={group.id}>
+                        <div
+                          className={`flex items-center gap-3 border-t px-4 pb-2 pt-3 ${separador} ${
+                            isLightPanelTheme ? "bg-slate-50" : "bg-white/[0.022]"
                           }`}
                         >
-                          <ServiceIcon serviceId={service.id} className="h-[18px] w-[18px]" />
-                        </span>
-                        <p className="truncate text-[11px] font-semibold leading-tight text-slate-100" title={service.name}>
-                          {service.name}
-                        </p>
-                        <div className={`my-2.5 h-px ${isLightPanelTheme ? "bg-slate-100" : "bg-white/10"}`} />
-                        <div className="flex flex-col gap-1">
-                          {svcModules.map((moduleId) => {
-                            const pedido = pedidoDe(service.id, moduleId);
-
-                            return (
-                            <div
-                              key={moduleId}
-                              title={
-                                pedido
-                                  ? `${pedido.requestedByName} pidió habilitar este tablero: no alcanzó a capturarlo en los días hábiles.`
-                                  : undefined
-                              }
-                              className={`flex items-center justify-between gap-1.5 rounded-lg px-2 py-1 ${
-                                pedido
-                                  ? "bg-teal-300/[0.08] ring-1 ring-inset ring-teal-300/25"
-                                  : isLightPanelTheme
-                                    ? "bg-slate-50"
-                                    : "bg-white/[0.035]"
-                              }`}
-                            >
-                              <span
-                                className={`flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide ${
-                                  pedido
-                                    ? "text-teal-100"
-                                    : isLightPanelTheme
-                                      ? "text-slate-500"
-                                      : "text-slate-400"
-                                }`}
-                              >
-                                {pedido ? <span className="h-1.5 w-1.5 rounded-full bg-teal-300" /> : null}
-                                {MODULE_BY_ID[moduleId].shortName}
-                              </span>
-                              {overrideStateChip(service, moduleId)}
-                            </div>
-                            );
-                          })}
+                          <span className="h-3 w-[3px] shrink-0 rounded-full bg-teal-300/80" />
+                          <h3 className={`text-[10.5px] font-bold uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                            {group.title}
+                          </h3>
+                          <span className="ml-auto text-[10.5px] text-slate-500">
+                            {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
+                          </span>
                         </div>
-                      </div>
-                      );
-                    })}
+                        {encabezado}
+                        {group.services.map((service) => {
+                          const svcModuleIds = getAreaById(service.id)?.modules ?? [];
+                          const pidio = servicioConPedido.has(service.id);
+                          return (
+                            <div
+                              key={service.id}
+                              className={`grid items-center border-t px-4 transition ${separador} ${
+                                isLightPanelTheme ? "hover:bg-slate-50" : "hover:bg-white/[0.03]"
+                              }`}
+                              style={{ gridTemplateColumns: anchoFila, minHeight: "38px" }}
+                            >
+                              <span className="flex min-w-0 items-center gap-2.5 py-1.5">
+                                <ServiceIcon
+                                  serviceId={service.id}
+                                  className={`h-3.5 w-3.5 shrink-0 ${isLightPanelTheme ? "text-slate-400" : "text-slate-500"}`}
+                                />
+                                <span className={`truncate text-[12.5px] ${isLightPanelTheme ? "text-slate-800" : "text-slate-200"}`} title={service.name}>
+                                  {service.name}
+                                </span>
+                                {pidio ? (
+                                  <span className="shrink-0 rounded-full border border-rose-400/30 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-rose-300">
+                                    solicitó habilitar
+                                  </span>
+                                ) : null}
+                              </span>
+                              {columnas.map((moduleId) => {
+                                const tiene = svcModuleIds.includes(moduleId);
+                                const pedido = pedidoDe(service.id, moduleId);
+                                return (
+                                  <span
+                                    key={moduleId}
+                                    className="flex justify-center py-1"
+                                    title={
+                                      pedido
+                                        ? `${pedido.requestedByName} pidió habilitar este tablero.`
+                                        : undefined
+                                    }
+                                  >
+                                    {tiene ? (
+                                      overrideSegmento(service, moduleId)
+                                    ) : (
+                                      <span className="text-[11px] text-slate-600">—</span>
+                                    )}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
                   </div>
                 </div>
+              )}
+
+              {/* Pie: que significa cada color y como va el mes. */}
+              <div
+                className={`flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t px-4 py-2.5 text-[11px] ${separador} ${
+                  isLightPanelTheme ? "bg-slate-50 text-slate-500" : "bg-white/[0.02] text-slate-400"
+                }`}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-1.5 w-3 rounded-sm bg-slate-500" /> Auto · sigue los días hábiles
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-1.5 w-3 rounded-sm bg-teal-300" /> Abierto · 24 horas
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-1.5 w-3 rounded-sm bg-amber-300" /> Cerrado
+                </span>
+                <span className="ml-auto">
+                  Automático <strong className={isLightPanelTheme ? "text-slate-800" : "text-slate-200"}>{overrideAutoCount}</strong> ·
+                  {" "}Abiertos <strong className={isLightPanelTheme ? "text-slate-800" : "text-slate-200"}>{overrideOpenCount}</strong> ·
+                  {" "}Cerrados <strong className={isLightPanelTheme ? "text-slate-800" : "text-slate-200"}>{overrideClosedCount}</strong>
+                </span>
               </div>
-              );
-            })
-          )}
-        </div>
+            </div>
+          );
+        })()}
       </section>
     ) : null;
 
