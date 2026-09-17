@@ -20465,6 +20465,7 @@ export default function Home() {
                                   : v === "NA"
                                     ? L ? "border-slate-300 bg-slate-100 text-slate-600" : "border-slate-400/30 bg-slate-400/10 text-slate-300"
                                     : L ? "border-slate-200 bg-white text-slate-400" : "border-white/10 bg-[#111a2a] text-slate-500";
+                            const opcion = L ? "bg-white text-slate-900" : "bg-[#111a2a] text-white";
                             const colorPct = (p: number | null) =>
                               p === null
                                 ? "text-slate-500"
@@ -20576,10 +20577,12 @@ export default function Home() {
                                                     disabled={cecBloqueado}
                                                     className={`w-full min-w-[62px] cursor-pointer rounded-lg border px-1 py-1.5 text-center text-xs font-bold outline-none transition focus:ring-2 focus:ring-cyan-400/30 disabled:cursor-not-allowed ${colorValor(v)}`}
                                                   >
-                                                    <option value="">—</option>
-                                                    <option value="1">1</option>
-                                                    <option value="0">0</option>
-                                                    <option value="NA">N/A</option>
+                                                    {/* Las opciones llevan su propio color: si no, heredan el de la
+                                                        casilla y la lista se ve en blanco. */}
+                                                    <option value="" className={opcion}>—</option>
+                                                    <option value="1" className={`${opcion} font-bold`}>1</option>
+                                                    <option value="0" className={`${opcion} font-bold`}>0</option>
+                                                    <option value="NA" className={`${opcion} font-bold`}>N/A</option>
                                                   </select>
                                                 </td>
                                               );
