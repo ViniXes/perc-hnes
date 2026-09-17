@@ -1192,6 +1192,36 @@ const SERVICE_ICON_BY_ID: Record<string, keyof typeof SERVICE_ICON_PATHS> = {
   esdomed: "clipboard",
 };
 
+/**
+ * AVISO SUTIL: un solo estilo para los avisos dentro de las pantallas. Ocupa
+ * solo lo que mide su texto (no toda la fila), fondo neutro y un punto de color
+ * que indica el tono. Reemplaza las franjas verdes/ambar a lo ancho.
+ */
+function Aviso({
+  tono = "info",
+  claro = false,
+  className = "",
+  children,
+}: {
+  tono?: "info" | "ok" | "alerta" | "error";
+  claro?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  const punto =
+    tono === "ok" ? "bg-emerald-400" : tono === "alerta" ? "bg-amber-400" : tono === "error" ? "bg-rose-400" : "bg-sky-400";
+  return (
+    <div
+      className={`flex w-fit max-w-full items-start gap-2 rounded-lg border px-2.5 py-1.5 text-[11px] leading-4 ${
+        claro ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/[0.07] bg-white/[0.03] text-slate-300"
+      } ${className}`}
+    >
+      <span className={`mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full ${punto}`} />
+      <span className="min-w-0">{children}</span>
+    </div>
+  );
+}
+
 function ServiceIcon({
   serviceId,
   className = "h-4 w-4",
@@ -15832,7 +15862,7 @@ export default function Home() {
         </div>
 
         {(isAdmin || isSupervisor) && sepsHiddenKeys.length > 0 ? (
-          <div className={`mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] ${isLightPanelTheme ? "border-amber-200 bg-amber-50/70 text-amber-800" : "border-amber-400/20 bg-amber-400/5 text-amber-200"}`}>
+          <div className={`mt-4 flex w-fit max-w-full flex-wrap items-center gap-3 rounded-lg border px-2.5 py-1.5 text-[11px] ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/[0.07] bg-white/[0.03] text-slate-300"}`}>
             <span>Hay {sepsHiddenKeys.length} fila(s) oficial(es) oculta(s). Sus datos siguen guardados.</span>
             <button
               type="button"
@@ -17409,7 +17439,7 @@ export default function Home() {
         </div>
 
         {canEditCenso ? (
-          <p className={`mt-3 rounded-xl border px-3 py-2 text-[11px] ${isLightPanelTheme ? "border-cyan-200 bg-cyan-50/70 text-slate-600" : "border-cyan-400/20 bg-cyan-400/5 text-slate-300"}`}>
+          <p className={`mt-3 w-fit max-w-full rounded-lg border px-2.5 py-1.5 text-[11px] ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/[0.07] bg-white/[0.03] text-slate-300"}`}>
             Podés <strong>pegar desde Excel</strong>: seleccioná el rango de números en Excel, hacé clic en la celda inicial de la tabla y pegá (Ctrl+V). También podés escribir manualmente. Guardá el día o la semana; podés seguir llenando el mismo mes cuando quieras. Este censo no tiene cierre.
           </p>
         ) : null}
@@ -18063,7 +18093,7 @@ export default function Home() {
         )}
 
         {canManageInsumosRows && insumosHiddenKeys.length > 0 ? (
-          <div className={`mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] ${isLightPanelTheme ? "border-amber-200 bg-amber-50/70 text-amber-800" : "border-amber-400/20 bg-amber-400/5 text-amber-200"}`}>
+          <div className={`mt-3 flex w-fit max-w-full flex-wrap items-center gap-3 rounded-lg border px-2.5 py-1.5 text-[11px] ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/[0.07] bg-white/[0.03] text-slate-300"}`}>
             <span>
               Hay {insumosHiddenKeys.length} fila(s) oficial(es) oculta(s). Sus datos siguen guardados.
             </span>
@@ -20231,15 +20261,13 @@ export default function Home() {
                           Consultando al hospital…
                         </p>
                       ) : !datos.configurado ? (
-                        <div className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200">
-                          <p className="font-semibold">Este hospital todavía no está conectado.</p>
-                          <p className="mt-1 leading-6 text-amber-200/80">{datos.error}</p>
-                        </div>
+                        <Aviso tono="alerta" claro={isLightPanelTheme} className="mt-5">
+                          <strong>Este hospital todavía no está conectado.</strong> {datos.error}
+                        </Aviso>
                       ) : datos.error ? (
-                        <div className="mt-5 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-200">
-                          <p className="font-semibold">No pudimos leer el monitoreo de este hospital.</p>
-                          <p className="mt-1 text-rose-200/80">{datos.error}</p>
-                        </div>
+                        <Aviso tono="error" claro={isLightPanelTheme} className="mt-5">
+                          <strong>No pudimos leer el monitoreo de este hospital.</strong> {datos.error}
+                        </Aviso>
                       ) : (
                         <>
                           <div className={`mt-5 grid gap-3 ${datos.sinInsumos ? "" : "sm:grid-cols-2"}`}>
@@ -20475,26 +20503,22 @@ export default function Home() {
 
                         {/* Lista de otro servicio: se lee completa, no se escribe. */}
                         {!cecEditable ? (
-                          <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
-                            isLightPanelTheme
-                              ? "border-slate-200 bg-slate-50 text-slate-600"
-                              : "border-white/10 bg-white/[0.04] text-slate-300"
-                          }`}>
+                          <Aviso claro={isLightPanelTheme} className="mt-3">
                             Solo lectura. Esta lista la llena el personal asignado a{" "}
                             <strong>{plantilla.nombre}</strong>.
-                          </div>
+                          </Aviso>
                         ) : null}
 
                         {!cecAbiertoLista && cecEditable ? (
-                          <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+                          <Aviso tono="alerta" claro={isLightPanelTheme} className="mt-3">
                             La captura de {periodLabel} está cerrada. Se abre los primeros{" "}
                             {captureWindow.totalDays} días hábiles de cada mes. Si necesita
                             llenarla, pida al administrador que la desbloquee.
-                          </div>
+                          </Aviso>
                         ) : null}
 
                         {!cecAbierto && (cecListaDesbloqueada || puedeGestionarCec) ? (
-                          <div className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-200">
+                          <Aviso tono={cecListaDesbloqueada ? "ok" : "info"} claro={isLightPanelTheme} className="mt-3">
                             {cecListaDesbloqueada
                               ? `Desbloqueada fuera de fecha${
                                   cecDesbloqueos[`${periodId}__${plantilla.serviceId}`]?.por
@@ -20504,7 +20528,7 @@ export default function Home() {
                               : isAdmin
                                 ? "La captura está cerrada, pero como administrador puede editar esta lista. Use «Desbloquear para el comité» si el servicio debe llenarla."
                                 : "La captura está cerrada. Use «Desbloquear para el comité» si el servicio debe llenarla."}
-                          </div>
+                          </Aviso>
                         ) : null}
 
                         {cecCargando ? (
@@ -21647,7 +21671,7 @@ export default function Home() {
               )}
 
               {canManagePercRows && percHiddenKeys.length > 0 ? (
-                <div className={`mx-5 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] ${isLightPanelTheme ? "border-amber-200 bg-amber-50/70 text-amber-800" : "border-amber-400/20 bg-amber-400/5 text-amber-200"}`}>
+                <div className={`mx-5 mt-4 flex w-fit max-w-full flex-wrap items-center gap-3 rounded-lg border px-2.5 py-1.5 text-[11px] ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/[0.07] bg-white/[0.03] text-slate-300"}`}>
                   <span>Hay {percHiddenKeys.length} fila(s) oficial(es) oculta(s). Sus datos siguen guardados.</span>
                   <button
                     type="button"
@@ -22330,7 +22354,7 @@ export default function Home() {
                     </label>
                   </div>
                   {resetResult ? (
-                    <p className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{resetResult}</p>
+                    <Aviso tono="ok" claro={isLightPanelTheme} className="mt-4">{resetResult}</Aviso>
                   ) : null}
                   <button
                     type="button"
@@ -24997,11 +25021,11 @@ export default function Home() {
                   Consolidado de <strong className="text-slate-200">{getPeriodLabel(consolidadoPeriod)}</strong>. Los datos que vienen del <strong className="text-slate-200">Censo Diario</strong> de ese mismo mes se pintan en <span className="font-semibold text-amber-300">amarillo</span> mientras el mes está incompleto y en <span className="font-semibold text-emerald-300">verde</span> cuando ya se llenaron todos los días. Los <strong className="text-slate-200">Egresos</strong> y la <strong className="text-slate-200">Atención de Apoyo a RIISS</strong> los trae ESDOMED Services. El total se actualiza automáticamente.
                 </p>
                 {servicesConectado === false ? (
-                  <p className="mt-2 shrink-0 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                  <Aviso tono="alerta" claro={isLightPanelTheme} className="mt-2 shrink-0">
                     ESDOMED Services todavía no está conectado: faltan las variables
                     <strong> SERVICES_API_URL</strong> y <strong>SERVICES_API_KEY</strong> en Vercel.
                     Mientras tanto los Egresos y la Atención de Apoyo a RIISS quedan en 0.
-                  </p>
+                  </Aviso>
                 ) : null}
 
                 <div className="relative mt-4 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-white/10">
