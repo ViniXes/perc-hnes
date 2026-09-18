@@ -5709,6 +5709,9 @@ export default function Home() {
   // Filtro de la hoja de "Habilitar tableros": todos, solo abiertos, solo
   // cerrados o solo los que pidieron habilitacion.
   const [overrideFiltro, setOverrideFiltro] = useState<"todos" | "open" | "closed" | "pedido">("todos");
+  // BUSCADOR GLOBAL (Ctrl+K / Cmd+K): saltar a cualquier pantalla escribiendo.
+  const [paletaAbierta, setPaletaAbierta] = useState(false);
+  const [paletaQuery, setPaletaQuery] = useState("");
   // Divisiones abiertas en la hoja de "Habilitar tableros". Arrancan cerradas:
   // se ve el indice de divisiones y se abre la que se necesita.
   const [openOverrideGroups, setOpenOverrideGroups] = useState<Set<string>>(() => new Set());
@@ -6969,6 +6972,21 @@ export default function Home() {
     void loadCecDesbloqueos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, firestoreUnavailable, firestoreStatusReady]);
+
+  // Atajo del buscador global: Ctrl+K (o Cmd+K en Mac) abre; Esc cierra.
+  useEffect(() => {
+    const alTeclear = (evento: globalThis.KeyboardEvent) => {
+      if ((evento.ctrlKey || evento.metaKey) && evento.key.toLowerCase() === "k") {
+        evento.preventDefault();
+        setPaletaQuery("");
+        setPaletaAbierta((abierta) => !abierta);
+      } else if (evento.key === "Escape") {
+        setPaletaAbierta(false);
+      }
+    };
+    window.addEventListener("keydown", alTeclear);
+    return () => window.removeEventListener("keydown", alTeclear);
+  }, []);
 
   // Vista de escritorio forzada: se lee una vez al abrir y se guarda al cambiarla.
   // La clase va en el <html> porque de ahi cuelga la variante "desk" del CSS.
@@ -18912,6 +18930,100 @@ export default function Home() {
                 <span>Cerrar sesion</span>
               </button>
 
+              {/* BUSCADOR GLOBAL. Se abre con Ctrl+K y lista las pantallas a las
+                  que esta cuenta tiene acceso, incluidos los submenus. */}
+              {paletaAbierta ? (
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  className="fixed inset-0 z-[70] flex items-start justify-center p-4 pt-[12vh]"
+                  onClick={() => setPaletaAbierta(false)}
+                >
+                  <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
+                  <div
+                    onClick={(evento) => evento.stopPropagation()}
+                    className={`modal-pop-in relative w-full max-w-lg overflow-hidden rounded-2xl border ${
+                      isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#141d2e]"
+                    }`}
+                  >
+                    <div className={`flex items-center gap-2.5 border-b px-4 py-3 ${isLightPanelTheme ? "border-slate-200" : "border-white/[0.07]"}`}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-slate-500">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="M21 21l-4.3-4.3" />
+                      </svg>
+                      <input
+                        autoFocus
+                        value={paletaQuery}
+                        onChange={(evento) => setPaletaQuery(evento.target.value)}
+                        placeholder="Buscar pantalla… (PERC, censo, usuarios, comité…)"
+                        className={`w-full bg-transparent text-sm outline-none ${
+                          isLightPanelTheme ? "text-slate-900 placeholder:text-slate-400" : "text-white placeholder:text-slate-500"
+                        }`}
+                      />
+                      <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${
+                        isLightPanelTheme ? "border-slate-200 text-slate-400" : "border-white/10 text-slate-500"
+                      }`}>
+                        Esc
+                      </span>
+                    </div>
+                    {(() => {
+                      const q = paletaQuery.trim().toLowerCase();
+                      type Destino = { id: string; label: string; detail: string; padre?: string };
+                      const destinos: Destino[] = [];
+                      for (const item of sidebarItems) {
+                        const hijos = (item as { children?: { id: string; label: string; detail: string }[] }).children;
+                        destinos.push({ id: item.id, label: item.label, detail: item.detail });
+                        for (const hijo of hijos ?? []) {
+                          destinos.push({ id: hijo.id, label: hijo.label, detail: hijo.detail, padre: item.label });
+                        }
+                      }
+                      const encontrados = destinos
+                        .filter(
+                          (d) =>
+                            !q ||
+                            d.label.toLowerCase().includes(q) ||
+                            d.detail.toLowerCase().includes(q) ||
+                            (d.padre ?? "").toLowerCase().includes(q),
+                        )
+                        .slice(0, 9);
+                      if (encontrados.length === 0) {
+                        return (
+                          <p className={`px-4 py-8 text-center text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                            Nada coincide con «{paletaQuery}».
+                          </p>
+                        );
+                      }
+                      return (
+                        <div className="max-h-[50vh] overflow-y-auto p-1.5">
+                          {encontrados.map((d) => (
+                            <button
+                              key={`${d.padre ?? ""}${d.id}`}
+                              type="button"
+                              onClick={() => {
+                                setPaletaAbierta(false);
+                                handleSidebarNavigation(d.id);
+                              }}
+                              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+                                isLightPanelTheme ? "hover:bg-slate-100" : "hover:bg-white/[0.06]"
+                              }`}
+                            >
+                              <span className="min-w-0 flex-1">
+                                <span className={`block truncate text-sm font-medium ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                  {d.padre ? `${d.padre} · ` : ""}
+                                  {d.label}
+                                </span>
+                                <span className="block truncate text-[11px] text-slate-500">{d.detail}</span>
+                              </span>
+                              <span className="shrink-0 text-[11px] text-slate-500">Ir →</span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              ) : null}
+
               {/* PIE DEL MENU: quien lo hizo y que version esta corriendo. */}
               <div
                 className={`mt-auto hidden w-full flex-col items-center gap-0.5 border-t pt-3 text-center desk:flex ${
@@ -18933,6 +19045,20 @@ export default function Home() {
                 >
                   Versión {APP_VERSION}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaletaQuery("");
+                    setPaletaAbierta(true);
+                  }}
+                  className={`mt-1.5 rounded-md border px-2 py-0.5 text-[10px] font-medium transition ${
+                    isLightPanelTheme
+                      ? "border-slate-200 text-slate-400 hover:bg-slate-100"
+                      : "border-white/10 text-slate-500 hover:bg-white/[0.06]"
+                  }`}
+                >
+                  Buscar · Ctrl + K
+                </button>
               </div>
             </div>
           </aside>
