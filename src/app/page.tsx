@@ -5726,6 +5726,23 @@ export default function Home() {
   const [bitacora, setBitacora] = useState<BitacoraFila[]>([]);
   const [bitacoraCargando, setBitacoraCargando] = useState(false);
   const [bitacoraQuery, setBitacoraQuery] = useState("");
+  // TENDENCIAS: cumplimiento de cada tablero mes a mes.
+  type TendenciaModulo = { done: number; total: number; pct: number; faltan: string[] };
+  type TendenciaFila = {
+    periodId: string;
+    label: string;
+    corto: string;
+    perc: TendenciaModulo;
+    seps: TendenciaModulo;
+    horas: TendenciaModulo;
+    cec: TendenciaModulo;
+    global: number;
+  };
+  const [tendencias, setTendencias] = useState<TendenciaFila[]>([]);
+  const [tendenciasCargando, setTendenciasCargando] = useState(false);
+  const [tendenciasError, setTendenciasError] = useState("");
+  const [tendenciasMeses, setTendenciasMeses] = useState(12);
+  const [tendenciasSeries, setTendenciasSeries] = useState<Record<string, boolean>>({});
   // AVISO DE CIFRAS ATIPICAS (PERC): antes de guardar se compara cada fila con el
   // mes anterior; si algo se disparo (p.ej. 498 -> 4980) se pide confirmacion.
   const [percAtipicos, setPercAtipicos] = useState<
@@ -6376,14 +6393,22 @@ export default function Home() {
   // Lista de servicios completos/pendientes de UN modulo, con las familias UCI/UCIN
   // agrupadas. Es la misma logica del modal de Monitoreo; la usa el Monitoreo General
   // para mostrar los tres modulos juntos.
-  function computeMonitorStats(statsLabel: "PERC" | "SEPS" | "Horas") {
+  function computeMonitorStats(
+    statsLabel: "PERC" | "SEPS" | "Horas",
+    // HISTORIAL. Si se pasa el conjunto de servicios que SI entregaron en un mes
+    // pasado, se cuenta con el en vez del estado del mes en curso. Es lo que usa
+    // la pantalla de Tendencias para rehacer el monitoreo de cualquier periodo.
+    hechos?: Set<string>,
+  ) {
     const rawStats = dashboardGroups
       .flatMap((group) => group.services)
       .filter((service) => service.modules.some((m) => m.label === statsLabel))
       .filter((service) => isServiceInChiefScope(monitorScopeProfile, service.id));
 
     const isDone = (service: (typeof rawStats)[number]) =>
-      !!service.modules.find((m) => m.label === statsLabel)?.completed;
+      hechos
+        ? hechos.has(service.id)
+        : !!service.modules.find((m) => m.label === statsLabel)?.completed;
 
     const items: { id: string; name: string; done: boolean; family?: { done: number; total: number; pct: number } }[] = [];
     const seenFamilies = new Set<string>();
@@ -6504,6 +6529,10 @@ export default function Home() {
     monitorDivision && !serviceProfile?.division && !serviceProfile?.department
       ? { division: monitorDivision, department: null }
       : serviceProfile;
+  // TENDENCIAS: la ve quien ya monitorea (admin, Direccion, supervisores y jefes
+  // de division). Cada uno con su mismo alcance: no muestra nada nuevo, solo lo
+  // que esa cuenta ya puede ver, mes a mes.
+  const puedeVerTendencias = isAdmin || isDirector || isSupervisor || !!monitorDivision;
   // COMITE DE EXPEDIENTE CLINICO. Lo LLENAN los miembros del comite (y los
   // administradores); lo VEN ademas la Direccion, los supervisores y cada jefe
   // de division, limitado a los servicios de su division.
@@ -8415,6 +8444,161 @@ export default function Home() {
       setError("No pudimos leer la bitácora.");
     } finally {
       setBitacoraCargando(false);
+    }
+  }
+
+  /**
+   * TENDENCIAS. Rehace el monitoreo de cada uno de los ultimos meses para poder
+   * compararlos. Son cuatro lecturas (una por coleccion) con un rango de periodos,
+   * no una por mes: aunque se pidan 12 meses siguen siendo cuatro consultas.
+   * El alcance es el mismo de la cuenta: un jefe de division ve solo lo suyo.
+   */
+  async function loadTendencias(meses = tendenciasMeses) {
+    if (firestoreUnavailable) return;
+    setTendenciasCargando(true);
+    setTendenciasError("");
+    try {
+      const anio = Number.parseInt(periodId.slice(0, 4), 10);
+      const mes = Number.parseInt(periodId.slice(5, 7), 10);
+      const periodos: string[] = [];
+      for (let atras = meses - 1; atras >= 0; atras -= 1) {
+        periodos.push(getPeriodId(new Date(anio, mes - 1 - atras, 1)));
+      }
+      const desde = periodos[0];
+      const hasta = periodos[periodos.length - 1];
+
+      const leer = async (coleccion: string, exigirValores: boolean) => {
+        const mapa = new Map<string, Set<string>>();
+        try {
+          const snap = await getDocs(
+            query(
+              collection(db, coleccion),
+              where("periodId", ">=", desde),
+              where("periodId", "<=", hasta),
+            ),
+          );
+          snap.forEach((item) => {
+            const d = item.data() as {
+              periodId?: unknown;
+              serviceId?: unknown;
+              values?: Record<string, Record<string, unknown>>;
+            };
+            if (typeof d.periodId !== "string" || typeof d.serviceId !== "string") return;
+            if (exigirValores && !hasAnyCapturedValue(d.values)) return;
+            const actual = mapa.get(d.periodId) ?? new Set<string>();
+            actual.add(d.serviceId);
+            mapa.set(d.periodId, actual);
+          });
+        } catch {
+          // Si a esta cuenta le faltan reglas para una coleccion, ese modulo
+          // queda en cero en vez de tumbar toda la pantalla.
+        }
+        return mapa;
+      };
+
+      const [hPerc, hSeps, hHoras, hCec] = await Promise.all([
+        leer("serviceTabulators", true),
+        leer("sepsTabulators", false),
+        leer("horasTabulators", false),
+        leer("cecTabulators", false),
+      ]);
+
+      const vacio = new Set<string>();
+      const MES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+      const filas: TendenciaFila[] = periodos.map((periodo) => {
+        const deModulo = (
+          etiqueta: "PERC" | "SEPS" | "Horas",
+          historial: Map<string, Set<string>>,
+        ): TendenciaModulo => {
+          const stat = computeMonitorStats(etiqueta, historial.get(periodo) ?? vacio);
+          return {
+            done: stat.completos,
+            total: stat.total,
+            pct: stat.pct,
+            faltan: stat.items.filter((it) => !it.done).map((it) => it.name),
+          };
+        };
+        const entregadosCec = hCec.get(periodo) ?? vacio;
+        const cec: TendenciaModulo = {
+          done: cecPlantillasVisibles.filter((t) => entregadosCec.has(t.serviceId)).length,
+          total: cecPlantillasVisibles.length,
+          pct: 0,
+          faltan: cecPlantillasVisibles
+            .filter((t) => !entregadosCec.has(t.serviceId))
+            .map((t) => t.nombre),
+        };
+        cec.pct = cec.total > 0 ? Math.round((cec.done / cec.total) * 100) : 0;
+
+        const perc = deModulo("PERC", hPerc);
+        const seps = deModulo("SEPS", hSeps);
+        const horas = deModulo("Horas", hHoras);
+        const sumaHecha = perc.done + seps.done + horas.done + cec.done;
+        const sumaTotal = perc.total + seps.total + horas.total + cec.total;
+        const indice = Number.parseInt(periodo.slice(5, 7), 10) - 1;
+        return {
+          periodId: periodo,
+          label: getPeriodLabel(periodo),
+          corto: `${MES_CORTO[indice] ?? periodo.slice(5, 7)} ${periodo.slice(2, 4)}`,
+          perc,
+          seps,
+          horas,
+          cec,
+          global: sumaTotal > 0 ? Math.round((sumaHecha / sumaTotal) * 100) : 0,
+        };
+      });
+      setTendencias(filas);
+    } catch {
+      setTendenciasError("No pudimos leer el historial de los meses anteriores.");
+    } finally {
+      setTendenciasCargando(false);
+    }
+  }
+
+  /** Historial mes a mes en Excel, tal como se ve en la tabla. */
+  async function descargarTendenciasExcel() {
+    if (tendencias.length === 0) return;
+    try {
+      const XLSX = await import("xlsx");
+      const encabezado = [
+        "Mes",
+        "PERC %",
+        "PERC entregados",
+        "PERC total",
+        "SEPS %",
+        "SEPS entregados",
+        "SEPS total",
+        "Horas %",
+        "Horas entregados",
+        "Horas total",
+        "C.E. Clinico %",
+        "C.E. Clinico entregados",
+        "C.E. Clinico total",
+        "Global %",
+      ];
+      const filas = tendencias.map((f) => [
+        f.label,
+        f.perc.pct,
+        f.perc.done,
+        f.perc.total,
+        f.seps.pct,
+        f.seps.done,
+        f.seps.total,
+        f.horas.pct,
+        f.horas.done,
+        f.horas.total,
+        f.cec.pct,
+        f.cec.done,
+        f.cec.total,
+        f.global,
+      ]);
+      const hoja = XLSX.utils.aoa_to_sheet([encabezado, ...filas]);
+      hoja["!cols"] = [{ wch: 22 }, ...encabezado.slice(1).map(() => ({ wch: 13 }))];
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "Tendencias");
+      XLSX.writeFile(libro, `PULSO_Tendencias_${tendencias[0].periodId}_a_${tendencias[tendencias.length - 1].periodId}.xlsx`);
+    } catch (err) {
+      console.error(err);
+      setError("No pudimos generar el Excel del historial.");
     }
   }
 
@@ -14230,6 +14414,13 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSidebarSection, mobileView]);
 
+  // Tendencias: se arma al entrar y cada vez que se cambia el rango de meses.
+  useEffect(() => {
+    if (activeSidebarSection !== "panel-tendencias" && mobileView !== "panel-tendencias") return;
+    void loadTendencias(tendenciasMeses);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSidebarSection, mobileView, tendenciasMeses, periodId]);
+
   useEffect(() => {
     if (activeSidebarSection !== "panel-cec" && mobileView !== "panel-cec") return;
     void loadCecEstados();
@@ -18488,6 +18679,18 @@ export default function Home() {
             },
           ]
         : []),
+      // TENDENCIAS: el mismo monitoreo, pero de los ultimos meses, para ver si
+      // el hospital va mejorando o cayendo.
+      ...(puedeVerTendencias
+        ? [
+            {
+              id: "panel-tendencias",
+              label: "Tendencias",
+              detail: "Comparación entre meses",
+              badge: "TE",
+            },
+          ]
+        : []),
       // Monitor de RRHH (aamaya): acceso directo al Monitoreo de Horas, donde esta
       // el boton para descargar el consolidado mensual de horas de todos los servicios.
       ...(isHorasMonitor
@@ -20515,6 +20718,456 @@ export default function Home() {
                         Se muestran los últimos 200 movimientos.
                       </p>
                     </div>
+                  );
+                })()}
+              </section>
+            ) : null}
+
+            {/* ================= TENDENCIAS =================
+                El mismo monitoreo, pero de los ultimos meses uno junto a otro:
+                sirve para ver si el hospital va mejorando o cayendo. Solo lee. */}
+            {puedeVerTendencias &&
+            (activeSidebarSection === "panel-tendencias" || mobileView === "panel-tendencias") ? (
+              <section
+                id="panel-tendencias"
+                data-view="panel-tendencias"
+                className={`rounded-[24px] p-5 ${
+                  isLightPanelTheme
+                    ? "border border-slate-200 bg-white text-slate-900"
+                    : "border border-white/10 bg-[#202c41] text-slate-100"
+                }`}
+              >
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                      Tendencias
+                    </p>
+                    <h2 className={`mt-1 text-xl font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                      Comparación entre meses
+                    </h2>
+                    <p className={`mt-1 max-w-2xl text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
+                      Cumplimiento de cada tablero mes a mes, con el mismo cálculo del monitoreo.
+                      Esta pantalla solo lee lo que ya está guardado: no modifica nada.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div
+                      className={`inline-flex overflow-hidden rounded-xl border ${
+                        isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/[0.08] bg-white/[0.025]"
+                      }`}
+                    >
+                      {[6, 12].map((cuantos) => (
+                        <button
+                          key={cuantos}
+                          type="button"
+                          onClick={() => setTendenciasMeses(cuantos)}
+                          className={`px-3.5 py-2 text-[12px] font-semibold transition ${
+                            tendenciasMeses === cuantos
+                              ? isLightPanelTheme
+                                ? "bg-teal-600 text-white"
+                                : "bg-teal-400/[0.14] text-teal-100"
+                              : isLightPanelTheme
+                                ? "text-slate-500 hover:bg-slate-50"
+                                : "text-slate-400 hover:bg-white/[0.05]"
+                          }`}
+                        >
+                          {cuantos} meses
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void loadTendencias(tendenciasMeses)}
+                      disabled={tendenciasCargando}
+                      className={`${BTN_GUARDAR} rounded-xl px-4 py-2 text-sm transition disabled:opacity-50`}
+                    >
+                      {tendenciasCargando ? "Cargando…" : "Actualizar"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void descargarTendenciasExcel()}
+                      disabled={tendencias.length === 0}
+                      className={`${BTN_EXCEL} rounded-xl px-4 py-2 text-sm font-semibold transition disabled:opacity-40`}
+                    >
+                      Excel
+                    </button>
+                  </div>
+                </div>
+
+                {(() => {
+                  const filas = tendencias;
+                  const tenueTexto = isLightPanelTheme ? "text-slate-500" : "text-slate-400";
+                  if (filas.length === 0) {
+                    return (
+                      <p className={`mt-6 rounded-2xl border px-4 py-10 text-center text-sm ${
+                        isLightPanelTheme
+                          ? "border-slate-200 bg-slate-50/60 text-slate-500"
+                          : "border-white/[0.07] bg-white/[0.02] text-slate-400"
+                      }`}>
+                        {tendenciasCargando
+                          ? "Leyendo el historial de los meses anteriores…"
+                          : tendenciasError || "Todavía no hay meses guardados para comparar."}
+                      </p>
+                    );
+                  }
+
+                  const series = [
+                    { clave: "perc" as const, label: "PERC", color: isLightPanelTheme ? "#0891b2" : "#22d3ee" },
+                    { clave: "seps" as const, label: "SEPS", color: isLightPanelTheme ? "#2563eb" : "#60a5fa" },
+                    { clave: "horas" as const, label: "Horas", color: isLightPanelTheme ? "#d97706" : "#fbbf24" },
+                    { clave: "cec" as const, label: "C.E. Clínico", color: isLightPanelTheme ? "#7c3aed" : "#a78bfa" },
+                  ];
+                  const visibles = series.filter((serie) => tendenciasSeries[serie.clave] !== false);
+
+                  const ultima = filas[filas.length - 1];
+                  const previa = filas.length > 1 ? filas[filas.length - 2] : null;
+                  const mejor = filas.reduce((a, b) => (b.global > a.global ? b : a), filas[0]);
+                  const promedio = Math.round(
+                    filas.reduce((suma, fila) => suma + fila.global, 0) / filas.length,
+                  );
+                  const variacion = previa ? ultima.global - previa.global : null;
+
+                  const ANCHO = 680;
+                  const ALTO = 214;
+                  const IZQ = 30;
+                  const DER = 10;
+                  const ARR = 12;
+                  const ABA = 26;
+                  const px = (indice: number) =>
+                    filas.length === 1
+                      ? IZQ + (ANCHO - IZQ - DER) / 2
+                      : IZQ + (indice * (ANCHO - IZQ - DER)) / (filas.length - 1);
+                  const py = (pct: number) => ARR + ((100 - pct) * (ALTO - ARR - ABA)) / 100;
+                  const rejilla = isLightPanelTheme ? "#e2e8f0" : "rgba(255,255,255,0.07)";
+                  const tinta = isLightPanelTheme ? "#94a3b8" : "#64748b";
+                  const fondoPunto = isLightPanelTheme ? "#ffffff" : "#202c41";
+
+                  const chipDelta = (delta: number | null) => {
+                    if (delta === null) {
+                      return <span className={`text-[10px] ${tenueTexto}`}>—</span>;
+                    }
+                    if (delta === 0) {
+                      return (
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          isLightPanelTheme ? "bg-slate-100 text-slate-500" : "bg-white/[0.05] text-slate-400"
+                        }`}>
+                          =
+                        </span>
+                      );
+                    }
+                    const sube = delta > 0;
+                    return (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        sube
+                          ? isLightPanelTheme
+                            ? "bg-teal-50 text-teal-700"
+                            : "bg-teal-400/[0.12] text-teal-200"
+                          : isLightPanelTheme
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-amber-400/[0.12] text-amber-200"
+                      }`}>
+                        {sube ? "▲" : "▼"} {Math.abs(delta)}
+                      </span>
+                    );
+                  };
+
+                  const movimientos = (() => {
+                    const cayeron: string[] = [];
+                    const mejoraron: string[] = [];
+                    if (!previa) return { cayeron, mejoraron };
+                    for (const serie of series) {
+                      const antes = new Set(previa[serie.clave].faltan);
+                      const ahora = new Set(ultima[serie.clave].faltan);
+                      for (const nombre of ahora) {
+                        if (!antes.has(nombre)) cayeron.push(`${nombre} · ${serie.label}`);
+                      }
+                      for (const nombre of antes) {
+                        if (!ahora.has(nombre)) mejoraron.push(`${nombre} · ${serie.label}`);
+                      }
+                    }
+                    cayeron.sort((a, b) => a.localeCompare(b, "es"));
+                    mejoraron.sort((a, b) => a.localeCompare(b, "es"));
+                    return { cayeron, mejoraron };
+                  })();
+
+                  const tarjeta = isLightPanelTheme
+                    ? "border-slate-200 bg-slate-50/70"
+                    : "border-white/[0.07] bg-white/[0.02]";
+                  const rotulo = `text-[10px] font-bold uppercase tracking-[0.2em] ${
+                    isLightPanelTheme ? "text-slate-400" : "text-slate-500"
+                  }`;
+                  const cifra = `mt-1.5 text-[26px] font-bold leading-none tabular-nums ${
+                    isLightPanelTheme ? "text-slate-900" : "text-white"
+                  }`;
+
+                  return (
+                    <>
+                      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                        <div className={`rounded-2xl border p-4 ${tarjeta}`}>
+                          <p className={rotulo}>Promedio del periodo</p>
+                          <p className={cifra}>{promedio}%</p>
+                          <p className={`mt-1.5 text-[11px] ${tenueTexto}`}>
+                            {filas.length} meses, de {filas[0].label} a {ultima.label}.
+                          </p>
+                        </div>
+                        <div className={`rounded-2xl border p-4 ${tarjeta}`}>
+                          <p className={rotulo}>Mejor mes</p>
+                          <p className={cifra}>{mejor.global}%</p>
+                          <p className={`mt-1.5 text-[11px] first-letter:uppercase ${tenueTexto}`}>{mejor.label}</p>
+                        </div>
+                        <div className={`rounded-2xl border p-4 ${tarjeta}`}>
+                          <p className={rotulo}>Último mes</p>
+                          <p className={cifra}>
+                            {ultima.global}%{" "}
+                            <span className="align-middle">{chipDelta(variacion)}</span>
+                          </p>
+                          <p className={`mt-1.5 text-[11px] ${tenueTexto}`}>
+                            {previa
+                              ? `${previa.global}% en ${previa.label}.`
+                              : "No hay un mes anterior con que comparar."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className={`mt-4 rounded-2xl border p-4 ${tarjeta}`}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {series.map((serie) => {
+                            const activa = tendenciasSeries[serie.clave] !== false;
+                            return (
+                              <button
+                                key={serie.clave}
+                                type="button"
+                                onClick={() =>
+                                  setTendenciasSeries((actual) => ({
+                                    ...actual,
+                                    [serie.clave]: actual[serie.clave] === false,
+                                  }))
+                                }
+                                title={activa ? "Ocultar esta línea" : "Mostrar esta línea"}
+                                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+                                  activa
+                                    ? isLightPanelTheme
+                                      ? "border-slate-200 bg-white text-slate-700"
+                                      : "border-white/[0.09] bg-white/[0.04] text-slate-200"
+                                    : isLightPanelTheme
+                                      ? "border-slate-100 bg-transparent text-slate-300"
+                                      : "border-white/[0.05] bg-transparent text-slate-600"
+                                }`}
+                              >
+                                <span
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ background: activa ? serie.color : "currentColor" }}
+                                />
+                                {serie.label}
+                                <span className="tabular-nums opacity-70">{ultima[serie.clave].pct}%</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <svg
+                          viewBox={`0 0 ${ANCHO} ${ALTO}`}
+                          className="mt-3 w-full"
+                          style={{ height: 214 }}
+                          role="img"
+                          aria-label="Cumplimiento mensual por tablero"
+                        >
+                          {[0, 25, 50, 75, 100].map((nivel) => (
+                            <g key={nivel}>
+                              <line
+                                x1={IZQ}
+                                x2={ANCHO - DER}
+                                y1={py(nivel)}
+                                y2={py(nivel)}
+                                stroke={rejilla}
+                                strokeWidth="1"
+                              />
+                              <text x={IZQ - 7} y={py(nivel) + 3} textAnchor="end" fontSize="8.5" fill={tinta}>
+                                {nivel}
+                              </text>
+                            </g>
+                          ))}
+                          {visibles.map((serie) => (
+                            <polyline
+                              key={serie.clave}
+                              fill="none"
+                              stroke={serie.color}
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              points={filas
+                                .map((fila, indice) => `${px(indice)},${py(fila[serie.clave].pct)}`)
+                                .join(" ")}
+                            />
+                          ))}
+                          {visibles.map((serie) =>
+                            filas.map((fila, indice) => (
+                              <circle
+                                key={`${serie.clave}-${fila.periodId}`}
+                                cx={px(indice)}
+                                cy={py(fila[serie.clave].pct)}
+                                r="2.7"
+                                fill={fondoPunto}
+                                stroke={serie.color}
+                                strokeWidth="1.7"
+                              >
+                                <title>{`${serie.label} · ${fila.label}: ${fila[serie.clave].pct}%`}</title>
+                              </circle>
+                            )),
+                          )}
+                          {filas.map((fila, indice) => (
+                            <text
+                              key={fila.periodId}
+                              x={px(indice)}
+                              y={ALTO - 7}
+                              textAnchor="middle"
+                              fontSize="8.5"
+                              fill={tinta}
+                            >
+                              {fila.corto}
+                            </text>
+                          ))}
+                        </svg>
+                      </div>
+
+                      <div className={`mt-4 overflow-hidden rounded-2xl border ${
+                        isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/[0.07] bg-white/[0.02]"
+                      }`}>
+                        <div className="overflow-x-auto">
+                          <div className="min-w-[700px]">
+                            <div
+                              className={`grid px-4 pb-1.5 pt-3 text-[9px] font-bold uppercase tracking-[0.18em] ${
+                                isLightPanelTheme ? "text-slate-400" : "text-slate-500"
+                              }`}
+                              style={{ gridTemplateColumns: "minmax(0,1fr) repeat(4, 92px) 120px" }}
+                            >
+                              <span>Mes</span>
+                              <span className="text-center">PERC</span>
+                              <span className="text-center">SEPS</span>
+                              <span className="text-center">Horas</span>
+                              <span className="text-center">C.E. Clínico</span>
+                              <span className="text-center">Global</span>
+                            </div>
+                            {[...filas].reverse().map((fila, indice, listado) => {
+                              const anterior = listado[indice + 1] ?? null;
+                              const separador = isLightPanelTheme
+                                ? "border-slate-100"
+                                : "border-white/[0.045]";
+                              return (
+                                <div
+                                  key={fila.periodId}
+                                  className={`grid items-center border-t px-4 py-2.5 transition ${separador} ${
+                                    isLightPanelTheme ? "hover:bg-slate-50" : "hover:bg-white/[0.03]"
+                                  }`}
+                                  style={{ gridTemplateColumns: "minmax(0,1fr) repeat(4, 92px) 120px" }}
+                                >
+                                  <span className="min-w-0">
+                                    <span className={`block truncate text-[12.5px] font-medium first-letter:uppercase ${
+                                      isLightPanelTheme ? "text-slate-800" : "text-slate-100"
+                                    }`}>
+                                      {fila.label}
+                                    </span>
+                                    {fila.periodId === periodId ? (
+                                      <span className={`text-[10px] ${tenueTexto}`}>En cierre</span>
+                                    ) : null}
+                                  </span>
+                                  {series.map((serie) => (
+                                    <span key={serie.clave} className="text-center">
+                                      <span
+                                        className="block text-[12.5px] font-bold tabular-nums"
+                                        style={{ color: serie.color }}
+                                      >
+                                        {fila[serie.clave].total > 0 ? `${fila[serie.clave].pct}%` : "—"}
+                                      </span>
+                                      {fila[serie.clave].total > 0 ? (
+                                        <span className={`text-[10px] tabular-nums ${tenueTexto}`}>
+                                          {fila[serie.clave].done}/{fila[serie.clave].total}
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                  ))}
+                                  <span className="flex items-center justify-center gap-2">
+                                    <span className={`text-[13px] font-bold tabular-nums ${
+                                      isLightPanelTheme ? "text-slate-900" : "text-white"
+                                    }`}>
+                                      {fila.global}%
+                                    </span>
+                                    {chipDelta(anterior ? fila.global - anterior.global : null)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <p className={`border-t px-4 py-2.5 text-[11px] ${
+                          isLightPanelTheme ? "border-slate-100 text-slate-500" : "border-white/[0.045] text-slate-500"
+                        }`}>
+                          El porcentaje de cada mes se calcula igual que en el Monitoreo general: las
+                          familias (UCI, UCIN, Cuidados Paliativos) valen uno.
+                        </p>
+                      </div>
+
+                      {previa ? (
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <div className={`rounded-2xl border p-4 ${tarjeta}`}>
+                            <p className={rotulo}>Se pusieron al día</p>
+                            <p className={`mt-1 text-[11px] ${tenueTexto}`}>
+                              Entregaron en {ultima.label} y no en {previa.label}.
+                            </p>
+                            {movimientos.mejoraron.length === 0 ? (
+                              <p className={`mt-3 text-[12px] ${tenueTexto}`}>Sin cambios.</p>
+                            ) : (
+                              <ul className="mt-3 space-y-1.5">
+                                {movimientos.mejoraron.slice(0, 8).map((texto) => (
+                                  <li
+                                    key={texto}
+                                    className={`text-[12px] ${isLightPanelTheme ? "text-teal-700" : "text-teal-200"}`}
+                                  >
+                                    {texto}
+                                  </li>
+                                ))}
+                                {movimientos.mejoraron.length > 8 ? (
+                                  <li className={`text-[11px] ${tenueTexto}`}>
+                                    y {movimientos.mejoraron.length - 8} más.
+                                  </li>
+                                ) : null}
+                              </ul>
+                            )}
+                          </div>
+                          <div className={`rounded-2xl border p-4 ${tarjeta}`}>
+                            <p className={rotulo}>Dejaron de entregar</p>
+                            <p className={`mt-1 text-[11px] ${tenueTexto}`}>
+                              Entregaron en {previa.label} y todavía no en {ultima.label}.
+                            </p>
+                            {movimientos.cayeron.length === 0 ? (
+                              <p className={`mt-3 text-[12px] ${tenueTexto}`}>Sin cambios.</p>
+                            ) : (
+                              <ul className="mt-3 space-y-1.5">
+                                {movimientos.cayeron.slice(0, 8).map((texto) => (
+                                  <li
+                                    key={texto}
+                                    className={`text-[12px] ${isLightPanelTheme ? "text-amber-700" : "text-amber-200"}`}
+                                  >
+                                    {texto}
+                                  </li>
+                                ))}
+                                {movimientos.cayeron.length > 8 ? (
+                                  <li className={`text-[11px] ${tenueTexto}`}>
+                                    y {movimientos.cayeron.length - 8} más.
+                                  </li>
+                                ) : null}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {ultima.periodId === periodId ? (
+                        <p className={`mt-3 text-[11px] ${tenueTexto}`}>
+                          {ultima.label} todavía está en cierre, así que su cifra sigue subiendo
+                          mientras los servicios entregan.
+                        </p>
+                      ) : null}
+                    </>
                   );
                 })()}
               </section>
