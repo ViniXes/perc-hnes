@@ -3,7 +3,7 @@
    - Navegaciones (paginas): network-first, cae a cache y luego a "/".
    - Estaticos same-origin (/_next, iconos): cache-first.
    - Cualquier peticion cross-origin (Firebase/Firestore/Auth) o no-GET: passthrough. */
-const CACHE = "pulso-v4";
+const CACHE = "pulso-v5";
 const PRECACHE = ["/", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {

@@ -2812,6 +2812,12 @@ async function fetchCaptureOverridesForPeriod(periodId: string): Promise<Capture
 // no hay uso formal del sistema, asi que no tiene sentido ofrecerlo en el selector.
 const AVANCE_FIRST_PERIOD = "2026-07";
 
+// TENDENCIAS: primer mes con datos REALES del hospital. Lo anterior a esta fecha
+// es captura de prueba de la puesta en marcha (meses sueltos al 93%, al 5%, etc.)
+// y no dice nada del cumplimiento: mostrarlo solo ensuciaba la grafica y bajaba
+// los promedios. Cuando se quiera volver a ver algo mas viejo, se cambia aca.
+const TENDENCIAS_PRIMER_PERIODO = "2026-08";
+
 // Meses disponibles para consultar: de AVANCE_FIRST_PERIOD hasta el mes en cierre,
 // sin meses futuros. La lista crece sola con el paso del tiempo.
 function buildAvancePeriods(currentPeriodId: string): string[] {
@@ -6920,7 +6926,15 @@ export default function Home() {
       const mes = Number.parseInt(periodId.slice(5, 7), 10);
       const periodos: string[] = [];
       for (let atras = meses - 1; atras >= 0; atras -= 1) {
-        periodos.push(getPeriodId(new Date(anio, mes - 1 - atras, 1)));
+        const periodo = getPeriodId(new Date(anio, mes - 1 - atras, 1));
+        // Nada anterior al primer mes real: esos meses nunca se capturaron de
+        // verdad y no se comparan con nada.
+        if (periodo < TENDENCIAS_PRIMER_PERIODO) continue;
+        periodos.push(periodo);
+      }
+      if (periodos.length === 0) {
+        setTendencias([]);
+        return;
       }
       const desde = periodos[0];
       const hasta = periodos[periodos.length - 1];
@@ -7004,15 +7018,7 @@ export default function Home() {
           global: sumaTotal > 0 ? Math.round((sumaHecha / sumaTotal) * 100) : 0,
         };
       });
-      // Solo se muestran los meses que EXISTEN en PULSO. Antes de agosto de 2026
-      // no hay nada guardado, y una fila en cero de un mes que nunca se capturo
-      // no es una caida: es ruido que ensucia la grafica y el promedio. Se corta
-      // en el primer mes con datos; si despues hay un mes en cero, ese si se ve,
-      // porque ahi el cero significa algo.
-      const primeroConDatos = filas.findIndex(
-        (fila) => fila.perc.done + fila.seps.done + fila.horas.done + fila.cec.done > 0,
-      );
-      setTendencias(primeroConDatos < 0 ? [] : filas.slice(primeroConDatos));
+      setTendencias(filas);
     } catch {
       setTendenciasError("No pudimos leer el historial de los meses anteriores.");
     } finally {
@@ -19195,7 +19201,7 @@ export default function Home() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <div
-                      className={`inline-flex overflow-hidden rounded-xl border ${
+                      className={`${tendencias.length > 1 ? "inline-flex" : "hidden"} overflow-hidden rounded-xl border ${
                         isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/[0.08] bg-white/[0.025]"
                       }`}
                     >
@@ -19609,10 +19615,10 @@ export default function Home() {
 
                       {filas.length === 1 ? (
                         <p className={`mt-3 text-[11px] first-letter:uppercase ${tenueTexto}`}>
-                          {ultima.label} es el único mes cerrado en PULSO, así que todavía no hay
-                          con qué compararlo. La comparación aparece sola cuando se cierre el
-                          siguiente: los meses anteriores no se muestran porque nunca se
-                          capturaron aquí.
+                          {ultima.label} es el primer mes con datos reales del hospital, así que
+                          todavía no hay con qué compararlo. La comparación aparece sola cuando se
+                          cierre el siguiente. Lo anterior fue captura de prueba de la puesta en
+                          marcha y por eso no se muestra.
                         </p>
                       ) : null}
 
