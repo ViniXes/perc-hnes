@@ -19454,6 +19454,134 @@ export default function Home() {
             </div>
             </section>
 
+            {/* ================== TU MES ==================
+                Para la cuenta de un servicio: en una sola tarjeta, que le falta
+                entregar este mes, cuanto tiempo queda y un acceso directo a cada
+                tablero pendiente. Evita tener que buscarlo por los menus. */}
+            {currentService && !isMinsal && !isAdmin ? (
+              (() => {
+                const propio = dashboardGroups
+                  .flatMap((g) => g.services)
+                  .find((svc) => svc.id === currentService.id);
+                const modulos = (propio?.modules ?? []).map((mod) => ({
+                  label: mod.label,
+                  completo: !!mod.completed,
+                  panel:
+                    mod.label === "PERC"
+                      ? "panel-tabulator"
+                      : mod.label === "SEPS"
+                        ? "panel-seps"
+                        : "panel-horas",
+                }));
+                if (modulos.length === 0) return null;
+                const pendientes = modulos.filter((m) => !m.completo);
+                const listo = pendientes.length === 0;
+                // Cuanto falta para que cierre la ventana (el ultimo dia cierra 2:30 p. m.).
+                const cierre = captureWindow.lastOpenDay
+                  ? new Date(
+                      captureWindow.lastOpenDay.getFullYear(),
+                      captureWindow.lastOpenDay.getMonth(),
+                      captureWindow.lastOpenDay.getDate(),
+                      CAPTURE_CLOSE_HOUR,
+                      CAPTURE_CLOSE_MINUTE,
+                      0,
+                      0,
+                    )
+                  : null;
+                const horasRestantes = cierre
+                  ? Math.max(0, Math.round((cierre.getTime() - now.getTime()) / 3600000))
+                  : 0;
+                const urgente = captureWindow.isOpen && !listo && horasRestantes <= 24;
+                return (
+                  <section
+                    className={`hidden overflow-hidden rounded-[22px] border p-5 desk:block ${
+                      isLightPanelTheme
+                        ? "border-slate-200 bg-white text-slate-900"
+                        : "border-white/10 bg-[#1b2537] text-slate-100"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                          Tu mes · {periodLabel}
+                        </p>
+                        <h2 className={`mt-1 text-xl font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                          {listo
+                            ? "Ya entregaste todo lo de este mes"
+                            : `Te falta${pendientes.length === 1 ? "" : "n"} ${pendientes.length} de ${modulos.length} ${
+                                modulos.length === 1 ? "tablero" : "tableros"
+                              }`}
+                        </h2>
+                        <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
+                          {!captureWindow.isOpen
+                            ? "La captura de este mes está cerrada. Si necesitás digitar, pedí que te la reabran."
+                            : cierre
+                              ? `Día hábil ${captureWindow.activeDayNumber} de ${captureWindow.totalDays} · cierra el ${SHORT_DATE_FORMATTER.format(cierre)} a las 2:30 p. m.`
+                              : "Captura abierta."}
+                        </p>
+                      </div>
+                      {captureWindow.isOpen && !listo ? (
+                        <div
+                          className={`shrink-0 rounded-2xl border px-4 py-2.5 text-center ${
+                            urgente
+                              ? "border-amber-300/30 bg-amber-300/[0.08]"
+                              : isLightPanelTheme
+                                ? "border-slate-200 bg-slate-50"
+                                : "border-white/[0.07] bg-white/[0.03]"
+                          }`}
+                        >
+                          <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                            Tiempo restante
+                          </p>
+                          <p className={`text-2xl font-bold leading-tight ${
+                            urgente
+                              ? isLightPanelTheme ? "text-amber-700" : "text-amber-200"
+                              : isLightPanelTheme ? "text-slate-900" : "text-white"
+                          }`}>
+                            {horasRestantes >= 48
+                              ? `${Math.floor(horasRestantes / 24)} días`
+                              : `${horasRestantes} h`}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {modulos.map((mod) => (
+                        <button
+                          key={mod.label}
+                          type="button"
+                          onClick={() => handleSidebarNavigation(mod.panel)}
+                          className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition ${
+                            isLightPanelTheme
+                              ? "border-slate-200 bg-white hover:bg-slate-50"
+                              : "border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.06]"
+                          }`}
+                        >
+                          <span
+                            className={`h-2 w-2 shrink-0 rounded-full ${
+                              mod.completo ? "bg-teal-300" : "bg-amber-300"
+                            }`}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className={`block text-sm font-semibold ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+                              {mod.label === "Horas" ? "Distribución de Horas" : mod.label}
+                            </span>
+                            <span className={`block text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                              {mod.completo ? "Entregado" : "Pendiente de entregar"}
+                            </span>
+                          </span>
+                          <span className={`shrink-0 text-[11px] font-semibold ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                            {mod.completo ? "Ver" : "Llenar →"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })()
+            ) : null}
+
             <div className="hidden desk:block">{moduleSections}</div>
 
           {/* Toasts sutiles (esquina) para exito/error. Se desvanecen solos. */}
