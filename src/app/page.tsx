@@ -68,6 +68,7 @@ import {
 } from "@/lib/seps-templates";
 import { downloadSepsTemplate } from "@/lib/seps-download";
 import { descargarCecExcel, mostrarCecReporte, type CecEntrada } from "@/lib/cec-export";
+import { mostrarActa, type ActaDatos } from "@/lib/acta-cierre";
 import { importSepsWorkbookByLabels } from "@/lib/seps-import";
 import {
   applySepsLayout,
@@ -8415,6 +8416,49 @@ export default function Home() {
     } finally {
       setBitacoraCargando(false);
     }
+  }
+
+  /**
+   * ACTA DE CIERRE: resumen del mes listo para imprimir y firmar. Sale de lo que
+   * la pantalla ya calcula (monitoreo por modulo) mas los tableros que se
+   * abrieron o cerraron a mano en el periodo.
+   */
+  function abrirActaDeCierre() {
+    const ventana = window.open("", "_blank");
+    if (!ventana) {
+      setError("El navegador bloqueó la ventana del acta. Permití ventanas emergentes para PULSO.");
+      return;
+    }
+    ventana.document.write(
+      '<p style="font-family:sans-serif;padding:24px;color:#0B2C4D">Generando el acta de cierre…</p>',
+    );
+    const modulos = (["PERC", "SEPS", "Horas"] as const).map((label) => {
+      const stat = computeMonitorStats(label);
+      return {
+        label: label === "Horas" ? "Distribución de Horas" : label,
+        total: stat.total,
+        completos: stat.completos,
+        pendientes: stat.items.filter((it) => !it.done).map((it) => it.name),
+      };
+    });
+    const movimientos: ActaDatos["movimientos"] = [];
+    for (const [clave, estado] of Object.entries(captureOverrides)) {
+      const [periodo, serviceId, moduleId] = clave.split("__");
+      if (periodo !== periodId) continue;
+      movimientos.push({
+        servicio: getServiceById(serviceId)?.name ?? serviceId,
+        modulo: getModuleLabel(moduleId as ModuleId),
+        estado: estado === "open" ? "Abierto" : "Cerrado",
+      });
+    }
+    movimientos.sort((a, b) => a.servicio.localeCompare(b.servicio, "es"));
+    mostrarActa(ventana, {
+      periodoLabel: periodLabel,
+      generadoPor: serviceProfile?.name || usuarioDeCorreo(user?.email || ""),
+      modulos,
+      movimientos,
+    });
+    void registrarBitacora("Acta de cierre generada", periodLabel);
   }
 
   /** Clave del cierre manual de un tablero del admin. */
@@ -22017,6 +22061,31 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
+                  {/* ACTA: el cierre del mes en un documento firmable. */}
+                  <div className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 ${
+                    isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-white/[0.02]"
+                  }`}>
+                    <div className="min-w-0">
+                      <p className={`text-sm font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                        Acta de cierre del mes
+                      </p>
+                      <p className={`mt-0.5 text-[11px] leading-5 ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                        Resumen por módulo, servicios pendientes y tableros abiertos o cerrados fuera
+                        de fecha, con espacio para firmas.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => abrirActaDeCierre()}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-sky-300/25 bg-sky-300/[0.08] px-3.5 py-2 text-xs font-semibold text-sky-100 transition hover:bg-sky-300/[0.15]"
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M6 2h9l5 5v15H6z" /><path d="M14 2v6h6M9 13h6M9 17h6" />
+                      </svg>
+                      Generar acta
+                    </button>
+                  </div>
+
                   <p className={`mt-3 text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
                     Cada archivo sale con los datos disponibles al momento de la descarga.
                   </p>
