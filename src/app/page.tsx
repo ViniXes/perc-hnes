@@ -161,6 +161,7 @@ import {
   LoginLoadingModal,
 } from "@/components/login-loading-modal";
 import { APP_VERSION } from "@/lib/version";
+import { esperarConfirmacion, estaEnLinea } from "@/lib/offline";
 import {
   DEP_ICON_PROPS,
   DOC_COLUMNS,
@@ -4102,6 +4103,10 @@ export default function Home() {
   const [paletaAbierta, setPaletaAbierta] = useState(false);
   // Ayuda de atajos de teclado (se abre con "?" o desde el pie del menu).
   const [atajosAbiertos, setAtajosAbiertos] = useState(false);
+  // CAPTURA SIN CONEXION: si el navegador dice que no hay red y cuantos guardados
+  // quedaron esperando que vuelva para viajar al servidor.
+  const [sinConexion, setSinConexion] = useState(false);
+  const [porEnviar, setPorEnviar] = useState(0);
   // BITACORA: registro de quien hizo que (desbloqueos, cierres, permisos, claves).
   type BitacoraFila = {
     id: string;
@@ -5436,6 +5441,48 @@ export default function Home() {
     window.addEventListener("keydown", alTeclear);
     return () => window.removeEventListener("keydown", alTeclear);
   }, []);
+
+  // Aviso de conexion. El navegador avisa al perderla y al recuperarla; ademas
+  // se lee una vez al abrir, por si ya se entro sin red.
+  useEffect(() => {
+    const revisar = () => setSinConexion(!estaEnLinea());
+    revisar();
+    window.addEventListener("online", revisar);
+    window.addEventListener("offline", revisar);
+    return () => {
+      window.removeEventListener("online", revisar);
+      window.removeEventListener("offline", revisar);
+    };
+  }, []);
+
+  /**
+   * Guarda esperando la confirmacion del servidor solo unos segundos. Sin red el
+   * dato YA quedo escrito en el dispositivo y Firestore lo envia solo cuando la
+   * conexion vuelve, aunque se cierre PULSO: por eso en vez de dejar el boton
+   * girando se responde "pendiente" y se le dice a la persona que su trabajo esta
+   * a salvo. Devuelve "ok" cuando el servidor confirmo.
+   */
+  async function confirmarGuardado(escritura: Promise<unknown>, queSeGuardo: string) {
+    const estado = await esperarConfirmacion(escritura, {
+      alConfirmarTarde: () => {
+        setPorEnviar((cuantos) => Math.max(0, cuantos - 1));
+        setMessage(`Ya se envió al servidor: ${queSeGuardo}.`);
+      },
+      alFallarTarde: () => {
+        setPorEnviar((cuantos) => Math.max(0, cuantos - 1));
+        setError(
+          `${queSeGuardo} quedó guardado en este dispositivo, pero el servidor lo rechazó al enviarlo. Revisalo y volvé a guardar.`,
+        );
+      },
+    });
+    if (estado === "pendiente") setPorEnviar((cuantos) => cuantos + 1);
+    return estado;
+  }
+
+  /** El mismo aviso para los cuatro tabuladores cuando se guardo sin conexion. */
+  function avisoSinConexion(queSeGuardo: string) {
+    return `${queSeGuardo} quedó guardado en este dispositivo. No hay conexión: se enviará solo cuando vuelva, aunque cierres PULSO.`;
+  }
 
   /**
    * TECLADO EN LOS TABULADORES. Enter baja a la celda de abajo y las flechas
@@ -7577,8 +7624,11 @@ export default function Home() {
     setCecGuardando(true);
     setError("");
     setMessage("");
+    const queSeGuardo = `La lista de ${plantilla.nombre} (${periodLabel})`;
+
     try {
-      await setDoc(
+      const estadoEnvio = await confirmarGuardado(
+        setDoc(
         doc(db, "cecTabulators", `${periodId}__${plantilla.serviceId}`),
         {
           periodId,
@@ -7597,8 +7647,14 @@ export default function Home() {
           updatedAt: serverTimestamp(),
         },
         { merge: true },
+        ),
+        queSeGuardo,
       );
-      setMessage(`Lista de ${plantilla.nombre} guardada.`);
+      setMessage(
+        estadoEnvio === "pendiente"
+          ? avisoSinConexion(queSeGuardo)
+          : `Lista de ${plantilla.nombre} guardada.`,
+      );
       setCecEstados((previo) => ({
         ...previo,
         [plantilla.serviceId]: { usuario: serviceProfile?.username || "", fecha: "" },
@@ -10284,24 +10340,29 @@ export default function Home() {
     setError("");
     setMessage("");
 
+    const queSeGuardo = `El PERC de ${currentService.name} (${targetPeriodLabel})`;
+
     try {
-      await setDoc(
-        doc(db, "serviceTabulators", `${targetPeriod}__${currentService.id}`),
-        {
-          periodId: targetPeriod,
-          periodLabel: targetPeriodLabel,
-          serviceId: currentService.id,
-          serviceName: currentService.name,
-          headers: TABULATOR_HEADERS,
-          rows: currentService.rows,
-          extraRows: percExtraRows,
-          hiddenKeys: percHiddenKeys,
-          userId: user.uid,
-          userEmail: user.email || "",
-          values: normalizedValues,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
+      const estadoEnvio = await confirmarGuardado(
+        setDoc(
+          doc(db, "serviceTabulators", `${targetPeriod}__${currentService.id}`),
+          {
+            periodId: targetPeriod,
+            periodLabel: targetPeriodLabel,
+            serviceId: currentService.id,
+            serviceName: currentService.name,
+            headers: TABULATOR_HEADERS,
+            rows: currentService.rows,
+            extraRows: percExtraRows,
+            hiddenKeys: percHiddenKeys,
+            userId: user.uid,
+            userEmail: user.email || "",
+            values: normalizedValues,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        ),
+        queSeGuardo,
       );
 
       setTableValues(normalizedValues);
@@ -10317,7 +10378,11 @@ export default function Home() {
       });
       await refreshPublicDashboard(false);
 
-      setMessage(`Datos guardados correctamente para ${currentService.name} (${targetPeriodLabel}).`);
+      setMessage(
+        estadoEnvio === "pendiente"
+          ? avisoSinConexion(queSeGuardo)
+          : `Datos guardados correctamente para ${currentService.name} (${targetPeriodLabel}).`,
+      );
     } catch (saveError) {
       if (await handleFirestoreError(saveError)) {
         return;
@@ -11417,8 +11482,11 @@ export default function Home() {
       sepsExtraRows.map((e) => e.key),
     );
 
+    const queSeGuardo = `El SEPS de ${sepsTemplate.displayName ?? currentService?.name ?? sepsTemplate.serviceId} (${targetPeriodLabel})`;
+
     try {
-      await setDoc(
+      const estadoEnvio = await confirmarGuardado(
+        setDoc(
         doc(db, "sepsTabulators", `${targetPeriod}__${sepsTemplate.serviceId}`),
         {
           periodId: targetPeriod,
@@ -11435,6 +11503,8 @@ export default function Home() {
           updatedAt: serverTimestamp(),
         },
         { merge: true },
+        ),
+        queSeGuardo,
       );
 
       setSepsValues(normalizedValues);
@@ -11442,7 +11512,11 @@ export default function Home() {
       // Refresca el tablero general para que el Monitoreo marque el servicio como
       // completado al instante, sin tener que recargar la pagina.
       await refreshPublicDashboard(false);
-      setMessage(`Tabulador SEPS guardado correctamente (${targetPeriodLabel}).`);
+      setMessage(
+        estadoEnvio === "pendiente"
+          ? avisoSinConexion(queSeGuardo)
+          : `Tabulador SEPS guardado correctamente (${targetPeriodLabel}).`,
+      );
     } catch (saveError) {
       if (await handleFirestoreError(saveError)) {
         return;
@@ -11898,8 +11972,11 @@ export default function Home() {
       (emp) => emp.name.trim() !== "" || Object.values(emp.hours).some((h) => h.trim() !== ""),
     );
 
+    const queSeGuardo = `La Distribución de Horas de ${horasTemplate.displayName ?? currentService?.name ?? horasTemplate.serviceId} (${targetPeriodLabel})`;
+
     try {
-      await setDoc(
+      const estadoEnvio = await confirmarGuardado(
+        setDoc(
         doc(db, "horasTabulators", `${targetPeriod}__${horasTemplate.serviceId}`),
         {
           periodId: targetPeriod,
@@ -11914,6 +11991,8 @@ export default function Home() {
           updatedAt: serverTimestamp(),
         },
         { merge: true },
+        ),
+        queSeGuardo,
       );
 
       setHorasSaved(true);
@@ -11921,7 +12000,11 @@ export default function Home() {
       // Refresca el tablero general para que el Monitoreo marque el servicio como
       // completado al instante, sin tener que recargar la pagina.
       await refreshPublicDashboard(false);
-      setMessage(`Distribucion de Horas guardada correctamente (${targetPeriodLabel}).`);
+      setMessage(
+        estadoEnvio === "pendiente"
+          ? avisoSinConexion(queSeGuardo)
+          : `Distribucion de Horas guardada correctamente (${targetPeriodLabel}).`,
+      );
     } catch (saveError) {
       if (await handleFirestoreError(saveError)) {
         return;
@@ -18028,6 +18111,36 @@ export default function Home() {
                   </span>
                 </button>
               ))}
+            </div>
+          ) : null}
+
+          {/* AVISO DE CONEXION. Solo aparece cuando hay algo que decir: que se esta
+              trabajando sin red, o que quedaron cambios esperando para enviarse.
+              Firestore los manda solo; no hay nada que reintentar a mano. */}
+          {sinConexion || porEnviar > 0 ? (
+            <div className="pointer-events-none fixed inset-x-0 top-2 z-[105] flex justify-center px-3 desk:top-3">
+              <div
+                role="status"
+                aria-live="polite"
+                className={`modal-pop-in flex max-w-full items-center gap-2 rounded-full border px-3.5 py-1.5 text-[11.5px] font-medium shadow-lg backdrop-blur ${
+                  sinConexion
+                    ? "border-amber-400/35 bg-[#241d10]/95 text-amber-100"
+                    : "border-teal-400/30 bg-[#0f1f1d]/95 text-teal-100"
+                }`}
+              >
+                {sinConexion ? (
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                ) : (
+                  <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-teal-300/25 border-t-teal-300" />
+                )}
+                <span className="min-w-0 truncate">
+                  {sinConexion
+                    ? porEnviar > 0
+                      ? `Sin conexión · ${porEnviar} cambio${porEnviar === 1 ? "" : "s"} esperando para enviarse`
+                      : "Sin conexión · lo que guardes queda en este dispositivo"
+                    : `Enviando ${porEnviar} cambio${porEnviar === 1 ? "" : "s"} guardado${porEnviar === 1 ? "" : "s"} sin conexión…`}
+                </span>
+              </div>
             </div>
           ) : null}
 
