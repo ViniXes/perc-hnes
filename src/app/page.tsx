@@ -4099,8 +4099,6 @@ export default function Home() {
   // Filtro de la hoja de "Habilitar tableros": todos, solo abiertos, solo
   // cerrados o solo los que pidieron habilitacion.
   const [overrideFiltro, setOverrideFiltro] = useState<"todos" | "open" | "closed" | "pedido">("todos");
-  // Ayuda de atajos de teclado (se abre con "?" o desde el pie del menu).
-  const [atajosAbiertos, setAtajosAbiertos] = useState(false);
   // CAPTURA SIN CONEXION: si el navegador dice que no hay red y cuantos guardados
   // quedaron esperando que vuelva para viajar al servidor.
   const [sinConexion, setSinConexion] = useState(false);
@@ -5410,28 +5408,6 @@ export default function Home() {
     void loadCecDesbloqueos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, firestoreUnavailable, firestoreStatusReady]);
-
-  // Atajos globales: "?" muestra la ayuda de atajos y Esc cierra lo que este
-  // abierto. "?" se ignora mientras se escribe, para no interrumpir la captura.
-  useEffect(() => {
-    const alTeclear = (evento: globalThis.KeyboardEvent) => {
-      const destino = evento.target as HTMLElement | null;
-      const escribiendo =
-        !!destino &&
-        (destino.tagName === "INPUT" ||
-          destino.tagName === "TEXTAREA" ||
-          destino.tagName === "SELECT" ||
-          destino.isContentEditable);
-      if (evento.key === "Escape") {
-        setAtajosAbiertos(false);
-      } else if (evento.key === "?" && !escribiendo) {
-        evento.preventDefault();
-        setAtajosAbiertos(true);
-      }
-    };
-    window.addEventListener("keydown", alTeclear);
-    return () => window.removeEventListener("keydown", alTeclear);
-  }, []);
 
   // Aviso de conexion. El navegador avisa al perderla y al recuperarla; ademas
   // se lee una vez al abrir, por si ya se entro sin red.
@@ -18042,92 +18018,6 @@ export default function Home() {
             </div>
           ) : null}
 
-          {/* ================= ATAJOS DE TECLADO =================
-              Ayuda corta: que hace cada tecla. Se abre con "?" o desde el pie del
-              menu. No cambia nada del sistema: solo explica. */}
-          {atajosAbiertos ? (
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-label="Atajos de teclado"
-              className="fixed inset-0 z-[115] flex items-center justify-center p-4"
-            >
-              <div
-                className="modal-fade-in absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
-                onClick={() => setAtajosAbiertos(false)}
-              />
-              <div
-                className={`modal-pop-in relative w-full max-w-md overflow-hidden rounded-3xl border shadow-2xl ${
-                  isLightPanelTheme
-                    ? "border-slate-200 bg-white text-slate-900"
-                    : "border-white/10 bg-[#141c2c] text-slate-100"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3 px-6 pt-6">
-                  <div>
-                    <p className={`text-[10px] font-bold uppercase tracking-[0.22em] ${isLightPanelTheme ? "text-slate-400" : "text-slate-500"}`}>
-                      Teclado
-                    </p>
-                    <h3 className={`mt-1 text-lg font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                      Atajos de PULSO
-                    </h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAtajosAbiertos(false)}
-                    aria-label="Cerrar los atajos"
-                    className={`rounded-lg px-2 py-1 text-sm transition ${
-                      isLightPanelTheme ? "text-slate-400 hover:bg-slate-100" : "text-slate-500 hover:bg-white/[0.06]"
-                    }`}
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="px-6 pb-2 pt-4">
-                  {(
-                    [
-                      { teclas: ["Enter"], que: "En los tabuladores, bajar a la celda de abajo" },
-                      { teclas: ["Shift", "Enter"], que: "Subir a la celda de arriba" },
-                      { teclas: ["↑", "↓"], que: "Moverse por la misma columna" },
-                      { teclas: ["Tab"], que: "Pasar a la celda siguiente" },
-                      { teclas: ["Esc"], que: "Cerrar la ventana que esté abierta" },
-                      { teclas: ["?"], que: "Abrir esta ayuda" },
-                    ] as const
-                  ).map((atajo) => (
-                    <div
-                      key={atajo.que}
-                      className={`flex items-center justify-between gap-4 border-b py-2.5 last:border-b-0 ${
-                        isLightPanelTheme ? "border-slate-100" : "border-white/[0.05]"
-                      }`}
-                    >
-                      <span className={`text-[12.5px] ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                        {atajo.que}
-                      </span>
-                      <span className="flex shrink-0 items-center gap-1">
-                        {atajo.teclas.map((tecla) => (
-                          <kbd
-                            key={tecla}
-                            className={`rounded-md border px-2 py-0.5 font-mono text-[11px] font-semibold ${
-                              isLightPanelTheme
-                                ? "border-slate-200 bg-slate-50 text-slate-600"
-                                : "border-white/10 bg-white/[0.05] text-slate-200"
-                            }`}
-                          >
-                            {tecla}
-                          </kbd>
-                        ))}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <p className={`px-6 pb-6 pt-2 text-[11px] leading-4 ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
-                  Al presionar Tab recién abierta la pantalla aparece el enlace «Saltar al
-                  contenido», que brinca el menú de una vez.
-                </p>
-              </div>
-            </div>
-          ) : null}
-
           {/* Modal: confirmar salir de la app (boton atras en Inicio). SOLO movil. */}
           {showExitModal ? (
             <div
@@ -18226,24 +18116,6 @@ export default function Home() {
                 </span>
                 <span className="hidden desk:inline">Menú</span>
               </button>
-
-              {/* BUSCADOR. Vive aca, junto al contenido, y no en el pie del menu:
-                  es una herramienta de trabajo, no un dato del sistema. */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAtajosAbiertos(true)}
-                  title="Atajos de teclado"
-                  aria-label="Atajos de teclado"
-                  className={`inline-flex h-[38px] w-[38px] items-center justify-center rounded-xl border text-[13px] font-bold shadow-sm backdrop-blur-md transition ${
-                    isLightPanelTheme
-                      ? "border-slate-200 bg-white/90 text-slate-400 hover:bg-white hover:text-slate-600"
-                      : "border-white/[0.08] bg-[#202c41]/90 text-slate-500 hover:bg-[#243049] hover:text-slate-300"
-                  }`}
-                >
-                  ?
-                </button>
-              </div>
             </div>
 
             {/* Pantalla de INICIO (resumen) — SOLO movil, ajustada a una vista. */}
