@@ -17910,31 +17910,6 @@ export default function Home() {
                 >
                   Versión {APP_VERSION}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPaletaQuery("");
-                    setPaletaAbierta(true);
-                  }}
-                  className={`mt-1.5 rounded-md border px-2 py-0.5 text-[10px] font-medium transition ${
-                    isLightPanelTheme
-                      ? "border-slate-200 text-slate-400 hover:bg-slate-100"
-                      : "border-white/10 text-slate-500 hover:bg-white/[0.06]"
-                  }`}
-                >
-                  Buscar · Ctrl + K
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAtajosAbiertos(true)}
-                  className={`mt-1 rounded-md px-2 py-0.5 text-[10px] font-medium transition ${
-                    isLightPanelTheme
-                      ? "text-slate-400 hover:bg-slate-100"
-                      : "text-slate-500 hover:bg-white/[0.06]"
-                  }`}
-                >
-                  Atajos de teclado · ?
-                </button>
               </div>
             </div>
           </aside>
@@ -18241,6 +18216,61 @@ export default function Home() {
                 </span>
                 <span className="hidden desk:inline">Menú</span>
               </button>
+
+              {/* BUSCADOR. Vive aca, junto al contenido, y no en el pie del menu:
+                  es una herramienta de trabajo, no un dato del sistema. */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaletaQuery("");
+                    setPaletaAbierta(true);
+                  }}
+                  title="Buscar una pantalla (Ctrl + K)"
+                  className={`inline-flex items-center gap-2.5 rounded-xl border px-3 py-2 text-[12.5px] shadow-sm backdrop-blur-md transition ${
+                    isLightPanelTheme
+                      ? "border-slate-200 bg-white/90 text-slate-500 hover:bg-white"
+                      : "border-white/[0.08] bg-[#202c41]/90 text-slate-400 hover:bg-[#243049]"
+                  }`}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="15"
+                    height="15"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-3.2-3.2" />
+                  </svg>
+                  <span>Buscar…</span>
+                  <span
+                    className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
+                      isLightPanelTheme
+                        ? "border-slate-200 bg-slate-50 text-slate-400"
+                        : "border-white/10 bg-white/[0.05] text-slate-500"
+                    }`}
+                  >
+                    Ctrl K
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAtajosAbiertos(true)}
+                  title="Atajos de teclado"
+                  aria-label="Atajos de teclado"
+                  className={`inline-flex h-[38px] w-[38px] items-center justify-center rounded-xl border text-[13px] font-bold shadow-sm backdrop-blur-md transition ${
+                    isLightPanelTheme
+                      ? "border-slate-200 bg-white/90 text-slate-400 hover:bg-white hover:text-slate-600"
+                      : "border-white/[0.08] bg-[#202c41]/90 text-slate-500 hover:bg-[#243049] hover:text-slate-300"
+                  }`}
+                >
+                  ?
+                </button>
+              </div>
             </div>
 
             {/* Pantalla de INICIO (resumen) — SOLO movil, ajustada a una vista. */}
