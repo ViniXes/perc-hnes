@@ -15,12 +15,15 @@ import {
   updateProfile,
 } from "firebase/auth";
 import {
+  addDoc,
   collection,
   deleteDoc,
   doc,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -5711,6 +5714,17 @@ export default function Home() {
   const [overrideFiltro, setOverrideFiltro] = useState<"todos" | "open" | "closed" | "pedido">("todos");
   // BUSCADOR GLOBAL (Ctrl+K / Cmd+K): saltar a cualquier pantalla escribiendo.
   const [paletaAbierta, setPaletaAbierta] = useState(false);
+  // BITACORA: registro de quien hizo que (desbloqueos, cierres, permisos, claves).
+  type BitacoraFila = {
+    id: string;
+    accion: string;
+    detalle: string;
+    usuario: string;
+    fecha: string;
+  };
+  const [bitacora, setBitacora] = useState<BitacoraFila[]>([]);
+  const [bitacoraCargando, setBitacoraCargando] = useState(false);
+  const [bitacoraQuery, setBitacoraQuery] = useState("");
   const [paletaQuery, setPaletaQuery] = useState("");
   // Divisiones abiertas en la hoja de "Habilitar tableros". Arrancan cerradas:
   // se ve el indice de divisiones y se abre la que se necesita.
@@ -8347,6 +8361,57 @@ export default function Home() {
     }
   }
 
+  /**
+   * BITACORA. Deja constancia de una accion sensible: quien, que y cuando.
+   * Nunca rompe la accion principal: si el registro falla, se ignora.
+   */
+  async function registrarBitacora(accion: string, detalle: string) {
+    if (firestoreUnavailable || !user) return;
+    try {
+      await addDoc(collection(db, "auditLog"), {
+        accion,
+        detalle,
+        userId: user.uid,
+        userName: serviceProfile?.name || "",
+        userEmail: serviceProfile?.username || user.email || "",
+        periodId,
+        at: serverTimestamp(),
+      });
+    } catch {
+      // El registro es un extra: no debe impedir la accion del usuario.
+    }
+  }
+
+  /** Trae los ultimos movimientos de la bitacora (solo admin). */
+  async function loadBitacora() {
+    if (!isAdmin || firestoreUnavailable) return;
+    setBitacoraCargando(true);
+    try {
+      const snap = await getDocs(
+        query(collection(db, "auditLog"), orderBy("at", "desc"), limit(200)),
+      );
+      const filas: BitacoraFila[] = [];
+      snap.forEach((item) => {
+        const d = item.data() as Record<string, unknown>;
+        filas.push({
+          id: item.id,
+          accion: typeof d.accion === "string" ? d.accion : "",
+          detalle: typeof d.detalle === "string" ? d.detalle : "",
+          usuario:
+            (typeof d.userEmail === "string" && d.userEmail) ||
+            (typeof d.userName === "string" && d.userName) ||
+            "—",
+          fecha: fechaLegible(d.at as never) || "",
+        });
+      });
+      setBitacora(filas);
+    } catch {
+      setError("No pudimos leer la bitácora.");
+    } finally {
+      setBitacoraCargando(false);
+    }
+  }
+
   /** Clave del cierre manual de un tablero del admin. */
   function claveCierre(modulo: "insumos" | "gastos" | "depre", periodo: string) {
     return `${periodo}__${modulo}`;
@@ -8393,6 +8458,10 @@ export default function Home() {
     setCierresManuales(siguiente);
     try {
       await setDoc(doc(db, "documentControl", "cierresManuales"), siguiente);
+      void registrarBitacora(
+        estaba ? "Tablero del admin reabierto" : "Tablero del admin cerrado",
+        `${modulo} · ${getPeriodLabel(periodo)}`,
+      );
       setMessage(
         estaba
           ? `Tablero reabierto para ${getPeriodLabel(periodo)}: ya se puede editar.`
@@ -8514,6 +8583,10 @@ export default function Home() {
     setCecDesbloqueos(siguiente);
     try {
       await setDoc(doc(db, "documentControl", "cecDesbloqueos"), siguiente);
+      void registrarBitacora(
+        desbloquear ? "Comité: todas las listas desbloqueadas" : "Comité: todas las listas bloqueadas",
+        periodLabel,
+      );
       setMessage(
         desbloquear
           ? `Todas las listas del comité quedaron desbloqueadas para ${periodLabel}.`
@@ -8558,6 +8631,10 @@ export default function Home() {
     setCecDesbloqueos(siguiente);
     try {
       await setDoc(doc(db, "documentControl", "cecDesbloqueos"), siguiente);
+      void registrarBitacora(
+        estaba ? "Lista del comité bloqueada" : "Lista del comité desbloqueada",
+        `${nombre} · ${periodLabel}`,
+      );
       setMessage(
         estaba
           ? `Lista de ${nombre} bloqueada de nuevo para ${periodLabel}.`
@@ -10258,6 +10335,10 @@ export default function Home() {
         return next;
       });
 
+      void registrarBitacora(
+        nextState === "open" ? "Tablero abierto" : nextState === "closed" ? "Tablero cerrado" : "Tablero en automático",
+        `${getServiceById(serviceId)?.name ?? serviceId} · ${getModuleLabel(moduleId)} · ${getPeriodLabel(targetPeriod)}`,
+      );
       setMessage(
         nextState === "open"
           ? `Tablero habilitado para captura de ${getPeriodLabel(targetPeriod)} por 24 horas.`
@@ -13799,6 +13880,10 @@ export default function Home() {
         }
       }
 
+      void registrarBitacora(
+        "Permisos actualizados",
+        `${draft.name || draft.email} · rol ${draft.role}${draft.isActive ? "" : " · inactivo"}`,
+      );
       setMessage(`Permisos actualizados para ${draft.name || draft.email}.`);
     } catch (saveError) {
       setError(getAuthErrorMessage(saveError));
@@ -13834,6 +13919,10 @@ export default function Home() {
       }
       const users = await fetchManagedUsers();
       applyAdminUsers(users);
+      void registrarBitacora(
+        "Clave reseteada",
+        managedUser.name || managedUser.username || uid,
+      );
       setMessage(
         `Clave de ${managedUser.name || managedUser.username || "usuario"} reseteada a ${data.password || "123456"}. La cambiará al iniciar sesión.`,
       );
@@ -13868,6 +13957,10 @@ export default function Home() {
       const users = await fetchManagedUsers();
       applyAdminUsers(users);
       setDeleteConfirmUid("");
+      void registrarBitacora(
+        "Usuario eliminado",
+        `${managedUser.name || managedUser.username || uid} (${managedUser.username || ""})`,
+      );
       setMessage(
         `${managedUser.name || managedUser.username || "Usuario"} eliminado por completo.`,
       );
@@ -14030,6 +14123,13 @@ export default function Home() {
   }
 
   // El semaforo del comite se lee al ENTRAR a su pantalla, no antes.
+  // La bitacora se trae al entrar a su pantalla (no antes: son 200 registros).
+  useEffect(() => {
+    if (activeSidebarSection !== "panel-bitacora" && mobileView !== "panel-bitacora") return;
+    void loadBitacora();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSidebarSection, mobileView]);
+
   useEffect(() => {
     if (activeSidebarSection !== "panel-cec" && mobileView !== "panel-cec") return;
     void loadCecEstados();
@@ -18393,6 +18493,17 @@ export default function Home() {
             },
           ]
         : []),
+      // BITACORA: quien hizo que. Solo administradores.
+      ...(isAdmin
+        ? [
+            {
+              id: "panel-bitacora",
+              label: "Bitácora",
+              detail: "Registro de acciones del sistema",
+              badge: "BT",
+            },
+          ]
+        : []),
       // La bandeja la ve quien puede resolverla: admin, Direccion / Subdireccion
       // Medica y los jefes de division (cada uno solo con lo de su ambito).
       ...(isAdmin || puedeHabilitarTableros
@@ -20113,7 +20224,118 @@ export default function Home() {
 
           {captureToggleSection ? (
             <div data-view="panel-capture-toggle">{captureToggleSection}</div>
+
           ) : null}
+
+            {/* ================= BITACORA =================
+                Registro de las acciones sensibles: desbloqueos, cierres, permisos,
+                claves y bajas de usuarios. Solo se lee: nadie puede editarla. */}
+            {isAdmin && (activeSidebarSection === "panel-bitacora" || mobileView === "panel-bitacora") ? (
+              <section
+                id="panel-bitacora"
+                data-view="panel-bitacora"
+                className={`rounded-[24px] p-5 ${
+                  isLightPanelTheme
+                    ? "border border-slate-200 bg-white text-slate-900"
+                    : "border border-white/10 bg-[#202c41] text-slate-100"
+                }`}
+              >
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                      Bitácora
+                    </p>
+                    <h2 className={`mt-1 text-xl font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                      Registro de acciones
+                    </h2>
+                    <p className={`mt-1 max-w-2xl text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
+                      Quedan registrados los desbloqueos y cierres de tableros y del comité, los
+                      cambios de permisos, los reinicios de clave y las bajas de usuarios. El
+                      registro no se puede editar ni borrar.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      value={bitacoraQuery}
+                      onChange={(evento) => setBitacoraQuery(evento.target.value)}
+                      placeholder="Buscar en la bitácora…"
+                      className={`w-56 rounded-xl px-3 py-2 text-sm outline-none transition focus:border-teal-400/60 ${
+                        isLightPanelTheme
+                          ? "border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"
+                          : "border border-white/[0.08] bg-white/[0.025] text-white placeholder:text-slate-500"
+                      }`}
+                      type="search"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void loadBitacora()}
+                      disabled={bitacoraCargando}
+                      className={`${BTN_GUARDAR} rounded-xl px-4 py-2 text-sm transition disabled:opacity-50`}
+                    >
+                      {bitacoraCargando ? "Cargando…" : "Actualizar"}
+                    </button>
+                  </div>
+                </div>
+
+                {(() => {
+                  const q = bitacoraQuery.trim().toLowerCase();
+                  const filas = bitacora.filter(
+                    (f) =>
+                      !q ||
+                      f.accion.toLowerCase().includes(q) ||
+                      f.detalle.toLowerCase().includes(q) ||
+                      f.usuario.toLowerCase().includes(q),
+                  );
+                  const separador = isLightPanelTheme ? "border-slate-100" : "border-white/[0.045]";
+                  return (
+                    <div className={`mt-4 overflow-hidden rounded-2xl border ${isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/[0.07] bg-white/[0.02]"}`}>
+                      <div
+                        className={`grid px-4 pb-1.5 pt-3 text-[9px] font-bold uppercase tracking-[0.18em] ${isLightPanelTheme ? "text-slate-400" : "text-slate-500"}`}
+                        style={{ gridTemplateColumns: "150px 210px minmax(0,1fr) 160px" }}
+                      >
+                        <span>Fecha</span>
+                        <span>Acción</span>
+                        <span>Detalle</span>
+                        <span>Usuario</span>
+                      </div>
+                      {filas.length === 0 ? (
+                        <p className={`px-4 py-10 text-center text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                          {bitacora.length === 0
+                            ? "Sin movimientos todavía. Presioná «Actualizar» para traer el registro."
+                            : "Nada coincide con la búsqueda."}
+                        </p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <div className="min-w-[760px]">
+                            {filas.map((f) => (
+                              <div
+                                key={f.id}
+                                className={`grid items-center border-t px-4 py-2 text-[12.5px] transition ${separador} ${
+                                  isLightPanelTheme ? "hover:bg-slate-50" : "hover:bg-white/[0.03]"
+                                }`}
+                                style={{ gridTemplateColumns: "150px 210px minmax(0,1fr) 160px" }}
+                              >
+                                <span className={isLightPanelTheme ? "text-slate-500" : "text-slate-500"}>{f.fecha || "—"}</span>
+                                <span className={`font-medium ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>{f.accion}</span>
+                                <span className={`truncate ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`} title={f.detalle}>
+                                  {f.detalle}
+                                </span>
+                                <span className={`truncate font-mono text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                                  {f.usuario}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <p className={`border-t px-4 py-2.5 text-[11px] ${separador} ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
+                        Se muestran los últimos 200 movimientos.
+                      </p>
+                    </div>
+                  );
+                })()}
+              </section>
+            ) : null}
 
           {/* HOSPITALES: el monitoreo de los otros hospitales que ESDOMED
               acompaña. Se entra por región para que la lista siga siendo legible

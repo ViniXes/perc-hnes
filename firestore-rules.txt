@@ -22,6 +22,8 @@ rules_version = '2';
 //  4) Gestor del comite: si el perfil tiene cec == true y cecGestor == true, puede
 //     desbloquear y bloquear las listas del comite fuera de fecha (documento
 //     documentControl/cecDesbloqueos). 'cecGestor' solo lo escribe un admin.
+//  5) Bitacora (auditLog): toda cuenta con sesion puede dejar constancia de sus
+//     acciones; solo el administrador la lee y nadie la edita ni la borra.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -166,6 +168,14 @@ service cloud.firestore {
     }
     // Desbloqueos del Comite de Expediente Clinico: los escribe el admin o el
     // gestor del comite (cec == true y cecGestor == true).
+    // BITACORA: registro de acciones sensibles. Cualquier cuenta con sesion la
+    // ESCRIBE (queda constancia de lo que hace), pero solo el admin la LEE, y
+    // nadie puede editarla ni borrarla: es un registro, no un documento.
+    match /auditLog/{docId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
     match /documentControl/cecDesbloqueos {
       allow read: if isSignedIn() && noEsMinsal();
       allow write: if isAdmin()
