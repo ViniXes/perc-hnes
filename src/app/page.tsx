@@ -7004,7 +7004,15 @@ export default function Home() {
           global: sumaTotal > 0 ? Math.round((sumaHecha / sumaTotal) * 100) : 0,
         };
       });
-      setTendencias(filas);
+      // Solo se muestran los meses que EXISTEN en PULSO. Antes de agosto de 2026
+      // no hay nada guardado, y una fila en cero de un mes que nunca se capturo
+      // no es una caida: es ruido que ensucia la grafica y el promedio. Se corta
+      // en el primer mes con datos; si despues hay un mes en cero, ese si se ve,
+      // porque ahi el cero significa algo.
+      const primeroConDatos = filas.findIndex(
+        (fila) => fila.perc.done + fila.seps.done + fila.horas.done + fila.cec.done > 0,
+      );
+      setTendencias(primeroConDatos < 0 ? [] : filas.slice(primeroConDatos));
     } catch {
       setTendenciasError("No pudimos leer el historial de los meses anteriores.");
     } finally {
@@ -19241,7 +19249,8 @@ export default function Home() {
                       }`}>
                         {tendenciasCargando
                           ? "Leyendo el historial de los meses anteriores…"
-                          : tendenciasError || "Todavía no hay meses guardados para comparar."}
+                          : tendenciasError ||
+                            "Todavía no hay ningún mes guardado en PULSO para mostrar."}
                       </p>
                     );
                   }
@@ -19341,8 +19350,10 @@ export default function Home() {
                         <div className={`rounded-2xl border p-4 ${tarjeta}`}>
                           <p className={rotulo}>Promedio del periodo</p>
                           <p className={cifra}>{promedio}%</p>
-                          <p className={`mt-1.5 text-[11px] ${tenueTexto}`}>
-                            {filas.length} meses, de {filas[0].label} a {ultima.label}.
+                          <p className={`mt-1.5 text-[11px] first-letter:uppercase ${tenueTexto}`}>
+                            {filas.length === 1
+                              ? `${ultima.label}, el único mes con datos.`
+                              : `${filas.length} meses, de ${filas[0].label} a ${ultima.label}.`}
                           </p>
                         </div>
                         <div className={`rounded-2xl border p-4 ${tarjeta}`}>
@@ -19596,8 +19607,17 @@ export default function Home() {
                         </div>
                       ) : null}
 
+                      {filas.length === 1 ? (
+                        <p className={`mt-3 text-[11px] first-letter:uppercase ${tenueTexto}`}>
+                          {ultima.label} es el único mes cerrado en PULSO, así que todavía no hay
+                          con qué compararlo. La comparación aparece sola cuando se cierre el
+                          siguiente: los meses anteriores no se muestran porque nunca se
+                          capturaron aquí.
+                        </p>
+                      ) : null}
+
                       {ultima.periodId === periodId ? (
-                        <p className={`mt-3 text-[11px] ${tenueTexto}`}>
+                        <p className={`mt-3 text-[11px] first-letter:uppercase ${tenueTexto}`}>
                           {ultima.label} todavía está en cierre, así que su cifra sigue subiendo
                           mientras los servicios entregan.
                         </p>
