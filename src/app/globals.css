@@ -1031,3 +1031,49 @@ body[data-panel-theme="light"] .modal-pop-in {
 @media (prefers-reduced-motion: reduce) {
   body[data-panel-theme="dark"] button[class*="bg-[#1b2537]"]:hover { transform: none; }
 }
+
+/* =====================================================================
+   ACCESIBILIDAD Y TECLADO
+   Quien navega con el teclado necesita ver SIEMPRE donde esta parado, y
+   poder saltarse el menu sin recorrerlo item por item.
+   ===================================================================== */
+
+/* Anillo de foco unico para toda la aplicacion. Solo aparece cuando se
+   llega con el teclado (:focus-visible), no al hacer clic con el mouse. */
+:focus-visible {
+  outline: 2px solid #2dd4bf;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+body[data-panel-theme="light"] :focus-visible {
+  outline-color: #0f766e;
+}
+/* Las celdas de los tabuladores ya tienen su propio borde: ahi el anillo va
+   pegado, para que no se monte sobre la celda vecina. */
+td :focus-visible,
+th :focus-visible {
+  outline-offset: 0;
+}
+
+/* Enlace "Saltar al contenido": invisible hasta que recibe el foco. */
+.salto-contenido {
+  position: absolute;
+  left: 50%;
+  top: -100px;
+  z-index: 200;
+  transform: translateX(-50%);
+  border-radius: 0 0 12px 12px;
+  background: #1f6f68;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 18px;
+  box-shadow: 0 10px 30px rgba(3, 7, 18, 0.5);
+  transition: top 0.15s ease;
+}
+.salto-contenido:focus {
+  top: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .salto-contenido { transition: none; }
+}

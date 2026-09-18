@@ -1588,6 +1588,15 @@ const IconChart = (
   </svg>
 );
 
+const IconTrend = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M4 20V4" />
+    <path d="M4 20h16" />
+    <path d="m7 15 3.5-4 3 2.5L18 8" />
+    <path d="M18 8h-3.2M18 8v3.2" />
+  </svg>
+);
+
 const IconWrench = (
   <svg {...ICON_PROPS} aria-hidden="true">
     <path d="M15.6 6.4a3.8 3.8 0 0 0-4.7 4.9l-6.1 6.1a1.4 1.4 0 0 0 0 2l.8.8a1.4 1.4 0 0 0 2 0l6.1-6.1a3.8 3.8 0 0 0 4.9-4.7l-2.3 2.3-2.4-.6-.6-2.4 2.3-2.3Z" />
@@ -1623,6 +1632,7 @@ const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-config": IconWrench,
   "panel-signups": IconMessage,
   "panel-services": IconDashboard,
+  "panel-tendencias": IconTrend,
 };
 
 // Color del recuadro del icono de cada submenu bajo PERC (distinto por item, para
@@ -1734,6 +1744,7 @@ const SIDEBAR_TILE_GRADIENT: Record<string, string> = {
   "panel-config": "from-slate-400 to-slate-600",
   "panel-calendar": "from-rose-400 to-pink-600",
   "panel-admin-export": "from-teal-400 to-cyan-600",
+  "panel-tendencias": "from-violet-400 to-indigo-600",
   "panel-users": "from-indigo-400 to-purple-600",
   "panel-capture-toggle": "from-lime-400 to-green-600",
   "panel-requests": "from-blue-400 to-pink-600",
@@ -5715,6 +5726,8 @@ export default function Home() {
   const [overrideFiltro, setOverrideFiltro] = useState<"todos" | "open" | "closed" | "pedido">("todos");
   // BUSCADOR GLOBAL (Ctrl+K / Cmd+K): saltar a cualquier pantalla escribiendo.
   const [paletaAbierta, setPaletaAbierta] = useState(false);
+  // Ayuda de atajos de teclado (se abre con "?" o desde el pie del menu).
+  const [atajosAbiertos, setAtajosAbiertos] = useState(false);
   // BITACORA: registro de quien hizo que (desbloqueos, cierres, permisos, claves).
   type BitacoraFila = {
     id: string;
@@ -7022,15 +7035,72 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, firestoreUnavailable, firestoreStatusReady]);
 
-  // Atajo del buscador global: Ctrl+K (o Cmd+K en Mac) abre; Esc cierra.
+  // Atajos globales: Ctrl+K (o Cmd+K) abre el buscador, "?" muestra la ayuda de
+  // atajos y Esc cierra lo que este abierto. "?" se ignora mientras se escribe,
+  // para no interrumpir la captura.
   useEffect(() => {
     const alTeclear = (evento: globalThis.KeyboardEvent) => {
+      const destino = evento.target as HTMLElement | null;
+      const escribiendo =
+        !!destino &&
+        (destino.tagName === "INPUT" ||
+          destino.tagName === "TEXTAREA" ||
+          destino.tagName === "SELECT" ||
+          destino.isContentEditable);
       if ((evento.ctrlKey || evento.metaKey) && evento.key.toLowerCase() === "k") {
         evento.preventDefault();
         setPaletaQuery("");
         setPaletaAbierta((abierta) => !abierta);
       } else if (evento.key === "Escape") {
         setPaletaAbierta(false);
+        setAtajosAbiertos(false);
+      } else if (evento.key === "?" && !escribiendo) {
+        evento.preventDefault();
+        setAtajosAbiertos(true);
+      }
+    };
+    window.addEventListener("keydown", alTeclear);
+    return () => window.removeEventListener("keydown", alTeclear);
+  }, []);
+
+  /**
+   * TECLADO EN LOS TABULADORES. Enter baja a la celda de abajo y las flechas
+   * arriba/abajo suben y bajan por la misma columna, como en Excel: quien captura
+   * ya no tiene que recorrer toda la fila con Tab ni usar el mouse. Shift+Enter
+   * sube. Si no hay una celda escribible en esa direccion, no hace nada.
+   */
+  useEffect(() => {
+    const alTeclear = (evento: globalThis.KeyboardEvent) => {
+      if (evento.key !== "Enter" && evento.key !== "ArrowUp" && evento.key !== "ArrowDown") return;
+      if (evento.ctrlKey || evento.metaKey || evento.altKey) return;
+      const activo = evento.target as HTMLInputElement | null;
+      if (!activo || activo.tagName !== "INPUT") return;
+      const tipo = (activo.type || "text").toLowerCase();
+      if (tipo === "checkbox" || tipo === "radio" || tipo === "button" || tipo === "submit") return;
+      const celda = activo.closest("td");
+      const fila = celda?.closest("tr");
+      const cuerpo = fila?.parentElement;
+      if (!celda || !fila || !cuerpo) return;
+      const columna = Array.prototype.indexOf.call(fila.children, celda);
+      if (columna < 0) return;
+      const filas = Array.from(cuerpo.children).filter(
+        (nodo) => nodo.tagName === "TR",
+      ) as HTMLElement[];
+      const indice = filas.indexOf(fila as HTMLElement);
+      if (indice < 0) return;
+      const paso =
+        evento.key === "ArrowUp" || (evento.key === "Enter" && evento.shiftKey) ? -1 : 1;
+      for (let i = indice + paso; i >= 0 && i < filas.length; i += paso) {
+        const destino = filas[i].children[columna] as HTMLElement | undefined;
+        const campo = destino?.querySelector<HTMLInputElement>(
+          "input:not([disabled]):not([readonly])",
+        );
+        if (campo) {
+          evento.preventDefault();
+          campo.focus();
+          campo.select();
+          return;
+        }
       }
     };
     window.addEventListener("keydown", alTeclear);
@@ -19009,6 +19079,12 @@ export default function Home() {
           </div>
         ) : null}
 
+        {/* ACCESIBILIDAD: es el primer elemento que toma el foco con Tab. No se ve
+            hasta que se enfoca y sirve para saltarse el menu de un salto. */}
+        <a href="#contenido" className="salto-contenido">
+          Saltar al contenido
+        </a>
+
         <div
           className={`mx-auto grid max-w-[1850px] grid-cols-1 gap-6 ${
             menuOpen ? "desk:grid-cols-[290px_minmax(0,1fr)]" : "desk:grid-cols-1"
@@ -19130,6 +19206,7 @@ export default function Home() {
                       }
                     }}
                     title={item.detail}
+                    aria-current={isActive ? "page" : undefined}
                     className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-2.5 text-center transition desk:w-full desk:flex-row desk:justify-start desk:gap-2.5 desk:px-2.5 desk:py-1.5 desk:text-left ${
                       hasAlert
                         ? "border-rose-400/60 bg-rose-500/15 hover:bg-rose-500/25"
@@ -19473,6 +19550,17 @@ export default function Home() {
                 >
                   Buscar · Ctrl + K
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setAtajosAbiertos(true)}
+                  className={`mt-1 rounded-md px-2 py-0.5 text-[10px] font-medium transition ${
+                    isLightPanelTheme
+                      ? "text-slate-400 hover:bg-slate-100"
+                      : "text-slate-500 hover:bg-white/[0.06]"
+                  }`}
+                >
+                  Atajos de teclado · ?
+                </button>
               </div>
             </div>
           </aside>
@@ -19594,6 +19682,93 @@ export default function Home() {
             </div>
           ) : null}
 
+          {/* ================= ATAJOS DE TECLADO =================
+              Ayuda corta: que hace cada tecla. Se abre con "?" o desde el pie del
+              menu. No cambia nada del sistema: solo explica. */}
+          {atajosAbiertos ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Atajos de teclado"
+              className="fixed inset-0 z-[115] flex items-center justify-center p-4"
+            >
+              <div
+                className="modal-fade-in absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+                onClick={() => setAtajosAbiertos(false)}
+              />
+              <div
+                className={`modal-pop-in relative w-full max-w-md overflow-hidden rounded-3xl border shadow-2xl ${
+                  isLightPanelTheme
+                    ? "border-slate-200 bg-white text-slate-900"
+                    : "border-white/10 bg-[#141c2c] text-slate-100"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3 px-6 pt-6">
+                  <div>
+                    <p className={`text-[10px] font-bold uppercase tracking-[0.22em] ${isLightPanelTheme ? "text-slate-400" : "text-slate-500"}`}>
+                      Teclado
+                    </p>
+                    <h3 className={`mt-1 text-lg font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                      Atajos de PULSO
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAtajosAbiertos(false)}
+                    aria-label="Cerrar los atajos"
+                    className={`rounded-lg px-2 py-1 text-sm transition ${
+                      isLightPanelTheme ? "text-slate-400 hover:bg-slate-100" : "text-slate-500 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="px-6 pb-2 pt-4">
+                  {(
+                    [
+                      { teclas: ["Ctrl", "K"], que: "Buscar y saltar a cualquier pantalla" },
+                      { teclas: ["Enter"], que: "En los tabuladores, bajar a la celda de abajo" },
+                      { teclas: ["Shift", "Enter"], que: "Subir a la celda de arriba" },
+                      { teclas: ["↑", "↓"], que: "Moverse por la misma columna" },
+                      { teclas: ["Tab"], que: "Pasar a la celda siguiente" },
+                      { teclas: ["Esc"], que: "Cerrar la ventana que esté abierta" },
+                      { teclas: ["?"], que: "Abrir esta ayuda" },
+                    ] as const
+                  ).map((atajo) => (
+                    <div
+                      key={atajo.que}
+                      className={`flex items-center justify-between gap-4 border-b py-2.5 last:border-b-0 ${
+                        isLightPanelTheme ? "border-slate-100" : "border-white/[0.05]"
+                      }`}
+                    >
+                      <span className={`text-[12.5px] ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                        {atajo.que}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        {atajo.teclas.map((tecla) => (
+                          <kbd
+                            key={tecla}
+                            className={`rounded-md border px-2 py-0.5 font-mono text-[11px] font-semibold ${
+                              isLightPanelTheme
+                                ? "border-slate-200 bg-slate-50 text-slate-600"
+                                : "border-white/10 bg-white/[0.05] text-slate-200"
+                            }`}
+                          >
+                            {tecla}
+                          </kbd>
+                        ))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className={`px-6 pb-6 pt-2 text-[11px] leading-4 ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
+                  En Mac, Ctrl es ⌘. Al presionar Tab recién abierta la pantalla aparece el
+                  enlace «Saltar al contenido», que brinca el menú de una vez.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           {/* Modal: confirmar salir de la app (boton atras en Inicio). SOLO movil. */}
           {showExitModal ? (
             <div
@@ -19667,7 +19842,12 @@ export default function Home() {
             </div>
           ) : null}
 
-          <div data-mview={mobileView} className="min-w-0 space-y-6 pb-28 desk:pb-0">
+          <div
+            id="contenido"
+            tabIndex={-1}
+            data-mview={mobileView}
+            className="min-w-0 space-y-6 pb-28 focus:outline-none desk:pb-0"
+          >
             {/* Boton de menu (hamburguesa) PEGAJOSO: solo PC (en movil se usa la casita inferior). */}
             <div className="sticky top-3 z-30 hidden items-center justify-between gap-2 desk:flex">
               <button
@@ -20209,7 +20389,12 @@ export default function Home() {
 
           {/* Toasts sutiles (esquina) para exito/error. Se desvanecen solos. */}
           {error || message ? (
-            <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex w-full max-w-xs flex-col gap-2">
+            <div
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="pointer-events-none fixed bottom-5 right-5 z-[60] flex w-full max-w-xs flex-col gap-2"
+            >
               {error ? (
                 <div className="modal-pop-in pointer-events-auto flex items-start gap-2 rounded-xl border border-rose-400/30 bg-[#241016]/95 px-4 py-3 text-sm text-rose-100 shadow-xl backdrop-blur">
                   <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-rose-400" />
@@ -20217,6 +20402,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => setError("")}
+                    aria-label="Cerrar el aviso"
                     className="shrink-0 text-rose-300/70 transition hover:text-rose-100"
                   >
                     ✕
