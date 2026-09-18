@@ -5725,6 +5725,11 @@ export default function Home() {
   const [bitacora, setBitacora] = useState<BitacoraFila[]>([]);
   const [bitacoraCargando, setBitacoraCargando] = useState(false);
   const [bitacoraQuery, setBitacoraQuery] = useState("");
+  // AVISO DE CIFRAS ATIPICAS (PERC): antes de guardar se compara cada fila con el
+  // mes anterior; si algo se disparo (p.ej. 498 -> 4980) se pide confirmacion.
+  const [percAtipicos, setPercAtipicos] = useState<
+    { fila: string; actual: number; anterior: number }[]
+  >([]);
   const [paletaQuery, setPaletaQuery] = useState("");
   // Divisiones abiertas en la hoja de "Habilitar tableros". Arrancan cerradas:
   // se ve el indice de divisiones y se abre la que se necesita.
@@ -11508,7 +11513,49 @@ export default function Home() {
     setError("");
   }
 
-  async function handleSave() {
+  /**
+   * Compara el total de cada fila con el mes anterior del MISMO servicio y
+   * devuelve las que se dispararon (5 veces o mas, y con diferencia grande).
+   * Es un aviso, no un bloqueo: casi siempre es un cero de mas al digitar.
+   */
+  async function detectarAtipicosPerc(
+    valores: TableValues,
+    targetPeriod: string,
+  ): Promise<{ fila: string; actual: number; anterior: number }[]> {
+    if (!currentService || firestoreUnavailable) return [];
+    const [anioTexto, mesTexto] = targetPeriod.split("-");
+    const anio = Number.parseInt(anioTexto, 10);
+    const mes = Number.parseInt(mesTexto, 10);
+    if (!Number.isFinite(anio) || !Number.isFinite(mes)) return [];
+    const previo = mes === 1 ? `${anio - 1}-12` : `${anio}-${String(mes - 1).padStart(2, "0")}`;
+    let anteriores: TableValues = {};
+    try {
+      const snap = await getDoc(doc(db, "serviceTabulators", `${previo}__${currentService.id}`));
+      if (!snap.exists()) return [];
+      anteriores = (snap.data().values ?? {}) as TableValues;
+    } catch {
+      return [];
+    }
+    const total = (fila: Record<string, string> | undefined) =>
+      Object.values(fila ?? {}).reduce((suma, celda) => {
+        const n = Number.parseFloat(String(celda).replace(/,/g, ""));
+        return suma + (Number.isFinite(n) ? n : 0);
+      }, 0);
+    const avisos: { fila: string; actual: number; anterior: number }[] = [];
+    for (const fila of currentService.rows) {
+      const ahora = total(valores[fila]);
+      const antes = total(anteriores[fila]);
+      if (antes <= 0 || ahora <= 0) continue;
+      const diferencia = Math.abs(ahora - antes);
+      if (diferencia < 50) continue;
+      if (ahora >= antes * 5 || ahora * 5 <= antes) {
+        avisos.push({ fila, actual: ahora, anterior: antes });
+      }
+    }
+    return avisos.slice(0, 8);
+  }
+
+  async function handleSave(forzar = false) {
     if (blockedByGhost()) return;
     if (!user || !currentService || !serviceProfile || firestoreUnavailable) {
       return;
@@ -11546,15 +11593,24 @@ export default function Home() {
       return;
     }
 
-    setIsSaving(true);
-    setError("");
-    setMessage("");
-
     const normalizedValues = mergeWithTemplate(
       currentService,
       tableValues,
       percExtraRows.map((e) => e.key),
     );
+
+    // Aviso de cifras atipicas: se muestra UNA vez; si la persona confirma, guarda.
+    if (!forzar) {
+      const avisos = await detectarAtipicosPerc(normalizedValues, targetPeriod);
+      if (avisos.length > 0) {
+        setPercAtipicos(avisos);
+        return;
+      }
+    }
+
+    setIsSaving(true);
+    setError("");
+    setMessage("");
 
     try {
       await setDoc(
@@ -19821,6 +19877,89 @@ export default function Home() {
 
             <div className="hidden desk:block">{moduleSections}</div>
 
+          {/* AVISO DE CIFRAS ATIPICAS. Sale antes de guardar el PERC cuando una
+              fila se disparo respecto al mes anterior: casi siempre es un cero de
+              mas al digitar. No bloquea: la persona decide. */}
+          {percAtipicos.length > 0 ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-[65] flex items-center justify-center p-4"
+              onClick={() => setPercAtipicos([])}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/70 backdrop-blur-sm" />
+              <div
+                onClick={(evento) => evento.stopPropagation()}
+                className={`modal-pop-in relative w-full max-w-lg overflow-hidden rounded-2xl border ${
+                  isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#141d2e]"
+                }`}
+              >
+                <div className={`border-b px-5 py-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/[0.07]"}`}>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-300">
+                    Revisá antes de guardar
+                  </p>
+                  <h3 className={`mt-1 text-lg font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                    {percAtipicos.length === 1
+                      ? "Una cifra se ve muy distinta al mes pasado"
+                      : `${percAtipicos.length} cifras se ven muy distintas al mes pasado`}
+                  </h3>
+                  <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
+                    Puede ser correcto, pero conviene confirmarlo: un cero de más es el error
+                    más común al digitar.
+                  </p>
+                </div>
+                <div className="max-h-[42vh] overflow-y-auto px-5 py-3">
+                  {percAtipicos.map((aviso) => (
+                    <div
+                      key={aviso.fila}
+                      className={`flex items-center justify-between gap-3 border-b py-2 last:border-b-0 ${
+                        isLightPanelTheme ? "border-slate-100" : "border-white/[0.05]"
+                      }`}
+                    >
+                      <span className={`min-w-0 flex-1 truncate text-[12.5px] ${isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`} title={aviso.fila}>
+                        {aviso.fila}
+                      </span>
+                      <span className="shrink-0 text-right text-[11px] text-slate-500">
+                        mes pasado{" "}
+                        <strong className={isLightPanelTheme ? "text-slate-700" : "text-slate-300"}>
+                          {aviso.anterior.toLocaleString("es-SV")}
+                        </strong>
+                      </span>
+                      <span className={`shrink-0 rounded-lg px-2 py-0.5 text-[12px] font-bold ${
+                        isLightPanelTheme ? "bg-amber-50 text-amber-700" : "bg-amber-300/[0.10] text-amber-200"
+                      }`}>
+                        {aviso.actual.toLocaleString("es-SV")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className={`flex flex-wrap justify-end gap-2 border-t px-5 py-3 ${isLightPanelTheme ? "border-slate-200" : "border-white/[0.07]"}`}>
+                  <button
+                    type="button"
+                    onClick={() => setPercAtipicos([])}
+                    className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                      isLightPanelTheme
+                        ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                        : "border-white/[0.09] bg-white/[0.03] text-slate-300 hover:bg-white/[0.07]"
+                    }`}
+                  >
+                    Volver a revisar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPercAtipicos([]);
+                      void handleSave(true);
+                    }}
+                    className={`${BTN_GUARDAR} rounded-xl px-4 py-2 text-sm transition`}
+                  >
+                    Está correcto, guardar
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {/* Toasts sutiles (esquina) para exito/error. Se desvanecen solos. */}
           {error || message ? (
             <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex w-full max-w-xs flex-col gap-2">
@@ -22387,7 +22526,7 @@ export default function Home() {
                     ) : null}
                     <button
                       type="button"
-                      onClick={handleSave}
+                      onClick={() => void handleSave()}
                       disabled={isSaving || percEditingBlocked}
                       title="Guardar datos"
                       aria-label="Guardar datos"
