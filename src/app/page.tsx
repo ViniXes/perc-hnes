@@ -6978,11 +6978,41 @@ export default function Home() {
       const vacio = new Set<string>();
       const MES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
       const filas: TendenciaFila[] = periodos.map((periodo) => {
+        /**
+         * Servicios que cuentan como ENTREGADOS ese mes. No basta con los
+         * documentos guardados: el Monitoreo aplica dos atajos y aca hay que
+         * aplicar los mismos, o las dos pantallas dicen cifras distintas del
+         * mismo mes y no se le puede creer a ninguna.
+         *
+         *  - Datos fijos: Aseo y Vacunacion tienen su PERC automatico (metros
+         *    cuadrados, dosis). Nadie los captura, asi que estan siempre listos.
+         *  - Recibido fuera de PULSO: el tablero llego por correo o en papel y un
+         *    administrador lo marco. Cuenta como entregado aunque no exista el
+         *    documento. La marca se guarda con el mes adentro de la clave
+         *    ("2026-08__farmacia__SEPS"), asi que tambien vale hacia atras.
+         */
+        const entregadosDe = (
+          etiqueta: "PERC" | "SEPS" | "Horas",
+          historial: Map<string, Set<string>>,
+        ) => {
+          const hechos = new Set(historial.get(periodo) ?? vacio);
+          if (etiqueta === "PERC") {
+            for (const idFijo of PERC_FIXED_SERVICE_IDS) hechos.add(idFijo);
+          }
+          const prefijo = `${periodo}__`;
+          const sufijo = `__${etiqueta}`;
+          for (const clave of Object.keys(recibidosExternos)) {
+            if (clave.startsWith(prefijo) && clave.endsWith(sufijo)) {
+              hechos.add(clave.slice(prefijo.length, clave.length - sufijo.length));
+            }
+          }
+          return hechos;
+        };
         const deModulo = (
           etiqueta: "PERC" | "SEPS" | "Horas",
           historial: Map<string, Set<string>>,
         ): TendenciaModulo => {
-          const stat = computeMonitorStats(etiqueta, historial.get(periodo) ?? vacio);
+          const stat = computeMonitorStats(etiqueta, entregadosDe(etiqueta, historial));
           return {
             done: stat.completos,
             total: stat.total,
@@ -12927,7 +12957,7 @@ export default function Home() {
     if (activeSidebarSection !== "panel-tendencias" && mobileView !== "panel-tendencias") return;
     void loadTendencias(tendenciasMeses);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSidebarSection, mobileView, tendenciasMeses, periodId]);
+  }, [activeSidebarSection, mobileView, tendenciasMeses, periodId, recibidosExternos]);
 
   useEffect(() => {
     if (activeSidebarSection !== "panel-cec" && mobileView !== "panel-cec") return;
@@ -19553,8 +19583,10 @@ export default function Home() {
                         <p className={`border-t px-4 py-2.5 text-[11px] ${
                           isLightPanelTheme ? "border-slate-100 text-slate-500" : "border-white/[0.045] text-slate-500"
                         }`}>
-                          El porcentaje de cada mes se calcula igual que en el Monitoreo general: las
-                          familias (UCI, UCIN, Cuidados Paliativos) valen uno.
+                          El porcentaje de cada mes se calcula igual que en el Monitoreo general:
+                          las familias (UCI, UCIN, Cuidados Paliativos) valen uno, los tableros de
+                          datos fijos (Aseo, Vacunación) van por completos y los marcados como
+                          recibidos fuera de PULSO también cuentan.
                         </p>
                       </div>
 
