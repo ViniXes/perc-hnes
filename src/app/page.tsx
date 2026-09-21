@@ -17580,7 +17580,27 @@ export default function Home() {
               aria-label="Cerrar menú"
               className="mx-auto mb-3 block h-1.5 w-12 rounded-full bg-slate-400/40 desk:hidden"
             />
-            <div className={`pb-4 text-center desk:pb-3 ${isLightPanelTheme ? "border-b border-slate-200" : "border-b border-white/10"}`}>
+            <div className={`relative pb-4 text-center desk:pb-3 ${isLightPanelTheme ? "border-b border-slate-200" : "border-b border-white/10"}`}>
+              {/* El boton de menu vive ACA, sobre el encabezado, y no al lado del
+                  contenido: aprovecha el espacio libre a la izquierda del nombre
+                  del hospital. Solo el icono, para no empujar el titulo. */}
+              <button
+                type="button"
+                onClick={() => setMenuOpen(false)}
+                aria-label="Ocultar menú"
+                title="Ocultar menú"
+                className={`absolute left-0 top-0 hidden h-8 w-8 items-center justify-center rounded-xl border ring-1 transition desk:flex ${
+                  isLightPanelTheme
+                    ? "border-amber-300/60 bg-white ring-amber-300/40 hover:bg-amber-50"
+                    : "border-amber-400/40 bg-[#202c41] ring-amber-400/30 hover:bg-[#243049]"
+                }`}
+              >
+                <span className="flex flex-col gap-[3px]">
+                  <span className="block h-0.5 w-4 rounded-full bg-amber-400" />
+                  <span className="block h-0.5 w-4 rounded-full bg-amber-400" />
+                  <span className="block h-0.5 w-4 rounded-full bg-amber-400" />
+                </span>
+              </button>
               <p className="hospital-shimmer text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
                 Hospital Nacional
               </p>
@@ -18141,11 +18161,11 @@ export default function Home() {
             className="min-w-0 space-y-6 pb-28 focus:outline-none desk:pb-0"
           >
             {/* Boton de menu (hamburguesa) PEGAJOSO: solo PC (en movil se usa la casita inferior). */}
-            <div className="sticky top-3 z-30 hidden items-center justify-between gap-2 desk:flex">
+            <div className={`sticky top-3 z-30 hidden items-center justify-between gap-2 ${menuOpen ? "" : "desk:flex"}`}>
               <button
                 type="button"
-                onClick={() => setMenuOpen((value) => !value)}
-                aria-label={menuOpen ? "Ocultar menú" : "Mostrar menú"}
+                onClick={() => setMenuOpen(true)}
+                aria-label="Mostrar menú"
                 className={`inline-flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-semibold shadow-lg ring-1 backdrop-blur-md transition-all duration-300 hover:opacity-100 ${
                   isLightPanelTheme
                     ? "border-amber-300/60 bg-white text-slate-800 ring-amber-300/40 hover:bg-amber-50"
