@@ -1,7 +1,8 @@
 /**
  * VERSION DE PULSO
  *
- * Se muestra al pie del menu y en la politica de privacidad. Al publicar un
- * cambio se sube aca y con eso queda actualizada en toda la aplicacion.
+ * Formato "1986.<entrega>". La entrega sube sola con cada cambio publicado:
+ * la escribe scripts/marcar-version.mjs a partir del historial del repositorio.
+ * No editar a mano — correr "npm run marcar-version" antes de hacer el commit.
  */
-export const APP_VERSION = "21.09.26";
+export const APP_VERSION = "1986.368";
