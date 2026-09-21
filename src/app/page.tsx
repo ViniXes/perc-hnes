@@ -162,6 +162,7 @@ import {
 } from "@/components/login-loading-modal";
 import { APP_VERSION } from "@/lib/version";
 import { esperarConfirmacion, estaEnLinea } from "@/lib/offline";
+import { SelectorFecha, SelectorMes } from "@/components/selectores-fecha";
 import {
   DEP_ICON_PROPS,
   DOC_COLUMNS,
@@ -13083,39 +13084,40 @@ export default function Home() {
 
         <div className="grid gap-3 desk:grid-cols-[280px_1fr]">
           <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-3">
-            <label className="block">
+            <div className="block">
               <span className="text-sm font-medium text-slate-200">Mes a configurar</span>
-              <input
-                value={calendarEditorPeriodId}
-                onChange={(event) => setCalendarEditorPeriodId(event.target.value)}
-                className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
-                type="month"
-              />
-            </label>
+              <div className="mt-1.5">
+                <SelectorMes
+                  value={calendarEditorPeriodId}
+                  onChange={setCalendarEditorPeriodId}
+                  nota="Se puede configurar a futuro"
+                />
+              </div>
+            </div>
 
             <div className="mt-3 grid grid-cols-1 gap-2">
-              <label className="block">
+              <div className="block">
                 <span className="text-sm font-medium text-slate-200">Desde</span>
-                <input
-                  value={calendarRangeStart}
-                  min={`${calendarEditorPeriodId}-01`}
-                  max={`${calendarEditorPeriodId}-31`}
-                  onChange={(event) => setCalendarRangeStart(event.target.value)}
-                  className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
-                  type="date"
-                />
-              </label>
-              <label className="block">
+                <div className="mt-1.5">
+                  <SelectorFecha
+                    value={calendarRangeStart}
+                    min={`${calendarEditorPeriodId}-01`}
+                    max={`${calendarEditorPeriodId}-31`}
+                    onChange={setCalendarRangeStart}
+                  />
+                </div>
+              </div>
+              <div className="block">
                 <span className="text-sm font-medium text-slate-200">Hasta</span>
-                <input
-                  value={calendarRangeEnd}
-                  min={`${calendarEditorPeriodId}-01`}
-                  max={`${calendarEditorPeriodId}-31`}
-                  onChange={(event) => setCalendarRangeEnd(event.target.value)}
-                  className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
-                  type="date"
-                />
-              </label>
+                <div className="mt-1.5">
+                  <SelectorFecha
+                    value={calendarRangeEnd}
+                    min={calendarRangeStart || `${calendarEditorPeriodId}-01`}
+                    max={`${calendarEditorPeriodId}-31`}
+                    onChange={setCalendarRangeEnd}
+                  />
+                </div>
+              </div>
             </div>
             <p className="mt-2 text-xs text-slate-400">
               Podés marcar un solo día (Desde = Hasta) o varios de una vez (ej. 3 al 6).
@@ -13339,21 +13341,18 @@ export default function Home() {
               vuelve sola a Auto; <strong>Cerrar</strong> la bloquea antes de tiempo.
             </p>
           </div>
-          <label className="block shrink-0">
+          <div className="block shrink-0">
             <span className={`text-sm font-medium ${isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>
               Mes
             </span>
-            <input
-              value={overridePanelPeriodId}
-              onChange={(event) => setOverridePanelPeriodId(event.target.value)}
-              className={`mt-1.5 w-full rounded-2xl px-3 py-2 text-sm outline-none focus:border-cyan-400 ${
-                isLightPanelTheme
-                  ? "border border-slate-200 bg-white text-slate-900"
-                  : "border border-white/10 bg-[#2a3448] text-white"
-              }`}
-              type="month"
-            />
-          </label>
+            <div className="mt-1.5 w-[220px]">
+              <SelectorMes
+                value={overridePanelPeriodId}
+                onChange={setOverridePanelPeriodId}
+                claro={isLightPanelTheme}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Filtros + buscador */}
@@ -16466,15 +16465,15 @@ export default function Home() {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+            <div className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
               <span className="font-semibold uppercase tracking-wide">Mes</span>
-              <input
-                type="month"
+              <SelectorMes
+                plano
                 value={censoPeriod}
-                onChange={(event) => setCensoPeriod(event.target.value || censoPeriod)}
-                className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`}
+                onChange={(valor) => setCensoPeriod(valor || censoPeriod)}
+                claro={isLightPanelTheme}
               />
-            </label>
+            </div>
             {canEditCenso ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Edición
@@ -16715,10 +16714,10 @@ export default function Home() {
             <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>Distribución de Gasto General · {getPeriodLabel(gastosPeriod)}</p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+            <div className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
               <span className="font-semibold uppercase tracking-wide">Mes</span>
-              <input type="month" value={gastosPeriod} onChange={(e) => setGastosPeriod(e.target.value || gastosPeriod)} className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`} />
-            </label>
+              <SelectorMes plano value={gastosPeriod} onChange={(valor) => setGastosPeriod(valor || gastosPeriod)} claro={isLightPanelTheme} />
+            </div>
             <button type="button" data-abrir-tabla={gastosOpen ? "no" : "si"} onClick={() => setGastosOpen((x) => !x)} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">{gastosOpen ? "Ocultar tabla" : "Mostrar tabla"}</button>
             {isAdmin ? (
               <button
@@ -16813,10 +16812,10 @@ export default function Home() {
             <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>Depreciación por centro de producción · {getPeriodLabel(deprePeriod)}</p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+            <div className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
               <span className="font-semibold uppercase tracking-wide">Mes</span>
-              <input type="month" value={deprePeriod} onChange={(e) => setDeprePeriod(e.target.value || deprePeriod)} className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`} />
-            </label>
+              <SelectorMes plano value={deprePeriod} onChange={(valor) => setDeprePeriod(valor || deprePeriod)} claro={isLightPanelTheme} />
+            </div>
             <button type="button" data-abrir-tabla={depreOpen ? "no" : "si"} onClick={() => setDepreOpen((x) => !x)} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">{depreOpen ? "Ocultar tabla" : "Mostrar tabla"}</button>
             {isAdmin ? (
               <button
@@ -16898,15 +16897,15 @@ export default function Home() {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+            <div className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-600" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
               <span className="font-semibold uppercase tracking-wide">Mes</span>
-              <input
-                type="month"
+              <SelectorMes
+                plano
                 value={insumosPeriod}
-                onChange={(event) => setInsumosPeriod(event.target.value || insumosPeriod)}
-                className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-800" : "text-white [color-scheme:dark]"}`}
+                onChange={(valor) => setInsumosPeriod(valor || insumosPeriod)}
+                claro={isLightPanelTheme}
               />
-            </label>
+            </div>
             {isAdmin ? (
               <button
                 type="button"
@@ -19845,15 +19844,15 @@ export default function Home() {
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-2">
                         {hospital && !hospital.soloAvance ? (
-                          <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+                          <div className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
                             <span className="font-semibold uppercase tracking-wide">Mes</span>
-                            <input
-                              type="month"
+                            <SelectorMes
+                              plano
                               value={mes}
-                              onChange={(event) => void loadSigmaMonitoreo(hospital.id, event.target.value, true)}
-                              className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-900" : "text-white [color-scheme:dark]"}`}
+                              onChange={(valor) => void loadSigmaMonitoreo(hospital.id, valor, true)}
+                              claro={isLightPanelTheme}
                             />
-                          </label>
+                          </div>
                         ) : null}
                         {hospital && !hospital.local ? (
                           <button
@@ -20778,17 +20777,17 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
+                  <div className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-[#1b2537] text-slate-300"}`}>
                     <span className="font-semibold uppercase tracking-wide">Mes</span>
-                    <input
-                      type="month"
+                    <SelectorMes
+                      plano
                       value={verifSumasPeriodo || periodId}
-                      onChange={(event) => {
-                        if (event.target.value) void loadVerificacionSumas(event.target.value);
+                      onChange={(valor) => {
+                        if (valor) void loadVerificacionSumas(valor);
                       }}
-                      className={`bg-transparent text-xs outline-none ${isLightPanelTheme ? "text-slate-900" : "text-white [color-scheme:dark]"}`}
+                      claro={isLightPanelTheme}
                     />
-                  </label>
+                  </div>
                   <button
                     type="button"
                     onClick={() => void loadVerificacionSumas()}
@@ -24998,19 +24997,18 @@ export default function Home() {
                     </h3>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#1b2537] px-2.5 py-1.5 text-xs text-slate-300">
+                    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#1b2537] px-2.5 py-1.5 text-xs text-slate-300">
                       <span className="font-semibold uppercase tracking-wide">Mes</span>
-                      <input
-                        type="month"
+                      <SelectorMes
+                        plano
                         value={consolidadoPeriod}
-                        onChange={(event) => {
-                          if (event.target.value) {
-                            void loadConsolidadoPreview(event.target.value);
+                        onChange={(valor) => {
+                          if (valor) {
+                            void loadConsolidadoPreview(valor);
                           }
                         }}
-                        className="bg-transparent text-xs text-white outline-none [color-scheme:dark]"
                       />
-                    </label>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setShowCensoConsolidadoPreview(false)}
@@ -25176,20 +25174,20 @@ export default function Home() {
                     </span>
                   </p>
 
-                  <label className="mt-5 block">
+                  <div className="mt-5 block">
                     <span className="text-sm font-medium text-slate-200">Mes y año a habilitar</span>
-                    <input
-                      value={captureOpenPeriod}
-                      onChange={(event) => setCaptureOpenPeriod(event.target.value)}
-                      type="month"
-                      className="mt-2 w-full rounded-2xl border border-white/10 bg-[#2a3448] px-3 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
-                    />
+                    <div className="mt-2">
+                      <SelectorMes
+                        value={captureOpenPeriod}
+                        onChange={setCaptureOpenPeriod}
+                      />
+                    </div>
                     {captureOpenPeriod ? (
                       <span className="mt-2 block text-xs font-medium text-emerald-300">
                         Se habilitará: {getPeriodLabel(captureOpenPeriod)}
                       </span>
                     ) : null}
-                  </label>
+                  </div>
 
                   <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <button
