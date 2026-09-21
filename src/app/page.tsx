@@ -4133,6 +4133,20 @@ export default function Home() {
     cec: TendenciaModulo;
     global: number;
   };
+  // RECORDATORIOS POR CORREO: resultado de la prueba manual (solo admin).
+  type RecordatoriosResultado = {
+    ok?: boolean;
+    error?: string;
+    motivo?: string;
+    simulado?: boolean;
+    enPrueba?: boolean;
+    desvio?: string | null;
+    modulos?: string[];
+    enviados?: number;
+    destinatarios?: { correo: string; nombre: string; pendientes: string[] }[] | number;
+  };
+  const [recordatorios, setRecordatorios] = useState<RecordatoriosResultado | null>(null);
+  const [recordatoriosCargando, setRecordatoriosCargando] = useState(false);
   const [tendencias, setTendencias] = useState<TendenciaFila[]>([]);
   const [tendenciasCargando, setTendenciasCargando] = useState(false);
   const [tendenciasError, setTendenciasError] = useState("");
@@ -7054,6 +7068,33 @@ export default function Home() {
       setTendenciasError("No pudimos leer el historial de los meses anteriores.");
     } finally {
       setTendenciasCargando(false);
+    }
+  }
+
+  /**
+   * Prueba de los recordatorios por correo. Con simular=true NO manda nada:
+   * devuelve a quien le tocaria hoy. Con simular=false manda de verdad (y si
+   * esta puesto el modo prueba en Vercel, todo se desvia a ese correo).
+   */
+  async function probarRecordatorios(simular: boolean) {
+    setRecordatoriosCargando(true);
+    setRecordatorios(null);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setRecordatorios({ ok: false, error: "No se pudo verificar la sesión." });
+        return;
+      }
+      const res = await fetch("/api/recordatorios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, simular }),
+      });
+      setRecordatorios((await res.json()) as RecordatoriosResultado);
+    } catch {
+      setRecordatorios({ ok: false, error: "No se pudo contactar al servidor." });
+    } finally {
+      setRecordatoriosCargando(false);
     }
   }
 
@@ -19215,6 +19256,98 @@ export default function Home() {
                       <p className={`border-t px-4 py-2.5 text-[11px] ${separador} ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
                         Se muestran los últimos 200 movimientos.
                       </p>
+                      {/* RECORDATORIOS POR CORREO. Se manda solo el ultimo dia de
+                          la ventana, y solo a quien no ha entregado. Aca se puede
+                          ver a quien le tocaria hoy sin mandar nada. */}
+                      <div className={`border-t px-4 py-4 ${separador}`}>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className={`text-[11px] font-bold uppercase tracking-[0.18em] ${isLightPanelTheme ? "text-slate-400" : "text-slate-500"}`}>
+                              Recordatorios por correo
+                            </p>
+                            <p className={`mt-1 max-w-xl text-[12px] leading-5 ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
+                              El sistema revisa cada mañana si hoy cierra la ventana de algún
+                              tablero y, si es así, le escribe únicamente a quien todavía no
+                              entregó. Nadie recibe copia.
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void probarRecordatorios(true)}
+                              disabled={recordatoriosCargando}
+                              className={`${BTN_DESBLOQUEAR} rounded-xl px-3.5 py-2 text-[12.5px] font-semibold transition disabled:opacity-50`}
+                            >
+                              {recordatoriosCargando ? "Consultando…" : "Ver a quién le toca hoy"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void probarRecordatorios(false)}
+                              disabled={recordatoriosCargando}
+                              title="Manda los correos de hoy. Si el modo prueba está activo en Vercel, todos se desvían a ese buzón."
+                              className={`${BTN_GUARDAR} rounded-xl px-3.5 py-2 text-[12.5px] transition disabled:opacity-50`}
+                            >
+                              Enviar ahora
+                            </button>
+                          </div>
+                        </div>
+
+                        {recordatorios ? (
+                          <div className={`mt-3 rounded-xl border p-3 ${
+                            isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-white/[0.02]"
+                          }`}>
+                            {recordatorios.error ? (
+                              <p className="text-[12.5px] text-amber-300">{recordatorios.error}</p>
+                            ) : recordatorios.motivo ? (
+                              <p className={`text-[12.5px] ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                                {recordatorios.motivo}
+                              </p>
+                            ) : (
+                              <>
+                                <p className={`text-[12.5px] ${isLightPanelTheme ? "text-slate-700" : "text-slate-200"}`}>
+                                  {recordatorios.simulado
+                                    ? `Hoy cierra ${(recordatorios.modulos ?? []).join(", ")}. Le tocaría a ${
+                                        Array.isArray(recordatorios.destinatarios)
+                                          ? recordatorios.destinatarios.length
+                                          : 0
+                                      } persona(s).`
+                                    : `Enviados ${recordatorios.enviados ?? 0} de ${
+                                        typeof recordatorios.destinatarios === "number"
+                                          ? recordatorios.destinatarios
+                                          : 0
+                                      }.`}
+                                </p>
+                                {recordatorios.enPrueba ? (
+                                  <p className="mt-1 text-[11.5px] text-amber-300">
+                                    Modo prueba activo: todo se desvía a {recordatorios.desvio}.
+                                  </p>
+                                ) : null}
+                                {Array.isArray(recordatorios.destinatarios) &&
+                                recordatorios.destinatarios.length > 0 ? (
+                                  <ul className="mt-2.5 space-y-1">
+                                    {recordatorios.destinatarios.slice(0, 12).map((d) => (
+                                      <li
+                                        key={d.correo}
+                                        className={`text-[11.5px] ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}
+                                      >
+                                        <span className={isLightPanelTheme ? "text-slate-800" : "text-slate-200"}>
+                                          {d.nombre}
+                                        </span>{" "}
+                                        · {d.correo} — {d.pendientes.join(" / ")}
+                                      </li>
+                                    ))}
+                                    {recordatorios.destinatarios.length > 12 ? (
+                                      <li className={`text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-500"}`}>
+                                        y {recordatorios.destinatarios.length - 12} más.
+                                      </li>
+                                    ) : null}
+                                  </ul>
+                                ) : null}
+                              </>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   );
                 })()}
