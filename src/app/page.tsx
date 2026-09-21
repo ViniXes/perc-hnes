@@ -13276,7 +13276,7 @@ export default function Home() {
       const actual = state ?? null;
       return (
         <span
-          className={`inline-flex overflow-hidden rounded-lg border text-[10px] font-semibold ${
+          className={`inline-flex overflow-hidden rounded-lg border text-[11px] font-semibold ${
             isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-black/25"
           } ${isBusy ? "opacity-50" : ""}`}
         >
@@ -13298,7 +13298,7 @@ export default function Home() {
                   if (on) return;
                   void handleToggleCapture(service.id, moduleId, op.valor);
                 }}
-                className={`px-2.5 py-1 transition ${i > 0 ? (isLightPanelTheme ? "border-l border-slate-200" : "border-l border-white/[0.06]") : ""} ${
+                className={`px-2.5 py-1.5 transition ${i > 0 ? (isLightPanelTheme ? "border-l border-slate-200" : "border-l border-white/[0.06]") : ""} ${
                   on
                     ? op.activo
                     : isLightPanelTheme
@@ -13333,7 +13333,7 @@ export default function Home() {
               Habilitar tableros
             </p>
             <h2 className="mt-1 text-xl font-semibold">Reabrir o cerrar captura por servicio</h2>
-            <p className={`mt-1 max-w-3xl text-xs ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+            <p className={`mt-1.5 max-w-3xl text-sm leading-relaxed ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
               Cada tablero sigue la ventana normal de días hábiles (<strong>Auto</strong>).{" "}
               <strong>Abrir</strong> reabre la captura tardía <strong>por 24 horas</strong> y luego
               vuelve sola a Auto; <strong>Cerrar</strong> la bloquea antes de tiempo.
@@ -13370,7 +13370,7 @@ export default function Home() {
                 key={f.id}
                 type="button"
                 onClick={() => setOverrideFiltro(f.id)}
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition ${
+                className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[12.5px] transition ${
                   on
                     ? "border-teal-300/30 bg-teal-300/[0.10] text-teal-100"
                     : isLightPanelTheme
@@ -13390,7 +13390,7 @@ export default function Home() {
                 prev.size > 0 ? new Set() : new Set(overrideGroups.map((g) => g.id)),
               )
             }
-            className={`rounded-full border px-3 py-1.5 text-xs transition ${
+            className={`rounded-full border px-3.5 py-1.5 text-[12.5px] transition ${
               isLightPanelTheme
                 ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                 : "border-white/[0.08] bg-white/[0.025] text-slate-400 hover:bg-white/[0.06]"
@@ -13415,7 +13415,7 @@ export default function Home() {
             son franjas separadoras y los modulos, columnas fijas. */}
         {(() => {
           const columnas = toggleableModules;
-          const anchoFila = `minmax(200px,1fr) repeat(${columnas.length}, 150px)`;
+          const anchoFila = `minmax(220px,1fr) repeat(${columnas.length}, 168px)`;
           const filaVisible = (service: ServiceDefinition) => {
             if (overrideFiltro === "todos") return true;
             if (overrideFiltro === "pedido") return servicioConPedido.has(service.id);
@@ -13452,7 +13452,7 @@ export default function Home() {
           const separador = isLightPanelTheme ? "border-slate-100" : "border-white/[0.045]";
           const encabezado = (
             <div
-              className={`grid px-4 pb-1.5 text-[9px] font-bold uppercase tracking-[0.18em] ${
+              className={`grid px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] ${
                 isLightPanelTheme ? "text-slate-400" : "text-slate-500"
               }`}
               style={{ gridTemplateColumns: anchoFila }}
@@ -13478,7 +13478,7 @@ export default function Home() {
                 </p>
               ) : (
                 <div className="overflow-x-auto">
-                  <div className="min-w-[720px]">
+                  <div className="min-w-[780px]">
                     {grupos.map((group) => (
                       <Fragment key={group.id}>
                         <button
@@ -13496,26 +13496,26 @@ export default function Home() {
                           }`}
                         >
                           <span className="h-3 w-[3px] shrink-0 rounded-full bg-teal-300/80" />
-                          <h3 className={`text-[10.5px] font-bold uppercase tracking-[0.2em] ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                          <h3 className={`text-[11.5px] font-bold uppercase tracking-[0.18em] ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
                             {group.title}
                           </h3>
                           {/* Resumen de la division: se ve sin abrirla. */}
                           {group.abiertos > 0 ? (
-                            <span className="rounded-full border border-teal-300/25 bg-teal-300/[0.08] px-2 py-0.5 text-[10px] font-semibold text-teal-100">
+                            <span className="rounded-full border border-teal-300/25 bg-teal-300/[0.08] px-2 py-0.5 text-[10.5px] font-semibold text-teal-100">
                               {group.abiertos} abierto{group.abiertos === 1 ? "" : "s"}
                             </span>
                           ) : null}
                           {group.cerrados > 0 ? (
-                            <span className="rounded-full border border-amber-300/25 bg-amber-300/[0.08] px-2 py-0.5 text-[10px] font-semibold text-amber-100">
+                            <span className="rounded-full border border-amber-300/25 bg-amber-300/[0.08] px-2 py-0.5 text-[10.5px] font-semibold text-amber-100">
                               {group.cerrados} cerrado{group.cerrados === 1 ? "" : "s"}
                             </span>
                           ) : null}
                           {group.pedidos > 0 ? (
-                            <span className="rounded-full border border-rose-400/25 bg-rose-400/[0.08] px-2 py-0.5 text-[10px] font-semibold text-rose-200">
+                            <span className="rounded-full border border-rose-400/25 bg-rose-400/[0.08] px-2 py-0.5 text-[10.5px] font-semibold text-rose-200">
                               {group.pedidos} solicitud{group.pedidos === 1 ? "" : "es"}
                             </span>
                           ) : null}
-                          <span className="ml-auto text-[10.5px] text-slate-500">
+                          <span className="ml-auto text-[11.5px] text-slate-500">
                             {group.services.length} servicio{group.services.length === 1 ? "" : "s"}
                           </span>
                           <svg
@@ -13543,18 +13543,18 @@ export default function Home() {
                               className={`grid items-center border-t px-4 transition ${separador} ${
                                 isLightPanelTheme ? "hover:bg-slate-50" : "hover:bg-white/[0.03]"
                               }`}
-                              style={{ gridTemplateColumns: anchoFila, minHeight: "38px" }}
+                              style={{ gridTemplateColumns: anchoFila, minHeight: "42px" }}
                             >
                               <span className="flex min-w-0 items-center gap-2.5 py-1.5">
                                 <ServiceIcon
                                   serviceId={service.id}
-                                  className={`h-3.5 w-3.5 shrink-0 ${isLightPanelTheme ? "text-slate-400" : "text-slate-500"}`}
+                                  className={`h-4 w-4 shrink-0 ${isLightPanelTheme ? "text-slate-400" : "text-slate-500"}`}
                                 />
-                                <span className={`truncate text-[12.5px] ${isLightPanelTheme ? "text-slate-800" : "text-slate-200"}`} title={service.name}>
+                                <span className={`truncate text-[13.5px] ${isLightPanelTheme ? "text-slate-800" : "text-slate-200"}`} title={service.name}>
                                   {service.name}
                                 </span>
                                 {pidio ? (
-                                  <span className="shrink-0 rounded-full border border-rose-400/30 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-rose-300">
+                                  <span className="shrink-0 rounded-full border border-rose-400/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-300">
                                     solicitó habilitar
                                   </span>
                                 ) : null}
@@ -13575,7 +13575,7 @@ export default function Home() {
                                     {tiene ? (
                                       overrideSegmento(service, moduleId)
                                     ) : (
-                                      <span className="text-[11px] text-slate-600">—</span>
+                                      <span className="text-[12px] text-slate-600">—</span>
                                     )}
                                   </span>
                                 );
@@ -13591,7 +13591,7 @@ export default function Home() {
 
               {/* Pie: que significa cada color y como va el mes. */}
               <div
-                className={`flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t px-4 py-2.5 text-[11px] ${separador} ${
+                className={`flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t px-4 py-3 text-[11.5px] ${separador} ${
                   isLightPanelTheme ? "bg-slate-50 text-slate-500" : "bg-white/[0.02] text-slate-400"
                 }`}
               >
