@@ -3980,6 +3980,9 @@ export default function Home() {
   const [isExportingServiceProduction, setIsExportingServiceProduction] = useState(false);
   /** Vista previa (en pantalla) del consolidado de Produccion Distribuida. */
   const [showDistribuidaPreview, setShowDistribuidaPreview] = useState(false);
+  // Mes que se esta mirando en la vista previa del consolidado. Arranca en el mes
+  // en cierre; el selector del encabezado permite ir a cualquier mes anterior.
+  const [distribuidaPeriodo, setDistribuidaPeriodo] = useState("");
   const [distribuidaPreview, setDistribuidaPreview] = useState<
     { row: string; cells: number[]; total: number }[] | null
   >(null);
@@ -6761,17 +6764,24 @@ export default function Home() {
 
   // Vista previa de Produccion Distribuida: arma la MISMA tabla del Excel y la
   // muestra en pantalla. No descarga nada ni toca los datos capturados.
-  async function handlePreviewMonthlyReport() {
+  /**
+   * Vista previa del consolidado. Sin argumento abre el mes EN CIERRE (y repone
+   * el selector ahi, para que nunca se abra en un mes viejo por accidente); con
+   * un periodo, muestra ese mes del historico.
+   */
+  async function handlePreviewMonthlyReport(periodo?: string) {
     if (!isAdmin || firestoreUnavailable) {
       return;
     }
 
+    const destino = periodo ?? periodId;
+    setDistribuidaPeriodo(destino);
     setShowDistribuidaPreview(true);
     setIsLoadingDistribuida(true);
     setError("");
 
     try {
-      const overview = await fetchAdminOverviewForPeriod(periodId);
+      const overview = await fetchAdminOverviewForPeriod(destino);
       setDistribuidaPreview(computeDistribuidaMatrix(overview));
       // Cuantos servicios alimentan este consolidado y cuantos ya guardaron.
       const conPerc = overview.filter((entry) => entry.service.rows.length > 0);
@@ -6791,19 +6801,20 @@ export default function Home() {
     }
   }
 
-  async function handleExportMonthlyReport() {
+  async function handleExportMonthlyReport(periodo?: string) {
     if (!isAdmin || firestoreUnavailable) {
       return;
     }
 
+    const destino = periodo ?? periodId;
     setIsExportingMonthlyReport(true);
     setError("");
     setMessage("");
 
     try {
-      const overview = await fetchAdminOverviewForPeriod(periodId);
-      downloadAdminExcelReport(overview, periodId);
-      setMessage(`Excel generado correctamente para el periodo ${periodLabel}.`);
+      const overview = await fetchAdminOverviewForPeriod(destino);
+      downloadAdminExcelReport(overview, destino);
+      setMessage(`Excel generado correctamente para el periodo ${getPeriodLabel(destino)}.`);
     } catch (exportError) {
       if (await handleFirestoreError(exportError)) {
         return;
@@ -24493,14 +24504,29 @@ export default function Home() {
                     <h3 className="mt-1 text-xl font-bold text-white sm:text-2xl">
                       Producción Distribuida
                     </h3>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {periodLabel} · así va quedando el consolidado con lo capturado hasta ahora
-                    </p>
+                    {/* HISTORICO: el mismo consolidado de cualquier mes anterior.
+                        No se puede elegir un mes futuro. */}
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <div className="w-[190px]">
+                        <SelectorMes
+                          value={distribuidaPeriodo || periodId}
+                          min={AVANCE_FIRST_PERIOD}
+                          max={periodId}
+                          onChange={(valor) => void handlePreviewMonthlyReport(valor)}
+                          titulo="Ver el consolidado de otro mes"
+                        />
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        {(distribuidaPeriodo || periodId) === periodId
+                          ? "así va quedando con lo capturado hasta ahora"
+                          : "mes ya cerrado"}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => void handlePreviewMonthlyReport()}
+                      onClick={() => void handlePreviewMonthlyReport(distribuidaPeriodo || periodId)}
                       aria-label="Actualizar"
                       title="Actualizar"
                       className="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-500/10 text-cyan-200 transition hover:bg-cyan-500/20"
@@ -24511,7 +24537,7 @@ export default function Home() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => void handleExportMonthlyReport()}
+                      onClick={() => void handleExportMonthlyReport(distribuidaPeriodo || periodId)}
                       disabled={isExportingMonthlyReport}
                       className="rounded-xl bg-cyan-500 px-3.5 py-2 text-xs font-bold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-60"
                     >
