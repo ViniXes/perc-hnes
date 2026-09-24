@@ -282,10 +282,13 @@ html.forzar-escritorio body {
   --accent-btn: #22d3ee;    /* cian lleno para botones */
   --accent-ink: #07131f;    /* texto sobre acento lleno */
   --shadow-card: 0 24px 70px rgba(0, 0, 0, 0.50);
-  /* Resplandores sutiles como en la pantalla de login. */
+  /* Resplandores como en el login, un poco mas presentes: dan profundidad al
+     lienzo para que los paneles opacos parezcan "flotar" (retoque de elegancia). */
   background-image:
-    radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.06), transparent 34%),
-    radial-gradient(circle at 100% 100%, rgba(124, 58, 237, 0.07), transparent 40%);
+    radial-gradient(circle at 12% -2%, rgba(34, 211, 238, 0.12), transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(124, 58, 237, 0.12), transparent 42%),
+    radial-gradient(circle at 60% 122%, rgba(45, 212, 191, 0.07), transparent 52%),
+    linear-gradient(160deg, #0b1526 0%, #0a0f1c 58%, #0b1424 100%);
   background-attachment: fixed;
 }
 
@@ -1076,4 +1079,34 @@ th :focus-visible {
 }
 @media (prefers-reduced-motion: reduce) {
   .salto-contenido { transition: none; }
+}
+
+
+/* =============================================================================
+   ELEGANCIA (solo vista) — retoques globales, sin tocar componentes ni logica:
+     1) Fondo con profundidad  -> arriba, en .panel-shell.theme-dark.
+     2) Vidrio mas fino        -> relieve sutil y brillo superior en los paneles.
+     3) Tipografia y numeros    -> numeros tabulares (alinean) y titulos ajustados.
+   ============================================================================= */
+
+/* 2) Relieve + brillo superior en los paneles (solo tema oscuro). Unifica la
+   elevacion de tarjetas, menus y modales con una sombra suave y una linea de luz
+   en el borde de arriba, para el efecto "vidrio" del mockup. */
+.panel-shell.theme-dark [class*="rounded-2xl"][class*="border-white/10"],
+.panel-shell.theme-dark [class*="rounded-3xl"][class*="border-white/10"],
+.panel-shell.theme-dark [class*="rounded-[24px]"][class*="border-white/10"],
+.panel-shell.theme-dark [class*="rounded-[20px]"][class*="border-white/10"] {
+  box-shadow: 0 16px 40px rgba(2, 6, 16, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* 3) Numeros tabulares (columnas de cifras alineadas) + mejor renderizado, y un
+   ajuste fino de interletra en los titulos. */
+.panel-shell {
+  font-variant-numeric: tabular-nums;
+  text-rendering: optimizeLegibility;
+}
+.panel-shell h1,
+.panel-shell h2,
+.panel-shell h3 {
+  letter-spacing: -0.01em;
 }
