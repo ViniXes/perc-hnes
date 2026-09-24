@@ -5,4 +5,4 @@
  * la escribe scripts/marcar-version.mjs a partir del historial del repositorio.
  * No editar a mano — correr "npm run marcar-version" antes de hacer el commit.
  */
-export const APP_VERSION = "1986.370";
+export const APP_VERSION = "1986.372";
