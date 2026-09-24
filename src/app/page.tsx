@@ -132,7 +132,6 @@ import {
 import {
   HOSPITALES_EXTERNOS,
   REGIONES_SALUD,
-  tonoAvance,
 } from "@/lib/hospitales-red";
 import {
   IconFile,
@@ -20049,7 +20048,7 @@ export default function Home() {
                               </p>
                               <p className={`mt-1.5 text-sm ${suave}`}>
                                 {nacional.conDatos > 0
-                                  ? `Avance promedio de ${nacional.conDatos} ${nacional.conDatos === 1 ? "hospital" : "hospitales"} (cada hospital pesa igual).`
+                                  ? `Avance promedio de ${nacional.conDatos} ${nacional.conDatos === 1 ? "hospital" : "hospitales"} · ${conectadosTotal} de ${HOSPITALES_EXTERNOS.length} conectados.`
                                   : "Todavía no se ha consultado a los hospitales de este mes."}
                               </p>
                             </div>
@@ -20079,65 +20078,59 @@ export default function Home() {
                             />
                           </div>
 
-                          {/* Estado por HOSPITAL: cuantos van completos, en proceso,
-                              sin avance o sin conexion, con sus nombres. */}
-                          <div className="mt-4 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+                          {/* Estado por hospital, en una tira delgada: punto de color, numero y a
+                              quienes corresponde. Reemplaza los cuatro recuadros. */}
+                          <div className="mt-4 flex flex-wrap gap-x-7 gap-y-3 border-t border-white/10 pt-4">
                             {[
-                              { titulo: "Al 100%", lista: nacional.alCien, punto: "bg-emerald-400", valor: isLightPanelTheme ? "text-emerald-700" : "text-emerald-200" },
-                              { titulo: "En proceso", lista: nacional.enProceso, punto: "bg-amber-300", valor: isLightPanelTheme ? "text-amber-700" : "text-amber-100" },
-                              { titulo: "Sin avance", lista: nacional.sinAvance, punto: "bg-slate-400", valor: isLightPanelTheme ? "text-slate-700" : "text-slate-200" },
-                              { titulo: sigmaTodos ? "Consultando…" : "Sin conexión", lista: nacional.sinConexion, punto: "bg-slate-600", valor: isLightPanelTheme ? "text-slate-500" : "text-slate-400" },
+                              { n: nacional.alCien.length, lab: "al 100%", nombres: nacional.alCien, punto: "bg-emerald-400" },
+                              { n: nacional.enProceso.length, lab: "en proceso", nombres: nacional.enProceso, punto: "bg-amber-400" },
+                              { n: nacional.sinAvance.length, lab: "sin avance", nombres: nacional.sinAvance, punto: "bg-slate-500" },
+                              { n: nacional.sinConexion.length, lab: sigmaTodos ? "consultando\u2026" : "sin conexi\u00f3n", nombres: nacional.sinConexion, punto: "bg-slate-600" },
                             ].map((c) => (
-                              <div
-                                key={c.titulo}
-                                className={`rounded-xl border px-3 py-2.5 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-white/[0.03]"}`}
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                                    <span className={`h-2 w-2 rounded-full ${c.punto}`} />
-                                    {c.titulo}
-                                  </p>
-                                  <p className={`text-2xl font-bold leading-none ${c.valor}`}>
-                                    {c.lista.length}
-                                    <span className="ml-1 text-xs font-medium text-slate-500">de {conectadosTotal}</span>
-                                  </p>
-                                </div>
-                                <p className="mt-1.5 line-clamp-2 min-h-[2rem] text-[11px] leading-4 text-slate-500">
-                                  {c.lista.length > 0 ? c.lista.join(" · ") : "Ninguno"}
-                                </p>
+                              <div key={c.lab} className="flex items-center gap-2.5">
+                                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${c.punto}`} aria-hidden="true" />
+                                <span className={`text-lg font-bold leading-none tabular-nums ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                  {c.n}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className={`block text-xs ${suave}`}>{c.lab}</span>
+                                  <span className="block max-w-[168px] truncate text-[11px] text-slate-500">
+                                    {c.nombres.length
+                                      ? c.nombres.length > 3
+                                        ? `${c.nombres.slice(0, 2).join(" \u00b7 ")} \u00b7 +${c.nombres.length - 2}`
+                                        : c.nombres.join(" \u00b7 ")
+                                      : "\u2014"}
+                                  </span>
+                                </span>
                               </div>
                             ))}
                           </div>
                           <p className="mt-3 text-[11px] text-slate-500">
-                            {conectadosTotal} de {HOSPITALES_EXTERNOS.length} hospitales conectados al monitoreo
-                            {nacional.conDatos > 0 ? ` · ${nacional.completos} de ${nacional.total} servicios entregados en total` : ""}.
+                            {nacional.conDatos > 0
+                              ? `${nacional.completos} de ${nacional.total} servicios entregados en total.`
+                              : "Todav\u00eda sin consultar los hospitales de este mes."}
                           </p>
                         </div>
 
-                        {/* Mapa de calor: las cinco regiones en una sola linea, del
-                            occidente al oriente del pais. Un solo tono que se va
-                            oscureciendo con el avance; gris = sin datos. */}
-                        <div className="mt-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                              Avance por región
-                            </p>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] text-slate-500">0%</span>
-                              {[15, 40, 65, 85, 100].map((paso) => (
-                                <span
-                                  key={paso}
-                                  className="h-2.5 w-4 rounded-[3px]"
-                                  style={{ background: tonoAvance(paso) }}
-                                />
-                              ))}
-                              <span className="text-[10px] text-slate-500">100%</span>
-                            </div>
-                          </div>
-                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                            {REGIONES_SALUD.map((r) => {
-                              const res = resumenRegion(r.id);
+                        {/* Las cinco regiones en una sola lista, ordenadas por avance (primero las
+                            que van mejor). El anillo muestra el % de un vistazo. */}
+                        <div className="mt-4 grid gap-2.5">
+                          {[...REGIONES_SALUD]
+                            .map((r) => ({
+                              r,
+                              res: resumenRegion(r.id),
+                              lista: HOSPITALES_EXTERNOS.filter((h) => h.region === r.id),
+                            }))
+                            .sort((a, b) => {
+                              const av = a.res.conDatos > 0 ? 1 : 0;
+                              const bv = b.res.conDatos > 0 ? 1 : 0;
+                              if (av !== bv) return bv - av;
+                              return b.res.pct - a.res.pct;
+                            })
+                            .map(({ r, res, lista }) => {
+                              const conectados = lista.filter((h) => h.conectado).length;
                               const hay = res.conDatos > 0;
+                              const CIRC = 119.38;
                               return (
                                 <button
                                   key={r.id}
@@ -20146,94 +20139,53 @@ export default function Home() {
                                     setRegionSel(r.id);
                                     setHospitalSel("");
                                   }}
-                                  className={`rounded-xl border p-2.5 text-left transition ${
-                                    isLightPanelTheme ? "border-slate-200" : "border-white/10"
-                                  } hover:border-teal-400/50`}
-                                  style={{ background: hay ? tonoAvance(res.pct) : "transparent" }}
+                                  className={`flex items-center gap-4 rounded-2xl border p-4 text-left transition hover:border-teal-400/50 ${tarjeta}`}
                                 >
-                                  <p
-                                    className="text-[10px] font-semibold uppercase tracking-wide"
-                                    style={{ color: hay && res.pct >= 55 ? "rgba(255,255,255,0.85)" : undefined }}
-                                  >
-                                    <span className={hay && res.pct >= 55 ? "" : "text-slate-400"}>{r.nombre}</span>
-                                  </p>
-                                  <p
-                                    className="mt-0.5 text-lg font-bold"
-                                    style={{
-                                      color: hay
-                                        ? res.pct >= 55
-                                          ? "#ffffff"
-                                          : isLightPanelTheme
-                                            ? "#0f172a"
-                                            : "#e2e8f0"
-                                        : undefined,
-                                    }}
-                                  >
-                                    <span className={hay ? "" : "text-slate-500"}>{hay ? `${res.pct}%` : "—"}</span>
-                                  </p>
-                                  <p
-                                    className="text-[10px]"
-                                    style={{ color: hay && res.pct >= 55 ? "rgba(255,255,255,0.8)" : undefined }}
-                                  >
-                                    <span className={hay && res.pct >= 55 ? "" : "text-slate-500"}>
-                                      {hay
-                                        ? `${res.alCien.length} de ${res.conDatos} ${res.conDatos === 1 ? "hospital" : "hospitales"} al 100%`
-                                        : "sin datos"}
+                                  <span className="min-w-0 flex-1">
+                                    <span className={`block text-base font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                                      {r.nombre}
                                     </span>
-                                  </p>
+                                    <span className={`mt-0.5 block truncate text-[11px] ${suave}`}>
+                                      {r.detalle} · {conectados} de {lista.length} conectados
+                                    </span>
+                                    <span className="mt-1.5 block text-[11px] text-slate-500">
+                                      {hay
+                                        ? `${res.alCien.length} de ${res.conDatos} al 100%${res.enProceso.length ? ` \u00b7 ${res.enProceso.length} en proceso` : ""}`
+                                        : conectados
+                                          ? "Sin consultar este mes."
+                                          : "A\u00fan sin reportar al monitoreo."}
+                                    </span>
+                                  </span>
+                                  <span className="relative h-[46px] w-[46px] shrink-0">
+                                    <svg width="46" height="46" className="-rotate-90" aria-hidden="true">
+                                      <defs>
+                                        <linearGradient id={`ring-${r.id}`} x1="0" y1="0" x2="1" y2="1">
+                                          <stop offset="0" stopColor="#5eead4" />
+                                          <stop offset="1" stopColor="#34d399" />
+                                        </linearGradient>
+                                      </defs>
+                                      <circle cx="23" cy="23" r="19" fill="none" stroke={isLightPanelTheme ? "rgba(15,23,42,0.10)" : "rgba(255,255,255,0.10)"} strokeWidth="4" />
+                                      {hay ? (
+                                        <circle
+                                          cx="23"
+                                          cy="23"
+                                          r="19"
+                                          fill="none"
+                                          stroke={`url(#ring-${r.id})`}
+                                          strokeWidth="4"
+                                          strokeLinecap="round"
+                                          strokeDasharray={CIRC}
+                                          strokeDashoffset={CIRC * (1 - res.pct / 100)}
+                                        />
+                                      ) : null}
+                                    </svg>
+                                    <span className={`absolute inset-0 grid place-items-center text-xs font-bold tabular-nums ${hay ? (isLightPanelTheme ? "text-slate-900" : "text-white") : "text-slate-500"}`}>
+                                      {hay ? `${res.pct}%` : "\u2014"}
+                                    </span>
+                                  </span>
                                 </button>
                               );
                             })}
-                          </div>
-                        </div>
-
-                        {/* Las cinco regiones, ahora con su avance real. */}
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                          {REGIONES_SALUD.map((r) => {
-                            const lista = HOSPITALES_EXTERNOS.filter((h) => h.region === r.id);
-                            const conectados = lista.filter((h) => h.conectado).length;
-                            const res = resumenRegion(r.id);
-                            return (
-                              <button
-                                key={r.id}
-                                type="button"
-                                onClick={() => {
-                                  setRegionSel(r.id);
-                                  setHospitalSel("");
-                                }}
-                                className={`rounded-2xl border p-4 text-left transition hover:border-teal-400/50 ${tarjeta}`}
-                              >
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                                  Región
-                                </p>
-                                <p className={`mt-1 text-xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                                  {r.nombre}
-                                </p>
-                                <p className={`mt-0.5 text-xs ${suave}`}>{r.detalle}</p>
-                                <p className={`mt-3 text-sm font-semibold ${conectados ? "text-emerald-300" : "text-slate-400"}`}>
-                                  {conectados} de {lista.length} conectados
-                                </p>
-                                {res.conDatos > 0 ? (
-                                  <>
-                                    <div className={`mt-2 h-2 overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
-                                      <div
-                                        className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500"
-                                        style={{ width: `${res.pct}%` }}
-                                      />
-                                    </div>
-                                    <p className={`mt-1.5 text-xs ${suave}`}>
-                                      Promedio {res.pct}% · {res.alCien.length} de {res.conDatos} al 100%
-                                      {res.enProceso.length ? ` · ${res.enProceso.length} en proceso` : ""}
-                                    </p>
-                                  </>
-                                ) : (
-                                  <p className="mt-2 text-xs text-slate-500">
-                                    {conectados ? "Sin consultar este mes." : "Aún sin reportar al monitoreo."}
-                                  </p>
-                                )}
-                              </button>
-                            );
-                          })}
                         </div>
 
                         {/* Tabla nacional: los que ya reportan, del que más entregó
