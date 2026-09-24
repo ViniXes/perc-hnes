@@ -1110,3 +1110,66 @@ th :focus-visible {
 .panel-shell h3 {
   letter-spacing: -0.01em;
 }
+
+
+/* =============================================================================
+   ELEGANCIA v2 (solo vista) — tablas legibles, foco/interaccion, estados y
+   jerarquia tipografica. Todo global bajo .panel-shell y con los tokens del
+   tema (funciona en oscuro y en claro). Sin tocar componentes ni logica.
+   ============================================================================= */
+
+/* --- 1) Tablas mas legibles: zebra muy leve, hover de fila y scrollbar con acento --- */
+.panel-shell tbody tr { transition: background-color .12s ease; }
+.panel-shell tbody tr:nth-child(even) {
+  background-color: color-mix(in srgb, var(--text) 3%, transparent);
+}
+.panel-shell tbody tr:hover {
+  background-color: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.show-scrollbar {
+  scrollbar-color: color-mix(in srgb, var(--accent) 50%, transparent) transparent;
+}
+.show-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.show-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 65%, transparent);
+}
+
+/* --- 2) Interaccion y foco: transiciones suaves y anillo de foco accesible --- */
+.panel-shell button,
+.panel-shell a[href],
+.panel-shell [role="button"],
+.panel-shell summary {
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease,
+              box-shadow .15s ease, transform .1s ease;
+}
+.panel-shell :is(button, a[href], input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- 3) Estados y chips: halo de color en los puntitos de estado, brillo en pastillas --- */
+.panel-shell [class*="bg-emerald"][class~="rounded-full"]:where([class~="h-1.5"],[class~="h-2"],[class~="h-2.5"],[class~="h-3"]) {
+  box-shadow: 0 0 7px 0 rgba(52, 211, 153, 0.50);
+}
+.panel-shell [class*="bg-amber"][class~="rounded-full"]:where([class~="h-1.5"],[class~="h-2"],[class~="h-2.5"],[class~="h-3"]) {
+  box-shadow: 0 0 7px 0 rgba(251, 191, 36, 0.50);
+}
+.panel-shell [class*="bg-rose"][class~="rounded-full"]:where([class~="h-1.5"],[class~="h-2"],[class~="h-2.5"],[class~="h-3"]) {
+  box-shadow: 0 0 7px 0 rgba(251, 113, 133, 0.50);
+}
+.panel-shell [class*="bg-cyan"][class~="rounded-full"]:where([class~="h-1.5"],[class~="h-2"],[class~="h-2.5"],[class~="h-3"]) {
+  box-shadow: 0 0 7px 0 rgba(34, 211, 238, 0.45);
+}
+.panel-shell.theme-dark [class~="rounded-full"][class~="border"] {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* --- 4) Jerarquia tipografica: rotulos en mayuscula con mas aire y separadores finos --- */
+.panel-shell [class~="uppercase"] { letter-spacing: 0.08em; }
+.panel-shell hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
