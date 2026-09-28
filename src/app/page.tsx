@@ -1648,7 +1648,13 @@ function computeDistribuidaMatrix(overview: AdminOverviewEntry[]) {
 
   return CONSOLIDADO_ROW_ORDER.map((row) => {
     const headerSums = sumsByRow.get(row);
-    const cells = TABULATOR_HEADERS.map((header) => headerSums?.get(header) ?? 0);
+    // Ningun servicio se apoya a si mismo: la diagonal (codigo de la fila ==
+    // codigo del centro/columna) SIEMPRE va en 0, tanto en pantalla como al bajar.
+    const codigoFila = row.match(/^\s*(\d+)/)?.[1] ?? "";
+    const cells = TABULATOR_HEADERS.map((header) => {
+      if (codigoFila && header.match(/^\s*(\d+)/)?.[1] === codigoFila) return 0;
+      return headerSums?.get(header) ?? 0;
+    });
     return { row, cells, total: cells.reduce((acc, n) => acc + n, 0) };
   });
 }
@@ -1699,8 +1705,13 @@ function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: stri
     .join("");
   const bodyRows = CONSOLIDADO_ROW_ORDER.map((row) => {
     const headerSums = sumsByRow.get(row);
+    // Ningun servicio se apoya a si mismo: la diagonal (codigo de la fila ==
+    // codigo del centro) SIEMPRE se descarga en 0.
+    const codigoFila = row.match(/^\s*(\d+)/)?.[1] ?? "";
     const cells = TABULATOR_HEADERS.map((header) => {
-      const sum = headerSums?.get(header);
+      const esPropio =
+        !!codigoFila && header.match(/^\s*(\d+)/)?.[1] === codigoFila;
+      const sum = esPropio ? 0 : headerSums?.get(header);
       const text = sum === undefined ? "0" : formatConsolidatedNumber(sum);
 
       return `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(
