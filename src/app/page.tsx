@@ -3996,6 +3996,8 @@ export default function Home() {
   const [distribuidaPreview, setDistribuidaPreview] = useState<
     { row: string; cells: number[]; total: number }[] | null
   >(null);
+  // Buscador de la vista previa: filtra las columnas por centro de costo.
+  const [distribuidaBusca, setDistribuidaBusca] = useState("");
   const [isLoadingDistribuida, setIsLoadingDistribuida] = useState(false);
   /** Numero de camas por centro (dato fijo, editable por el admin). */
   const [camasFijas, setCamasFijas] = useState<Record<string, number>>({});
@@ -24673,72 +24675,110 @@ export default function Home() {
                       Todavía no hay datos capturados para este período.
                     </p>
                   ) : (
-                    <div className="show-scrollbar min-h-0 flex-1 overflow-auto rounded-2xl border border-white/10">
-                      <table className="w-max min-w-full border-collapse text-[11px]">
-                        <thead className="sticky top-0 z-10">
-                          <tr>
-                            <th className="sticky left-0 z-20 min-w-[220px] border-b border-r border-white/10 bg-[#1b2537] px-3 py-2.5 text-left font-bold text-slate-200">
-                              Centro de costos
-                            </th>
-                            {TABULATOR_HEADERS.map((header) => (
-                              <th
-                                key={header}
-                                className="min-w-[110px] border-b border-white/10 bg-[#1b2537] px-2 py-2.5 text-center font-semibold text-slate-300"
-                              >
-                                {header}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {distribuidaPreview.map((fila, index) => {
-                            // Verde sutil = ese centro de costos ya tiene produccion
-                            // capturada este mes. Gris = sigue en cero.
-                            const conDatos = fila.total > 0;
-
-                            return (
-                            <tr
-                              key={fila.row}
-                              className={
-                                conDatos
-                                  ? "bg-emerald-500/[0.07]"
-                                  : index % 2 === 0
-                                    ? "bg-white/[0.02]"
-                                    : undefined
-                              }
-                            >
-                              <td
-                                className={`sticky left-0 z-10 border-b border-r px-3 py-2 font-semibold ${
-                                  conDatos
-                                    ? "border-emerald-400/20 bg-[#152a26] text-emerald-100"
-                                    : "border-white/10 bg-[#141d2e] text-slate-300"
-                                }`}
-                              >
-                                <span className="flex items-center gap-2">
-                                  <span
-                                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                      conDatos ? "bg-emerald-400" : "bg-slate-600"
-                                    }`}
-                                  />
-                                  {fila.row}
-                                </span>
-                              </td>
-                              {fila.cells.map((valor, i) => (
-                                <td
-                                  key={`${fila.row}-${i}`}
-                                  className={`border-b border-white/5 px-2 py-2 text-center ${
-                                    valor === 0 ? "text-slate-600" : "font-semibold text-emerald-200"
-                                  }`}
-                                >
-                                  {valor === 0 ? "0" : formatConsolidatedNumber(valor)}
-                                </td>
-                              ))}
-                            </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                    (() => {
+                      const q = distribuidaBusca.trim().toLowerCase();
+                      const cols = TABULATOR_HEADERS.map((h, i) => ({ h, i })).filter(
+                        ({ h }) => !q || h.toLowerCase().includes(q),
+                      );
+                      const codigoDe = (t: string) => t.match(/^\s*(\d+)/)?.[1] ?? "";
+                      return (
+                        <>
+                          <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
+                            <input
+                              type="search"
+                              value={distribuidaBusca}
+                              onChange={(event) => setDistribuidaBusca(event.target.value)}
+                              placeholder="Buscar centro de costo (ej. aseo, almacen)…"
+                              className="w-full max-w-xs rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:border-cyan-400 sm:w-80"
+                            />
+                            {q ? (
+                              <span className="text-[11px] text-slate-400">
+                                {cols.length} centro{cols.length === 1 ? "" : "s"} · la casilla con anillo es el cruce del servicio consigo mismo (debe ser 0)
+                              </span>
+                            ) : null}
+                          </div>
+                          {cols.length === 0 ? (
+                            <p className="py-16 text-center text-sm text-slate-400">
+                              Ningun centro de costo coincide con la busqueda.
+                            </p>
+                          ) : (
+                            <div className="show-scrollbar min-h-0 flex-1 overflow-auto rounded-2xl border border-white/10">
+                              <table className="w-max min-w-full border-collapse text-[11px]">
+                                <thead className="sticky top-0 z-10">
+                                  <tr>
+                                    <th className="sticky left-0 z-20 min-w-[220px] border-b border-r border-white/10 bg-[#1b2537] px-3 py-2.5 text-left font-bold text-slate-200">
+                                      Centro de costos
+                                    </th>
+                                    {cols.map(({ h }) => (
+                                      <th
+                                        key={h}
+                                        className="min-w-[110px] border-b border-white/10 bg-[#1b2537] px-2 py-2.5 text-center font-semibold text-slate-300"
+                                      >
+                                        {h}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {distribuidaPreview.map((fila, index) => {
+                                    const conDatos = fila.total > 0;
+                                    const codFila = codigoDe(fila.row);
+                                    return (
+                                    <tr
+                                      key={fila.row}
+                                      className={
+                                        conDatos
+                                          ? "bg-emerald-500/[0.07]"
+                                          : index % 2 === 0
+                                            ? "bg-white/[0.02]"
+                                            : undefined
+                                      }
+                                    >
+                                      <td
+                                        className={`sticky left-0 z-10 border-b border-r px-3 py-2 font-semibold ${
+                                          conDatos
+                                            ? "border-emerald-400/20 bg-[#152a26] text-emerald-100"
+                                            : "border-white/10 bg-[#141d2e] text-slate-300"
+                                        }`}
+                                      >
+                                        <span className="flex items-center gap-2">
+                                          <span
+                                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                              conDatos ? "bg-emerald-400" : "bg-slate-600"
+                                            }`}
+                                          />
+                                          {fila.row}
+                                        </span>
+                                      </td>
+                                      {cols.map(({ h, i }) => {
+                                        const valor = fila.cells[i];
+                                        const esPropio = !!codFila && codigoDe(h) === codFila;
+                                        return (
+                                          <td
+                                            key={`${fila.row}-${i}`}
+                                            title={esPropio ? "Cruce del servicio consigo mismo: debe ser 0" : undefined}
+                                            className={`border-b border-white/5 px-2 py-2 text-center ${
+                                              esPropio
+                                                ? "bg-rose-500/10 font-semibold text-rose-200 ring-1 ring-inset ring-rose-400/60"
+                                                : valor === 0
+                                                  ? "text-slate-600"
+                                                  : "font-semibold text-emerald-200"
+                                            }`}
+                                          >
+                                            {valor === 0 ? "0" : formatConsolidatedNumber(valor)}
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()
                   )}
                 </div>
               </div>
