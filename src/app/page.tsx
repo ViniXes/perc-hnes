@@ -4003,6 +4003,13 @@ export default function Home() {
   const [changelogPendiente, setChangelogPendiente] = useState<ChangelogEntry[]>([]);
   const [showChangelog, setShowChangelog] = useState(false);
   const changelogHechoRef = useRef(false);
+  const cerrarNovedades = () => {
+    setShowChangelog(false);
+    try {
+      const n = Number.parseInt(APP_VERSION.split(".").pop() || "0", 10) || 0;
+      localStorage.setItem("pulso.changelog.visto", String(n));
+    } catch {}
+  };
   const [isLoadingDistribuida, setIsLoadingDistribuida] = useState(false);
   /** Numero de camas por centro (dato fijo, editable por el admin). */
   const [camasFijas, setCamasFijas] = useState<Record<string, number>>({});
@@ -13069,12 +13076,14 @@ export default function Home() {
       (e) => num(e.version) > umbral && num(e.version) <= actual && relevante(e),
     ).sort((a, b) => num(b.version) - num(a.version));
     if (pend.length) {
-      setChangelogPendiente(pend);
-      setShowChangelog(true);
+      // Espera breve para no pelear con el modal de actualizacion / la recarga.
+      window.setTimeout(() => {
+        setChangelogPendiente(pend);
+        setShowChangelog(true);
+      }, 1500);
     }
-    try {
-      localStorage.setItem(clave, String(actual));
-    } catch {}
+    // Ojo: el "visto" se marca SOLO cuando el usuario cierra el modal
+    // (cerrarNovedades), no aca, para que no se pierda si hay una recarga.
   }, [serviceProfile, isAdmin, monitorDivision]);
 
   // Tendencias: se arma al entrar y cada vez que se cambia el rango de meses.
@@ -24836,7 +24845,7 @@ export default function Home() {
               role="dialog"
               aria-modal="true"
               className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-              onClick={() => setShowChangelog(false)}
+              onClick={cerrarNovedades}
             >
               <div className="modal-fade-in fixed inset-0 bg-slate-950/80 backdrop-blur-sm" />
               <div
@@ -24854,7 +24863,7 @@ export default function Home() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowChangelog(false)}
+                    onClick={cerrarNovedades}
                     aria-label="Cerrar"
                     className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
                   >
@@ -24879,7 +24888,7 @@ export default function Home() {
                 <div className="shrink-0 border-t border-white/10 px-5 py-4">
                   <button
                     type="button"
-                    onClick={() => setShowChangelog(false)}
+                    onClick={cerrarNovedades}
                     className="w-full rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-400"
                   >
                     Entendido

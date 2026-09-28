@@ -27,13 +27,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "1986.379",
+    version: "1986.381",
     para: ["admin"],
     texto:
       "Nuevo: aviso de novedades por version. A cada usuario le llega solo lo que le corresponde; vos, como admin, ves todos los mensajes.",
   },
   {
-    version: "1986.379",
+    version: "1986.381",
     para: ["div:apoyo", "serv:aseo", "serv:almacen"],
     texto:
       "Ahora ningun servicio se reporta a si mismo: la columna del propio centro queda bloqueada y sale en 0 en el consolidado.",
