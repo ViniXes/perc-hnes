@@ -4710,6 +4710,19 @@ export default function Home() {
     if (explicito) {
       return TABULATOR_HEADERS.find((h) => h === explicito) ?? null;
     }
+    // Centro propio por CODIGO: los renglones del servicio empiezan con el
+    // codigo de su propio centro (ej. "648_1-Aseo" -> 648). Bloquea esa columna
+    // para que NINGUN servicio que digita se reporte a si mismo, aunque el
+    // nombre no coincida con el del centro.
+    const codigoPropio = currentService.rows
+      .map((r) => r.match(/^\s*(\d+)/)?.[1])
+      .find(Boolean);
+    if (codigoPropio) {
+      const porCodigo = TABULATOR_HEADERS.find(
+        (h) => h.match(/^\s*(\d+)/)?.[1] === codigoPropio,
+      );
+      if (porCodigo) return porCodigo;
+    }
     const name = currentService.name.trim().toLowerCase();
     return (
       TABULATOR_HEADERS.find(
