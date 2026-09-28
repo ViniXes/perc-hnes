@@ -160,6 +160,7 @@ import {
   LoginLoadingModal,
 } from "@/components/login-loading-modal";
 import { APP_VERSION } from "@/lib/version";
+import { CHANGELOG, type ChangelogEntry } from "@/lib/changelog";
 import { esperarConfirmacion, estaEnLinea } from "@/lib/offline";
 import { SelectorFecha, SelectorMes } from "@/components/selectores-fecha";
 import {
@@ -3998,6 +3999,10 @@ export default function Home() {
   >(null);
   // Buscador de la vista previa: filtra las columnas por centro de costo.
   const [distribuidaBusca, setDistribuidaBusca] = useState("");
+  // Changelog dirigido: mensajes de novedades por version segun el usuario.
+  const [changelogPendiente, setChangelogPendiente] = useState<ChangelogEntry[]>([]);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const changelogHechoRef = useRef(false);
   const [isLoadingDistribuida, setIsLoadingDistribuida] = useState(false);
   /** Numero de camas por centro (dato fijo, editable por el admin). */
   const [camasFijas, setCamasFijas] = useState<Record<string, number>>({});
@@ -13030,6 +13035,47 @@ export default function Home() {
     void loadBitacora();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSidebarSection, mobileView]);
+
+  // Novedades por version (changelog dirigido): al entrar muestra los mensajes
+  // nuevos que le corresponden al usuario. El admin ve todos. No repite historial.
+  useEffect(() => {
+    if (changelogHechoRef.current) return;
+    if (!serviceProfile) return;
+    changelogHechoRef.current = true;
+    const num = (v: string) => Number.parseInt(v.split(".").pop() || "0", 10) || 0;
+    const actual = num(APP_VERSION);
+    const div =
+      serviceProfile.division ||
+      monitorDivision ||
+      (serviceProfile.serviceId ? SERVICE_GROUP_BY_ID[serviceProfile.serviceId] ?? null : null);
+    const sid = serviceProfile.serviceId ?? null;
+    const relevante = (e: ChangelogEntry) => {
+      if (isAdmin) return true;
+      return e.para.some(
+        (por) =>
+          por === "todos" ||
+          (por.startsWith("div:") && !!div && por.slice(4) === div) ||
+          (por.startsWith("serv:") && !!sid && por.slice(5) === sid),
+      );
+    };
+    const clave = "pulso.changelog.visto";
+    let visto = 0;
+    try {
+      visto = Number.parseInt(localStorage.getItem(clave) || "", 10) || 0;
+    } catch {}
+    // Primera vez en este navegador: mostrar solo lo de la version actual.
+    const umbral = visto || actual - 1;
+    const pend = CHANGELOG.filter(
+      (e) => num(e.version) > umbral && num(e.version) <= actual && relevante(e),
+    ).sort((a, b) => num(b.version) - num(a.version));
+    if (pend.length) {
+      setChangelogPendiente(pend);
+      setShowChangelog(true);
+    }
+    try {
+      localStorage.setItem(clave, String(actual));
+    } catch {}
+  }, [serviceProfile, isAdmin, monitorDivision]);
 
   // Tendencias: se arma al entrar y cada vez que se cambia el rango de meses.
   useEffect(() => {
@@ -24780,6 +24826,64 @@ export default function Home() {
                       );
                     })()
                   )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {showChangelog && changelogPendiente.length > 0 ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+              onClick={() => setShowChangelog(false)}
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/80 backdrop-blur-sm" />
+              <div
+                onClick={(event) => event.stopPropagation()}
+                className="modal-pop-in relative flex max-h-[85dvh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60"
+              >
+                <div className="h-1 w-full shrink-0 bg-gradient-to-r from-cyan-400 to-violet-500" />
+                <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-5">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-300/90">
+                      Novedades
+                    </p>
+                    <h3 className="mt-1 text-xl font-bold text-white">Qué hay de nuevo</h3>
+                    <p className="mt-1 text-xs text-slate-400">Versión {APP_VERSION}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowChangelog(false)}
+                    aria-label="Cerrar"
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="show-scrollbar min-h-0 flex-1 overflow-auto px-5 pb-5">
+                  <ul className="flex flex-col gap-2.5">
+                    {changelogPendiente.map((nota, i) => (
+                      <li
+                        key={`${nota.version}-${i}`}
+                        className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
+                      >
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-300/80">
+                          v{nota.version}
+                        </p>
+                        <p className="mt-1 text-sm leading-relaxed text-slate-200">{nota.texto}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="shrink-0 border-t border-white/10 px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowChangelog(false)}
+                    className="w-full rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-400"
+                  >
+                    Entendido
+                  </button>
                 </div>
               </div>
             </div>
