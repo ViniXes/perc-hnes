@@ -4154,6 +4154,7 @@ export default function Home() {
   const [tendenciasError, setTendenciasError] = useState("");
   const [tendenciasMeses, setTendenciasMeses] = useState(12);
   const [tendenciasSeries, setTendenciasSeries] = useState<Record<string, boolean>>({});
+  const [tendHover, setTendHover] = useState<number | null>(null);
   // AVISO DE CIFRAS ATIPICAS (PERC): antes de guardar se compara cada fila con el
   // mes anterior; si algo se disparo (p.ej. 498 -> 4980) se pide confirmacion.
   const [percAtipicos, setPercAtipicos] = useState<
@@ -19614,6 +19615,7 @@ export default function Home() {
                           style={{ height: 214 }}
                           role="img"
                           aria-label="Cumplimiento mensual por tablero"
+                          onMouseLeave={() => setTendHover(null)}
                         >
                           {[0, 25, 50, 75, 100].map((nivel) => (
                             <g key={nivel}>
@@ -19630,6 +19632,23 @@ export default function Home() {
                               </text>
                             </g>
                           ))}
+                          {/* Relleno de area cuando queda una sola linea visible. */}
+                          {visibles.length === 1 ? (
+                            <>
+                              <defs>
+                                <linearGradient id="tendArea" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0" stopColor={visibles[0].color} stopOpacity="0.22" />
+                                  <stop offset="1" stopColor={visibles[0].color} stopOpacity="0" />
+                                </linearGradient>
+                              </defs>
+                              <polygon
+                                fill="url(#tendArea)"
+                                points={`${px(0)},${ALTO - ABA} ${filas
+                                  .map((fila, indice) => `${px(indice)},${py(fila[visibles[0].clave].pct)}`)
+                                  .join(" ")} ${px(filas.length - 1)},${ALTO - ABA}`}
+                              />
+                            </>
+                          ) : null}
                           {visibles.map((serie) => (
                             <polyline
                               key={serie.clave}
@@ -19643,21 +19662,88 @@ export default function Home() {
                                 .join(" ")}
                             />
                           ))}
-                          {visibles.map((serie) =>
-                            filas.map((fila, indice) => (
+                          {/* Punto final destacado de cada linea visible. */}
+                          {visibles.map((serie) => {
+                            const fin = filas.length - 1;
+                            return (
                               <circle
-                                key={`${serie.clave}-${fila.periodId}`}
-                                cx={px(indice)}
-                                cy={py(fila[serie.clave].pct)}
-                                r="2.7"
-                                fill={fondoPunto}
-                                stroke={serie.color}
-                                strokeWidth="1.7"
-                              >
-                                <title>{`${serie.label} · ${fila.label}: ${fila[serie.clave].pct}%`}</title>
-                              </circle>
-                            )),
-                          )}
+                                key={`fin-${serie.clave}`}
+                                cx={px(fin)}
+                                cy={py(filas[fin][serie.clave].pct)}
+                                r="3.6"
+                                fill={serie.color}
+                                stroke={fondoPunto}
+                                strokeWidth="1.5"
+                              />
+                            );
+                          })}
+
+                          {/* Guia vertical + puntos + tooltip del mes bajo el mouse. */}
+                          {tendHover !== null && filas[tendHover] ? (
+                            <g pointerEvents="none">
+                              <line
+                                x1={px(tendHover)}
+                                x2={px(tendHover)}
+                                y1={ARR}
+                                y2={ALTO - ABA}
+                                stroke={isLightPanelTheme ? "rgba(15,23,42,0.18)" : "rgba(255,255,255,0.16)"}
+                                strokeWidth="1"
+                                strokeDasharray="3 3"
+                              />
+                              {visibles.map((serie) => (
+                                <circle
+                                  key={`hov-${serie.clave}`}
+                                  cx={px(tendHover)}
+                                  cy={py(filas[tendHover][serie.clave].pct)}
+                                  r="4"
+                                  fill={serie.color}
+                                  stroke={fondoPunto}
+                                  strokeWidth="1.8"
+                                />
+                              ))}
+                              {(() => {
+                                const anchoTip = 122;
+                                const altoTip = 22 + visibles.length * 14;
+                                let tipX = px(tendHover) + 10;
+                                if (tipX + anchoTip > ANCHO - 2) tipX = px(tendHover) - anchoTip - 10;
+                                if (tipX < 2) tipX = 2;
+                                const tipY = ARR + 2;
+                                const etiqueta = filas[tendHover].label;
+                                const titulo = etiqueta.charAt(0).toUpperCase() + etiqueta.slice(1);
+                                return (
+                                  <g>
+                                    <rect
+                                      x={tipX}
+                                      y={tipY}
+                                      width={anchoTip}
+                                      height={altoTip}
+                                      rx="9"
+                                      fill={isLightPanelTheme ? "#ffffff" : "#0e1626"}
+                                      stroke={isLightPanelTheme ? "#e2e8f0" : "rgba(255,255,255,0.14)"}
+                                    />
+                                    <text x={tipX + 11} y={tipY + 16} fontSize="9.5" fontWeight="700" fill={isLightPanelTheme ? "#0f172a" : "#e7ecf5"}>
+                                      {titulo}
+                                    </text>
+                                    {visibles.map((serie, j) => {
+                                      const filaY = tipY + 30 + j * 14;
+                                      return (
+                                        <g key={`tip-${serie.clave}`}>
+                                          <circle cx={tipX + 14} cy={filaY - 3} r="3.2" fill={serie.color} />
+                                          <text x={tipX + 23} y={filaY} fontSize="9" fill={isLightPanelTheme ? "#475569" : "#9fb0cc"}>
+                                            {serie.label}
+                                          </text>
+                                          <text x={tipX + anchoTip - 11} y={filaY} textAnchor="end" fontSize="9.5" fontWeight="700" fill={isLightPanelTheme ? "#0f172a" : "#ffffff"}>
+                                            {filas[tendHover][serie.clave].pct}%
+                                          </text>
+                                        </g>
+                                      );
+                                    })}
+                                  </g>
+                                );
+                              })()}
+                            </g>
+                          ) : null}
+
                           {filas.map((fila, indice) => (
                             <text
                               key={fila.periodId}
@@ -19670,6 +19756,24 @@ export default function Home() {
                               {fila.corto}
                             </text>
                           ))}
+
+                          {/* Zonas transparentes: capturan el mes bajo el mouse. Van al final
+                              para quedar por encima y recibir el hover. */}
+                          {filas.map((fila, indice) => {
+                            const anchoBanda = (ANCHO - IZQ - DER) / filas.length;
+                            const bandaX = filas.length === 1 ? IZQ : px(indice) - anchoBanda / 2;
+                            return (
+                              <rect
+                                key={`cap-${fila.periodId}`}
+                                x={Math.max(IZQ, bandaX)}
+                                y={ARR}
+                                width={filas.length === 1 ? ANCHO - IZQ - DER : anchoBanda}
+                                height={ALTO - ARR - ABA}
+                                fill="transparent"
+                                onMouseEnter={() => setTendHover(indice)}
+                              />
+                            );
+                          })}
                         </svg>
                       </div>
 
