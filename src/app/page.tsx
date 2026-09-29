@@ -7189,6 +7189,7 @@ export default function Home() {
       const libro = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(libro, hoja, "Tendencias");
       XLSX.writeFile(libro, `PULSO_Tendencias_${tendencias[0].periodId}_a_${tendencias[tendencias.length - 1].periodId}.xlsx`);
+      setMessage("Excel del historial descargado.");
     } catch (err) {
       console.error(err);
       setError("No pudimos generar el Excel del historial.");
@@ -18860,7 +18861,10 @@ export default function Home() {
                     ? "border-emerald-300 bg-white text-emerald-700"
                     : "border-emerald-400/30 bg-[#0f1f1a]/95 text-emerald-100"
                 }`}>
-                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                  <svg className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M8.5 12.5l2.5 2.5 4.5-5" />
+                  </svg>
                   <span className="flex-1">{message}</span>
                   <button
                     type="button"
@@ -24726,9 +24730,16 @@ export default function Home() {
                   {isLoadingDistribuida ? (
                     <p className="py-16 text-center text-sm text-slate-400">Preparando la tabla…</p>
                   ) : !distribuidaPreview || distribuidaPreview.length === 0 ? (
-                    <p className="py-16 text-center text-sm text-slate-400">
-                      Todavía no hay datos capturados para este período.
-                    </p>
+                    <div className="pulso-empty">
+                      <span className="pulso-empty__ic">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <rect x="3" y="4" width="18" height="16" rx="2" />
+                          <path d="M3 10h18M9 4v16" />
+                        </svg>
+                      </span>
+                      <span className="pulso-empty__title">Todavía no hay datos</span>
+                      <span className="pulso-empty__hint">Cuando los servicios capturen su producción de este período, el consolidado aparecerá aquí.</span>
+                    </div>
                   ) : (
                     (() => {
                       const q = distribuidaBusca.trim().toLowerCase();
@@ -26534,14 +26545,21 @@ export default function Home() {
                 {/* Tabla */}
                 <div className="max-h-[70vh] overflow-y-auto px-3 pb-2 sm:px-5">
                   {docsLoading ? (
-                    <div className="flex flex-col items-center justify-center gap-3 py-16">
-                      <span
-                        className="h-6 w-6 animate-spin rounded-full border-2"
-                        style={{ borderColor: "var(--border)", borderTopColor: "var(--text-muted)" }}
-                      />
-                      <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                        Cargando control documental…
-                      </p>
+                    <div className="pulso-skel-stack px-1 py-4" role="status" aria-label="Cargando control documental">
+                      <div className="flex items-center gap-3">
+                        <span className="pulso-skel pulso-skel--sm" style={{ width: "34%" }} />
+                        <span className="pulso-skel pulso-skel--sm ml-auto" style={{ width: "14%" }} />
+                        <span className="pulso-skel pulso-skel--sm" style={{ width: "14%" }} />
+                        <span className="pulso-skel pulso-skel--sm" style={{ width: "14%" }} />
+                      </div>
+                      {Array.from({ length: 8 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="pulso-skel pulso-skel--line" style={{ width: `${38 - (i % 3) * 6}%` }} />
+                          <span className="pulso-skel pulso-skel--pill ml-auto h-5" style={{ width: "13%" }} />
+                          <span className="pulso-skel pulso-skel--pill h-5" style={{ width: "13%" }} />
+                          <span className="pulso-skel pulso-skel--pill h-5" style={{ width: "13%" }} />
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <table className="w-full border-collapse">

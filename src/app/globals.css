@@ -1173,3 +1173,101 @@ th :focus-visible {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--border), transparent);
 }
+
+/* ============================================================================
+   ELEGANCIA v3 (solo vista) — estados de carga y vacíos, consistencia entre
+   módulos y tablas grandes más legibles. Todo global bajo .panel-shell y con
+   los tokens del tema; funciona en oscuro y en claro. Sin tocar lógica.
+   ============================================================================ */
+
+/* --- #1 · Estados de CARGA: skeletons con brillo suave -------------------- */
+@keyframes pulsoShimmer {
+  0%   { background-position: -160% 0; }
+  100% { background-position:  160% 0; }
+}
+.pulso-skel {
+  position: relative;
+  border-radius: 10px;
+  background-color: color-mix(in srgb, var(--text) 8%, transparent);
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, var(--text) 12%, transparent) 45%,
+    color-mix(in srgb, var(--accent) 14%, transparent) 55%,
+    transparent 80%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: pulsoShimmer 1.35s ease-in-out infinite;
+}
+.pulso-skel--line { height: 12px; }
+.pulso-skel--sm   { height: 10px; }
+.pulso-skel--lg   { height: 20px; }
+.pulso-skel--pill { border-radius: 999px; }
+.pulso-skel-stack { display: grid; gap: 10px; }
+@media (prefers-reduced-motion: reduce) {
+  .pulso-skel { animation: none; }
+}
+
+/* --- #1 · Estados VACÍOS: bloque centrado, discreto y consistente --------- */
+.pulso-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 34px 22px;
+  color: var(--text-muted);
+}
+.pulso-empty .pulso-empty__ic {
+  width: 42px; height: 42px;
+  display: grid; place-items: center;
+  border-radius: 14px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  margin-bottom: 2px;
+}
+.pulso-empty__title { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.pulso-empty__hint  { font-size: 11.5px; color: var(--text-faint); max-width: 30ch; line-height: 1.5; }
+
+/* --- #2 · CONSISTENCIA entre módulos -------------------------------------- */
+/* Títulos con el mismo ritmo en todos los módulos */
+.panel-shell h1, .panel-shell h2, .panel-shell h3 { letter-spacing: -0.01em; }
+/* Estado deshabilitado uniforme para cualquier botón/acción */
+.panel-shell button:disabled,
+.panel-shell [role="button"][aria-disabled="true"],
+.panel-shell [aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+/* Selección de texto con el acento del tema, en toda la app */
+.panel-shell ::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+/* Imágenes/gráficos no se estiran raro */
+.panel-shell img { max-width: 100%; }
+
+/* --- #4 · TABLAS grandes: números tabulares y opción de encabezado fijo --- */
+/* Números alineados y del mismo ancho: se leen y comparan mucho mejor */
+.panel-shell table { font-variant-numeric: tabular-nums; }
+
+/* Opt-in: envolver una tabla ancha en un contenedor .tabla-fija para dejar el
+   encabezado y (si se marca) la primera columna pegados al hacer scroll. */
+.tabla-fija { overflow: auto; }
+.tabla-fija table { border-collapse: separate; border-spacing: 0; }
+.tabla-fija thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.tabla-fija--col1 tbody tr > :first-child,
+.tabla-fija--col1 thead tr > :first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+.tabla-fija--col1 thead tr > :first-child { z-index: 4; }
+.tabla-fija--col1 tbody tr > :first-child { box-shadow: inset -1px 0 0 var(--border); }
