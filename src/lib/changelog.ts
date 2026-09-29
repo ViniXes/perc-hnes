@@ -27,6 +27,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.385",
+    para: ["todos"],
+    texto:
+      "El saludo de Inicio ahora cambia segun la hora del dia: buenos dias, buenas tardes o buenas noches.",
+  },
+  {
+    version: "1986.385",
+    para: ["admin", "div:direccion"],
+    texto:
+      "Inicio abre con un resumen del mes: avance global de entregas, servicios al dia y modulos pendientes de un vistazo, con su tira de carga mientras se consulta.",
+  },
+  {
     version: "1986.384",
     para: ["todos"],
     texto:

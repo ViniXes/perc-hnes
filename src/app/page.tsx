@@ -18584,7 +18584,7 @@ export default function Home() {
                         : "Módulo de Administración"}
                   </h1>
                   <p className={`mt-0.5 truncate text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                    Bienvenido/a{" "}
+                    {(() => { const h = now.getHours(); return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches"; })()},{" "}
                     <span className={isLightPanelTheme ? "font-semibold text-slate-900" : "font-semibold text-cyan-200"}>{toTitleCase(welcomeName)}</span>
                     {currentService ? <span className="text-slate-400"> · Período de {periodLabel}</span> : null}
                   </p>
@@ -18631,6 +18631,77 @@ export default function Home() {
               </div>
             </div>
             </section>
+
+            {/* ============ RESUMEN DEL MES (admin/supervisor) ============
+                Tira de KPIs al tope de Inicio: pulso del mes de un vistazo. */}
+            {(isAdmin || isSupervisor) && !isMinsal ? (
+              <div className={`rounded-3xl border p-4 sm:p-5 ${isLightPanelTheme ? "border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]" : "border-white/10 bg-gradient-to-br from-[#1b2540] to-[#141d2e] shadow-[0_18px_50px_rgba(3,7,18,0.35)]"}`}>
+                {isLoadingDashboard ? (
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <div className="flex items-center gap-4">
+                      <span className="pulso-skel h-20 w-20 rounded-full" />
+                      <div className="pulso-skel-stack">
+                        <span className="pulso-skel pulso-skel--sm" style={{ width: 130 }} />
+                        <span className="pulso-skel pulso-skel--sm" style={{ width: 90 }} />
+                      </div>
+                    </div>
+                    <div className="grid flex-1 grid-cols-3 gap-2.5">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <span key={i} className="pulso-skel h-16 rounded-2xl" />
+                      ))}
+                    </div>
+                  </div>
+                ) : (() => {
+                  const svcs = dashboardGroups.flatMap((g) => g.services);
+                  const svcTotal = svcs.length;
+                  const svcDone = svcs.filter((s) => s.completed).length;
+                  const modDone = moduleStats.PERC.done + moduleStats.SEPS.done + moduleStats.Horas.done;
+                  const modTotal = moduleStats.PERC.total + moduleStats.SEPS.total + moduleStats.Horas.total;
+                  const modPend = Math.max(0, modTotal - modDone);
+                  const pct = modTotal > 0 ? Math.round((modDone / modTotal) * 100) : 0;
+                  const circ = 2 * Math.PI * 26;
+                  const off = circ * (1 - pct / 100);
+                  const pendVal = isLightPanelTheme
+                    ? (modPend > 0 ? "text-amber-600" : "text-slate-400")
+                    : (modPend > 0 ? "text-amber-300" : "text-slate-500");
+                  return (
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                      <div className="flex items-center gap-4">
+                        <div className="relative h-20 w-20 shrink-0">
+                          <svg viewBox="0 0 64 64" className="h-20 w-20 -rotate-90" aria-hidden="true">
+                            <circle cx="32" cy="32" r="26" fill="none" stroke={isLightPanelTheme ? "#e2e8f0" : "rgba(255,255,255,0.10)"} strokeWidth="6" />
+                            <circle cx="32" cy="32" r="26" fill="none" stroke="url(#kpiRing)" strokeWidth="6" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off} />
+                            <defs><linearGradient id="kpiRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#22d3ee" /><stop offset="1" stopColor="#34d399" /></linearGradient></defs>
+                          </svg>
+                          <div className="absolute inset-0 grid place-items-center">
+                            <span className={`text-lg font-bold tabular-nums ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{pct}%</span>
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--text-faint)" }}>Resumen del mes</p>
+                          <p className={`text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>Avance global de entregas</p>
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>{periodLabel}</p>
+                        </div>
+                      </div>
+                      <div className="grid flex-1 grid-cols-3 gap-2.5">
+                        <div className={`rounded-2xl border px-3 py-2.5 text-center ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-white/[0.03]"}`}>
+                          <p className={`text-xl font-bold tabular-nums ${isLightPanelTheme ? "text-cyan-700" : "text-cyan-300"}`}>{svcDone}/{svcTotal}</p>
+                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-faint)" }}>Servicios al día</p>
+                        </div>
+                        <div className={`rounded-2xl border px-3 py-2.5 text-center ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-white/[0.03]"}`}>
+                          <p className={`text-xl font-bold tabular-nums ${isLightPanelTheme ? "text-emerald-700" : "text-emerald-300"}`}>{modDone}/{modTotal}</p>
+                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-faint)" }}>Módulos al día</p>
+                        </div>
+                        <div className={`rounded-2xl border px-3 py-2.5 text-center ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-white/[0.03]"}`}>
+                          <p className={`text-xl font-bold tabular-nums ${pendVal}`}>{modPend}</p>
+                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-faint)" }}>Pendientes</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : null}
 
             {/* ================== TU MES ==================
                 Para la cuenta de un servicio: en una sola tarjeta, que le falta
