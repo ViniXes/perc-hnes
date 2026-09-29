@@ -160,7 +160,7 @@ import {
   LoginLoadingModal,
 } from "@/components/login-loading-modal";
 import { APP_VERSION } from "@/lib/version";
-import { CHANGELOG, type ChangelogEntry } from "@/lib/changelog";
+import { CHANGELOG, CHANGELOG_LATEST, type ChangelogEntry } from "@/lib/changelog";
 import { esperarConfirmacion, estaEnLinea } from "@/lib/offline";
 import { SelectorFecha, SelectorMes } from "@/components/selectores-fecha";
 import {
@@ -4006,8 +4006,7 @@ export default function Home() {
   const cerrarNovedades = () => {
     setShowChangelog(false);
     try {
-      const n = Number.parseInt(APP_VERSION.split(".").pop() || "0", 10) || 0;
-      localStorage.setItem("pulso.changelog.visto", String(n));
+      localStorage.setItem("pulso.changelog.visto", String(CHANGELOG_LATEST));
     } catch {}
   };
   const [isLoadingDistribuida, setIsLoadingDistribuida] = useState(false);
@@ -13063,7 +13062,6 @@ export default function Home() {
     if (!serviceProfile) return;
     changelogHechoRef.current = true;
     const num = (v: string) => Number.parseInt(v.split(".").pop() || "0", 10) || 0;
-    const actual = num(APP_VERSION);
     const div =
       serviceProfile.division ||
       monitorDivision ||
@@ -13083,10 +13081,12 @@ export default function Home() {
     try {
       visto = Number.parseInt(localStorage.getItem(clave) || "", 10) || 0;
     } catch {}
-    // Primera vez en este navegador: mostrar solo lo de la version actual.
-    const umbral = visto || actual - 1;
+    // Primera vez en este navegador: mostrar solo el ultimo lote del changelog.
+    // Se basa en CHANGELOG_LATEST (la version mas nueva definida en el archivo),
+    // no en APP_VERSION, para que el aviso no dependa del numero de despliegue.
+    const umbral = visto || CHANGELOG_LATEST - 1;
     const pend = CHANGELOG.filter(
-      (e) => num(e.version) > umbral && num(e.version) <= actual && relevante(e),
+      (e) => num(e.version) > umbral && relevante(e),
     ).sort((a, b) => num(b.version) - num(a.version));
     if (pend.length) {
       // Espera breve para no pelear con el modal de actualizacion / la recarga.
@@ -18631,76 +18631,6 @@ export default function Home() {
               </div>
             </div>
             </section>
-
-            {/* ============ RESUMEN DEL MES (admin/supervisor) ============
-                Tira de KPIs al tope de Inicio: pulso del mes de un vistazo. */}
-            {(isAdmin || isSupervisor) && !isMinsal ? (
-              <div className={`rounded-3xl border p-4 sm:p-5 ${isLightPanelTheme ? "border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)]" : "border-white/10 bg-gradient-to-br from-[#1b2540] to-[#141d2e] shadow-[0_18px_50px_rgba(3,7,18,0.35)]"}`}>
-                {isLoadingDashboard ? (
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                    <div className="flex items-center gap-4">
-                      <span className="pulso-skel h-20 w-20 rounded-full" />
-                      <div className="pulso-skel-stack">
-                        <span className="pulso-skel pulso-skel--sm" style={{ width: 130 }} />
-                        <span className="pulso-skel pulso-skel--sm" style={{ width: 90 }} />
-                      </div>
-                    </div>
-                    <div className="grid flex-1 grid-cols-3 gap-2.5">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <span key={i} className="pulso-skel h-16 rounded-2xl" />
-                      ))}
-                    </div>
-                  </div>
-                ) : (() => {
-                  const svcs = dashboardGroups.flatMap((g) => g.services);
-                  const svcTotal = svcs.length;
-                  const svcDone = svcs.filter((s) => s.completed).length;
-                  const svcPend = Math.max(0, svcTotal - svcDone);
-                  const svcFull = svcs.filter((s) => s.modules.length > 0 && s.modules.every((m) => m.completed)).length;
-                  const pct = svcTotal > 0 ? Math.round((svcDone / svcTotal) * 100) : 0;
-                  const circ = 2 * Math.PI * 26;
-                  const off = circ * (1 - pct / 100);
-                  const pendVal = isLightPanelTheme
-                    ? (svcPend > 0 ? "text-amber-600" : "text-slate-400")
-                    : (svcPend > 0 ? "text-amber-300" : "text-slate-500");
-                  return (
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                      <div className="flex items-center gap-4">
-                        <div className="relative h-20 w-20 shrink-0">
-                          <svg viewBox="0 0 64 64" className="h-20 w-20 -rotate-90" aria-hidden="true">
-                            <circle cx="32" cy="32" r="26" fill="none" stroke={isLightPanelTheme ? "#e2e8f0" : "rgba(255,255,255,0.10)"} strokeWidth="6" />
-                            <circle cx="32" cy="32" r="26" fill="none" stroke="url(#kpiRing)" strokeWidth="6" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off} />
-                            <defs><linearGradient id="kpiRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#22d3ee" /><stop offset="1" stopColor="#34d399" /></linearGradient></defs>
-                          </svg>
-                          <div className="absolute inset-0 grid place-items-center">
-                            <span className={`text-lg font-bold tabular-nums ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>{pct}%</span>
-                          </div>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--text-faint)" }}>Resumen del mes</p>
-                          <p className={`text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>Servicios con su entrega al día</p>
-                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>{periodLabel}</p>
-                        </div>
-                      </div>
-                      <div className="grid flex-1 grid-cols-3 gap-2.5">
-                        <div className={`rounded-2xl border px-3 py-2.5 text-center ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-white/[0.03]"}`}>
-                          <p className={`text-xl font-bold tabular-nums ${isLightPanelTheme ? "text-cyan-700" : "text-cyan-300"}`}>{svcDone}/{svcTotal}</p>
-                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-faint)" }}>Servicios al día</p>
-                        </div>
-                        <div className={`rounded-2xl border px-3 py-2.5 text-center ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-white/[0.03]"}`}>
-                          <p className={`text-xl font-bold tabular-nums ${isLightPanelTheme ? "text-emerald-700" : "text-emerald-300"}`}>{svcFull}</p>
-                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-faint)" }}>Al 100%</p>
-                        </div>
-                        <div className={`rounded-2xl border px-3 py-2.5 text-center ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-white/[0.03]"}`}>
-                          <p className={`text-xl font-bold tabular-nums ${pendVal}`}>{svcPend}</p>
-                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-faint)" }}>Pendientes</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            ) : null}
 
             {/* ============ ACCESOS DIRECTOS (admin/supervisor) ============ */}
             {(isAdmin || isSupervisor) && !isMinsal ? (

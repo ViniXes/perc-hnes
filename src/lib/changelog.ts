@@ -44,18 +44,6 @@ export const CHANGELOG: ChangelogEntry[] = [
     texto:
       "Cuando ya entregaste todo lo del mes, Inicio te lo confirma con un sello de Todo al dia.",
   },
-  {
-    version: "1986.384",
-    para: ["todos"],
-    texto:
-      "Mas detalles de vista: al cambiar de pantalla en el celular ahora subis directo al inicio, los botones responden al tocarlos y mejoramos el contraste de los textos y el foco del teclado.",
-  },
-  {
-    version: "1986.383",
-    para: ["todos"],
-    texto:
-      "Renovamos la vista de PULSO: las pantallas cargan mas suave, aparece un aviso claro cuando algo aun no tiene datos y se confirma cuando descargas un archivo. Los numeros de las tablas quedan alineados parejo.",
-  },
 ];
 
 // Version mas nueva presente en el changelog. La deteccion de "novedades sin ver"
