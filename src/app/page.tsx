@@ -13044,6 +13044,18 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSidebarSection, mobileView]);
 
+  // Al cambiar de pantalla en movil, subir al inicio para no quedar a mitad de
+  // scroll de la vista anterior. Salta el primer render y solo aplica en movil.
+  const mobileViewPrevRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = mobileViewPrevRef.current;
+    mobileViewPrevRef.current = mobileView;
+    if (prev === null || prev === mobileView) return;
+    if (typeof window === "undefined") return;
+    if (!window.matchMedia("(max-width: 1279px)").matches) return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [mobileView]);
+
   // Novedades por version (changelog dirigido): al entrar muestra los mensajes
   // nuevos que le corresponden al usuario. El admin ve todos. No repite historial.
   useEffect(() => {

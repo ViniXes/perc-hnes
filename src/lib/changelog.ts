@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.384",
+    para: ["todos"],
+    texto:
+      "Mas detalles de vista: al cambiar de pantalla en el celular ahora subis directo al inicio, los botones responden al tocarlos y mejoramos el contraste de los textos y el foco del teclado para que todo se lea y se navegue mas comodo.",
+  },
+  {
     version: "1986.383",
     para: ["todos"],
     texto:
