@@ -27,25 +27,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "1986.385",
+    version: "1986.387",
     para: ["todos"],
     texto:
       "El saludo de Inicio ahora cambia segun la hora del dia: buenos dias, buenas tardes o buenas noches.",
   },
   {
-    version: "1986.385",
-    para: ["admin", "div:direccion"],
-    texto:
-      "Inicio abre con un resumen del mes: % de servicios al dia, cuantos estan al 100% y cuantos siguen pendientes, de un vistazo y con su tira de carga mientras se consulta.",
-  },
-  {
-    version: "1986.385",
+    version: "1986.387",
     para: ["admin", "div:direccion"],
     texto:
       "Accesos directos en Inicio: Monitoreo general, Tendencias, Hospitales y Consolidados a un solo clic.",
   },
   {
-    version: "1986.385",
+    version: "1986.387",
     para: ["todos"],
     texto:
       "Cuando ya entregaste todo lo del mes, Inicio te lo confirma con un sello de Todo al dia.",
@@ -54,35 +48,20 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: "1986.384",
     para: ["todos"],
     texto:
-      "Mas detalles de vista: al cambiar de pantalla en el celular ahora subis directo al inicio, los botones responden al tocarlos y mejoramos el contraste de los textos y el foco del teclado para que todo se lea y se navegue mas comodo.",
+      "Mas detalles de vista: al cambiar de pantalla en el celular ahora subis directo al inicio, los botones responden al tocarlos y mejoramos el contraste de los textos y el foco del teclado.",
   },
   {
     version: "1986.383",
     para: ["todos"],
     texto:
-      "Renovamos la vista de PULSO: las pantallas cargan con un efecto mas suave, aparece un aviso claro cuando algo todavia no tiene datos y ahora se confirma cuando descargas un archivo. Ademas, los numeros de las tablas quedan alineados parejo para leerse mejor.",
+      "Renovamos la vista de PULSO: las pantallas cargan mas suave, aparece un aviso claro cuando algo aun no tiene datos y se confirma cuando descargas un archivo. Los numeros de las tablas quedan alineados parejo.",
   },
-  {
-    version: "1986.381",
-    para: ["admin"],
-    texto:
-      "Nuevo: aviso de novedades por version. A cada usuario le llega solo lo que le corresponde; vos, como admin, ves todos los mensajes.",
-  },
-  {
-    version: "1986.381",
-    para: ["div:apoyo", "serv:aseo", "serv:almacen"],
-    texto:
-      "Ahora ningun servicio se reporta a si mismo: la columna del propio centro queda bloqueada y sale en 0 en el consolidado.",
-  },
-  // Ejemplos (podes borrarlos o editarlos):
-  // {
-  //   version: "1986.381",
-  //   para: ["serv:aseo", "serv:almacen", "div:apoyo"],
-  //   texto: "Ahora la columna del propio centro queda bloqueada: ningun servicio se reporta a si mismo.",
-  // },
-  // {
-  //   version: "1986.381",
-  //   para: ["admin"],
-  //   texto: "Vista previa del consolidado con buscador por centro de costo para validar los cruces en 0.",
-  // },
 ];
+
+// Version mas nueva presente en el changelog. La deteccion de "novedades sin ver"
+// se basa en ESTE numero (no en APP_VERSION), para que los mensajes no dependan
+// del numero exacto de despliegue y siempre se muestre el ultimo lote agregado.
+export const CHANGELOG_LATEST = CHANGELOG.reduce(
+  (max, e) => Math.max(max, Number.parseInt(e.version.split(".").pop() || "0", 10) || 0),
+  0,
+);
