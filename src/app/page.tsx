@@ -18655,15 +18655,14 @@ export default function Home() {
                   const svcs = dashboardGroups.flatMap((g) => g.services);
                   const svcTotal = svcs.length;
                   const svcDone = svcs.filter((s) => s.completed).length;
-                  const modDone = moduleStats.PERC.done + moduleStats.SEPS.done + moduleStats.Horas.done;
-                  const modTotal = moduleStats.PERC.total + moduleStats.SEPS.total + moduleStats.Horas.total;
-                  const modPend = Math.max(0, modTotal - modDone);
-                  const pct = modTotal > 0 ? Math.round((modDone / modTotal) * 100) : 0;
+                  const svcPend = Math.max(0, svcTotal - svcDone);
+                  const svcFull = svcs.filter((s) => s.modules.length > 0 && s.modules.every((m) => m.completed)).length;
+                  const pct = svcTotal > 0 ? Math.round((svcDone / svcTotal) * 100) : 0;
                   const circ = 2 * Math.PI * 26;
                   const off = circ * (1 - pct / 100);
                   const pendVal = isLightPanelTheme
-                    ? (modPend > 0 ? "text-amber-600" : "text-slate-400")
-                    : (modPend > 0 ? "text-amber-300" : "text-slate-500");
+                    ? (svcPend > 0 ? "text-amber-600" : "text-slate-400")
+                    : (svcPend > 0 ? "text-amber-300" : "text-slate-500");
                   return (
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                       <div className="flex items-center gap-4">
@@ -18679,7 +18678,7 @@ export default function Home() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--text-faint)" }}>Resumen del mes</p>
-                          <p className={`text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>Avance global de entregas</p>
+                          <p className={`text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>Servicios con su entrega al día</p>
                           <p className="text-xs" style={{ color: "var(--text-muted)" }}>{periodLabel}</p>
                         </div>
                       </div>
@@ -18689,17 +18688,42 @@ export default function Home() {
                           <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-faint)" }}>Servicios al día</p>
                         </div>
                         <div className={`rounded-2xl border px-3 py-2.5 text-center ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-white/[0.03]"}`}>
-                          <p className={`text-xl font-bold tabular-nums ${isLightPanelTheme ? "text-emerald-700" : "text-emerald-300"}`}>{modDone}/{modTotal}</p>
-                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-faint)" }}>Módulos al día</p>
+                          <p className={`text-xl font-bold tabular-nums ${isLightPanelTheme ? "text-emerald-700" : "text-emerald-300"}`}>{svcFull}</p>
+                          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-faint)" }}>Al 100%</p>
                         </div>
                         <div className={`rounded-2xl border px-3 py-2.5 text-center ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/[0.07] bg-white/[0.03]"}`}>
-                          <p className={`text-xl font-bold tabular-nums ${pendVal}`}>{modPend}</p>
+                          <p className={`text-xl font-bold tabular-nums ${pendVal}`}>{svcPend}</p>
                           <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-faint)" }}>Pendientes</p>
                         </div>
                       </div>
                     </div>
                   );
                 })()}
+              </div>
+            ) : null}
+
+            {/* ============ ACCESOS DIRECTOS (admin/supervisor) ============ */}
+            {(isAdmin || isSupervisor) && !isMinsal ? (
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: "panel-monitor-general", label: "Monitoreo general" },
+                  { id: "panel-tendencias", label: "Tendencias" },
+                  ...(puedeVerHospitales ? [{ id: "panel-hospitales", label: "Hospitales" }] : []),
+                  { id: "panel-admin-export", label: "Consolidados" },
+                ].map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => runSidebarItem(a.id)}
+                    className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                      isLightPanelTheme
+                        ? "border-slate-200 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700"
+                        : "border-white/10 bg-white/[0.04] text-slate-200 hover:border-cyan-400/30 hover:bg-cyan-500/10 hover:text-cyan-200"
+                    }`}
+                  >
+                    {a.label}
+                  </button>
+                ))}
               </div>
             ) : null}
 
@@ -18791,6 +18815,13 @@ export default function Home() {
                               ? `${Math.floor(horasRestantes / 24)} días`
                               : `${horasRestantes} h`}
                           </p>
+                        </div>
+                      ) : listo ? (
+                        <div className={`inline-flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-2.5 ${isLightPanelTheme ? "border-emerald-300 bg-emerald-50" : "border-emerald-400/30 bg-emerald-500/10"}`}>
+                          <span className={`flex h-7 w-7 items-center justify-center rounded-full ${isLightPanelTheme ? "bg-emerald-500 text-white" : "bg-emerald-400/20 text-emerald-300"}`}>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
+                          </span>
+                          <span className={`text-sm font-bold ${isLightPanelTheme ? "text-emerald-700" : "text-emerald-200"}`}>Todo al día</span>
                         </div>
                       ) : null}
                     </div>

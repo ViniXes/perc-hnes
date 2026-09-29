@@ -36,7 +36,19 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: "1986.385",
     para: ["admin", "div:direccion"],
     texto:
-      "Inicio abre con un resumen del mes: avance global de entregas, servicios al dia y modulos pendientes de un vistazo, con su tira de carga mientras se consulta.",
+      "Inicio abre con un resumen del mes: % de servicios al dia, cuantos estan al 100% y cuantos siguen pendientes, de un vistazo y con su tira de carga mientras se consulta.",
+  },
+  {
+    version: "1986.385",
+    para: ["admin", "div:direccion"],
+    texto:
+      "Accesos directos en Inicio: Monitoreo general, Tendencias, Hospitales y Consolidados a un solo clic.",
+  },
+  {
+    version: "1986.385",
+    para: ["todos"],
+    texto:
+      "Cuando ya entregaste todo lo del mes, Inicio te lo confirma con un sello de Todo al dia.",
   },
   {
     version: "1986.384",
