@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.383",
+    para: ["todos"],
+    texto:
+      "Renovamos la vista de PULSO: las pantallas cargan con un efecto mas suave, aparece un aviso claro cuando algo todavia no tiene datos y ahora se confirma cuando descargas un archivo. Ademas, los numeros de las tablas quedan alineados parejo para leerse mejor.",
+  },
+  {
     version: "1986.381",
     para: ["admin"],
     texto:
