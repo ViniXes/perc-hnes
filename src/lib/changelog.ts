@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.390",
+    para: ["admin", "div:direccion"],
+    texto:
+      "Modulo Hospitales mas visual: el resumen nacional ahora muestra un anillo de avance grande y las tarjetas de region y hospital se elevan al pasar el cursor.",
+  },
+  {
     version: "1986.389",
     para: ["todos"],
     texto:

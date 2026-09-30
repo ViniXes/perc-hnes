@@ -20300,18 +20300,34 @@ export default function Home() {
                             despues. */}
                         <div className={`mt-5 rounded-2xl border p-4 ${tarjeta}`}>
                           <div className="flex flex-wrap items-end justify-between gap-3">
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                                Resumen nacional · {periodLabel}
-                              </p>
-                              <p className={`mt-1 text-4xl font-bold leading-none ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                                {nacional.conDatos > 0 ? `${nacional.pct}%` : "—"}
-                              </p>
-                              <p className={`mt-1.5 text-sm ${suave}`}>
-                                {nacional.conDatos > 0
-                                  ? `Avance promedio de ${nacional.conDatos} ${nacional.conDatos === 1 ? "hospital" : "hospitales"} · ${conectadosTotal} de ${HOSPITALES_EXTERNOS.length} conectados.`
-                                  : "Todavía no se ha consultado a los hospitales de este mes."}
-                              </p>
+                            <div className="flex items-center gap-4">
+                              <div className="relative h-24 w-24 shrink-0">
+                                <svg width="96" height="96" className="-rotate-90" aria-hidden="true">
+                                  <defs>
+                                    <linearGradient id="ring-nacional" x1="0" y1="0" x2="1" y2="1">
+                                      <stop offset="0" stopColor="#5eead4" />
+                                      <stop offset="1" stopColor="#34d399" />
+                                    </linearGradient>
+                                  </defs>
+                                  <circle cx="48" cy="48" r="42" fill="none" stroke={isLightPanelTheme ? "rgba(15,23,42,0.10)" : "rgba(255,255,255,0.10)"} strokeWidth="7" />
+                                  {nacional.conDatos > 0 ? (
+                                    <circle cx="48" cy="48" r="42" fill="none" stroke="url(#ring-nacional)" strokeWidth="7" strokeLinecap="round" strokeDasharray={263.9} strokeDashoffset={263.9 * (1 - nacional.pct / 100)} style={{ transition: "stroke-dashoffset 900ms cubic-bezier(0.22,1,0.36,1)" }} />
+                                  ) : null}
+                                </svg>
+                                <span className={`absolute inset-0 grid place-items-center text-2xl font-bold tabular-nums ${nacional.conDatos > 0 ? (isLightPanelTheme ? "text-slate-900" : "text-white") : "text-slate-500"}`}>
+                                  {nacional.conDatos > 0 ? `${nacional.pct}%` : "—"}
+                                </span>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                                  Resumen nacional · {periodLabel}
+                                </p>
+                                <p className={`mt-1.5 text-sm ${suave}`}>
+                                  {nacional.conDatos > 0
+                                    ? `Avance promedio de ${nacional.conDatos} ${nacional.conDatos === 1 ? "hospital" : "hospitales"} · ${conectadosTotal} de ${HOSPITALES_EXTERNOS.length} conectados.`
+                                    : "Todavía no se ha consultado a los hospitales de este mes."}
+                                </p>
+                              </div>
                             </div>
                             <div className="flex flex-col items-end gap-1.5">
                               <button
@@ -20400,7 +20416,7 @@ export default function Home() {
                                     setRegionSel(r.id);
                                     setHospitalSel("");
                                   }}
-                                  className={`flex items-center gap-4 rounded-2xl border p-4 text-left transition hover:border-teal-400/50 ${tarjeta}`}
+                                  className={`flex items-center gap-4 rounded-2xl border p-4 text-left transition duration-150 hover:-translate-y-0.5 hover:border-teal-400/50 hover:shadow-[0_14px_34px_rgba(2,6,16,0.30)] ${tarjeta}`}
                                 >
                                   <span className="min-w-0 flex-1">
                                     <span className={`block text-base font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
@@ -20467,7 +20483,7 @@ export default function Home() {
                                     setRegionSel(h.region);
                                     setHospitalSel(h.id);
                                   }}
-                                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition hover:border-teal-400/50 ${tarjeta}`}
+                                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition duration-150 hover:-translate-y-0.5 hover:border-teal-400/50 hover:shadow-[0_10px_26px_rgba(2,6,16,0.28)] ${tarjeta}`}
                                 >
                                   <span className="min-w-0 flex-1">
                                     <span className={`block truncate text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
@@ -20542,7 +20558,7 @@ export default function Home() {
                               key={h.id}
                               type="button"
                               onClick={() => setHospitalSel(h.id)}
-                              className={`rounded-2xl border p-4 text-left transition hover:border-teal-400/50 ${tarjeta}`}
+                              className={`rounded-2xl border p-4 text-left transition duration-150 hover:-translate-y-0.5 hover:border-teal-400/50 hover:shadow-[0_14px_34px_rgba(2,6,16,0.30)] ${tarjeta}`}
                             >
                               {contenido}
                             </button>
