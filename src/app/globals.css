@@ -269,9 +269,9 @@ html.forzar-escritorio body {
 
 .panel-shell.theme-dark {
   --bg: #0a0f1c;            /* azul marino profundo (igual que el login) */
-  --surface: #0e1626;       /* tarjeta principal */
-  --surface-2: #101a2e;     /* tarjeta interna / sidebar */
-  --surface-3: #18233a;     /* inputs / elevado */
+  --surface: #171a21;       /* tarjeta principal (grafito neutro) */
+  --surface-2: #1c2029;     /* tarjeta interna / sidebar (grafito) */
+  --surface-3: #262b35;     /* inputs / elevado (grafito) */
   --chip: #1a2740;          /* badges, avatar, chips neutros */
   --border: rgba(255, 255, 255, 0.10);
   --border-strong: rgba(34, 211, 238, 0.35);

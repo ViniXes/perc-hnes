@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.391",
+    para: ["todos"],
+    texto:
+      "Modo nocturno renovado: las tarjetas ahora usan un gris grafito elegante (el fondo azul marino se mantiene), para descansar la vista y que los colores resalten mejor.",
+  },
+  {
     version: "1986.390",
     para: ["admin", "div:direccion"],
     texto:
