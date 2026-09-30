@@ -4009,6 +4009,30 @@ export default function Home() {
       localStorage.setItem("pulso.changelog.visto", String(CHANGELOG_LATEST));
     } catch {}
   };
+  // Abre el aviso de novedades a pedido (boton en la etiqueta de version), sin
+  // depender del "visto" ni del timing de la actualizacion. Muestra lo que le
+  // corresponde al usuario (el admin ve todo).
+  const verNovedades = () => {
+    const num = (v: string) => Number.parseInt(v.split(".").pop() || "0", 10) || 0;
+    const div =
+      serviceProfile?.division ||
+      monitorDivision ||
+      (serviceProfile?.serviceId ? SERVICE_GROUP_BY_ID[serviceProfile.serviceId] ?? null : null);
+    const sid = serviceProfile?.serviceId ?? null;
+    const rel = (e: ChangelogEntry) =>
+      isAdmin ||
+      e.para.some(
+        (por) =>
+          por === "todos" ||
+          (por.startsWith("div:") && !!div && por.slice(4) === div) ||
+          (por.startsWith("serv:") && !!sid && por.slice(5) === sid),
+      );
+    const pend = CHANGELOG.filter(rel).sort((a, b) => num(b.version) - num(a.version));
+    if (pend.length) {
+      setChangelogPendiente(pend);
+      setShowChangelog(true);
+    }
+  };
   const [isLoadingDistribuida, setIsLoadingDistribuida] = useState(false);
   /** Numero de camas por centro (dato fijo, editable por el admin). */
   const [camasFijas, setCamasFijas] = useState<Record<string, number>>({});
@@ -18067,15 +18091,19 @@ export default function Home() {
                 <span className={`text-[11px] font-bold tracking-[0.12em] ${isLightPanelTheme ? "text-teal-700" : "text-teal-200"}`}>
                   ESDOMED
                 </span>
-                <span
-                  className={`mt-1 rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${
+                <button
+                  type="button"
+                  onClick={verNovedades}
+                  title="Ver novedades de esta versión"
+                  className={`mt-1 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition ${
                     isLightPanelTheme
-                      ? "border-slate-200 bg-slate-50 text-slate-500"
-                      : "border-white/10 bg-white/[0.03] text-slate-400"
+                      ? "border-slate-200 bg-slate-50 text-slate-500 hover:border-cyan-300 hover:text-cyan-700"
+                      : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-cyan-400/30 hover:text-cyan-200"
                   }`}
                 >
                   Versión {APP_VERSION}
-                </span>
+                  <span className="opacity-70">· Novedades</span>
+                </button>
               </div>
             </div>
           </aside>

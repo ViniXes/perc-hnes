@@ -27,19 +27,25 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "1986.387",
+    version: "1986.389",
+    para: ["todos"],
+    texto:
+      "Ahora podes volver a ver las novedades cuando quieras: tocá la etiqueta de version (abajo, dice \"Version ... · Novedades\").",
+  },
+  {
+    version: "1986.389",
     para: ["todos"],
     texto:
       "El saludo de Inicio ahora cambia segun la hora del dia: buenos dias, buenas tardes o buenas noches.",
   },
   {
-    version: "1986.387",
+    version: "1986.389",
     para: ["admin", "div:direccion"],
     texto:
       "Accesos directos en Inicio: Monitoreo general, Tendencias, Hospitales y Consolidados a un solo clic.",
   },
   {
-    version: "1986.387",
+    version: "1986.389",
     para: ["todos"],
     texto:
       "Cuando ya entregaste todo lo del mes, Inicio te lo confirma con un sello de Todo al dia.",
