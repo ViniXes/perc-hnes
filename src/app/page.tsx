@@ -5133,18 +5133,20 @@ export default function Home() {
   // supervisor = solo los modulos que supervisa).
   const adminServiceOptions = useMemo(() => {
     const base = SERVICE_DEFINITIONS.filter((service) => {
-      // Jefe de division: SOLO ve los servicios de su division.
-      if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
-      // Acceso "Ver tabuladores de todos los servicios" por modulo (por-usuario):
-      // incluye el servicio si tiene el modulo correspondiente al acceso otorgado.
+      // Acceso "Ver tabulador de un servicio" por modulo (por-usuario): el permiso
+      // EXPLICITO manda por encima del alcance por division. Si al usuario le
+      // asignaron ver el PERC/SEPS/Horas de este servicio, se le muestra aunque sea
+      // de otra division.
       const grantView =
         (serviceProfile?.viewPerc ?? []).includes(service.id) ||
         (serviceProfile?.viewSeps ?? []).includes(service.id) ||
         (serviceProfile?.viewHoras ?? []).includes(service.id);
+      if (grantView) return true;
+      // Jefe de division: SOLO ve los servicios de su division.
+      if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
       return (
         isAdmin ||
-        (getAreaById(service.id)?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false) ||
-        grantView
+        (getAreaById(service.id)?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false)
       );
     });
     const q = adminServiceQuery.trim().toLowerCase();
@@ -5159,18 +5161,20 @@ export default function Home() {
   // dropdown "Elegir servicio". Solo se incluyen las divisiones que tienen servicios.
   const adminServiceGroups = useMemo(() => {
     const base = SERVICE_DEFINITIONS.filter((service) => {
-      // Jefe de division: SOLO ve los servicios de su division.
-      if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
-      // Acceso "Ver tabuladores de todos los servicios" por modulo (por-usuario):
-      // incluye el servicio si tiene el modulo correspondiente al acceso otorgado.
+      // Acceso "Ver tabulador de un servicio" por modulo (por-usuario): el permiso
+      // EXPLICITO manda por encima del alcance por division. Si al usuario le
+      // asignaron ver el PERC/SEPS/Horas de este servicio, se le muestra aunque sea
+      // de otra division.
       const grantView =
         (serviceProfile?.viewPerc ?? []).includes(service.id) ||
         (serviceProfile?.viewSeps ?? []).includes(service.id) ||
         (serviceProfile?.viewHoras ?? []).includes(service.id);
+      if (grantView) return true;
+      // Jefe de division: SOLO ve los servicios de su division.
+      if (!isServiceInChiefScope(serviceProfile, service.id)) return false;
       return (
         isAdmin ||
-        (getAreaById(service.id)?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false) ||
-        grantView
+        (getAreaById(service.id)?.modules.some((m) => serviceProfile?.supervisorModules.includes(m)) ?? false)
       );
     });
     const byGroup = new Map<string, ServiceDefinition[]>();

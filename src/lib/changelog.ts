@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.397",
+    para: ["admin", "div:direccion"],
+    texto:
+      "Arreglo: cuando a un supervisor de una division se le asigna ver el PERC/SEPS/Horas de un servicio de OTRA division, ahora si le aparece en el selector (antes el filtro por division lo ocultaba).",
+  },
+  {
     version: "1986.396",
     para: ["admin", "div:direccion"],
     texto:
