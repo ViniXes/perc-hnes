@@ -30,7 +30,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: "1986.391",
     para: ["todos"],
     texto:
-      "Modo nocturno renovado: las tarjetas ahora usan un gris grafito elegante (el fondo azul marino se mantiene), para descansar la vista y que los colores resalten mejor.",
+      "Modo nocturno renovado: las tarjetas ahora usan un elegante tono ciruela/indigo (el fondo azul marino se mantiene), a tono con el violeta del logo, para descansar la vista del azul repetido.",
   },
   {
     version: "1986.390",
