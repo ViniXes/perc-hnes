@@ -4105,6 +4105,9 @@ export default function Home() {
   const [cecAutoria, setCecAutoria] = useState<{ usuario: string; fecha: string } | null>(null);
   // Que servicios ya entregaron su lista este mes (para el semaforo y el monitoreo).
   const [cecEstados, setCecEstados] = useState<Record<string, { usuario?: string; fecha?: string }>>({});
+  // Mes que se está viendo en el comité. "" = mes en curso. Los meses anteriores
+  // se ven en SOLO LECTURA (historial): no se editan ni se bloquean/desbloquean.
+  const [cecViewPeriod, setCecViewPeriod] = useState("");
 
   // Consulta de todos los hospitales a la vez (resumen nacional).
   const [sigmaTodos, setSigmaTodos] = useState(false);
@@ -7406,10 +7409,13 @@ export default function Home() {
   // La ventana del comite es la misma de Horas: los 5 primeros dias habiles del
   // mes, con el ultimo dia cerrando a las 2:30 p.m.
   const cecAbierto = captureWindow.isOpen;
+  // Período efectivo del comité (vista) y si es un mes anterior (historial).
+  const cecPeriodo = cecViewPeriod || periodId;
+  const cecEsHistorial = cecPeriodo !== periodId;
 
   /** ¿La lista de ese servicio fue desbloqueada por un admin para este mes? */
   function cecDesbloqueada(serviceId: string) {
-    return !!cecDesbloqueos[`${periodId}__${serviceId}`];
+    return !!cecDesbloqueos[`${cecPeriodo}__${serviceId}`];
   }
 
   /**
@@ -7417,7 +7423,7 @@ export default function Home() {
    * demas, dentro de la ventana o si el admin la desbloqueo.
    */
   function cecAbiertoPara(serviceId: string) {
-    return isAdmin || cecAbierto || cecDesbloqueada(serviceId);
+    return !cecEsHistorial && (isAdmin || cecAbierto || cecDesbloqueada(serviceId));
   }
 
   /** Desbloquea (true) o bloquea (false) TODAS las listas del comite este mes. */
@@ -7679,7 +7685,7 @@ export default function Home() {
     setError("");
     try {
       const snap = await getDocs(
-        query(collection(db, "cecTabulators"), where("periodId", "==", periodId)),
+        query(collection(db, "cecTabulators"), where("periodId", "==", cecPeriodo)),
       );
       const guardados = new Map<string, Record<string, unknown>>();
       snap.forEach((item) => {
@@ -7696,9 +7702,9 @@ export default function Home() {
         };
       });
       if (formato === "excel") {
-        await descargarCecExcel(periodId, periodLabel, entradas);
+        await descargarCecExcel(cecPeriodo, getPeriodLabel(cecPeriodo), entradas);
       } else if (ventana) {
-        mostrarCecReporte(ventana, periodLabel, entradas);
+        mostrarCecReporte(ventana, getPeriodLabel(cecPeriodo), entradas);
       }
     } catch (descargaError) {
       ventana?.close();
@@ -7725,7 +7731,7 @@ export default function Home() {
     setCecCargando(true);
     setCecAutoria(null);
     try {
-      const snap = await getDoc(doc(db, "cecTabulators", `${periodId}__${serviceId}`));
+      const snap = await getDoc(doc(db, "cecTabulators", `${cecPeriodo}__${serviceId}`));
       const datos = snap.exists() ? (snap.data() as Record<string, unknown>) : null;
       setCecDoc(cecMezclar(plantilla, (datos as Partial<CecDoc> | null) ?? null));
       if (datos && typeof datos.userEmail === "string") {
@@ -7806,7 +7812,7 @@ export default function Home() {
     if (firestoreUnavailable) return;
     try {
       const snap = await getDocs(
-        query(collection(db, "cecTabulators"), where("periodId", "==", periodId)),
+        query(collection(db, "cecTabulators"), where("periodId", "==", cecPeriodo)),
       );
       const estados: Record<string, { usuario?: string; fecha?: string }> = {};
       snap.forEach((item) => {
@@ -13141,8 +13147,9 @@ export default function Home() {
   useEffect(() => {
     if (activeSidebarSection !== "panel-cec" && mobileView !== "panel-cec") return;
     void loadCecEstados();
+    if (cecServicio) void abrirCecServicio(cecServicio);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSidebarSection, mobileView, periodId]);
+  }, [activeSidebarSection, mobileView, periodId, cecViewPeriod]);
 
   // Una cuenta MINSAL entra directo al monitoreo de hospitales: no tiene otra
   // pantalla a donde ir.
@@ -20697,7 +20704,10 @@ export default function Home() {
                           Comité de Expediente Clínico
                         </p>
                         <h2 className={`mt-1 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                          Lista de monitoreo · {periodLabel}
+                          Lista de monitoreo · {getPeriodLabel(cecPeriodo)}
+                          {cecEsHistorial ? (
+                            <span className="ml-2 inline-block align-middle rounded-full bg-amber-400/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-300">Historial · solo lectura</span>
+                          ) : null}
                         </h2>
                         <p className={`mt-1 text-sm ${suave}`}>
                           {isAdmin
@@ -20709,13 +20719,29 @@ export default function Home() {
                               : "Solo lectura: acá ves cómo va el llenado de los servicios de tu división."}
                         </p>
                       </div>
-                      <div className={`shrink-0 rounded-2xl border px-4 py-3 text-center ${marco}`}>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                          Entregados
-                        </p>
-                        <p className={`mt-0.5 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                          {entregados} <span className="text-sm font-medium text-slate-400">de {plantillas.length}</span>
-                        </p>
+                      <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+                        <div className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs ${marco}`}>
+                          <span className="font-semibold uppercase tracking-wide text-slate-400">Mes</span>
+                          <SelectorMes
+                            plano
+                            value={cecPeriodo}
+                            onChange={(valor) => setCecViewPeriod(valor && valor !== periodId ? valor : "")}
+                            claro={isLightPanelTheme}
+                          />
+                          {cecEsHistorial ? (
+                            <button type="button" onClick={() => setCecViewPeriod("")} className="rounded-lg border border-white/10 px-2 py-1 text-[11px] font-semibold text-cyan-200 transition hover:bg-white/5">
+                              Mes actual
+                            </button>
+                          ) : null}
+                        </div>
+                        <div className={`rounded-2xl border px-4 py-3 text-center ${marco}`}>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                            Entregados
+                          </p>
+                          <p className={`mt-0.5 text-2xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
+                            {entregados} <span className="text-sm font-medium text-slate-400">de {plantillas.length}</span>
+                          </p>
+                        </div>
                       </div>
                     </div>
 
@@ -20762,7 +20788,7 @@ export default function Home() {
 
                     {/* Desbloqueo/bloqueo de TODAS las listas (admin o gestor), solo
                         cuando la ventana de captura ya cerro. */}
-                    {puedeGestionarCec && !cecAbierto ? (
+                    {puedeGestionarCec && !cecAbierto && !cecEsHistorial ? (
                       <div className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-2.5 ${marco}`}>
                         <p className={`text-xs ${suave}`}>
                           Captura cerrada ·{" "}
@@ -20807,7 +20833,7 @@ export default function Home() {
                           <div className="flex flex-wrap items-center gap-2">
                             {/* Fuera de la ventana, el admin desbloquea la lista para
                                 que el comite la llene tarde (o la vuelve a bloquear). */}
-                            {puedeGestionarCec && !cecAbierto ? (
+                            {puedeGestionarCec && !cecAbierto && !cecEsHistorial ? (
                               <button
                                 type="button"
                                 onClick={() => void toggleCecDesbloqueo(plantilla.serviceId, plantilla.nombre)}
@@ -20847,7 +20873,7 @@ export default function Home() {
                           </Aviso>
                         ) : null}
 
-                        {!cecAbierto && (cecListaDesbloqueada || puedeGestionarCec) ? (
+                        {!cecAbierto && !cecEsHistorial && (cecListaDesbloqueada || puedeGestionarCec) ? (
                           <Aviso tono={cecListaDesbloqueada ? "ok" : "info"} claro={isLightPanelTheme} className="mt-3">
                             {cecListaDesbloqueada
                               ? `Desbloqueada fuera de fecha${

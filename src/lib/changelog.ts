@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.396",
+    para: ["admin", "div:direccion"],
+    texto:
+      "Comite de Expediente Clinico: ahora podes elegir el mes en el encabezado y ver los meses anteriores en modo solo lectura. El mes actual sigue igual (editable y con bloqueo/desbloqueo).",
+  },
+  {
     version: "1986.395",
     para: ["admin", "div:direccion"],
     texto:
