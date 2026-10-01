@@ -19273,9 +19273,22 @@ export default function Home() {
                               );
                             }
 
-                            // 3) Primer nivel: las divisiones (Direccion, Medica, Apoyo,
-                            // Subdireccion Administrativa, y Enfermeria si tiene servicios).
-                            return adminServiceGroups.map((group) => {
+                            // 3) Primer nivel: primero los servicios ASIGNADOS por
+                            // permiso explicito (se ven de una, aunque sean de otra
+                            // division), y luego las divisiones.
+                            const grantedFlat = SERVICE_DEFINITIONS.filter((s) =>
+                              viewAnyServiceIds.includes(s.id),
+                            );
+                            return [
+                              grantedFlat.length > 0 ? (
+                                <div key="__asignados" className="mb-1.5 border-b border-white/10 pb-1.5">
+                                  <p className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-300/80">
+                                    Asignados a este usuario
+                                  </p>
+                                  {grantedFlat.map(renderServiceBtn)}
+                                </div>
+                              ) : null,
+                              ...adminServiceGroups.map((group) => {
                               const active = group.services.some(
                                 (s) => s.id === adminSelectedServiceId,
                               );
@@ -19314,7 +19327,8 @@ export default function Home() {
                                   </svg>
                                 </button>
                               );
-                            });
+                            }),
+                            ];
                           })()}
                         </div>
                       </div>

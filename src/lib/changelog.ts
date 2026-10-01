@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.398",
+    para: ["admin", "div:direccion"],
+    texto:
+      "En el selector de \"Consolidado por servicio\" ahora salen arriba, en \"Asignados a este usuario\", los servicios que se le dieron por permiso (aunque sean de otra division), para encontrarlos de una.",
+  },
+  {
     version: "1986.397",
     para: ["admin", "div:direccion"],
     texto:
