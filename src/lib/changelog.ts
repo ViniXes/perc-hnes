@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.395",
+    para: ["admin", "div:direccion"],
+    texto:
+      "La bitacora ahora tambien registra cada guardado de tablero (PERC, SEPS, Horas y comite): queda constancia breve de quien guardo que y cuando.",
+  },
+  {
     version: "1986.390",
     para: ["admin", "div:direccion"],
     texto:

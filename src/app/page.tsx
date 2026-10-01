@@ -4169,6 +4169,8 @@ export default function Home() {
     fecha: string;
   };
   const [bitacora, setBitacora] = useState<BitacoraFila[]>([]);
+  // Evita repetir el mismo guardado en la bitacora dentro de la misma sesion.
+  const bitacoraGuardadoRef = useRef<Set<string>>(new Set());
   const [bitacoraCargando, setBitacoraCargando] = useState(false);
   const [bitacoraQuery, setBitacoraQuery] = useState("");
   // TENDENCIAS: cumplimiento de cada tablero mes a mes.
@@ -5528,6 +5530,12 @@ export default function Home() {
       },
     });
     if (estado === "pendiente") setPorEnviar((cuantos) => cuantos + 1);
+    // Bitacora: constancia breve de cada movimiento de guardado de un tablero.
+    // Una sola vez por tablero/periodo en la sesion, para no inundar el registro.
+    if (!bitacoraGuardadoRef.current.has(queSeGuardo)) {
+      bitacoraGuardadoRef.current.add(queSeGuardo);
+      void registrarBitacora("Tablero guardado", queSeGuardo);
+    }
     return estado;
   }
 
@@ -19342,9 +19350,9 @@ export default function Home() {
                       Registro de acciones
                     </h2>
                     <p className={`mt-1 max-w-2xl text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-400"}`}>
-                      Quedan registrados los desbloqueos y cierres de tableros y del comité, los
-                      cambios de permisos, los reinicios de clave y las bajas de usuarios. El
-                      registro no se puede editar ni borrar.
+                      Quedan registrados el guardado de tableros (PERC, SEPS, Horas y comité), los
+                      desbloqueos y cierres de tableros y del comité, los cambios de permisos, los
+                      reinicios de clave y las bajas de usuarios. El registro no se puede editar ni borrar.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
