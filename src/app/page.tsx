@@ -4142,6 +4142,8 @@ export default function Home() {
   // Usuario seleccionado en la vista maestro-detalle de "Usuarios y permisos".
   const [adminSelectedUserUid, setAdminSelectedUserUid] = useState<string | null>(null);
   const [adminUserQuery, setAdminUserQuery] = useState("");
+  // Filtro rapido de la lista de usuarios por tipo de cuenta.
+  const [adminUserFilter, setAdminUserFilter] = useState<"todos" | "servicio" | "jefaturas" | "comite" | "admin" | "inactivos">("todos");
   const [viewQ, setViewQ] = useState<{ perc: string; seps: string; horas: string }>({ perc: "", seps: "", horas: "" });
   const [calendarOverrides, setCalendarOverrides] = useState<Record<string, string[]>>({});
   // El calendario anual se quito de la vista; conservamos el setter por compatibilidad.
@@ -23455,7 +23457,29 @@ export default function Home() {
 
               {usersModalTab === "usuarios" ? (() => {
                 const q = adminUserQuery.trim().toLowerCase();
+                const esTipo = (u: ManagedUser, tipo: typeof adminUserFilter) =>
+                  tipo === "todos"
+                    ? true
+                    : tipo === "admin"
+                      ? u.role === "admin"
+                      : tipo === "jefaturas"
+                        ? u.role === "supervisor" || !!u.department || u.isDirector === true
+                        : tipo === "servicio"
+                          ? u.role === "service" && !u.department
+                          : tipo === "comite"
+                            ? u.cec === true
+                            : !u.isActive;
+                const pasaFiltro = (u: ManagedUser) => esTipo(u, adminUserFilter);
+                const filtros: { id: typeof adminUserFilter; label: string }[] = [
+                  { id: "todos", label: "Todos" },
+                  { id: "servicio", label: "Servicios" },
+                  { id: "jefaturas", label: "Jefaturas y grupos" },
+                  { id: "comite", label: "Comité" },
+                  { id: "admin", label: "Admin" },
+                  { id: "inactivos", label: "Inactivos" },
+                ];
                 const listed = adminUsers.filter((u) => {
+                  if (!pasaFiltro(u)) return false;
                   if (!q) return true;
                   const d = adminDrafts[u.uid];
                   const svcName = getServiceById(d?.serviceId)?.name || "";
@@ -23472,6 +23496,11 @@ export default function Home() {
                 const selectedUser = adminUsers.find((u) => u.uid === selectedUid) || null;
                 const draft = selectedUser ? adminDrafts[selectedUser.uid] : null;
                 const busy = selectedUser ? adminBusyUserId === selectedUser.uid : false;
+                // Hay cambios sin guardar: el borrador ya no coincide con lo guardado.
+                const hayCambios =
+                  !!selectedUser &&
+                  !!draft &&
+                  JSON.stringify(draft) !== JSON.stringify(buildAdminDrafts([selectedUser])[selectedUser.uid]);
                 const initials = (s: string) =>
                   (s || "?")
                     .split(" ")
@@ -23494,6 +23523,22 @@ export default function Home() {
                             placeholder="Buscar usuario o servicio…"
                             className="w-full rounded-xl border border-white/10 bg-[#2a3448] py-2.5 pl-9 pr-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-teal-400/60"
                           />
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {filtros.map((f) => {
+                            const n = adminUsers.filter((u) => esTipo(u, f.id)).length;
+                            const on = adminUserFilter === f.id;
+                            return (
+                              <button
+                                key={f.id}
+                                type="button"
+                                onClick={() => setAdminUserFilter(f.id)}
+                                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${on ? UM_ON : UM_OFF}`}
+                              >
+                                {f.label} <span className="opacity-60">{n}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                       <div className="max-h-[55vh] overflow-y-auto p-1.5">
@@ -23527,7 +23572,9 @@ export default function Home() {
                                     {d.name}
                                   </span>
                                   <span className="block truncate text-[11px] text-slate-400">
-                                    {getServiceById(d.serviceId) ? (
+                                    {d.department ? (
+                                      departmentEditorLabel(d.department)
+                                    ) : getServiceById(d.serviceId) ? (
                                       <>
                                         <ServiceIcon
                                           serviceId={d.serviceId}
@@ -23644,98 +23691,132 @@ export default function Home() {
                         {(() => {
                           const su = selectedUser;
                           const roleLbl = su.role === "admin" ? "Administrador" : su.isDirector ? "Directora" : su.role === "supervisor" ? "Supervisor" : "Servicio";
-                          const svcLbl = getServiceById(su.serviceId)?.name || "Sin servicio";
-                          const grpLbl = su.department ? departmentEditorLabel(su.department) : "";
                           const modLbl = (m: string) => (m === "perc" ? "PERC" : m === "sesps" ? "SEPS" : "Horas");
                           const menuLbl = (id: string) => GRANTABLE_MENUS.find((g) => g.id === id)?.label || id;
                           const svcName = (id: string) => getServiceById(id)?.name || id;
                           const cap = su.captureModules ?? [];
-                          const grants = su.menuGrants ?? [];
+                          const grants = (su.menuGrants ?? []).filter((g) => g !== "panel-monitor-cec");
+                          const veMonitorHorasCec = (su.menuGrants ?? []).includes("panel-monitor-cec");
                           const vp = su.viewPerc ?? [];
                           const vs = su.viewSeps ?? [];
                           const vh = su.viewHoras ?? [];
-                          // Chips neutros: el texto dice que es; el color no compite.
-                          const chipCls = (tone: string) =>
-                            `inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${
-                              tone === "blue" || tone === "emerald"
-                                ? "border-teal-300/20 bg-teal-300/[0.07] text-teal-100"
-                                : "border-white/10 bg-white/[0.04] text-slate-300"
-                            }`;
-                          const none = <span className="text-[11px] text-slate-500">— ninguno —</span>;
+                          const chip = "inline-flex items-center rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-medium text-slate-200";
+                          const chipOn = "inline-flex items-center rounded-md border border-teal-300/20 bg-teal-300/[0.07] px-2 py-0.5 text-[11px] font-medium text-teal-100";
+                          const nada = <span className="text-[11px] text-slate-500">Nada</span>;
+                          // QUE DIGITA, dicho en una frase. Lista de modulos vacia = TODOS
+                          // los del servicio; solo "noCapture" deja la cuenta sin captura.
+                          const grupoSvcs = su.department ? DEPARTMENT_SERVICES[su.department] ?? [] : [];
+                          const digita: ReactNode =
+                            su.role === "admin" ? (
+                              <span className={chipOn}>Todo (administrador)</span>
+                            ) : su.noCapture ? (
+                              nada
+                            ) : grupoSvcs.length ? (
+                              grupoSvcs.map((id) => (
+                                <span key={id} className={chipOn}>{svcName(id)}</span>
+                              ))
+                            ) : su.serviceId ? (
+                              (cap.length ? cap : getAreaById(su.serviceId)?.modules ?? []).map((m) => (
+                                <span key={m} className={chipOn}>
+                                  {modLbl(m)} · {svcName(su.serviceId || "")}
+                                </span>
+                              ))
+                            ) : (
+                              nada
+                            );
+                          const fila = (titulo: string, contenido: ReactNode) => (
+                            <div className="grid grid-cols-[92px_1fr] items-start gap-2">
+                              <span className="pt-0.5 text-[11px] font-medium text-slate-500">{titulo}</span>
+                              <div className="flex flex-wrap items-center gap-1.5">{contenido}</div>
+                            </div>
+                          );
                           return (
                             <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/15 p-3.5">
-                              <div className="flex items-center gap-2">
-                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-slate-400"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Permisos guardados</p>
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                  Lo que tiene hoy
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  <span className={chip}>{roleLbl}</span>
+                                  <span className={su.isActive ? chipOn : chip}>{su.isActive ? "Activa" : "Inactiva"}</span>
+                                  {su.mustChangePassword ? <span className={chip}>Debe cambiar clave</span> : null}
+                                </div>
                               </div>
-                              <div className="mt-2.5 flex flex-wrap gap-1.5">
-                                <span className={chipCls("blue")}>{roleLbl}</span>
-                                <span className={chipCls(su.isActive ? "emerald" : "slate")}>{su.isActive ? "Activo" : "Inactivo"}</span>
-                                {su.permissions.canEdit ? <span className={chipCls("emerald")}>Captura</span> : null}
-                                {su.permissions.canManageUsers ? <span className={chipCls("blue")}>Gestiona usuarios</span> : null}
-                              </div>
-                              <div className="mt-2 text-[11px] text-slate-300">
-                                <span className="text-slate-500">Servicio:</span> {svcLbl}
-                                {grpLbl ? <> · <span className="text-slate-500">Grupo:</span> {grpLbl}</> : null}
-                              </div>
-                              <div className="mt-2 space-y-1.5">
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <span className="text-[11px] text-slate-500">Tableros de captura:</span>
-                                  {/* OJO: la lista vacia NO significa "ninguno", significa
-                                      TODOS los del servicio. Solo la casilla "No llena
-                                      ningun tabulador" deja a la cuenta sin captura. */}
-                                  {su.noCapture ? (
-                                    <span className="text-[11px] font-semibold text-slate-300">
-                                      — ninguno (solo accesos otorgados) —
-                                    </span>
-                                  ) : cap.length ? (
-                                    cap.map((m) => (
-                                      <span key={m} className={chipCls("slate")}>
-                                        {modLbl(m)}
-                                      </span>
-                                    ))
+                              <div className="mt-3 space-y-2">
+                                {fila(
+                                  "Digita",
+                                  <>
+                                    {su.department ? (
+                                      <span className="text-[11px] text-slate-400">{departmentEditorLabel(su.department)}:</span>
+                                    ) : null}
+                                    {digita}
+                                    {su.role !== "admin" && !su.noCapture && !su.permissions.canEdit ? (
+                                      <span className="text-[11px] font-semibold text-amber-200/90">· captura apagada (solo mira)</span>
+                                    ) : null}
+                                  </>,
+                                )}
+                                {fila(
+                                  "Consulta",
+                                  vp.length || vs.length || vh.length ? (
+                                    <>
+                                      {vp.map((id) => <span key={"p" + id} className={chip}>PERC · {svcName(id)}</span>)}
+                                      {vs.map((id) => <span key={"s" + id} className={chip}>SEPS · {svcName(id)}</span>)}
+                                      {vh.map((id) => <span key={"h" + id} className={chip}>Horas · {svcName(id)}</span>)}
+                                    </>
                                   ) : (
+                                    nada
+                                  ),
+                                )}
+                                {fila(
+                                  "Monitorea",
+                                  su.monitorDivision || veMonitorHorasCec ? (
                                     <>
-                                      <span className="text-[11px] text-slate-300">
-                                        Todos los de su servicio:
-                                      </span>
-                                      {(getAreaById(su.serviceId)?.modules ?? []).map((m) => (
-                                        <span key={m} className={chipCls("emerald")}>
-                                          {modLbl(m)}
+                                      {su.monitorDivision ? (
+                                        <span className={chip}>{SERVICE_GROUP_LABELS[su.monitorDivision] || su.monitorDivision}</span>
+                                      ) : null}
+                                      {veMonitorHorasCec ? <span className={chip}>Horas + C.E. Clínico</span> : null}
+                                    </>
+                                  ) : (
+                                    nada
+                                  ),
+                                )}
+                                {su.cec
+                                  ? fila(
+                                      "Comité",
+                                      <>
+                                        <span className={chip}>
+                                          {(su.cecServicios ?? []).length
+                                            ? `Llena ${(su.cecServicios ?? []).length} lista(s)`
+                                            : "Miembro (solo lectura)"}
                                         </span>
-                                      ))}
-                                    </>
-                                  )}
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <span className="text-[11px] text-slate-500">Accesos de menú:</span>
-                                  {grants.length ? grants.map((g) => <span key={g} className={chipCls("slate")}>{menuLbl(g)}</span>) : none}
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <span className="text-[11px] text-slate-500">Ver tabuladores:</span>
-                                  {(vp.length || vs.length || vh.length) ? (
-                                    <>
-                                      {vp.map((id) => <span key={"p" + id} className={chipCls("cyan")}>PERC · {svcName(id)}</span>)}
-                                      {vs.map((id) => <span key={"s" + id} className={chipCls("violet")}>SEPS · {svcName(id)}</span>)}
-                                      {vh.map((id) => <span key={"h" + id} className={chipCls("amber")}>Horas · {svcName(id)}</span>)}
-                                    </>
-                                  ) : none}
-                                </div>
+                                        {su.cecGestor ? <span className={chip}>Gestor</span> : null}
+                                      </>,
+                                    )
+                                  : null}
+                                {grants.length
+                                  ? fila(
+                                      "Accesos extra",
+                                      grants.map((g) => <span key={g} className={chip}>{menuLbl(g)}</span>),
+                                    )
+                                  : null}
                               </div>
                             </div>
                           );
                         })()}
 
-                        <SeccionUm titulo="Asignación" detalle="Servicio, rol y alcance de la cuenta." />
+                        <SeccionUm titulo="1 · Qué digita" detalle="Su servicio o grupo de áreas, los tableros que llena y si puede escribir." />
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <label className="block">
-                            <span className="text-xs font-medium text-slate-400">Servicio</span>
+                            <span className="text-xs font-medium text-slate-400">
+                              {draft.department ? "Servicio (lo define el grupo)" : "Servicio"}
+                            </span>
                             <select
-                              value={draft.serviceId}
+                              value={draft.department ? "" : draft.serviceId}
+                              disabled={!!draft.department}
                               onChange={(event) =>
                                 updateAdminDraft(selectedUser.uid, { serviceId: event.target.value })
                               }
-                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-teal-400/60"
+                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-teal-400/60 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <option value="">Sin servicio</option>
                               {SERVICE_DEFINITIONS.map((service) => {
@@ -23763,28 +23844,9 @@ export default function Home() {
                               })}
                             </select>
                           </label>
-                          <label className="block">
-                            <span className="text-xs font-medium text-slate-400">Rol</span>
-                            <select
-                              value={draft.role}
-                              onChange={(event) => {
-                                const nextRole = event.target.value as UserRole;
-                                updateAdminDraft(selectedUser.uid, {
-                                  role: nextRole,
-                                  canManageUsers: nextRole === "admin",
-                                });
-                              }}
-                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-teal-400/60"
-                            >
-                              <option value="service">Servicio</option>
-                              <option value="admin">Administrador</option>
-                            </select>
-                          </label>
-                        </div>
-
-                        <label className="mt-3 block">
+                        <label className="block">
                           <span className="text-xs font-medium text-slate-400">
-                            Grupo de áreas (para quien cubre varias unidades)
+                            O un grupo de áreas (cubre varias unidades)
                           </span>
                           <select
                             value={draft.department}
@@ -23801,11 +23863,12 @@ export default function Home() {
                             ))}
                           </select>
                           <span className="mt-1 block text-[11px] text-slate-500">
-                            Si elegís un grupo, la persona cubre varias áreas y puede capturar sus
-                            tableros (ej. Ana Julia: Saneamiento + Servicios Varios + Transporte). En
-                            ese caso se ignora el servicio de arriba.
+                            Con un grupo, digita los tableros de todas sus áreas y el servicio de la
+                            izquierda no se usa.
                           </span>
                         </label>
+
+                        </div>
 
                         {/* TABLAS DEL SEPS: cuando el servicio tiene varias tablas y cada
                             persona llena solo la suya (Cuidados Paliativos: Médico,
@@ -23813,7 +23876,7 @@ export default function Home() {
                             nada, la cuenta ve todas las tablas del servicio. */}
                         {(() => {
                           const tablasSeps = getSepsTemplate(draft.serviceId)?.tables ?? [];
-                          if (tablasSeps.length < 2) return null;
+                          if (draft.department || tablasSeps.length < 2) return null;
                           const marcadas = draft.sepsTables ?? [];
                           return (
                             <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -23865,6 +23928,119 @@ export default function Home() {
                           );
                         })()}
 
+                        {draft.role === "service" && draft.serviceId && !draft.department ? (
+                          <div className="mt-4">
+                            <p className="text-xs font-medium text-slate-300">Tableros que llena</p>
+                            <p className="mt-0.5 text-[11px] text-slate-500">
+                              El sistema reconoce estos tableros para el servicio elegido. Activá los que debe llenar (uno, dos o los que correspondan).
+                            </p>
+                            <p className="mt-1 text-[11px] font-semibold leading-5 text-slate-300">
+                              Si no marcás ninguno, la persona llena TODOS los de su servicio. Para
+                              que no llene nada, usá la casilla de abajo.
+                            </p>
+
+                            {/* Cuenta que NO llena tabuladores: solo entra a los accesos
+                                otorgados mas abajo (p. ej. Depreciacion Mensual PERC). */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateAdminDraft(selectedUser.uid, { noCapture: !draft.noCapture })
+                              }
+                              className={`mt-2.5 flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
+                                draft.noCapture
+                                  ? "border-teal-300/30 bg-teal-300/[0.06]"
+                                  : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+                              }`}
+                            >
+                              <span
+                                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] font-bold ${
+                                  draft.noCapture
+                                    ? "border-teal-400 bg-teal-500 text-white"
+                                    : "border-white/25 text-transparent"
+                                }`}
+                              >
+                                ✓
+                              </span>
+                              <span className="min-w-0">
+                                <span
+                                  className={`block text-xs font-semibold ${
+                                    draft.noCapture ? "text-white" : "text-slate-300"
+                                  }`}
+                                >
+                                  No llena ningún tabulador
+                                </span>
+                                <span className="mt-0.5 block text-[11px] leading-5 text-slate-500">
+                                  Solo entra a los accesos que le otorgués abajo. No le aparece PERC,
+                                  SEPS ni Horas para capturar.
+                                </span>
+                              </span>
+                            </button>
+
+                            <div
+                              className={`mt-2 flex flex-wrap gap-2 ${
+                                draft.noCapture ? "pointer-events-none opacity-40" : ""
+                              }`}
+                            >
+                              {(getAreaById(draft.serviceId)?.modules ?? []).length === 0 ? (
+                                <span className="text-[11px] text-slate-500">Este servicio no tiene tableros configurados.</span>
+                              ) : (
+                                (getAreaById(draft.serviceId)?.modules ?? []).map((m) => {
+                                  const on = draft.captureModules.includes(m);
+                                  return (
+                                    <button
+                                      key={m}
+                                      type="button"
+                                      onClick={() =>
+                                        updateAdminDraft(selectedUser.uid, {
+                                          captureModules: on
+                                            ? draft.captureModules.filter((x) => x !== m)
+                                            : [...draft.captureModules, m],
+                                        })
+                                      }
+                                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                        on ? UM_ON : UM_OFF
+                                      }`}
+                                    >
+                                      {on ? "✓ " : ""}
+                                      {getModuleLabel(m)}
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateAdminDraft(selectedUser.uid, { canEdit: !draft.canEdit })}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                              draft.canEdit ? UM_ON : UM_OFF
+                            }`}
+                          >
+                            {draft.canEdit ? "✓ " : ""}Captura
+                          </button>
+                          {draft.role === "service" && draft.serviceId && !draft.department ? (
+                            <button
+                              type="button"
+                              onClick={() => updateAdminDraft(selectedUser.uid, { isChief: !draft.isChief })}
+                              title="El jefe del servicio ve y llena todos los tableros de su unidad."
+                              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                draft.isChief
+                                  ? UM_ON
+                                  : UM_OFF
+                              }`}
+                            >
+                              {draft.isChief ? "✓ " : ""}Jefe del servicio
+                            </button>
+                          ) : null}
+                        </div>
+                        <p className="mt-1.5 text-[11px] text-slate-500">
+                          Con <strong>Captura</strong> apagada entra a sus tableros pero no puede escribir.
+                        </p>
+
+                        <SeccionUm titulo="2 · Qué consulta y monitorea" detalle="Todo esto es solo lectura." />
                         {/* MONITOREO POR DIVISION: para el jefe de una division que ademas
                             captura su propio servicio. Le habilita "Monitoreo general" pero
                             contando SOLO los servicios de la division elegida. Es solo
@@ -23894,16 +24070,160 @@ export default function Home() {
                           </span>
                         </label>
 
+                        {/* Acceso de monitoreo (Horas + C.E. Clinico). Vive en menuGrants pero se
+                            muestra aca, junto a lo demas que la persona puede MIRAR. */}
+                        {(() => {
+                          const on = draft.menuGrants.includes("panel-monitor-cec");
+                          return (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateAdminDraft(selectedUser.uid, {
+                                  menuGrants: on
+                                    ? draft.menuGrants.filter((x) => x !== "panel-monitor-cec")
+                                    : [...draft.menuGrants, "panel-monitor-cec"],
+                                })
+                              }
+                              className={`mt-3 flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
+                                on
+                                  ? "border-teal-300/30 bg-teal-300/[0.07]"
+                                  : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                              }`}
+                            >
+                              <span
+                                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${
+                                  on ? "border-teal-400 bg-teal-500 text-white" : "border-white/25 text-transparent"
+                                }`}
+                              >
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M20 6 9 17l-5-5" />
+                                </svg>
+                              </span>
+                              <span className="min-w-0">
+                                <span className={`block text-xs font-semibold ${on ? "text-white" : "text-slate-300"}`}>
+                                  Monitoreo general: Horas + C.E. Clínico
+                                </span>
+                                <span className="mt-0.5 block text-[11px] leading-5 text-slate-500">
+                                  Ve quién entregó Distribución de Horas en todo el hospital y las 13 listas del
+                                  comité. Solo mirar.
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })()}
+
+                        <div className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+                          <div className="flex items-center gap-2.5">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.05] text-slate-300">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9.5h18M9 9.5V20" />
+                              </svg>
+                            </span>
+                            <div>
+                              <p className="text-sm font-semibold text-white">Ver tabuladores de otros servicios</p>
+                              <p className="text-[11px] text-slate-400">Buscá y elegí, por módulo, qué servicios puede consultar (solo lectura).</p>
+                            </div>
+                          </div>
+                          <div className="mt-3 space-y-2.5">
+                            {([
+                              { key: "perc" as const, label: "PERC", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewPerc },
+                              { key: "seps" as const, label: "SEPS", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewSeps },
+                              { key: "horas" as const, label: "Horas", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewHoras },
+                            ]).map((mod) => {
+                              const q = viewQ[mod.key].trim().toLowerCase();
+                              const selected = SERVICE_DEFINITIONS.filter((svc) => mod.arr.includes(svc.id));
+                              const results = q
+                                ? SERVICE_DEFINITIONS.filter((svc) => {
+                                    const has =
+                                      mod.key === "perc"
+                                        ? (getAreaById(svc.id)?.modules.includes("perc") ?? false)
+                                        : mod.key === "seps"
+                                          ? !!getSepsTemplate(svc.id)
+                                          : !!getHorasTemplate(svc.id);
+                                    return has && svc.name.toLowerCase().includes(q);
+                                  }).slice(0, 10)
+                                : [];
+                              const setArr = (next: string[]) =>
+                                updateAdminDraft(
+                                  selectedUser.uid,
+                                  mod.key === "perc" ? { viewPerc: next } : mod.key === "seps" ? { viewSeps: next } : { viewHoras: next },
+                                );
+                              const setQ = (val: string) =>
+                                setViewQ((p) =>
+                                  mod.key === "perc" ? { ...p, perc: val } : mod.key === "seps" ? { ...p, seps: val } : { ...p, horas: val },
+                                );
+                              return (
+                                <div key={mod.key} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${mod.chip}`}>{mod.label}</span>
+                                    <span className="text-[11px] font-medium text-slate-400">{mod.arr.length} servicio(s)</span>
+                                  </div>
+                                  {selected.length > 0 ? (
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {selected.map((svc) => (
+                                        <span key={svc.id} className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium ${mod.pill}`}>
+                                          {svc.name}
+                                          <button
+                                            type="button"
+                                            aria-label={`Quitar ${svc.name}`}
+                                            onClick={() => setArr(mod.arr.filter((x) => x !== svc.id))}
+                                            className="text-white/60 transition hover:text-white"
+                                          >
+                                            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                                          </button>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                  <div className="relative mt-2">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                                    <input
+                                      value={viewQ[mod.key]}
+                                      onChange={(e) => setQ(e.target.value)}
+                                      placeholder={`Buscar servicio de ${mod.label}…`}
+                                      className={`w-full rounded-lg border border-white/10 bg-[#1b2537] py-2 pl-8 pr-3 text-xs text-white outline-none placeholder:text-slate-500 ${mod.focus}`}
+                                    />
+                                  </div>
+                                  {q ? (
+                                    <div className="mt-1.5 max-h-44 space-y-0.5 overflow-y-auto rounded-lg border border-white/5 bg-black/20 p-1">
+                                      {results.length === 0 ? (
+                                        <p className="px-2 py-1.5 text-[11px] text-slate-500">Sin servicios que coincidan.</p>
+                                      ) : (
+                                        results.map((svc) => {
+                                          const on = mod.arr.includes(svc.id);
+                                          return (
+                                            <button
+                                              key={svc.id}
+                                              type="button"
+                                              onClick={() => setArr(on ? mod.arr.filter((x) => x !== svc.id) : [...mod.arr, svc.id])}
+                                              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${on ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/5"}`}
+                                            >
+                                              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-teal-400 bg-teal-500 text-white" : "border-white/25 text-transparent"}`}>
+                                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                                              </span>
+                                              <span className="leading-tight">{svc.name}</span>
+                                              {on ? <span className="ml-auto text-[10px] font-semibold text-teal-200">Agregado</span> : null}
+                                            </button>
+                                          );
+                                        })
+                                      )}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
                         {/* COMITE DE EXPEDIENTE CLINICO. Para las personas que YA tienen
                             cuenta en PULSO por su servicio: con esta casilla se les agrega
                             el menu "C.E. Clinico" encima de lo que ya hacen. Quien se
                             registra directamente como comite ya entra con la marca puesta. */}
-                        <SeccionUm titulo="Comité de Expediente Clínico" detalle="Acceso al menú C.E. Clínico." />
-                        <div className="mt-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+                        <div className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-slate-200">
-                                Miembro del comité
+                                Comité de Expediente Clínico
                               </p>
                               <p className="mt-1 text-[11px] leading-5 text-slate-400">
                                 Le agrega el menú <strong>C.E. Clínico</strong> con las 13 listas de
@@ -24015,7 +24335,101 @@ export default function Home() {
                           ) : null}
                         </div>
 
-                        <SeccionUm titulo="Estado y permisos" detalle="Encienda o apague cada permiso; se aplica al guardar." />
+                        <SeccionUm titulo="3 · Accesos extra" detalle="Submenús que puede abrir además de sus tableros." />
+                        <div className="mt-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+                          <div className="flex items-center gap-2.5">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.05] text-slate-300">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M4 6h16M4 12h16M4 18h10" />
+                              </svg>
+                            </span>
+                            <div>
+                              <p className="text-sm font-semibold text-white">Accesos de menú</p>
+                              <p className="text-[11px] text-slate-400">
+                                Submenús extra a los que puede entrar, además de sus tableros.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-4 space-y-3.5">
+                            {(
+                              [
+                                { grp: "PERC", chip: UM_GRUPO },
+                                { grp: "SEPS", chip: UM_GRUPO },
+                                { grp: "Horas", chip: UM_GRUPO },
+                                { grp: "General", chip: UM_GRUPO },
+                              ] as const
+                            ).map(({ grp, chip }) => {
+                              const items = GRANTABLE_MENUS.filter((m) => m.group === grp && m.id !== "panel-monitor-cec");
+                              if (items.length === 0) return null;
+                              return (
+                                <div key={grp}>
+                                  <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${chip}`}>
+                                    {grp}
+                                  </span>
+                                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                    {items.map((m) => {
+                                      const on = draft.menuGrants.includes(m.id);
+                                      return (
+                                        <button
+                                          key={m.id}
+                                          type="button"
+                                          onClick={() =>
+                                            updateAdminDraft(selectedUser.uid, {
+                                              menuGrants: on
+                                                ? draft.menuGrants.filter((x) => x !== m.id)
+                                                : [...draft.menuGrants, m.id],
+                                            })
+                                          }
+                                          className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
+                                            on
+                                              ? "border-teal-300/30 bg-teal-300/[0.07]"
+                                              : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                                          }`}
+                                        >
+                                          <span
+                                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${
+                                              on
+                                                ? "border-teal-400 bg-teal-500 text-white"
+                                                : "border-white/25 text-transparent"
+                                            }`}
+                                          >
+                                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                              <path d="M20 6 9 17l-5-5" />
+                                            </svg>
+                                          </span>
+                                          <span className={`text-xs font-medium leading-tight ${on ? "text-white" : "text-slate-300"}`}>
+                                            {m.label}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <SeccionUm titulo="4 · Cuenta" detalle="Rol, estado, clave y documento." />
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="text-xs font-medium text-slate-400">Rol</span>
+                            <select
+                              value={draft.role}
+                              onChange={(event) => {
+                                const nextRole = event.target.value as UserRole;
+                                updateAdminDraft(selectedUser.uid, {
+                                  role: nextRole,
+                                  canManageUsers: nextRole === "admin",
+                                });
+                              }}
+                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-teal-400/60"
+                            >
+                              <option value="service">Servicio</option>
+                              <option value="admin">Administrador</option>
+                            </select>
+                          </label>
+                        </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -24028,12 +24442,12 @@ export default function Home() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => updateAdminDraft(selectedUser.uid, { canEdit: !draft.canEdit })}
+                            onClick={() => updateAdminDraft(selectedUser.uid, { mustChangePassword: !draft.mustChangePassword })}
                             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                              draft.canEdit ? UM_ON : UM_OFF
+                              draft.mustChangePassword ? UM_ON : UM_OFF
                             }`}
                           >
-                            {draft.canEdit ? "✓ " : ""}Captura
+                            {draft.mustChangePassword ? "✓ " : ""}Debe cambiar clave
                           </button>
                           <button
                             type="button"
@@ -24045,36 +24459,13 @@ export default function Home() {
                           >
                             {draft.canManageUsers ? "✓ " : ""}Gestiona usuarios
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => updateAdminDraft(selectedUser.uid, { mustChangePassword: !draft.mustChangePassword })}
-                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                              draft.mustChangePassword ? UM_ON : UM_OFF
-                            }`}
-                          >
-                            {draft.mustChangePassword ? "✓ " : ""}Debe cambiar clave
-                          </button>
-                          {draft.role === "service" && draft.serviceId && !draft.department ? (
-                            <button
-                              type="button"
-                              onClick={() => updateAdminDraft(selectedUser.uid, { isChief: !draft.isChief })}
-                              title="El jefe del servicio ve y llena todos los tableros de su unidad."
-                              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                                draft.isChief
-                                  ? UM_ON
-                                  : UM_OFF
-                              }`}
-                            >
-                              {draft.isChief ? "✓ " : ""}Jefe del servicio
-                            </button>
-                          ) : null}
                         </div>
 
                         {/* DOCUMENTO DE IDENTIDAD: corregirlo o liberarlo. Sirve cuando
                             alguien puso su DUI en la cuenta equivocada y ese numero le
                             queda bloqueado en la suya. */}
-                        <SeccionUm titulo="Documento de identidad" />
-                        <div className="mt-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+                        <p className="mt-4 text-xs font-medium text-slate-300">Documento de identidad</p>
+                        <div className="mt-2 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
                           {docFixUid === selectedUser.uid ? (
                             <div className="mt-2.5 space-y-2">
                               <div className="flex flex-wrap gap-2">
@@ -24152,267 +24543,11 @@ export default function Home() {
                           )}
                         </div>
 
-                        {draft.role === "service" && draft.serviceId && !draft.department ? (
-                          <div className="mt-4">
-                            <SeccionUm titulo="Tableros de su unidad" />
-                            <p className="mt-0.5 text-[11px] text-slate-500">
-                              El sistema reconoce estos tableros para el servicio elegido. Activá los que debe llenar (uno, dos o los que correspondan).
-                            </p>
-                            <p className="mt-1 text-[11px] font-semibold leading-5 text-slate-300">
-                              Si no marcás ninguno, la persona llena TODOS los de su servicio. Para
-                              que no llene nada, usá la casilla de abajo.
-                            </p>
-
-                            {/* Cuenta que NO llena tabuladores: solo entra a los accesos
-                                otorgados mas abajo (p. ej. Depreciacion Mensual PERC). */}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                updateAdminDraft(selectedUser.uid, { noCapture: !draft.noCapture })
-                              }
-                              className={`mt-2.5 flex w-full items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
-                                draft.noCapture
-                                  ? "border-teal-300/30 bg-teal-300/[0.06]"
-                                  : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
-                              }`}
-                            >
-                              <span
-                                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] font-bold ${
-                                  draft.noCapture
-                                    ? "border-teal-400 bg-teal-500 text-white"
-                                    : "border-white/25 text-transparent"
-                                }`}
-                              >
-                                ✓
-                              </span>
-                              <span className="min-w-0">
-                                <span
-                                  className={`block text-xs font-semibold ${
-                                    draft.noCapture ? "text-white" : "text-slate-300"
-                                  }`}
-                                >
-                                  No llena ningún tabulador
-                                </span>
-                                <span className="mt-0.5 block text-[11px] leading-5 text-slate-500">
-                                  Solo entra a los accesos que le otorgués abajo. No le aparece PERC,
-                                  SEPS ni Horas para capturar.
-                                </span>
-                              </span>
-                            </button>
-
-                            <div
-                              className={`mt-2 flex flex-wrap gap-2 ${
-                                draft.noCapture ? "pointer-events-none opacity-40" : ""
-                              }`}
-                            >
-                              {(getAreaById(draft.serviceId)?.modules ?? []).length === 0 ? (
-                                <span className="text-[11px] text-slate-500">Este servicio no tiene tableros configurados.</span>
-                              ) : (
-                                (getAreaById(draft.serviceId)?.modules ?? []).map((m) => {
-                                  const on = draft.captureModules.includes(m);
-                                  return (
-                                    <button
-                                      key={m}
-                                      type="button"
-                                      onClick={() =>
-                                        updateAdminDraft(selectedUser.uid, {
-                                          captureModules: on
-                                            ? draft.captureModules.filter((x) => x !== m)
-                                            : [...draft.captureModules, m],
-                                        })
-                                      }
-                                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                                        on ? UM_ON : UM_OFF
-                                      }`}
-                                    >
-                                      {on ? "✓ " : ""}
-                                      {getModuleLabel(m)}
-                                    </button>
-                                  );
-                                })
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        <div className="mt-5 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-                          <div className="flex items-center gap-2.5">
-                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.05] text-slate-300">
-                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M4 6h16M4 12h16M4 18h10" />
-                              </svg>
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-white">Accesos de menú</p>
-                              <p className="text-[11px] text-slate-400">
-                                Submenús extra a los que puede entrar, además de sus tableros.
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-4 space-y-3.5">
-                            {(
-                              [
-                                { grp: "PERC", chip: UM_GRUPO },
-                                { grp: "SEPS", chip: UM_GRUPO },
-                                { grp: "Horas", chip: UM_GRUPO },
-                                { grp: "General", chip: UM_GRUPO },
-                              ] as const
-                            ).map(({ grp, chip }) => {
-                              const items = GRANTABLE_MENUS.filter((m) => m.group === grp);
-                              if (items.length === 0) return null;
-                              return (
-                                <div key={grp}>
-                                  <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${chip}`}>
-                                    {grp}
-                                  </span>
-                                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                    {items.map((m) => {
-                                      const on = draft.menuGrants.includes(m.id);
-                                      return (
-                                        <button
-                                          key={m.id}
-                                          type="button"
-                                          onClick={() =>
-                                            updateAdminDraft(selectedUser.uid, {
-                                              menuGrants: on
-                                                ? draft.menuGrants.filter((x) => x !== m.id)
-                                                : [...draft.menuGrants, m.id],
-                                            })
-                                          }
-                                          className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${
-                                            on
-                                              ? "border-teal-300/30 bg-teal-300/[0.07]"
-                                              : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
-                                          }`}
-                                        >
-                                          <span
-                                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${
-                                              on
-                                                ? "border-teal-400 bg-teal-500 text-white"
-                                                : "border-white/25 text-transparent"
-                                            }`}
-                                          >
-                                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                              <path d="M20 6 9 17l-5-5" />
-                                            </svg>
-                                          </span>
-                                          <span className={`text-xs font-medium leading-tight ${on ? "text-white" : "text-slate-300"}`}>
-                                            {m.label}
-                                          </span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="mt-5 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
-                          <div className="flex items-center gap-2.5">
-                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.05] text-slate-300">
-                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9.5h18M9 9.5V20" />
-                              </svg>
-                            </span>
-                            <div>
-                              <p className="text-sm font-semibold text-white">Ver tabuladores de otros servicios</p>
-                              <p className="text-[11px] text-slate-400">Buscá y elegí, por módulo, qué servicios puede consultar (solo lectura).</p>
-                            </div>
-                          </div>
-                          <div className="mt-3 space-y-2.5">
-                            {([
-                              { key: "perc" as const, label: "PERC", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewPerc },
-                              { key: "seps" as const, label: "SEPS", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewSeps },
-                              { key: "horas" as const, label: "Horas", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewHoras },
-                            ]).map((mod) => {
-                              const q = viewQ[mod.key].trim().toLowerCase();
-                              const selected = SERVICE_DEFINITIONS.filter((svc) => mod.arr.includes(svc.id));
-                              const results = q
-                                ? SERVICE_DEFINITIONS.filter((svc) => {
-                                    const has =
-                                      mod.key === "perc"
-                                        ? (getAreaById(svc.id)?.modules.includes("perc") ?? false)
-                                        : mod.key === "seps"
-                                          ? !!getSepsTemplate(svc.id)
-                                          : !!getHorasTemplate(svc.id);
-                                    return has && svc.name.toLowerCase().includes(q);
-                                  }).slice(0, 10)
-                                : [];
-                              const setArr = (next: string[]) =>
-                                updateAdminDraft(
-                                  selectedUser.uid,
-                                  mod.key === "perc" ? { viewPerc: next } : mod.key === "seps" ? { viewSeps: next } : { viewHoras: next },
-                                );
-                              const setQ = (val: string) =>
-                                setViewQ((p) =>
-                                  mod.key === "perc" ? { ...p, perc: val } : mod.key === "seps" ? { ...p, seps: val } : { ...p, horas: val },
-                                );
-                              return (
-                                <div key={mod.key} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-                                  <div className="flex items-center gap-2">
-                                    <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${mod.chip}`}>{mod.label}</span>
-                                    <span className="text-[11px] font-medium text-slate-400">{mod.arr.length} servicio(s)</span>
-                                  </div>
-                                  {selected.length > 0 ? (
-                                    <div className="mt-2 flex flex-wrap gap-1.5">
-                                      {selected.map((svc) => (
-                                        <span key={svc.id} className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium ${mod.pill}`}>
-                                          {svc.name}
-                                          <button
-                                            type="button"
-                                            aria-label={`Quitar ${svc.name}`}
-                                            onClick={() => setArr(mod.arr.filter((x) => x !== svc.id))}
-                                            className="text-white/60 transition hover:text-white"
-                                          >
-                                            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-                                          </button>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                  <div className="relative mt-2">
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-                                    <input
-                                      value={viewQ[mod.key]}
-                                      onChange={(e) => setQ(e.target.value)}
-                                      placeholder={`Buscar servicio de ${mod.label}…`}
-                                      className={`w-full rounded-lg border border-white/10 bg-[#1b2537] py-2 pl-8 pr-3 text-xs text-white outline-none placeholder:text-slate-500 ${mod.focus}`}
-                                    />
-                                  </div>
-                                  {q ? (
-                                    <div className="mt-1.5 max-h-44 space-y-0.5 overflow-y-auto rounded-lg border border-white/5 bg-black/20 p-1">
-                                      {results.length === 0 ? (
-                                        <p className="px-2 py-1.5 text-[11px] text-slate-500">Sin servicios que coincidan.</p>
-                                      ) : (
-                                        results.map((svc) => {
-                                          const on = mod.arr.includes(svc.id);
-                                          return (
-                                            <button
-                                              key={svc.id}
-                                              type="button"
-                                              onClick={() => setArr(on ? mod.arr.filter((x) => x !== svc.id) : [...mod.arr, svc.id])}
-                                              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${on ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/5"}`}
-                                            >
-                                              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-teal-400 bg-teal-500 text-white" : "border-white/25 text-transparent"}`}>
-                                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-                                              </span>
-                                              <span className="leading-tight">{svc.name}</span>
-                                              {on ? <span className="ml-auto text-[10px] font-semibold text-teal-200">Agregado</span> : null}
-                                            </button>
-                                          );
-                                        })
-                                      )}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="mt-5 flex items-center gap-2 border-t border-white/10 pt-4">
+                        <div className="sticky bottom-0 z-10 -mx-5 -mb-5 mt-5 rounded-b-2xl border-t border-white/10 bg-[#1b2537]/95 px-5 py-3 backdrop-blur">
+                          <p className={`mb-2 text-[11px] font-semibold ${hayCambios ? "text-amber-200" : "text-slate-500"}`}>
+                            {hayCambios ? "● Hay cambios sin guardar" : "Todo guardado"}
+                          </p>
+                        <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => void handleAdminSave(selectedUser.uid)}
@@ -24445,6 +24580,7 @@ export default function Home() {
                               <span>Eliminar</span>
                             </button>
                           ) : null}
+                        </div>
                         </div>
 
                         {selectedUser.role !== "admin" && deleteConfirmUid === selectedUser.uid ? (

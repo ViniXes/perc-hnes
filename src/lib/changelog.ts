@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.407",
+    para: ["admin"],
+    texto:
+      "Usuarios ordenado: arriba un resumen claro (que digita, que consulta, que monitorea) y la ficha en 4 bloques: Que digita, Que consulta y monitorea, Accesos extra y Cuenta. Guardar queda siempre a la vista y avisa si hay cambios sin guardar. La lista tiene filtros por tipo de cuenta.",
+  },
+  {
     version: "1986.406",
     para: ["admin", "div:enfermeria"],
     texto:
