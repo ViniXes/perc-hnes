@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.402",
+    para: ["admin"],
+    texto:
+      "Nuevo acceso de menu \"Monitoreo del C.E. Clinico (13 listas)\": la cuenta que lo tenga ve en \"Monitoreo general\" solo la tarjeta del comite con las 13 listas, sin abrir ni llenar nada.",
+  },
+  {
     version: "1986.401",
     para: ["admin", "div:administrativa"],
     texto:

@@ -421,6 +421,9 @@ const GRANTABLE_MENUS: { id: string; label: string; group: "PERC" | "SEPS" | "Ho
   { id: "panel-gastos-perc", label: "Gastos PERC", group: "PERC" },
   { id: "panel-depreciacion-perc", label: "Depreciación Mensual PERC", group: "PERC" },
   { id: "panel-poa", label: "POA (Plan Anual Operativo)", group: "General" },
+  // Solo la tarjeta del C.E. Clinico (las 13 listas) en "Monitoreo general".
+  // No abre el modulo del comite ni deja llenar nada.
+  { id: "panel-monitor-cec", label: "Monitoreo del C.E. Clínico (13 listas)", group: "General" },
 ];
 type CensoRow = { key: string; label: string };
 const CENSO_BASE_ROWS: CensoRow[] = [
@@ -5060,6 +5063,11 @@ export default function Home() {
   // servicios de SU division. Por eso aca no entra isSupervisor.
   const veTodoCec = isAdmin || isDirector || esComiteCec;
   const puedeVerCec = veTodoCec || !!divisionCec;
+  // Acceso otorgado "Monitoreo del C.E. Clinico": la cuenta ve en "Monitoreo
+  // general" el avance de las 13 listas del comite, y nada mas de ese monitoreo.
+  const veMonitorCec = (serviceProfile?.menuGrants ?? []).includes("panel-monitor-cec");
+  const veMonitoreoGeneralCompleto = isAdmin || isDirector || isSupervisor || !!monitorDivision;
+  const soloMonitorCec = veMonitorCec && !veMonitoreoGeneralCompleto;
   // Cuenta creada exclusivamente para el comite: no tiene servicio, division ni
   // jefatura. Para ella el modulo del comite ES su pantalla de inicio.
   const esSoloComite =
@@ -5085,7 +5093,7 @@ export default function Home() {
       name: string;
       done: boolean;
       family?: { done: number; total: number; pct: number };
-    }[] = cecPlantillasVisibles.map((plantilla) => ({
+    }[] = (veMonitorCec ? CEC_TEMPLATES : cecPlantillasVisibles).map((plantilla) => ({
       id: plantilla.serviceId,
       name: plantilla.nombre,
       done: !!cecEstados[plantilla.serviceId],
@@ -17443,13 +17451,14 @@ export default function Home() {
       // Monitoreo General: PERC + SEPS + Horas en una sola pantalla. Lo ven los
       // administradores y tambien Direccion y Subdireccion Medica, que monitorean
       // todo el hospital sin capturar nada.
-      ...(isAdmin || isDirector || isSupervisor || monitorDivision
+      ...(isAdmin || isDirector || isSupervisor || monitorDivision || veMonitorCec
         ? [
             {
               id: "panel-monitor-general",
               label: "Monitoreo general",
-              detail:
-                monitorDivision && !isAdmin && !isDirector && !isSupervisor
+              detail: soloMonitorCec
+                ? "C.E. Clínico · las 13 listas"
+                : monitorDivision && !isAdmin && !isDirector && !isSupervisor
                   ? `PERC, SEPS y Horas · ${SERVICE_GROUP_LABELS[monitorDivision] || "su division"}`
                   : "PERC, SEPS y Horas en una vista",
               badge: "MG",
@@ -25102,7 +25111,7 @@ export default function Home() {
 
           {/* MONITOREO GENERAL (solo admin): PERC + SEPS + Horas en una sola vista.
               Los monitoreos por modulo siguen funcionando por separado. */}
-          {(isAdmin || isDirector || isSupervisor || monitorDivision) && showGeneralMonitorModal
+          {(isAdmin || isDirector || isSupervisor || monitorDivision || veMonitorCec) && showGeneralMonitorModal
             ? (() => {
                 const columnasBase = [
                   { key: "PERC" as const, titulo: "PERC", periodo: periodId, color: "#38bdf8" },
@@ -25116,19 +25125,21 @@ export default function Home() {
                 }));
                 // C.E. Clínico: mismo cierre que Horas (los 5 días hábiles) y la
                 // lista ya recortada a la división de quien esté mirando.
-                const columnas = puedeVerCec
-                  ? [
-                      ...columnasBase,
-                      {
-                        key: "CEC" as const,
-                        titulo: "C.E. Clínico",
-                        periodo: periodId,
-                        color: "#fbbf24",
-                        stats: cecMonitorStats,
-                        cerrado: !captureWindow.isOpen,
-                      },
-                    ]
-                  : columnasBase;
+                const columnaCec = {
+                  key: "CEC" as const,
+                  titulo: "C.E. Clínico",
+                  periodo: periodId,
+                  color: "#fbbf24",
+                  stats: cecMonitorStats,
+                  cerrado: !captureWindow.isOpen,
+                };
+                // Con el acceso "Monitoreo del C.E. Clinico" y nada mas, la vista
+                // muestra UNICAMENTE la tarjeta del comite.
+                const columnas = soloMonitorCec
+                  ? [columnaCec]
+                  : puedeVerCec || veMonitorCec
+                    ? [...columnasBase, columnaCec]
+                    : columnasBase;
 
                 return (
                   <div
@@ -25140,7 +25151,9 @@ export default function Home() {
                     <div className="modal-fade-in fixed inset-0 bg-slate-950/75 backdrop-blur-sm" />
                     <div
                       onClick={(event) => event.stopPropagation()}
-                      className="modal-pop-in relative flex max-h-[92dvh] w-full min-w-0 max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60"
+                      className={`modal-pop-in relative flex max-h-[92dvh] w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60 ${
+                        soloMonitorCec ? "max-w-md" : "max-w-6xl"
+                      }`}
                     >
                       <div className="h-1 w-full shrink-0 bg-gradient-to-r from-cyan-400 via-violet-500 to-emerald-400" />
 
@@ -25186,8 +25199,12 @@ export default function Home() {
                       </div>
 
                       <div
-                        className={`grid min-h-0 flex-1 gap-3 overflow-y-auto px-5 pb-5 sm:px-7 sm:pb-7 sm:grid-cols-2 ${
-                          columnas.length > 3 ? "lg:grid-cols-4" : "lg:grid-cols-3"
+                        className={`grid min-h-0 flex-1 gap-3 overflow-y-auto px-5 pb-5 sm:px-7 sm:pb-7 ${
+                          columnas.length === 1
+                            ? "grid-cols-1"
+                            : columnas.length > 3
+                              ? "sm:grid-cols-2 lg:grid-cols-4"
+                              : "sm:grid-cols-2 lg:grid-cols-3"
                         }`}
                       >
                         {columnas.map((col) => (
