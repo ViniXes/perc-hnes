@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.406",
+    para: ["admin", "div:enfermeria"],
+    texto:
+      "Nuevo grupo de areas \"Enfermería + Cuidados Paliativos\": la cuenta que lo tenga digita el SEPS de Enfermeria y el de Cuidados Paliativos.",
+  },
+  {
     version: "1986.405",
     para: ["admin"],
     texto:

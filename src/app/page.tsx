@@ -754,16 +754,20 @@ const DEPARTMENT_SERVICES: Record<string, string[]> = {
   ],
   // Ana Julia (jefa que llena varias areas): Saneamiento + Servicios Varios + Transporte.
   "saneamiento-varios": ["saneamiento-ambiental", "servicios-varios", "transporte-general"],
+  // Enfermeria que ademas llena el SEPS de Cuidados Paliativos (Karina Hernandez).
+  "enfermeria-paliativos": ["enfermeria", "cuidados-paliativos"],
 };
 const DEPARTMENT_LABELS: Record<string, string> = {
   laboratorios: "Jefa de Departamento de Laboratorios",
   "uci-ucin": "Jefe General UCI/UCIN",
   "saneamiento-varios": "Jefatura de Servicios Varios y Saneamiento",
+  "enfermeria-paliativos": "Enfermería + Cuidados Paliativos",
 };
 // Etiqueta que se usa cuando el departamento se registra como EDITOR (puede capturar).
 const DEPARTMENT_EDITOR_LABELS: Record<string, string> = {
   "uci-ucin": "Asistencia UCI/UCIN",
   "saneamiento-varios": "Jefa de Servicios Varios y Saneamiento",
+  "enfermeria-paliativos": "Enfermería + Cuidados Paliativos",
 };
 function departmentEditorLabel(dep: string) {
   return DEPARTMENT_EDITOR_LABELS[dep] || DEPARTMENT_LABELS[dep] || "Asistencia";
@@ -27824,6 +27828,7 @@ export default function Home() {
                               .filter((dep) =>
                                 dep !== "uci-ucin" &&
                                 dep !== "saneamiento-varios" &&
+                                dep !== "enfermeria-paliativos" &&
                                 (DEPARTMENT_SERVICES[dep] || []).some(
                                   (sid) => (SERVICE_GROUP_BY_ID[sid] || "apoyo") === signupDivView,
                                 ),
