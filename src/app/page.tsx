@@ -4732,11 +4732,31 @@ export default function Home() {
   const isAdminLike =
     !!serviceProfile?.permissions.canManageUsers || serviceProfile?.role === "admin";
   const isSupervisorLike = serviceProfile?.role === "supervisor";
-  // El admin y los supervisores eligen el servicio a ver; el resto usa el suyo.
+  // CONSULTA POR PERMISO: cuentas que no son admin ni supervisor pero a las que el
+  // admin les asigno ver el PERC/SEPS/Horas de servicios concretos (p. ej. la
+  // Division de Enfermeria). Pueden elegir UNO de esos servicios en el selector y
+  // verlo en solo lectura; sin eleccion siguen en su propio servicio.
+  const viewGrantServiceIds = [
+    ...(serviceProfile?.viewPerc ?? []),
+    ...(serviceProfile?.viewSeps ?? []),
+    ...(serviceProfile?.viewHoras ?? []),
+  ];
+  const isViewerLike = !isAdminLike && !isSupervisorLike && viewGrantServiceIds.length > 0;
+  // true = la cuenta esta mirando un servicio AJENO por permiso de consulta. Todo
+  // lo de ese servicio queda de solo lectura (no se guarda nada).
+  const isViewingGrantedService =
+    isViewerLike &&
+    !!adminSelectedServiceId &&
+    viewGrantServiceIds.includes(adminSelectedServiceId) &&
+    adminSelectedServiceId !== (serviceProfile?.serviceId ?? "");
+  // El admin y los supervisores eligen el servicio a ver; las cuentas con permiso de
+  // consulta pueden elegir uno de los suyos; el resto usa su servicio asignado.
   const effectiveServiceId =
     isAdminLike || isSupervisorLike
       ? adminSelectedServiceId || undefined
-      : serviceProfile?.serviceId;
+      : isViewingGrantedService
+        ? adminSelectedServiceId
+        : serviceProfile?.serviceId;
   const currentService = useMemo(
     () => getServiceById(effectiveServiceId),
     [effectiveServiceId],
@@ -6742,7 +6762,7 @@ export default function Home() {
   // un servicio abierto. Los devuelve al panel sin tener que entrar a "Ver
   // tabuladores por servicio" y elegir "Sin servicio".
   function renderExitServiceButton() {
-    if (!(isAdminLike || isSupervisorLike) || !adminSelectedServiceId) {
+    if (!(isAdminLike || isSupervisorLike || isViewerLike) || !adminSelectedServiceId) {
       return null;
     }
 
@@ -10428,7 +10448,7 @@ export default function Home() {
   }
 
   async function handleSave(forzar = false) {
-    if (blockedByGhost()) return;
+    if (blockedByGhost() || blockedByViewOnly()) return;
     if (!user || !currentService || !serviceProfile || firestoreUnavailable) {
       return;
     }
@@ -11327,7 +11347,7 @@ export default function Home() {
 
   /** Guarda la estructura: rige para todos los meses siguientes. */
   async function doSaveSepsLayout() {
-    if (blockedByGhost()) return;
+    if (blockedByGhost() || blockedByViewOnly()) return;
     if (!canEditSepsLayout || !sepsLayoutDraft || !sepsBaseTemplate || firestoreUnavailable) return;
     setSepsSavingLayout(true);
     setError("");
@@ -11490,7 +11510,7 @@ export default function Home() {
   }
 
   async function handleSaveLabTest() {
-    if (blockedByGhost()) return;
+    if (blockedByGhost() || blockedByViewOnly()) return;
     if (!user || firestoreUnavailable) return;
     if (!labMonth) { setLabError("Selecciona el mes antes de guardar."); setLabMsg(""); return; }
     if (!labSection || !labTest) { setLabError("Selecciona seccion y prueba."); setLabMsg(""); return; }
@@ -11553,7 +11573,7 @@ export default function Home() {
   /** Vuelve a traer la SUMA de las unidades que alimentan un consolidado y la deja
    *  cargada en pantalla (todavia sin guardar: se revisa y luego se toca Guardar). */
   async function handleRecalcularConsolidado() {
-    if (blockedByGhost()) return;
+    if (blockedByGhost() || blockedByViewOnly()) return;
     if (!sepsTemplate?.consolidatesFrom || firestoreUnavailable) return;
     const periodo = sepsViewPeriod ?? sepsPeriodId;
     setIsLoadingSeps(true);
@@ -11579,7 +11599,7 @@ export default function Home() {
   }
 
   async function handleSaveSeps() {
-    if (blockedByGhost()) return;
+    if (blockedByGhost() || blockedByViewOnly()) return;
     if (!user || !sepsTemplate || !serviceProfile || firestoreUnavailable) {
       return;
     }
@@ -12061,7 +12081,7 @@ export default function Home() {
   }
 
   async function handleSaveHoras() {
-    if (blockedByGhost()) return;
+    if (blockedByGhost() || blockedByViewOnly()) return;
     if (!user || !horasTemplate || !serviceProfile || firestoreUnavailable) {
       return;
     }
@@ -12680,6 +12700,13 @@ export default function Home() {
     realProfileRef.current = null;
   }
 
+  /** Candado: la consulta por permiso de un servicio ajeno es solo lectura. */
+  function blockedByViewOnly(): boolean {
+    if (!isViewingGrantedService) return false;
+    setError("Estás consultando un servicio asignado: es solo lectura.");
+    return true;
+  }
+
   /** Candado: ningun guardado puede ejecutarse mientras se verifica a otra cuenta. */
   function blockedByGhost(): boolean {
     if (!ghostUid) return false;
@@ -13182,7 +13209,7 @@ export default function Home() {
     const isPercHistory = percViewPeriod !== null;
     const percReadOnly = isPercHistory && !isAdmin;
     // El admin nunca queda bloqueado; el servicio: historial = solo lectura, mes actual = ventana.
-    const percEditingBlocked = ghostUid
+    const percEditingBlocked = ghostUid || isViewingGrantedService
       ? true
       : isAdmin
         ? false
@@ -13834,7 +13861,7 @@ export default function Home() {
     const sepsHistReadOnly = isSepsHistory && !isAdmin;
     // Los consolidados YA NO son de solo lectura: traen la suma de sus unidades y
     // se pueden corregir a mano (con el boton "Recalcular" para volver a la suma).
-    const sepsEditingBlocked = ghostUid
+    const sepsEditingBlocked = ghostUid || isViewingGrantedService
       ? true
       : isAdmin || isSepsStaff
         ? false
@@ -15875,6 +15902,17 @@ export default function Home() {
             if (wantSeps) ensureMod("sesps");
             if (wantHoras) ensureMod("distribucion");
             base = base.slice().sort((a, b) => MODULE_ORDER.indexOf(a.id) - MODULE_ORDER.indexOf(b.id));
+            // Servicio ajeno consultado por permiso: SOLO los modulos que se le
+            // asignaron para ESE servicio (nada de capturar ni de submenus propios).
+            if (isViewingGrantedService && currentService) {
+              const sid = currentService.id;
+              return base.filter(
+                (mod) =>
+                  (mod.id === "perc" && viewPerc.includes(sid)) ||
+                  (mod.id === "sesps" && viewSeps.includes(sid)) ||
+                  (mod.id === "distribucion" && viewHoras.includes(sid)),
+              );
+            }
             // Almacen siempre ve sus modulos completos (para llegar a Insumos).
             if (serviceProfile.serviceId === "almacen") return base;
             return base.filter((mod) => {
@@ -15895,6 +15933,9 @@ export default function Home() {
     // caso el modulo sale en el menu (para alcanzar el submenu) pero NO su tabulador.
     const capturesModule = (moduleId: ModuleId) => {
       if (isAdmin || isSupervisor) return true;
+      // Servicio ajeno consultado por permiso: se muestra (en solo lectura) el
+      // tablero que se le asigno; el resto lo filtran showModule y allowView*.
+      if (isViewingGrantedService) return true;
       if (serviceProfile.noCapture) return false;
       if (!currentService) return false;
       if (!(getAreaById(currentService.id)?.modules.includes(moduleId) ?? false)) return false;
@@ -16041,7 +16082,7 @@ export default function Home() {
     const activeHorasPeriod = horasViewPeriod ?? periodId;
     const isHorasHistory = horasViewPeriod !== null;
     const horasHistReadOnly = isHorasHistory && !isAdmin;
-    const horasEditingBlocked = ghostUid
+    const horasEditingBlocked = ghostUid || isViewingGrantedService
       ? true
       : isAdmin
         ? false
@@ -17684,7 +17725,7 @@ export default function Home() {
         {/* Boton FLOTANTE para salir del servicio que el admin esta viendo. Antes
             habia que volver a "Ver tabuladores por servicio" y elegir "Sin
             servicio"; ahora esta siempre a la vista, en cualquier pantalla. */}
-        {(isAdminLike || isSupervisorLike) && adminSelectedServiceId && !ghostUid ? (
+        {(isAdminLike || isSupervisorLike || isViewerLike) && adminSelectedServiceId && !ghostUid ? (
           <button
             type="button"
             onClick={() => {

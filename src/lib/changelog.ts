@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.399",
+    para: ["admin", "div:enfermeria"],
+    texto:
+      "Arreglo: las cuentas a las que se les asigna ver el PERC/SEPS/Horas de un servicio (sin ser supervisores) ahora si pueden elegirlo en \"Consolidado por servicio\" y ver su tablero, en solo lectura. Tambien se ve igual en el modo verificacion.",
+  },
+  {
     version: "1986.398",
     para: ["admin", "div:direccion"],
     texto:
