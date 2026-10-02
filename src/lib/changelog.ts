@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.408",
+    para: ["admin"],
+    texto:
+      "Usuarios: el Rol ahora muestra \"Supervisor (jefatura o grupo)\" cuando corresponde, en vez de decir \"Servicio\".",
+  },
+  {
     version: "1986.407",
     para: ["admin"],
     texto:

@@ -24415,7 +24415,8 @@ export default function Home() {
                           <label className="block">
                             <span className="text-xs font-medium text-slate-400">Rol</span>
                             <select
-                              value={draft.role}
+                              value={draft.department ? "supervisor" : draft.role}
+                              disabled={!!draft.department}
                               onChange={(event) => {
                                 const nextRole = event.target.value as UserRole;
                                 updateAdminDraft(selectedUser.uid, {
@@ -24423,9 +24424,14 @@ export default function Home() {
                                   canManageUsers: nextRole === "admin",
                                 });
                               }}
-                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-teal-400/60"
+                              className="mt-1 w-full rounded-xl border border-white/10 bg-[#2a3448] px-3 py-2.5 text-sm text-white outline-none focus:border-teal-400/60 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               <option value="service">Servicio</option>
+                              {/* Jefaturas y grupos de areas guardan rol "supervisor". Sin esta
+                                  opcion el selector mostraba "Servicio" aunque no lo fuera. */}
+                              {draft.role === "supervisor" || draft.department ? (
+                                <option value="supervisor">Supervisor (jefatura o grupo)</option>
+                              ) : null}
                               <option value="admin">Administrador</option>
                             </select>
                           </label>
