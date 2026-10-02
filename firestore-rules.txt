@@ -22,8 +22,13 @@ rules_version = '2';
 //  4) Gestor del comite: si el perfil tiene cec == true y cecGestor == true, puede
 //     desbloquear y bloquear las listas del comite fuera de fecha (documento
 //     documentControl/cecDesbloqueos). 'cecGestor' solo lo escribe un admin.
-//  5) Bitacora (auditLog): toda cuenta con sesion puede dejar constancia de sus
-//     acciones; solo el administrador la lee y nadie la edita ni la borra.
+//  5) Bitacora (auditLog): toda cuenta con sesion deja constancia de sus acciones
+//     sensibles (desbloqueos, cierres, permisos, claves, bajas). Solo el
+//     administrador la LEE y nadie la edita ni la borra: es un registro.
+//  6) Acceso "Monitoreo del C.E. Clinico" (menuGrants incluye 'panel-monitor-cec'):
+//     la cuenta puede LEER las listas del comite (cecTabulators) para ver su
+//     avance en "Monitoreo general". No puede escribirlas. 'menuGrants' solo lo
+//     escribe un admin, asi que nadie se lo puede dar a si mismo.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -166,16 +171,16 @@ service cloud.firestore {
         || (isSignedIn() && resource.data.requestedByUid == request.auth.uid);
       allow delete: if isAdmin();
     }
-    // Desbloqueos del Comite de Expediente Clinico: los escribe el admin o el
-    // gestor del comite (cec == true y cecGestor == true).
     // BITACORA: registro de acciones sensibles. Cualquier cuenta con sesion la
-    // ESCRIBE (queda constancia de lo que hace), pero solo el admin la LEE, y
-    // nadie puede editarla ni borrarla: es un registro, no un documento.
+    // ESCRIBE (queda constancia de lo que hace, siempre con su propia identidad),
+    // pero solo el admin la LEE, y nadie puede editarla ni borrarla.
     match /auditLog/{docId} {
       allow read: if isAdmin();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }
+    // Desbloqueos del Comite de Expediente Clinico: los escribe el admin o el
+    // gestor del comite (cec == true y cecGestor == true).
     match /documentControl/cecDesbloqueos {
       allow read: if isSignedIn() && noEsMinsal();
       allow write: if isAdmin()
