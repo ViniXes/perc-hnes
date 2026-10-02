@@ -397,15 +397,15 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
     admin: true,
   },
   {
-    // Monitor de RRHH (aamaya): SOLO ve el Monitoreo de Horas (quien completo) y descarga
-    // el consolidado mensual de horas en Excel. No captura.
+    // Monitor de RRHH (aamaya): ve el Monitoreo de Horas (quien completo), descarga
+    // el consolidado mensual de horas en Excel y ADEMAS digita las Horas de su propio
+    // servicio, Recursos Humanos.
     username: "aamaya",
     password: DEFAULT_TEMP_PASSWORD,
     firstName: "Andrea Michelle",
     lastName: "Amaya Majano",
     modules: ["distribucion"],
-    // Ya NO captura: el servicio de Recursos Humanos se elimino (no reporta ni SEPS
-    // ni Horas). Queda solo como monitora del consolidado de Horas.
+    captureServiceId: "rrhh",
   },
 ];
 // --- Censo Diario de Pacientes (submenu bajo PERC; SOLO supervision) -----------
@@ -730,6 +730,7 @@ const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
   "transporte-general": "administrativa",
   mantenimiento: "administrativa",
   "saneamiento-ambiental": "administrativa",
+  rrhh: "administrativa",
   "servicios-varios": "administrativa",
   tecnologia: "administrativa",
 };
@@ -813,6 +814,7 @@ const SERVICE_USERNAME_BY_ID: Record<string, string> = {
   lavanderia: "dep.lavanderia",
   "transporte-general": "dep.transporte",
   mantenimiento: "dep.mantenimiento",
+  rrhh: "dep.rrhh",
   "servicios-varios": "dep.serviciosvarios",
   tecnologia: "dep.tecnologia",
   ucp: "dep.ucp",
@@ -3077,21 +3079,29 @@ async function ensureSupervisorProfile(currentUser: User, account: SupervisorAcc
 
   await updateProfile(currentUser, { displayName });
 
+  // Cuenta que ademas captura un servicio propio (RRHH): se guarda igual que la
+  // construye buildSupervisorProfile, para que el panel de Usuarios la muestre bien.
+  const captureSvc = account.captureServiceId
+    ? getServiceById(account.captureServiceId)
+    : undefined;
+  const role = captureSvc ? "service" : account.admin ? "admin" : "supervisor";
+
   await setDoc(
     doc(db, "serviceUsers", currentUser.uid),
     {
-      serviceId: null,
-      serviceName: null,
+      serviceId: captureSvc?.id ?? null,
+      serviceName: captureSvc?.name ?? null,
       email: getSupervisorLoginEmail(account.username),
       loginEmail: getSupervisorLoginEmail(account.username),
       username: account.username,
       firstName: account.firstName,
       lastName: account.lastName,
       name: displayName,
-      role: account.admin ? "admin" : "supervisor",
+      role,
+      ...(captureSvc ? { isChief: false, captureModules: account.modules } : {}),
       isActive: true,
       mustChangePassword: true,
-      permissions: getDefaultPermissions(account.admin ? "admin" : "supervisor"),
+      permissions: getDefaultPermissions(role),
       supervisorModules: account.modules,
       updatedAt: serverTimestamp(),
     },

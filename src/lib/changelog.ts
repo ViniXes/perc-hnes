@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.401",
+    para: ["admin", "div:administrativa"],
+    texto:
+      "Vuelve el servicio Recursos Humanos en Distribucion de Horas: Andrea Michelle Amaya digita las horas de RRHH y sigue con el monitoreo y la descarga del consolidado.",
+  },
+  {
     version: "1986.400",
     para: ["admin", "div:medica", "div:apoyo"],
     texto:

@@ -855,7 +855,32 @@ export const HORAS_TEMPLATES: Record<string, HorasTemplate> = {
       "ELMER ALEXANDER GARCIA SALAZAR",
     ],
   },
-  // Sin plantilla de Horas: este servicio ya no reporta Distribucion de Horas.
+  // Recursos Humanos: lo digita Andrea Michelle Amaya (aamaya), que ademas
+  // monitorea y descarga el consolidado de Horas.
+  rrhh: {
+    serviceId: "rrhh",
+    establishment: "HOSPITAL NACIONAL EL SALVADOR",
+    columns: ["ADMINISTRACION"],
+    seedEmployees: [
+      { dui: "02605477-6", name: "SANDRA LISSETTE FUENTES QUIJANO" },
+      { dui: "02844524-0", name: "CARLOS ENRIQUE MARTINEZ CRIOLLO" },
+      { dui: "02039917-8", name: "ILIANA ARGENTINA QUINTANILLA DE DIAZ" },
+      { dui: "02044368-4", name: "XIOMARA DEL CARMEN FLORES CIUDAD REAL" },
+      { dui: "02168961-5", name: "JEYMI MARITZA RODRIGUEZ DE MONGE" },
+      { dui: "05005202-3", name: "KARLA YESENIA SORIANO HERNANDEZ" },
+      { dui: "03739507-0", name: "OSCAR ARMANDO RODRIGUEZ ASENCIO" },
+      { dui: "06402286-0", name: "MARCELO ANDRE HUEZO ESCALANTE" },
+      { dui: "05985558-3", name: "JUAN CARLOS PINEDA AGUILAR" },
+      { dui: "05656453-1", name: "ANDREA MICHELLE AMAYA MAJANO" },
+      { dui: "04797571-7", name: "GIOVANNI ORLANDO ALVARENGA SERRANO" },
+      { dui: "04515742-8", name: "GUSTAVO ALFONSO ZEPEDA ESCOBAR" },
+      { dui: "02362585-3", name: "VERÓNICA MERCEDES ALDANA DE ZEPEDA" },
+      { dui: "03359639-9", name: "KARLA ELIZABETH CÓRDOVA ALFARO" },
+      { dui: "04287384-7", name: "KARLA STEFFANY NAVARRETE DE PEREIRA" },
+      { dui: "06205087-5", name: "ANDRES ANTONIO RIVERA NAJARRO" },
+      { dui: "05532323-3", name: "NATHALIE ALEJANDRA ROQUE DE SALGADO" },
+    ],
+  },
   mantenimiento: {
     serviceId: "mantenimiento",
     establishment: "HOSPITAL NACIONAL EL SALVADOR",
