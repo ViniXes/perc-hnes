@@ -429,7 +429,8 @@ export const CEC_TEMPLATES: CecTemplate[] = [
   {
     serviceId: "rri",
     nombre: "Retorno, Referencia e Interconsulta",
-    division: "apoyo",
+    // Le corresponde a la Division Medica (Werner Stanley Posada), no a Apoyo.
+    division: "medica",
     bloques: [
       {
         id: "rri-b1",

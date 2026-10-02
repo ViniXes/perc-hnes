@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.400",
+    para: ["admin", "div:medica", "div:apoyo"],
+    texto:
+      "Comite de Expediente Clinico: la lista \"Retorno, Referencia e Interconsulta\" ahora pertenece a la Division Medica (antes figuraba en la Division de Apoyo).",
+  },
+  {
     version: "1986.399",
     para: ["admin", "div:enfermeria"],
     texto:
