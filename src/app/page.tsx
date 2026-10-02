@@ -421,9 +421,9 @@ const GRANTABLE_MENUS: { id: string; label: string; group: "PERC" | "SEPS" | "Ho
   { id: "panel-gastos-perc", label: "Gastos PERC", group: "PERC" },
   { id: "panel-depreciacion-perc", label: "Depreciación Mensual PERC", group: "PERC" },
   { id: "panel-poa", label: "POA (Plan Anual Operativo)", group: "General" },
-  // Solo la tarjeta del C.E. Clinico (las 13 listas) en "Monitoreo general".
-  // No abre el modulo del comite ni deja llenar nada.
-  { id: "panel-monitor-cec", label: "Monitoreo comité (C.E. Clínico, 13 listas)", group: "General" },
+  // "Monitoreo general" con SOLO dos tarjetas: Distribucion de Horas (todo el
+  // hospital) y C.E. Clinico (las 13 listas). Solo ver: no abre ni llena nada.
+  { id: "panel-monitor-cec", label: "Monitoreo general: Horas + C.E. Clínico", group: "General" },
 ];
 type CensoRow = { key: string; label: string };
 const CENSO_BASE_ROWS: CensoRow[] = [
@@ -17455,9 +17455,9 @@ export default function Home() {
         ? [
             {
               id: "panel-monitor-general",
-              label: soloMonitorCec ? "Monitoreo comité" : "Monitoreo general",
+              label: "Monitoreo general",
               detail: soloMonitorCec
-                ? "Avance de las 13 listas del C.E. Clínico"
+                ? "Distribución de Horas y C.E. Clínico"
                 : monitorDivision && !isAdmin && !isDirector && !isSupervisor
                   ? `PERC, SEPS y Horas · ${SERVICE_GROUP_LABELS[monitorDivision] || "su division"}`
                   : "PERC, SEPS y Horas en una vista",
@@ -25133,10 +25133,10 @@ export default function Home() {
                   stats: cecMonitorStats,
                   cerrado: !captureWindow.isOpen,
                 };
-                // Con el acceso "Monitoreo del C.E. Clinico" y nada mas, la vista
-                // muestra UNICAMENTE la tarjeta del comite.
+                // Con el acceso "Monitoreo general: Horas + C.E. Clinico" y nada mas,
+                // la vista muestra UNICAMENTE Distribucion de Horas y el comite.
                 const columnas = soloMonitorCec
-                  ? [columnaCec]
+                  ? [...columnasBase.filter((col) => col.key === "Horas"), columnaCec]
                   : puedeVerCec || veMonitorCec
                     ? [...columnasBase, columnaCec]
                     : columnasBase;
@@ -25152,7 +25152,7 @@ export default function Home() {
                     <div
                       onClick={(event) => event.stopPropagation()}
                       className={`modal-pop-in relative flex max-h-[92dvh] w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60 ${
-                        soloMonitorCec ? "max-w-md" : "max-w-6xl"
+                        soloMonitorCec ? "max-w-3xl" : "max-w-6xl"
                       }`}
                     >
                       <div className="h-1 w-full shrink-0 bg-gradient-to-r from-cyan-400 via-violet-500 to-emerald-400" />
@@ -25163,7 +25163,7 @@ export default function Home() {
                             Vista general
                           </p>
                           <h3 className="mt-1 text-xl font-bold text-white sm:text-2xl">
-                            {soloMonitorCec ? "Monitoreo comité" : "Monitoreo general"}
+                            Monitoreo general
                           </h3>
                           {monitorDivision && !isAdmin && !isDirector && !isSupervisor ? (
                             <p className="mt-1 inline-flex rounded-full bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-200">
@@ -25202,7 +25202,9 @@ export default function Home() {
                         className={`grid min-h-0 flex-1 gap-3 overflow-y-auto px-5 pb-5 sm:px-7 sm:pb-7 ${
                           columnas.length === 1
                             ? "grid-cols-1"
-                            : columnas.length > 3
+                            : columnas.length === 2
+                              ? "sm:grid-cols-2"
+                              : columnas.length > 3
                               ? "sm:grid-cols-2 lg:grid-cols-4"
                               : "sm:grid-cols-2 lg:grid-cols-3"
                         }`}

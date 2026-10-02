@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.405",
+    para: ["admin"],
+    texto:
+      "El acceso \"Monitoreo general: Horas + C.E. Clinico\" muestra el Monitoreo general con solo dos tarjetas: Distribucion de Horas de todo el hospital y las 13 listas del C.E. Clinico.",
+  },
+  {
     version: "1986.404",
     para: ["admin"],
     texto:
