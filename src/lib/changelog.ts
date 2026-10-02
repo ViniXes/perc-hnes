@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.404",
+    para: ["admin"],
+    texto:
+      "El acceso \"Monitoreo comité\" ahora se llama asi en el menu de quien lo tiene y abre solo la tarjeta del C.E. Clinico con las 13 listas.",
+  },
+  {
     version: "1986.402",
     para: ["admin"],
     texto:

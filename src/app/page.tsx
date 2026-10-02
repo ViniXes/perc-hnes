@@ -423,7 +423,7 @@ const GRANTABLE_MENUS: { id: string; label: string; group: "PERC" | "SEPS" | "Ho
   { id: "panel-poa", label: "POA (Plan Anual Operativo)", group: "General" },
   // Solo la tarjeta del C.E. Clinico (las 13 listas) en "Monitoreo general".
   // No abre el modulo del comite ni deja llenar nada.
-  { id: "panel-monitor-cec", label: "Monitoreo del C.E. Clínico (13 listas)", group: "General" },
+  { id: "panel-monitor-cec", label: "Monitoreo comité (C.E. Clínico, 13 listas)", group: "General" },
 ];
 type CensoRow = { key: string; label: string };
 const CENSO_BASE_ROWS: CensoRow[] = [
@@ -17455,9 +17455,9 @@ export default function Home() {
         ? [
             {
               id: "panel-monitor-general",
-              label: "Monitoreo general",
+              label: soloMonitorCec ? "Monitoreo comité" : "Monitoreo general",
               detail: soloMonitorCec
-                ? "C.E. Clínico · las 13 listas"
+                ? "Avance de las 13 listas del C.E. Clínico"
                 : monitorDivision && !isAdmin && !isDirector && !isSupervisor
                   ? `PERC, SEPS y Horas · ${SERVICE_GROUP_LABELS[monitorDivision] || "su division"}`
                   : "PERC, SEPS y Horas en una vista",
@@ -25163,7 +25163,7 @@ export default function Home() {
                             Vista general
                           </p>
                           <h3 className="mt-1 text-xl font-bold text-white sm:text-2xl">
-                            Monitoreo general
+                            {soloMonitorCec ? "Monitoreo comité" : "Monitoreo general"}
                           </h3>
                           {monitorDivision && !isAdmin && !isDirector && !isSupervisor ? (
                             <p className="mt-1 inline-flex rounded-full bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-200">
