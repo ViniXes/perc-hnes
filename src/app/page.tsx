@@ -2656,7 +2656,58 @@ function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEm
         Object.values(emp.hours).some((h) => h.trim() !== ""),
     );
 
-  return list.length > 0 ? list : seedHorasEmployees(template);
+  if (list.length === 0) return seedHorasEmployees(template);
+  return template.ordenFijo ? ordenarHorasSegunPlantilla(template, list) : list;
+}
+
+// Clave para comparar nombres sin importar tildes, mayusculas ni espacios dobles.
+function claveNombreHoras(nombre: string): string {
+  return nombre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+// Acomoda las filas en el orden de la plantilla (ordenFijo). Solo cambia el
+// ORDEN: cada persona conserva sus horas, DUI y comentario. Quien no esta en la
+// plantilla (p. ej. agregado a mano) queda al final, en el orden que traia.
+function ordenarHorasSegunPlantilla<T extends { name: string }>(template: HorasTemplate, list: T[]): T[] {
+  const posicion = new Map<string, number>();
+  template.seedEmployees.forEach((seed, idx) => {
+    const nombre = typeof seed === "string" ? seed : seed.name;
+    const clave = claveNombreHoras(nombre);
+    if (!posicion.has(clave)) posicion.set(clave, idx);
+  });
+  const fuera = template.seedEmployees.length;
+  return list
+    .map((emp, idx) => ({ emp, idx, pos: posicion.get(claveNombreHoras(emp.name)) ?? fuera }))
+    .sort((a, b) => a.pos - b.pos || a.idx - b.idx)
+    .map((x) => x.emp);
+}
+
+// DISTRIBUCION DE HORAS COMPLETA: no basta con guardar. Cuenta como entregada
+// cuando al menos el 90% de las personas de la lista tiene horas registradas.
+const HORAS_UMBRAL_COMPLETO = 0.9;
+function horasAvance(employees: unknown): { conHoras: number; total: number; pct: number; completo: boolean } {
+  const lista = Array.isArray(employees) ? employees : [];
+  let total = 0;
+  let conHoras = 0;
+  for (const item of lista) {
+    const row = (item ?? {}) as { name?: unknown; dui?: unknown; hours?: Record<string, unknown> };
+    const nombre = typeof row.name === "string" ? row.name.trim() : "";
+    const dui = typeof row.dui === "string" ? row.dui.trim() : "";
+    if (!nombre && !dui) continue;
+    total += 1;
+    const tiene = Object.values(row.hours ?? {}).some((valor) => {
+      const n = Number(String(valor ?? "").trim());
+      return Number.isFinite(n) && n > 0;
+    });
+    if (tiene) conHoras += 1;
+  }
+  const pct = total > 0 ? conHoras / total : 0;
+  return { conHoras, total, pct, completo: total > 0 && pct >= HORAS_UMBRAL_COMPLETO };
 }
 
 // Trae el PERSONAL del ultimo mes guardado de ese servicio (nombres, DUI/NIT y tipo
@@ -2937,6 +2988,8 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
   // Lecturas opcionales (SEPS/Horas pueden fallar si faltan reglas): no deben romper.
   const safeServiceIds = async (
     coll: string,
+    // Filtro opcional sobre el documento (Horas: solo cuenta si llega al 90%).
+    cuenta?: (data: Record<string, unknown>) => boolean,
   ): Promise<Set<string>> => {
     try {
       const snap = await getDocs(
@@ -2944,8 +2997,9 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
       );
       const ids = new Set<string>();
       for (const item of snap.docs) {
-        const sid = (item.data() as { serviceId?: unknown }).serviceId;
-        if (typeof sid === "string") {
+        const data = item.data() as Record<string, unknown>;
+        const sid = data.serviceId;
+        if (typeof sid === "string" && (!cuenta || cuenta(data))) {
           ids.add(sid);
         }
       }
@@ -2965,7 +3019,7 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
       ),
     ),
     safeServiceIds("sepsTabulators"),
-    safeServiceIds("horasTabulators"),
+    safeServiceIds("horasTabulators", (data) => horasAvance(data.employees).completo),
   ]);
   const completedByPeriod = new Map<string, Set<string>>();
 
@@ -7103,6 +7157,7 @@ export default function Home() {
             };
             if (typeof d.periodId !== "string" || typeof d.serviceId !== "string") return;
             if (exigirValores && !hasAnyCapturedValue(d.values)) return;
+            if (coleccion === "horasTabulators" && !horasAvance((d as { employees?: unknown }).employees).completo) return;
             const actual = mapa.get(d.periodId) ?? new Set<string>();
             actual.add(d.serviceId);
             mapa.set(d.periodId, actual);
@@ -15993,8 +16048,8 @@ export default function Home() {
 
       if (mod.id === "distribucion") {
         if (!horasTemplate || !currentService || !capturesModule("distribucion")) return "n/a";
-        // Solo "completo" cuando se GUARDO (no por los empleados precargados).
-        return horasSaved ? "completo" : "incompleto";
+        // "Completo" cuando se GUARDO y al menos el 90% de la lista tiene horas.
+        return horasSaved && horasAvance(horasEmployees).completo ? "completo" : "incompleto";
       }
 
       return "n/a";
@@ -16231,6 +16286,43 @@ export default function Home() {
           loading: isLoadingHoras,
           onSelect: (period) => void loadHorasHistory(period),
         })}
+
+        {(() => {
+          // Avance: cuantas personas ya tienen horas. Se marca COMPLETO al 90%.
+          const av = horasAvance(horasEmployees);
+          const pct = Math.round(av.pct * 100);
+          const meta = Math.ceil(av.total * HORAS_UMBRAL_COMPLETO);
+          const faltan = Math.max(0, meta - av.conHoras);
+          return av.total > 0 ? (
+            <div className={`mt-4 rounded-2xl border px-4 py-3 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-white/[0.03]"}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className={isLightPanelTheme ? "text-slate-700" : "text-slate-200"}>
+                  <strong>{av.conHoras}</strong> de {av.total} personas con horas ({pct}%)
+                </span>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 font-semibold ${
+                    av.completo
+                      ? isLightPanelTheme ? "bg-emerald-100 text-emerald-700" : "bg-emerald-500/15 text-emerald-200"
+                      : isLightPanelTheme ? "bg-amber-100 text-amber-700" : "bg-amber-500/15 text-amber-200"
+                  }`}
+                >
+                  {av.completo
+                    ? horasSaved ? "Completo" : "Llega al 90% · falta guardar"
+                    : `Faltan ${faltan} para el 90%`}
+                </span>
+              </div>
+              <div className={`mt-2 h-1.5 w-full overflow-hidden rounded-full ${isLightPanelTheme ? "bg-slate-200" : "bg-white/10"}`}>
+                <div
+                  className={`h-full rounded-full ${av.completo ? "bg-emerald-400" : "bg-amber-400"}`}
+                  style={{ width: `${Math.min(100, pct)}%` }}
+                />
+              </div>
+              <p className={`mt-1.5 text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
+                El monitoreo marca este tablero como completo cuando al menos el 90% de la lista tiene horas.
+              </p>
+            </div>
+          ) : null;
+        })()}
 
         <div className={`show-scrollbar mt-4 overflow-x-auto rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
           <table className={`w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>

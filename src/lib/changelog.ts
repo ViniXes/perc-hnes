@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.409",
+    para: ["todos"],
+    texto:
+      "Distribucion de Horas: ahora un tablero cuenta como completo en el monitoreo cuando al menos el 90% de su lista tiene horas (antes bastaba con guardar). Arriba de la tabla se ve cuantas personas faltan. Ademas, Medicina Interna muestra a su personal en el orden del listado de Hospitalizacion.",
+  },
+  {
     version: "1986.408",
     para: ["admin"],
     texto:
