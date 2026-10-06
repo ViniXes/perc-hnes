@@ -7837,6 +7837,13 @@ export default function Home() {
       const snap = await getDoc(doc(db, "cecTabulators", `${cecPeriodo}__${serviceId}`));
       const datos = snap.exists() ? (snap.data() as Record<string, unknown>) : null;
       setCecDoc(cecMezclar(plantilla, (datos as Partial<CecDoc> | null) ?? null));
+      if (datos) {
+        setCecEstados((previo) =>
+          previo[serviceId]
+            ? previo
+            : { ...previo, [serviceId]: { usuario: typeof datos.userEmail === "string" ? datos.userEmail : "" } },
+        );
+      }
       if (datos && typeof datos.userEmail === "string") {
         setCecAutoria({
           usuario: String(datos.userEmail),
@@ -13253,6 +13260,32 @@ export default function Home() {
     void loadTendencias(tendenciasMeses);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSidebarSection, mobileView, tendenciasMeses, periodId, recibidosExternos]);
+
+  // SEMAFORO DEL COMITE EN VIVO. Antes se leia una sola vez al entrar a la
+  // pantalla: si un servicio guardaba su lista despues, aca seguia en amarillo
+  // hasta recargar (o hasta que alguien volviera a guardar). Ahora escucha los
+  // documentos del mes y se pone en verde apenas el servicio guarda.
+  useEffect(() => {
+    if (firestoreUnavailable || !firestoreStatusReady || !user) return;
+    if (!(puedeVerCec || veMonitorCec || esComiteCec)) return;
+    const unsubscribe = onSnapshot(
+      query(collection(db, "cecTabulators"), where("periodId", "==", cecPeriodo)),
+      (snap) => {
+        const estados: Record<string, { usuario?: string; fecha?: string }> = {};
+        snap.forEach((item) => {
+          const d = item.data() as { serviceId?: string; userEmail?: string };
+          if (typeof d.serviceId === "string") {
+            estados[d.serviceId] = { usuario: d.userEmail ?? "" };
+          }
+        });
+        setCecEstados(estados);
+      },
+      () => {
+        // El semaforo es un extra: si no se puede leer, la captura sigue.
+      },
+    );
+    return () => unsubscribe();
+  }, [cecPeriodo, firestoreUnavailable, firestoreStatusReady, user, puedeVerCec, veMonitorCec, esComiteCec]);
 
   useEffect(() => {
     if (activeSidebarSection !== "panel-cec" && mobileView !== "panel-cec") return;

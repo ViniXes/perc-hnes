@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.410",
+    para: ["todos"],
+    texto:
+      "Comite de Expediente Clinico: los servicios se ponen en verde apenas guardan su lista, sin tener que recargar ni volver a guardar. Farmacia ahora tiene la columna de Responsable.",
+  },
+  {
     version: "1986.409",
     para: ["todos"],
     texto:

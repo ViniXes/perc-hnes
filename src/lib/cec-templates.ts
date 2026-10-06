@@ -86,7 +86,8 @@ export const CEC_TEMPLATES: CecTemplate[] = [
         columnas: 1,
         fecha: false,
         acciones: true,
-        responsable: false,
+        // Se agrego la columna de Responsable (no la traia la plantilla).
+        responsable: true,
         filas: [
           { key: "recetas-y-requisiciones-pendientes", categoria: "Farmacia", aspecto: "Recetas y requisiciones pendientes", },
           { key: "poseen-saldos-anteriores-negativos-o-positiv", categoria: "Farmacia", aspecto: "Poseen saldos anteriores (negativos o positivos).", },
