@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.411",
+    para: ["todos"],
+    texto:
+      "PERC ahora cierra donde corresponde: los primeros 3 dias habiles del mes, a las 2:30 p. m. del 3ro. Antes quedaba abierto hasta el 5to dia habil, como Horas. Para registrar despues, se pide la reapertura del tablero PERC.",
+  },
+  {
     version: "1986.410",
     para: ["todos"],
     texto:

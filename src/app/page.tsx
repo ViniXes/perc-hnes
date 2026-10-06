@@ -5320,6 +5320,19 @@ export default function Home() {
 
     return effectiveCaptureOpen(captureWindow.isOpen, override);
   }, [captureOverrides, captureWindow.isOpen, currentService, periodId]);
+  // PERC tiene SU PROPIA ventana: los primeros 3 dias habiles (cierra 2:30 p. m.
+  // del 3ro). Antes usaba la de Horas (5 dias) y se podia seguir guardando PERC
+  // hasta el 5to dia habil. La reapertura que vale es la de PERC ("perc").
+  const percWindow = useMemo(
+    () => getCaptureWindow(now, currentBlockedDates, "perc"),
+    [currentBlockedDates, now],
+  );
+  const percCaptureOpen = useMemo(() => {
+    const override = currentService
+      ? captureOverrides[getCaptureOverrideId(periodId, currentService.id, "perc")]
+      : undefined;
+    return effectiveCaptureOpen(percWindow.isOpen, override);
+  }, [captureOverrides, percWindow.isOpen, currentService, periodId]);
   // SEPS: plantilla del servicio (si tiene), ventana de doble fase y estado efectivo.
   const sepsBaseTemplate = useMemo(
     () => getSepsTemplate(effectiveServiceId),
@@ -10565,8 +10578,8 @@ export default function Home() {
       return;
     }
 
-    if (!editingHistory && !currentServiceCaptureOpen && !isAdmin) {
-      setError("El periodo de captura esta cerrado para este mes.");
+    if (!editingHistory && !percCaptureOpen && !isAdmin) {
+      setError("La captura de PERC está cerrada: se registra los primeros 3 días hábiles del mes (hasta las 2:30 p. m. del 3ro).");
       setMessage("");
       return;
     }
@@ -13312,8 +13325,8 @@ export default function Home() {
   const isLoadingSession = !authReady || (user !== null && !profileReady);
 
   if (user && serviceProfile && !isLoadingSession) {
-    const isDateLocked = !currentServiceCaptureOpen;
-    const isReopenedLate = currentServiceCaptureOpen && !captureWindow.isOpen;
+    const isDateLocked = !percCaptureOpen;
+    const isReopenedLate = percCaptureOpen && !percWindow.isOpen;
     const isPermissionLocked = !currentService || !serviceProfile.permissions.canEdit;
     const isFormLocked = isDateLocked || isPermissionLocked;
     // Historial PERC: mes activo, si es historial, y si la edicion esta bloqueada.
@@ -21939,10 +21952,10 @@ export default function Home() {
                     {!serviceProfile.permissions.canEdit
                       ? "El administrador desactivo temporalmente tu permiso de captura."
                       : isDateLocked
-                        ? `Captura solo en los primeros ${captureWindow.totalDays} dias habiles. Ultimo: ${SHORT_DATE_FORMATTER.format(captureWindow.lastOpenDay)}.`
+                        ? `Captura solo en los primeros ${percWindow.totalDays} dias habiles. Ultimo: ${SHORT_DATE_FORMATTER.format(percWindow.lastOpenDay)} a las 2:30 p. m.`
                         : isReopenedLate
                           ? "Reabierta por un supervisor: podes registrar fuera de tus dias habiles."
-                          : `Dia habil ${captureWindow.activeDayNumber} de ${captureWindow.totalDays}.`}
+                          : `Dia habil ${percWindow.activeDayNumber} de ${percWindow.totalDays}.`}
                   </span>
                   {/* Quién guardó por última vez este tabulador. Responde de una la
                       pregunta "¿este servicio ya cargó, y quién lo hizo?". */}
