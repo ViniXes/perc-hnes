@@ -29,6 +29,11 @@ rules_version = '2';
 //     la cuenta puede LEER las listas del comite (cecTabulators) para ver su
 //     avance en "Monitoreo general". No puede escribirlas. 'menuGrants' solo lo
 //     escribe un admin, asi que nadie se lo puede dar a si mismo.
+//  7) Cierre de PERC en el servidor: captureWindows/{mes}.percCierre guarda la
+//     hora de cierre (2:30 p. m. del 3er dia habil). Despues de esa hora nadie
+//     que no sea administrador puede guardar el PERC de ese mes, salvo que el
+//     tablero tenga una reapertura vigente (captureOverrides, 24 horas). Si un
+//     supervisor lo cerro a mano, tampoco se puede guardar.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -121,14 +126,46 @@ service cloud.firestore {
     match /serviceAssignments/{serviceId} {
       allow read, write: if isAdmin();
     }
+    // --- Cierre de PERC ------------------------------------------------------
+    // Si el mes todavia no tiene hora de cierre publicada, no se bloquea nada
+    // (la publica el administrador al entrar a PULSO).
+    function percEnPlazo(periodId) {
+      let ref = /databases/$(database)/documents/captureWindows/$(periodId);
+      return !exists(ref) || request.time < get(ref).data.percCierre;
+    }
+    function percOverride(periodId, serviceId) {
+      let id = periodId + '__' + serviceId + '__perc';
+      return /databases/$(database)/documents/captureOverrides/$(id);
+    }
+    // Reapertura vigente: estado 'open' de menos de 24 horas.
+    function percReabierto(periodId, serviceId) {
+      let ref = percOverride(periodId, serviceId);
+      return exists(ref)
+        && get(ref).data.state == 'open'
+        && request.time < get(ref).data.updatedAt + duration.value(24, 'h');
+    }
+    function percCerradoAMano(periodId, serviceId) {
+      let ref = percOverride(periodId, serviceId);
+      return exists(ref) && get(ref).data.state == 'closed';
+    }
+    function percAbierto(periodId, serviceId) {
+      return percReabierto(periodId, serviceId)
+        || (percEnPlazo(periodId) && !percCerradoAMano(periodId, serviceId));
+    }
+    match /captureWindows/{periodId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || (tienePerfil() && userProfile().role == 'admin');
+    }
     // PRODUCCION DISTRIBUIDA (PERC). Es lo unico del HNES que una cuenta MINSAL
     // puede LEER: de aca sale el avance del Hospital Nacional El Salvador dentro
     // del monitoreo de hospitales. Escribir, nunca.
     match /serviceTabulators/{docId} {
       allow read: if isSignedIn();
       allow create, update: if isAdmin()
+        || (tienePerfil() && userProfile().role == 'admin')
         || (isSignedIn() && noEsMinsal()
-            && request.resource.data.userId == request.auth.uid);
+            && request.resource.data.userId == request.auth.uid
+            && percAbierto(request.resource.data.periodId, request.resource.data.serviceId));
       allow delete: if isAdmin();
     }
     match /sepsTabulators/{docId} {

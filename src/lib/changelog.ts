@@ -27,6 +27,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.414",
+    para: ["admin"],
+    texto:
+      "Avisos dirigidos: PULSO puede mostrar una alerta a personas puntuales hasta que presionen Entendido. Primer uso: entregas tardias del PERC de septiembre (Lavanderia, CEYE y Almacen Medicamentos), registradas como falta en la Bitacora.",
+  },
+  {
+    version: "1986.414",
+    para: ["admin"],
+    texto:
+      "PERC: el cierre del 3er dia habil ahora tambien lo controla el servidor. Aunque alguien tenga PULSO abierto con una version vieja, despues de las 2:30 p. m. del 3er dia habil no se puede guardar PERC salvo que el tablero este reabierto.",
+  },
+  {
     version: "1986.412",
     para: ["todos"],
     texto:

@@ -16,6 +16,7 @@ import {
 } from "firebase/auth";
 import {
   addDoc,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -27,6 +28,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   where,
 } from "firebase/firestore";
 import { auth, createSecondaryAuth, firestoreDatabaseId } from "@/lib/firebase";
@@ -161,6 +163,7 @@ import {
 } from "@/components/login-loading-modal";
 import { APP_VERSION } from "@/lib/version";
 import { CHANGELOG, CHANGELOG_LATEST, type ChangelogEntry } from "@/lib/changelog";
+import { AVISOS_DIRIGIDOS, type AvisoDirigido } from "@/lib/avisos";
 import { esperarConfirmacion, estaEnLinea } from "@/lib/offline";
 import { SelectorFecha, SelectorMes } from "@/components/selectores-fecha";
 import {
@@ -4075,6 +4078,9 @@ export default function Home() {
   // Changelog dirigido: mensajes de novedades por version segun el usuario.
   const [changelogPendiente, setChangelogPendiente] = useState<ChangelogEntry[]>([]);
   const [showChangelog, setShowChangelog] = useState(false);
+  // Aviso dirigido pendiente (alerta que sale hasta que la persona da Entendido).
+  const [avisoPendiente, setAvisoPendiente] = useState<AvisoDirigido | null>(null);
+  const [avisoGuardando, setAvisoGuardando] = useState(false);
   const changelogHechoRef = useRef(false);
   const cerrarNovedades = () => {
     setShowChangelog(false);
@@ -5335,6 +5341,49 @@ export default function Home() {
       : undefined;
     return effectiveCaptureOpen(percWindow.isOpen, override);
   }, [captureOverrides, percWindow.isOpen, currentService, periodId]);
+  // CIERRE DE PERC EN EL SERVIDOR. El bloqueo de pantalla no alcanza: quien tenia
+  // PULSO abierto con una version vieja (o no acepto la actualizacion) podia
+  // seguir guardando. Por eso la hora de cierre se publica en
+  // captureWindows/{mes} y las reglas de Firestore rechazan cualquier guardado de
+  // PERC posterior, salvo que el tablero tenga una reapertura vigente. La publica
+  // cualquier administrador al entrar (solo si cambio), con el calendario ya
+  // aplicado (feriados y fechas no habiles).
+  const percCierreMillis = percWindow.lastOpenDay
+    ? new Date(
+        percWindow.lastOpenDay.getFullYear(),
+        percWindow.lastOpenDay.getMonth(),
+        percWindow.lastOpenDay.getDate(),
+        CAPTURE_CLOSE_HOUR,
+        CAPTURE_CLOSE_MINUTE,
+        0,
+        0,
+      ).getTime()
+    : null;
+  useEffect(() => {
+    if (!isAdmin || ghostUid || firestoreUnavailable || !firestoreStatusReady || !user) return;
+    if (percCierreMillis === null) return;
+    const ref = doc(db, "captureWindows", periodId);
+    void (async () => {
+      try {
+        const snap = await getDoc(ref);
+        const guardado = snap.exists()
+          ? readOverrideMillis((snap.data() as { percCierre?: unknown }).percCierre)
+          : null;
+        if (guardado === percCierreMillis) return;
+        await setDoc(
+          ref,
+          {
+            periodId,
+            percCierre: Timestamp.fromMillis(percCierreMillis),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+      } catch {
+        // Si no se puede publicar, la pantalla igual bloquea; se reintenta al volver a entrar.
+      }
+    })();
+  }, [isAdmin, ghostUid, firestoreUnavailable, firestoreStatusReady, user, periodId, percCierreMillis]);
   // SEPS: plantilla del servicio (si tiene), ventana de doble fase y estado efectivo.
   const sepsBaseTemplate = useMemo(
     () => getSepsTemplate(effectiveServiceId),
@@ -10653,6 +10702,13 @@ export default function Home() {
         return;
       }
 
+      const textoError = (saveError instanceof Error ? saveError.message : String(saveError)).toLowerCase();
+      if (textoError.includes("permission") || textoError.includes("permiso")) {
+        setError(
+          "El servidor rechazó el guardado: la captura de PERC de este mes ya cerró. Si necesitás registrar, pedí la reapertura del tablero PERC.",
+        );
+        return;
+      }
       setError("No pudimos guardar los datos. Revisa Firestore e intentalo de nuevo.");
     } finally {
       setIsSaving(false);
@@ -13275,6 +13331,88 @@ export default function Home() {
     void loadTendencias(tendenciasMeses);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSidebarSection, mobileView, tendenciasMeses, periodId, recibidosExternos]);
+
+  // AVISOS DIRIGIDOS: si esta persona tiene un aviso que aun no acepto, se le
+  // muestra al entrar (y en cada ingreso) hasta que presione Entendido.
+  useEffect(() => {
+    if (!user || !serviceProfile || ghostUid || firestoreUnavailable) {
+      setAvisoPendiente(null);
+      return;
+    }
+    const usuario = normalizeKey(
+      (serviceProfile.username || (user.email || "").split("@")[0] || "").trim(),
+    );
+    const candidatos = AVISOS_DIRIGIDOS.filter((aviso) =>
+      aviso.usuarios.some((u) => normalizeKey(u) === usuario),
+    );
+    if (candidatos.length === 0) {
+      setAvisoPendiente(null);
+      return;
+    }
+    let cancelado = false;
+    void (async () => {
+      try {
+        const snap = await getDoc(doc(db, "serviceUsers", user.uid));
+        const vistos = snap.exists()
+          ? ((snap.data() as { avisosVistos?: unknown }).avisosVistos as unknown[] | undefined) ?? []
+          : [];
+        const pendiente = candidatos.find((aviso) => !vistos.includes(aviso.id)) ?? null;
+        if (!cancelado) setAvisoPendiente(pendiente);
+      } catch {
+        if (!cancelado) setAvisoPendiente(candidatos[0]);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [user, serviceProfile, ghostUid, firestoreUnavailable]);
+
+  // La FALTA de cada aviso queda en la Bitacora una sola vez (id fijo: si ya
+  // existe no se vuelve a escribir). La deja el administrador al entrar.
+  useEffect(() => {
+    if (!isAdmin || ghostUid || firestoreUnavailable || !firestoreStatusReady || !user) return;
+    void (async () => {
+      for (const aviso of AVISOS_DIRIGIDOS) {
+        if (!aviso.falta) continue;
+        try {
+          const ref = doc(db, "auditLog", `falta__${aviso.id}`);
+          const snap = await getDoc(ref);
+          if (snap.exists()) continue;
+          await setDoc(ref, {
+            accion: aviso.falta.accion,
+            detalle: aviso.falta.detalle,
+            userId: user.uid,
+            userName: serviceProfile?.name || "",
+            userEmail: serviceProfile?.username || user.email || "",
+            periodId,
+            at: serverTimestamp(),
+          });
+        } catch {
+          // La bitacora es un extra; se reintenta en el proximo ingreso.
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, ghostUid, firestoreUnavailable, firestoreStatusReady, user]);
+
+  async function aceptarAviso() {
+    if (!avisoPendiente || !user) return;
+    const aviso = avisoPendiente;
+    setAvisoGuardando(true);
+    try {
+      await setDoc(
+        doc(db, "serviceUsers", user.uid),
+        { avisosVistos: arrayUnion(aviso.id) },
+        { merge: true },
+      );
+      void registrarBitacora("Aviso aceptado", `${aviso.titulo}: ${serviceProfile?.username || user.email || ""} dio Entendido.`);
+      setAvisoPendiente(null);
+    } catch {
+      setError("No pudimos registrar que leíste el aviso. Volvé a presionar Entendido.");
+    } finally {
+      setAvisoGuardando(false);
+    }
+  }
 
   // SEMAFORO DEL COMITE EN VIVO. Antes se leia una sola vez al entrar a la
   // pantalla: si un servicio guardaba su lista despues, aca seguia en amarillo
@@ -25332,6 +25470,30 @@ export default function Home() {
                       );
                     })()
                   )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {avisoPendiente ? (
+            <div role="alertdialog" aria-modal="true" className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/85 backdrop-blur-sm" />
+              <div className="modal-pop-in relative w-full max-w-md overflow-hidden rounded-3xl border border-amber-400/40 bg-[#0e1626] shadow-2xl shadow-black/60">
+                <div className="h-1 w-full bg-gradient-to-r from-amber-400 to-rose-500" />
+                <div className="px-5 pb-4 pt-5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-300">Aviso</p>
+                  <h3 className="mt-1 text-xl font-bold text-white">{avisoPendiente.titulo}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-200">{avisoPendiente.texto}</p>
+                </div>
+                <div className="border-t border-white/10 px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => void aceptarAviso()}
+                    disabled={avisoGuardando}
+                    className="w-full rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-300 disabled:opacity-60"
+                  >
+                    {avisoGuardando ? "Registrando…" : "Entendido"}
+                  </button>
                 </div>
               </div>
             </div>
