@@ -27,6 +27,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.412",
+    para: ["todos"],
+    texto:
+      "Comite de Expediente Clinico: todas las listas tienen ahora la columna de Responsable (Emergencia tableros, Hospital de Dia, Imagenologia, Alimentacion y Dietas e Informatica no la tenian).",
+  },
+  {
+    version: "1986.412",
+    para: ["todos"],
+    texto:
+      "Distribucion de Horas: una persona cuenta como registrada si tiene horas, si se le puso 0 o si tiene un comentario (licencia, vacaciones...). Asi el servicio sale completo aunque alguien no haya trabajado el mes.",
+  },
+  {
     version: "1986.411",
     para: ["todos"],
     texto:

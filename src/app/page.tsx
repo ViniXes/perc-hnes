@@ -2695,16 +2695,18 @@ function horasAvance(employees: unknown): { conHoras: number; total: number; pct
   let total = 0;
   let conHoras = 0;
   for (const item of lista) {
-    const row = (item ?? {}) as { name?: unknown; dui?: unknown; hours?: Record<string, unknown> };
+    const row = (item ?? {}) as { name?: unknown; dui?: unknown; comment?: unknown; hours?: Record<string, unknown> };
     const nombre = typeof row.name === "string" ? row.name.trim() : "";
     const dui = typeof row.dui === "string" ? row.dui.trim() : "";
     if (!nombre && !dui) continue;
     total += 1;
-    const tiene = Object.values(row.hours ?? {}).some((valor) => {
-      const n = Number(String(valor ?? "").trim());
-      return Number.isFinite(n) && n > 0;
-    });
-    if (tiene) conHoras += 1;
+    // Cuenta como REGISTRADA si tiene horas, si se le puso 0 a proposito o si
+    // tiene un comentario (licencia, vacaciones, incapacidad...). Asi una persona
+    // que no trabajo el mes no deja al servicio en amarillo para siempre.
+    const valores = Object.values(row.hours ?? {}).map((valor) => String(valor ?? "").trim());
+    const conValor = valores.some((v) => v !== "" && Number.isFinite(Number(v)));
+    const comentario = typeof row.comment === "string" && row.comment.trim() !== "";
+    if (conValor || comentario) conHoras += 1;
   }
   const pct = total > 0 ? conHoras / total : 0;
   return { conHoras, total, pct, completo: total > 0 && pct >= HORAS_UMBRAL_COMPLETO };
@@ -16343,7 +16345,7 @@ export default function Home() {
             <div className={`mt-4 rounded-2xl border px-4 py-3 ${isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-white/[0.03]"}`}>
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                 <span className={isLightPanelTheme ? "text-slate-700" : "text-slate-200"}>
-                  <strong>{av.conHoras}</strong> de {av.total} personas con horas ({pct}%)
+                  <strong>{av.conHoras}</strong> de {av.total} personas registradas ({pct}%)
                 </span>
                 <span
                   className={`rounded-full px-2.5 py-0.5 font-semibold ${
@@ -16364,7 +16366,7 @@ export default function Home() {
                 />
               </div>
               <p className={`mt-1.5 text-[11px] ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-                El monitoreo marca este tablero como completo cuando al menos el 90% de la lista tiene horas.
+                El monitoreo lo marca completo cuando al menos el 90% de la lista está registrada. Quien no trabajó el mes cuenta si le ponés 0 o un comentario (licencia, vacaciones…).
               </p>
             </div>
           ) : null;
