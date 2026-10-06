@@ -130,7 +130,7 @@ export const CEC_TEMPLATES: CecTemplate[] = [
         columnas: 1,
         fecha: false,
         acciones: true,
-        responsable: false,
+        responsable: true,
         filas: [
           { key: "tabla-de-pendientes-de-triage-y-referencias", categoria: "Emergencia (Médico)", aspecto: "Tabla de pendientes de triage y referencias actualizadas de otros establecimientos (48 horas).", },
           { key: "tablero-de-emergencia-pacientes-acumulado", categoria: "Emergencia (Médico)", aspecto: "Tablero de emergencia, pacientes acumulado.", },
@@ -240,7 +240,7 @@ export const CEC_TEMPLATES: CecTemplate[] = [
         columnas: 10,
         fecha: true,
         acciones: true,
-        responsable: false,
+        responsable: true,
         filas: [
           { key: "agendamiento-de-medicamentos", categoria: "Hospital de Día", aspecto: "Agendamiento de medicamentos", },
           { key: "registro-adecuado-de-balance-hidr-co", categoria: "Hospital de Día", aspecto: "Registro adecuado de balance hidríco", },
@@ -257,7 +257,7 @@ export const CEC_TEMPLATES: CecTemplate[] = [
         columnas: 10,
         fecha: true,
         acciones: true,
-        responsable: false,
+        responsable: true,
         filas: [
           { key: "historial-del-paciente-verificaci-n-de-signo", categoria: "Hospitalización (Médico)", aspecto: "Historial del paciente (Verificación de Signos Vitales, evolución, plan médico, medicamentos, cuidados generales, procedimiento) Según condición de paciente.", },
           { key: "nota-de-ingreso", categoria: "Hospitalización (Médico)", aspecto: "Nota de ingreso", },
@@ -284,7 +284,7 @@ export const CEC_TEMPLATES: CecTemplate[] = [
         columnas: 10,
         fecha: true,
         acciones: true,
-        responsable: false,
+        responsable: true,
         filas: [
           { key: "agendamiento-de-medicamentos-2", categoria: "Hospital de Día", aspecto: "Agendamiento de medicamentos", },
           { key: "registro-adecuado-de-balance-hidr-co-2", categoria: "Hospital de Día", aspecto: "Registro adecuado de balance hidríco", },
@@ -301,7 +301,7 @@ export const CEC_TEMPLATES: CecTemplate[] = [
         columnas: 10,
         fecha: true,
         acciones: true,
-        responsable: false,
+        responsable: true,
         filas: [
           { key: "cuidados-generales-2", categoria: "", aspecto: "Cuidados generales", },
           { key: "signos-vitales-por-parte-del-m-dico-2", categoria: "", aspecto: "Signos vitales por parte del médico", },
@@ -379,7 +379,7 @@ export const CEC_TEMPLATES: CecTemplate[] = [
         columnas: 1,
         fecha: false,
         acciones: true,
-        responsable: false,
+        responsable: true,
         filas: [
           { key: "realiza-el-cambio-de-solicitud-de-im-genes-e", categoria: "Imagenología", aspecto: "Realiza el cambio de solicitud de Imágenes en proceso y tomadas.", },
           { key: "se-observa-migraci-n-de-imagen-del-visor-de", categoria: "Imagenología", aspecto: "Se observa migración de imagen del visor de weasis a PACS.", },
@@ -399,7 +399,7 @@ export const CEC_TEMPLATES: CecTemplate[] = [
         columnas: 1,
         fecha: false,
         acciones: true,
-        responsable: false,
+        responsable: true,
         filas: [
           { key: "se-encuentran-finalizadas-las-solicitudes-re", categoria: "Alimentación y Dietas", aspecto: "Se encuentran finalizadas las solicitudes realizadas.", },
         ],
@@ -466,7 +466,7 @@ export const CEC_TEMPLATES: CecTemplate[] = [
         columnas: 1,
         fecha: false,
         acciones: true,
-        responsable: false,
+        responsable: true,
         filas: [
           { key: "notifica-falla-de-sis-a-jefaturas", categoria: "Operación y funcionamiento de redes y SIS", aspecto: "Notifica falla de SIS a jefaturas", },
           { key: "nofitica-reestablecimiento-de-servicio", categoria: "Operación y funcionamiento de redes y SIS", aspecto: "Nofitica reestablecimiento de servicio", },
