@@ -159,6 +159,8 @@ export function poaNum(value: string | undefined): number {
 export function poaPercent(prog: string | undefined, real: string | undefined): string {
   const p = poaNum(prog);
   if (p <= 0) return "";
+  // Sin registrar todavía: no es 0 %, queda en blanco.
+  if ((real ?? "").trim() === "") return "";
   const r = poaNum(real);
   const pct = Math.round((r / p) * 100);
   return `${pct}%`;

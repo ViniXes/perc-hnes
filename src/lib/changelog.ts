@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.417",
+    para: ["serv:esdomed", "admin"],
+    texto:
+      "PAO: lo que todavia no se registro aparece como pendiente (sin %), no como 0 %. El resumen del trimestre solo cuenta las actividades ya registradas.",
+  },
+  {
     version: "1986.416",
     para: ["admin"],
     texto:

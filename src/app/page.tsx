@@ -15760,22 +15760,31 @@ export default function Home() {
       const tieneMedida = (actividad: string) =>
         medidas.some((m) => m.trimestre === String(poaTrimestre) && m.resultado.trim() === actividad.trim() && (m.medida.trim() || m.factor.trim()));
       let sinMedida = 0;
+      // Solo cuenta lo que ya se registró: lo pendiente no es incumplimiento.
+      let registradasT = 0;
+      let registradasA = 0;
       for (const { row } of filas) {
         const tri = row.trimestres[tIdx];
         const sem = poaSemaforo(tri.prog, tri.real);
         conteo[sem] += 1;
-        if (poaNum(tri.prog) > 0) {
+        if (poaNum(tri.prog) > 0 && tri.real.trim() !== "") {
           progT += poaNum(tri.prog);
           realT += poaNum(tri.real);
+          registradasT += 1;
         }
-        const acum = poaAcumulado(row, poaTrimestre);
-        progA += acum.prog;
-        realA += acum.real;
+        for (let q = 0; q <= tIdx; q += 1) {
+          const t = row.trimestres[q];
+          if (poaNum(t.prog) > 0 && t.real.trim() !== "") {
+            progA += poaNum(t.prog);
+            realA += poaNum(t.real);
+            registradasA += 1;
+          }
+        }
         if (sem === "rojo" && !tieneMedida(row.actividad)) sinMedida += 1;
       }
       const pct = (r: number, p: number) => (p > 0 ? Math.round((r / p) * 100) : null);
-      const pctT = pct(realT, progT);
-      const pctA = pct(realA, progA);
+      const pctT = registradasT ? pct(realT, progT) : null;
+      const pctA = registradasA ? pct(realA, progA) : null;
       const semT: PoaSemaforo = progT > 0 ? poaSemaforo(progT, realT) : "na";
       const semA: PoaSemaforo = progA > 0 ? poaSemaforo(progA, realA) : "na";
       const riesgos = poaDoc.matrizRiesgos.map((r) => ({ r, exp: poaExposicion(r) })).filter((x) => x.exp > 0);
@@ -15819,8 +15828,18 @@ export default function Home() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {kpi(`Cumplimiento T${poaTrimestre}`, pctT === null ? "—" : `${pctT} %`, `${realT} de ${progT} programado en el trimestre`, poaSemaforoTone(semT))}
-            {kpi(`Acumulado a T${poaTrimestre}`, pctA === null ? "—" : `${pctA} %`, `${realA} de ${progA} programado del T1 al T${poaTrimestre}`, poaSemaforoTone(semA))}
+            {kpi(
+              `Cumplimiento T${poaTrimestre}`,
+              pctT === null ? "—" : `${pctT} %`,
+              pctT === null ? "todavía no hay nada registrado en el trimestre" : `${realT} de ${progT} programado (actividades registradas)`,
+              pctT === null ? undefined : poaSemaforoTone(semT),
+            )}
+            {kpi(
+              `Acumulado a T${poaTrimestre}`,
+              pctA === null ? "—" : `${pctA} %`,
+              pctA === null ? `sin registros del T1 al T${poaTrimestre}` : `${realA} de ${progA} programado del T1 al T${poaTrimestre}`,
+              pctA === null ? undefined : poaSemaforoTone(semA),
+            )}
             {kpi(
               "Actividades del trimestre",
               `${conteo.verde} · ${conteo.amarillo} · ${conteo.rojo}`,
@@ -15860,7 +15879,8 @@ export default function Home() {
                       const tri = row.trimestres[tIdx];
                       const sem = poaSemaforo(tri.prog, tri.real);
                       const acum = poaAcumulado(row, poaTrimestre);
-                      const pctAcum = acum.prog > 0 ? `${Math.round((acum.real / acum.prog) * 100)} %` : "—";
+                      const algoRegistrado = row.trimestres.slice(0, poaTrimestre).some((t) => t.real.trim() !== "");
+                      const pctAcum = acum.prog > 0 && algoRegistrado ? `${Math.round((acum.real / acum.prog) * 100)} %` : "—";
                       const conMedida = tieneMedida(row.actividad);
                       return (
                         <tr key={`sr-${gi}-${ri}`}>
