@@ -16017,7 +16017,7 @@ export default function Home() {
               POA · Plan Anual Operativo
             </h2>
             <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-              {poaDoc?.serviceName ?? SERVICE_DEFINITIONS.find((sv) => sv.id === poaServiceId)?.name ?? ""}
+              {poaDoc?.serviceName ?? poaNombreUnidad(poaServiceId)}
               {poaDirty ? " · cambios sin guardar" : poaDoc ? " · documento guardado" : ""}
             </p>
           </div>
