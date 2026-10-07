@@ -142,6 +142,9 @@ export type PoaDoc = {
   // guardados antes no los tienen y se completan con normalizePoaDoc). ---
   aprobaciones?: PoaAprobacion[];
   membrete?: PoaMembrete;
+  /** Misión y visión: solo para Subdirecciones y Divisiones (lineamientos, sección 2). */
+  mision?: string;
+  vision?: string;
   /** Sección 6: texto de seguimiento. */
   seguimiento?: string;
   medidas?: PoaMedidaRow[];
@@ -667,6 +670,27 @@ export const POA_SEEDS: Record<string, PoaDoc> = {
   esdomed: POA_SEED_ESDOMED,
 };
 
+// --- Unidades que hacen PAO además de los servicios ---------------------------
+// Las Divisiones y la Subdirección Administrativa elaboran su propio PAO (con
+// misión y visión). No son servicios: se asignan a la cuenta del jefe desde
+// Usuarios al otorgarle el acceso POA.
+export const POA_UNIDADES_DIVISION: { id: string; name: string; division: string }[] = [
+  { id: "division-medica", name: "División Médica", division: "medica" },
+  { id: "division-apoyo", name: "División de Apoyo", division: "apoyo" },
+  { id: "division-enfermeria", name: "División de Enfermería", division: "enfermeria" },
+  { id: "subdireccion-administrativa", name: "Subdirección Administrativa", division: "administrativa" },
+];
+
+/** Unidad de PAO que corresponde a un jefe de división (o "" si no aplica). */
+export function poaUnidadDeDivision(division: string | null | undefined): string {
+  return POA_UNIDADES_DIVISION.find((u) => u.division === division)?.id ?? "";
+}
+
+/** true si el PAO es de una División o de la Subdirección (lleva misión y visión). */
+export function poaEsDivision(unidadId: string | null | undefined): boolean {
+  return POA_UNIDADES_DIVISION.some((u) => u.id === unidadId);
+}
+
 /** Servicios habilitados para el módulo POA. */
 export const POA_SERVICES: string[] = ["esdomed"];
 
@@ -772,6 +796,7 @@ export function createPoaBlank(serviceId: string, year: number, serviceName: str
       place: "San Salvador",
     },
     intro: [""],
+    ...(poaEsDivision(serviceId) ? { mision: "", vision: "" } : {}),
     dependencia: "",
     objetivoGeneral: "",
     objetivosEspecificos: [""],
@@ -793,8 +818,14 @@ export function createPoaBlank(serviceId: string, year: number, serviceName: str
     matrizRiesgos: [{ ...POA_EMPTY_MATRIZ }],
     actividades: [{ objetivo: "", rows: [vacioActividad()] }],
     aprobaciones: [
-      { funcion: "Elaborado por", nombre: "", cargo: `Jefe de ${serviceName}` },
-      { funcion: "Revisado por", nombre: "", cargo: "Jefe de División / Subdirección" },
+      {
+        funcion: "Elaborado por",
+        nombre: "",
+        cargo: serviceId === "subdireccion-administrativa" ? "Subdirector Administrativo" : `Jefe de ${serviceName}`,
+      },
+      poaEsDivision(serviceId)
+        ? { funcion: "Revisado por", nombre: "", cargo: "Subdirector General" }
+        : { funcion: "Revisado por", nombre: "", cargo: "Jefe de División / Subdirección" },
       { funcion: "Aprobado por", nombre: "Dra. Laura Estela Miranda Iraheta", cargo: "Directora del Hospital Nacional El Salvador" },
     ],
     membrete: { proceso: "", codigo: "", version: "Versión 01" },

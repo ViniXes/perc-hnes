@@ -14,6 +14,7 @@
 // =============================================================================
 import {
   normalizePoaDoc,
+  poaEsDivision,
   poaCategoria,
   poaExposicion,
   poaPercent,
@@ -366,7 +367,13 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
   // ===========================================================================
   // II. Descripción general
   // ===========================================================================
-  h1(1, "Descripción general del servicio");
+  h1(1, poaEsDivision(doc.serviceId) ? "Descripción general de la unidad" : "Descripción general del servicio");
+  if (poaEsDivision(doc.serviceId)) {
+    h2("Misión");
+    para(doc.mision ?? "");
+    h2("Visión");
+    para(doc.vision ?? "");
+  }
   h2("Dependencia jerárquica");
   para(doc.dependencia);
   h2("Objetivos");
@@ -650,7 +657,7 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
     ["Aprobaciones", "2"],
     ["Índice", String(paginaIndice)],
     ["I. Introducción", String(sectionPages.I ?? "")],
-    ["II. Descripción general del servicio", String(sectionPages.II ?? "")],
+    [poaEsDivision(doc.serviceId) ? "II. Descripción general de la unidad" : "II. Descripción general del servicio", String(sectionPages.II ?? "")],
     ["III. Diagnóstico situacional", String(sectionPages.III ?? "")],
     ["IV. Valoración de riesgos", String(sectionPages.IV ?? "")],
     ["V. Programación de actividades de gestión", String(sectionPages.V ?? "")],

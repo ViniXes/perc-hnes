@@ -96,6 +96,9 @@ import {
   POA_EMPTY_MEDIDA,
   POA_EMPTY_APROBACION,
   POA_SEMAFORO_LABEL,
+  POA_UNIDADES_DIVISION,
+  poaEsDivision,
+  poaUnidadDeDivision,
   createPoaDocFromPrev,
   normalizePoaDoc,
   poaAcumulado,
@@ -258,6 +261,9 @@ type ManagedUser = {
   loginEmail: string;
   // Submenus extra otorgados por el admin (ids de GRANTABLE_MENUS).
   menuGrants: string[];
+  // Unidad cuyo PAO trabaja esta cuenta (con el acceso POA). Vacío = su servicio.
+  // Para jefes de división: "division-medica", "subdireccion-administrativa", etc.
+  poaUnidad: string;
   // Tablas del SEPS que esta cuenta puede ver y llenar DENTRO de su servicio.
   // Vacio = todas (lo normal). Con contenido, solo esas: sirve para servicios que
   // tienen varias tablas y cada disciplina llena la suya (Cuidados Paliativos).
@@ -285,6 +291,7 @@ type AdminDraft = {
   captureModules: ModuleId[];
   department: string;
   menuGrants: string[];
+  poaUnidad: string;
   noCapture: boolean;
   isChief: boolean;
   monitorDivision: string;
@@ -2169,6 +2176,7 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     menuGrants: Array.isArray(data.menuGrants)
       ? (data.menuGrants.filter((x): x is string => typeof x === "string"))
       : [],
+    poaUnidad: typeof data.poaUnidad === "string" ? data.poaUnidad : "",
     noCapture: data.noCapture === true,
     sepsTables: Array.isArray(data.sepsTables)
       ? (data.sepsTables.filter((x): x is string => typeof x === "string"))
@@ -2202,6 +2210,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         captureModules: managedUser.captureModules,
         department: managedUser.department || "",
         menuGrants: managedUser.menuGrants,
+        poaUnidad: managedUser.poaUnidad || "",
         noCapture: managedUser.noCapture,
         isChief: managedUser.isChief,
         monitorDivision: managedUser.monitorDivision || "",
@@ -5222,7 +5231,10 @@ export default function Home() {
   // administradores (todos los servicios) y la cuenta a la que un administrador le
   // otorgó el acceso "POA (Plan Anual Operativo)" en Usuarios: esa cuenta trabaja
   // SOLO el PAO de su propio servicio (las reglas de Firestore lo exigen también).
-  const canViewPoa = isAdmin || (hasGrant("panel-poa") && !!serviceProfile?.serviceId);
+  // Unidad del PAO de esta cuenta: la que le asignó el administrador o, si no,
+  // su propio servicio (las reglas de Firestore usan la misma regla).
+  const poaUnidadPropia = serviceProfile?.poaUnidad || serviceProfile?.serviceId || "";
+  const canViewPoa = isAdmin || (hasGrant("panel-poa") && !!poaUnidadPropia);
   const canEditPoa = canViewPoa;
   const canEditCenso =
     isAdmin || normalizeKey(serviceProfile?.username || "") === CENSO_EDITOR_USERNAME;
@@ -8303,11 +8315,17 @@ export default function Home() {
   // ---- POA: Plan Anual Operativo (registro por año) -------------------------
   // El documento vive en `poaDocuments/<servicio>__<año>` y los gráficos, para no
   // inflar el documento principal, en `poaDocuments/<servicio>__<año>__media`.
-  const poaServiceId = isAdmin ? poaAdminServiceId : (serviceProfile?.serviceId ?? "");
+  const poaServiceId = isAdmin ? poaAdminServiceId : poaUnidadPropia;
   /** Servicios que hacen PAO: los que llenan Distribución de Horas. */
   const poaServiciosHoras = AREA_DEFINITIONS.filter((area) => area.modules.includes("distribucion"))
     .map((area) => ({ id: area.id, name: SERVICE_DEFINITIONS.find((sv) => sv.id === area.id)?.name ?? area.name }))
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  /** Nombre visible de una unidad del PAO (servicio, División o Subdirección). */
+  const poaNombreUnidad = (id: string) =>
+    POA_UNIDADES_DIVISION.find((u) => u.id === id)?.name ??
+    SERVICE_DEFINITIONS.find((sv) => sv.id === id)?.name ??
+    poaServiciosHoras.find((sv) => sv.id === id)?.name ??
+    id;
 
   /** Aplica un cambio sobre una copia del documento y lo marca como no guardado. */
   function updatePoa(mutate: (draft: PoaDoc) => void) {
@@ -8404,7 +8422,7 @@ export default function Home() {
   }
 
   async function handleCreatePoaYear() {
-    const service = SERVICE_DEFINITIONS.find((sv) => sv.id === poaServiceId);
+    const service = { name: poaNombreUnidad(poaServiceId) };
     // Si existe el PAO del año anterior, el nuevo sale de ahí: mismo texto y
     // programación, y el cumplimiento y los riesgos del año que cierra ya armados.
     const anterior = await leerPoaDeAnio(poaYear - 1);
@@ -12997,6 +13015,11 @@ export default function Home() {
       : !isDept && nextRole === "service" && nextService
         ? getServiceUsername(nextService.id)
         : draft.username;
+    // PAO que elabora (solo con el acceso POA): lo elegido o, si no se tocó, la
+    // unidad que se mostró por defecto (su división o su servicio).
+    const nextPoaUnidad = draft.menuGrants.includes("panel-poa")
+      ? draft.poaUnidad || poaUnidadDeDivision(current.division) || effectiveServiceId || null
+      : null;
     const nextPermissions = {
       canEdit: draft.canEdit,
       canManageUsers: nextRole === "admin" ? true : false,
@@ -13068,6 +13091,7 @@ export default function Home() {
               supervisorModules: ["perc", "sesps", "distribucion"],
               permissions: { canEdit: true, canManageUsers: false, canToggleCapture: false },
               menuGrants: draft.menuGrants,
+              poaUnidad: nextPoaUnidad,
               viewPerc: draft.viewPerc,
               viewSeps: draft.viewSeps,
               viewHoras: draft.viewHoras,
@@ -13088,6 +13112,7 @@ export default function Home() {
               sepsTables: draft.sepsTables,
               captureModules: draft.captureModules,
               menuGrants: draft.menuGrants,
+              poaUnidad: nextPoaUnidad,
               noCapture: draft.noCapture,
               isChief: draft.isChief,
               viewPerc: draft.viewPerc,
@@ -16012,9 +16037,16 @@ export default function Home() {
                   className="max-w-[220px] rounded-xl border px-2.5 py-1.5 text-xs font-semibold"
                   style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text)" }}
                 >
-                  {poaServiciosHoras.map((sv) => (
-                    <option key={sv.id} value={sv.id}>{sv.name}</option>
-                  ))}
+                  <optgroup label="Divisiones y Subdirección">
+                    {POA_UNIDADES_DIVISION.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Servicios">
+                    {poaServiciosHoras.map((sv) => (
+                      <option key={sv.id} value={sv.id}>{sv.name}</option>
+                    ))}
+                  </optgroup>
                 </select>
               </label>
             ) : null}
@@ -16238,7 +16270,15 @@ export default function Home() {
             {canEditPoa ? poaMiniBtn("+ Párrafo", () => updatePoa((d) => { d.intro.push(""); })) : null}
 
             {/* ---- 2. Descripción general ---- */}
-            <h3 className="poa-h1">2. Descripción general del servicio</h3>
+            <h3 className="poa-h1">2. Descripción general {poaEsDivision(poaDoc.serviceId) ? "de la unidad" : "del servicio"}</h3>
+            {poaEsDivision(poaDoc.serviceId) ? (
+              <>
+                <h4 className="poa-h2">Misión</h4>
+                {poaField(poaDoc.mision ?? "", (v) => updatePoa((d) => { d.mision = v; }), { placeholder: "Misión, según el Manual de Organización y Funciones." })}
+                <h4 className="poa-h2">Visión</h4>
+                {poaField(poaDoc.vision ?? "", (v) => updatePoa((d) => { d.vision = v; }), { placeholder: "Visión, según el Manual de Organización y Funciones." })}
+              </>
+            ) : null}
             <h4 className="poa-h2">Dependencia jerárquica</h4>
             {poaField(poaDoc.dependencia, (v) => updatePoa((d) => { d.dependencia = v; }), { placeholder: "De quién depende el servicio, según su Manual de Organización y Funciones." })}
             <h4 className="poa-h2">Objetivos</h4>
@@ -25213,6 +25253,37 @@ export default function Home() {
                                       );
                                     })}
                                   </div>
+                                  {grp === "General" && draft.menuGrants.includes("panel-poa") ? (() => {
+                                    const unidadPorDefecto =
+                                      poaUnidadDeDivision(selectedUser.division) || draft.serviceId || "";
+                                    const unidad = draft.poaUnidad || unidadPorDefecto;
+                                    return (
+                                      <label className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-xs text-slate-300">
+                                        <span className="font-semibold text-white">PAO que elabora:</span>
+                                        <select
+                                          value={unidad}
+                                          onChange={(event) => updateAdminDraft(selectedUser.uid, { poaUnidad: event.target.value })}
+                                          className="min-w-[220px] rounded-lg border border-white/15 bg-[#0e1626] px-2 py-1.5 text-xs text-white"
+                                        >
+                                          <option value="">— Elegir —</option>
+                                          <optgroup label="Divisiones y Subdirección">
+                                            {POA_UNIDADES_DIVISION.map((u) => (
+                                              <option key={u.id} value={u.id}>{u.name}</option>
+                                            ))}
+                                          </optgroup>
+                                          <optgroup label="Servicios">
+                                            {poaServiciosHoras.map((sv) => (
+                                              <option key={sv.id} value={sv.id}>{sv.name}</option>
+                                            ))}
+                                          </optgroup>
+                                        </select>
+                                        <span className="w-full text-[11px] text-slate-400">
+                                          Solo verá y editará el PAO de esa unidad.
+                                          {!draft.poaUnidad && unidadPorDefecto ? " Si no se cambia, queda la que aparece seleccionada." : ""}
+                                        </span>
+                                      </label>
+                                    );
+                                  })() : null}
                                 </div>
                               );
                             })}

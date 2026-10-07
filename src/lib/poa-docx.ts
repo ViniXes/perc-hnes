@@ -171,7 +171,10 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
 
   // --- 3. Descripción general ----------------------------------------------
   const descripcion: object[] = [
-    H1("DESCRIPCIÓN GENERAL DEL SERVICIO"),
+    H1(doc.mision !== undefined ? "DESCRIPCIÓN GENERAL DE LA UNIDAD" : "DESCRIPCIÓN GENERAL DEL SERVICIO"),
+    ...(doc.mision !== undefined
+      ? [H2("Misión"), P(doc.mision || ""), H2("Visión"), P(doc.vision || "")]
+      : []),
     H2("Dependencia Jerárquica"),
     P(doc.dependencia),
     H2("Objetivos"),

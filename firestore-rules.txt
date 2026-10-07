@@ -106,7 +106,7 @@ service cloud.firestore {
         'serviceId', 'serviceName', 'menuGrants', 'noCapture', 'supervisorModules',
         'captureModules', 'viewPerc', 'viewSeps', 'viewHoras', 'division',
         'department', 'monitorDivision', 'username', 'loginEmail', 'sepsTables',
-        'cec', 'cecServicios', 'cecGestor'
+        'cec', 'cecServicios', 'cecGestor', 'poaUnidad'
       ];
     }
     function noTocaPrivilegios() {
@@ -236,27 +236,36 @@ service cloud.firestore {
         || request.auth.token.email == 'jcmiranda@perc-hnes.app'
         || (isSignedIn() && userProfile().role == 'admin');
     }
-    // POA - Plan Anual Operativo por servicio y año ("<servicio>__<año>" y
-    // "<servicio>__<año>__media"). Nadie entra por ser de un servicio: lo ven y
+    // POA - Plan Anual Operativo por unidad y año ("<unidad>__<año>" y
+    // "<unidad>__<año>__media"); la unidad es un servicio, una División o la
+    // Subdirección Administrativa. Nadie entra por ser de un servicio: lo ven y
     // editan los administradores (todos) y la cuenta a la que un administrador le
-    // otorgó el acceso "POA" (menuGrants 'panel-poa'), SOLO el de su servicio.
+    // otorgó el acceso "POA" (menuGrants 'panel-poa'), SOLO el de su unidad.
     function adminPoa() {
       return isAdmin() || (tienePerfil() && userProfile().role == 'admin');
+    }
+    // Unidad del PAO de la cuenta: la que le asignó el administrador (poaUnidad,
+    // p. ej. "division-medica") o, si no tiene, su propio servicio.
+    function unidadPoa() {
+      let p = userProfile();
+      let u = p.get('poaUnidad', '');
+      let s = p.get('serviceId', '');
+      return (u is string && u != '') ? u : ((s is string) ? s : '');
     }
     function tieneAccesoPoa() {
       return tienePerfil() && noEsMinsal()
         && userProfile().get('menuGrants', []).hasAny(['panel-poa'])
-        && userProfile().get('serviceId', '') != '';
+        && unidadPoa() != '';
     }
-    function poaDeSuServicio(docId) {
-      return tieneAccesoPoa() && docId.matches(userProfile().serviceId + '__.*');
+    function poaDeSuUnidad(docId) {
+      return tieneAccesoPoa() && docId.matches(unidadPoa() + '__.*');
     }
     match /poaDocuments/{docId} {
-      allow get: if adminPoa() || poaDeSuServicio(docId);
+      allow get: if adminPoa() || poaDeSuUnidad(docId);
       allow list: if adminPoa()
-        || (tieneAccesoPoa() && resource.data.serviceId == userProfile().serviceId);
+        || (tieneAccesoPoa() && resource.data.serviceId == unidadPoa());
       allow create, update: if adminPoa()
-        || (poaDeSuServicio(docId) && request.resource.data.serviceId == userProfile().serviceId);
+        || (poaDeSuUnidad(docId) && request.resource.data.serviceId == unidadPoa());
       allow delete: if adminPoa();
     }
     // Censo Diario de Pacientes (id = "<periodo>", p.ej. "2026-06").

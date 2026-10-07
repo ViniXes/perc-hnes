@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.419",
+    para: ["admin"],
+    texto:
+      "POA: las Divisiones Medica, de Apoyo y de Enfermeria y la Subdireccion Administrativa tambien hacen su PAO (con mision y vision). En Usuarios > Accesos extra, al marcar POA se elige que PAO elabora la cuenta: una division o un servicio.",
+  },
+  {
     version: "1986.418",
     para: ["admin"],
     texto:
