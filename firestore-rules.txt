@@ -34,6 +34,11 @@ rules_version = '2';
 //     que no sea administrador puede guardar el PERC de ese mes, salvo que el
 //     tablero tenga una reapertura vigente (captureOverrides, 24 horas). Si un
 //     supervisor lo cerro a mano, tampoco se puede guardar.
+//  8) POA (Plan Anual Operativo): nadie entra por ser de un servicio. Lo leen y
+//     escriben los administradores (todos los PAO) y la cuenta con el acceso
+//     'panel-poa', SOLO el PAO de su unidad: la que le asigno el administrador
+//     ('poaUnidad': un servicio, una Division o la Subdireccion Administrativa) o,
+//     si no tiene, su propio servicio. 'poaUnidad' solo lo escribe un admin.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
