@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.416",
+    para: ["admin"],
+    texto:
+      "PAO: la plantilla para los demas servicios sale en blanco (estructura de los lineamientos, sin objetivos ni datos de ESDOMED). Cada servicio parte de su propio PAO del ano anterior cuando ya lo tenga. ESDOMED: el PAO 2027 se arma con las actividades y riesgos del 2026; lo realizado de 2026 queda en blanco para completarlo.",
+  },
+  {
     version: "1986.415",
     para: ["serv:esdomed", "admin"],
     texto:

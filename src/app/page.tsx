@@ -103,6 +103,7 @@ import {
   poaNum,
   poaRiesgosPrevDesde,
   poaSemaforo,
+  poaSemillaDeAnio,
   type PoaDoc,
   type PoaSemaforo,
 } from "@/lib/poa-template";
@@ -8381,15 +8382,19 @@ export default function Home() {
   }
 
   /** Crea el documento del año a partir de la plantilla base del servicio. */
-  /** PAO guardado de otro año del mismo servicio (o null si no existe). */
+  /**
+   * PAO de otro año del mismo servicio: el guardado en PULSO o, si ese año no se
+   * guardó, el que viene escrito en la plantilla del servicio (p. ej. ESDOMED 2026).
+   */
   async function leerPoaDeAnio(year: number): Promise<PoaDoc | null> {
     try {
       const snap = await getDoc(doc(db, "poaDocuments", getPoaDocId(poaServiceId, year)));
       const data = snap.exists() ? (snap.data() as { doc?: PoaDoc }) : null;
-      return data?.doc ? normalizePoaDoc(data.doc) : null;
+      if (data?.doc) return normalizePoaDoc(data.doc);
     } catch {
-      return null;
+      // Sin conexión: se intenta con la plantilla.
     }
+    return poaSemillaDeAnio(poaServiceId, year);
   }
 
   async function handleCreatePoaYear() {
@@ -15961,7 +15966,7 @@ export default function Home() {
               POA · Plan Anual Operativo
             </h2>
             <p className={`mt-1 text-sm ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
-              {poaDoc?.serviceName ?? "Servicio de Estadística y Documentos Médicos"}
+              {poaDoc?.serviceName ?? SERVICE_DEFINITIONS.find((sv) => sv.id === poaServiceId)?.name ?? ""}
               {poaDirty ? " · cambios sin guardar" : poaDoc ? " · documento guardado" : ""}
             </p>
           </div>
@@ -16069,7 +16074,7 @@ export default function Home() {
                 Todavía no existe el POA {poaYear}
               </p>
               <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                Se crea a partir de la plantilla del servicio: el texto ya viene escrito y solo se actualizan las tablas.
+                Si existe el PAO del año anterior, se crea a partir de él. Si no, se crea con la estructura de los lineamientos en blanco para que el servicio la complete.
               </p>
             </div>
             {canEditPoa ? (
@@ -16177,7 +16182,7 @@ export default function Home() {
             <h3 className="poa-h1">1. Introducción</h3>
             {poaDoc.intro.map((text, index) => (
               <div key={`intro-${index}`} className="poa-para-row">
-                {poaField(text, (v) => updatePoa((d) => { d.intro[index] = v; }))}
+                {poaField(text, (v) => updatePoa((d) => { d.intro[index] = v; }), { placeholder: "Breve y clara: qué contiene el plan y por qué es relevante para el servicio." })}
                 {canEditPoa && poaDoc.intro.length > 1
                   ? poaMiniBtn("×", () => updatePoa((d) => { d.intro.splice(index, 1); }), "del")
                   : null}
@@ -16188,15 +16193,15 @@ export default function Home() {
             {/* ---- 2. Descripción general ---- */}
             <h3 className="poa-h1">2. Descripción general del servicio</h3>
             <h4 className="poa-h2">Dependencia jerárquica</h4>
-            {poaField(poaDoc.dependencia, (v) => updatePoa((d) => { d.dependencia = v; }))}
+            {poaField(poaDoc.dependencia, (v) => updatePoa((d) => { d.dependencia = v; }), { placeholder: "De quién depende el servicio, según su Manual de Organización y Funciones." })}
             <h4 className="poa-h2">Objetivos</h4>
             <p className="poa-label">Objetivo general</p>
-            {poaField(poaDoc.objetivoGeneral, (v) => updatePoa((d) => { d.objetivoGeneral = v; }))}
+            {poaField(poaDoc.objetivoGeneral, (v) => updatePoa((d) => { d.objetivoGeneral = v; }), { placeholder: "Objetivo general del servicio, según su MOF." })}
             <p className="poa-label">Objetivos específicos</p>
             {poaDoc.objetivosEspecificos.map((text, index) => (
               <div key={`obj-${index}`} className="poa-para-row">
                 <span className="poa-bullet-num">{index + 1}.</span>
-                {poaField(text, (v) => updatePoa((d) => { d.objetivosEspecificos[index] = v; }))}
+                {poaField(text, (v) => updatePoa((d) => { d.objetivosEspecificos[index] = v; }), { placeholder: "Objetivo específico" })}
                 {canEditPoa
                   ? poaMiniBtn("×", () => updatePoa((d) => { d.objetivosEspecificos.splice(index, 1); }), "del")
                   : null}
@@ -16307,7 +16312,7 @@ export default function Home() {
             </div>
 
             <h4 className="poa-h2">Producción general resumida del año {poaDoc.year - 1}</h4>
-            {poaField(poaDoc.produccion.intro, (v) => updatePoa((d) => { d.produccion.intro = v; }))}
+            {poaField(poaDoc.produccion.intro, (v) => updatePoa((d) => { d.produccion.intro = v; }), { placeholder: "Resumen cualitativo de la producción del año anterior: qué áreas abarca." })}
             {poaDoc.produccion.bloques.map((bloque, index) => {
               const mediaKey = bloque.imageKey || `grafico${index + 1}`;
               const image = poaMedia[mediaKey];
@@ -16315,7 +16320,7 @@ export default function Home() {
                 <div key={`prod-${index}`} className="poa-block">
                   <div className="poa-item-head">
                     <span className="poa-bullet-num">{index + 1}.</span>
-                    {poaField(bloque.title, (v) => updatePoa((d) => { d.produccion.bloques[index].title = v; }), { bold: true })}
+                    {poaField(bloque.title, (v) => updatePoa((d) => { d.produccion.bloques[index].title = v; }), { bold: true, placeholder: "Nombre del indicador de producción" })}
                   </div>
                   <div className="poa-figure">
                     {image ? (
@@ -16349,11 +16354,11 @@ export default function Home() {
                       <p className="poa-figure-empty">Sin gráfico</p>
                     )}
                   </div>
-                  {poaField(bloque.text, (v) => updatePoa((d) => { d.produccion.bloques[index].text = v; }))}
+                  {poaField(bloque.text, (v) => updatePoa((d) => { d.produccion.bloques[index].text = v; }), { placeholder: "Análisis del comportamiento del indicador." })}
                 </div>
               );
             })}
-            {poaField(poaDoc.produccion.cierre, (v) => updatePoa((d) => { d.produccion.cierre = v; }))}
+            {poaField(poaDoc.produccion.cierre, (v) => updatePoa((d) => { d.produccion.cierre = v; }), { placeholder: "Conclusión general de la producción del año." })}
 
             <h4 className="poa-h2">Cumplimiento de actividades del PAO {poaDoc.year - 1}</h4>
             <div className="poa-table-wrap">
@@ -16395,7 +16400,7 @@ export default function Home() {
               </div>
             ) : null}
             <p className="poa-label">Análisis</p>
-            {poaField(poaDoc.cumplimiento.analisis, (v) => updatePoa((d) => { d.cumplimiento.analisis = v; }))}
+            {poaField(poaDoc.cumplimiento.analisis, (v) => updatePoa((d) => { d.cumplimiento.analisis = v; }), { placeholder: "Análisis del cumplimiento de las actividades del PAO anterior." })}
 
             {/* ---- 4. Valoración de riesgos ---- */}
             <h3 className="poa-h1">4. Valoración de riesgos</h3>
@@ -16436,7 +16441,7 @@ export default function Home() {
             ) : null}
             {poaDoc.riesgosPrev.analisis.map((text, index) => (
               <div key={`ra-${index}`} className="poa-para-row">
-                {poaField(text, (v) => updatePoa((d) => { d.riesgosPrev.analisis[index] = v; }))}
+                {poaField(text, (v) => updatePoa((d) => { d.riesgosPrev.analisis[index] = v; }), { placeholder: "Análisis de la ejecución de las acciones de control." })}
                 {canEditPoa && poaDoc.riesgosPrev.analisis.length > 1
                   ? poaMiniBtn("×", () => updatePoa((d) => { d.riesgosPrev.analisis.splice(index, 1); }), "del")
                   : null}

@@ -722,10 +722,13 @@ export function poaCumplimientoDesde(prev: PoaDoc): PoaCumplimientoRow[] {
       if (!row.actividad.trim()) continue;
       const prog = poaSumProg(row);
       const real = poaSumReal(row);
+      // Si no se registró nada realizado en ningún trimestre, queda en blanco para
+      // completarlo (no como 0 %).
+      const registrado = row.trimestres.some((t) => (t.real ?? "").trim() !== "");
       rows.push({
         actividad: row.actividad,
         prog: prog ? String(prog) : "",
-        realiz: String(real),
+        realiz: registrado ? String(real) : "",
         obs: prog > 0 && real >= prog ? "Ninguna" : "",
       });
     }
@@ -740,9 +743,74 @@ export function poaRiesgosPrevDesde(prev: PoaDoc): PoaRiesgoPrevRow[] {
     .map((r) => ({ riesgo: r.riesgo, acciones: r.acciones, ejecucion: "", obs: "" }));
 }
 
-/** Crea el documento de un año nuevo a partir de la semilla del servicio. */
+/**
+ * PAO de un año que viene escrito en el código (la semilla del servicio), para
+ * usarlo como "año anterior" cuando ese año no está guardado en PULSO.
+ */
+export function poaSemillaDeAnio(serviceId: string, year: number): PoaDoc | null {
+  const seed = POA_SEEDS[serviceId];
+  return seed && seed.year === year ? normalizePoaDoc(seed) : null;
+}
+
+/**
+ * Plantilla EN BLANCO para un servicio que todavía no tiene PAO: la estructura de
+ * los lineamientos (todas las secciones y matrices) sin ningún contenido de otro
+ * servicio. Solo trae el nombre del servicio y la firma de la Dirección.
+ */
+export function createPoaBlank(serviceId: string, year: number, serviceName: string): PoaDoc {
+  const vacioActividad = (): PoaActividadRow => JSON.parse(JSON.stringify(POA_EMPTY_ACTIVIDAD)) as PoaActividadRow;
+  return {
+    year,
+    serviceId,
+    serviceName,
+    cover: {
+      hospital: "HOSPITAL NACIONAL EL SALVADOR",
+      title: "Plan Anual Operativo",
+      service: serviceName,
+      place: "San Salvador",
+    },
+    intro: [""],
+    dependencia: "",
+    objetivoGeneral: "",
+    objetivosEspecificos: [""],
+    funciones: [{ ...POA_EMPTY_FODA }],
+    recursos: [{ ...POA_EMPTY_RECURSO }],
+    foda: {
+      fortalezas: [{ ...POA_EMPTY_FODA }],
+      oportunidades: [{ ...POA_EMPTY_FODA }],
+      debilidades: [{ ...POA_EMPTY_FODA }],
+      amenazas: [{ ...POA_EMPTY_FODA }],
+    },
+    produccion: {
+      intro: "",
+      bloques: [{ title: "", text: "", imageKey: "grafico1" }],
+      cierre: "",
+    },
+    cumplimiento: { rows: [{ ...POA_EMPTY_CUMPLIMIENTO, obs: "" }], analisis: "" },
+    riesgosPrev: { rows: [{ ...POA_EMPTY_RIESGO_PREV, obs: "" }], analisis: [""] },
+    matrizRiesgos: [{ ...POA_EMPTY_MATRIZ }],
+    actividades: [{ objetivo: "", rows: [vacioActividad()] }],
+    aprobaciones: [
+      { funcion: "Elaborado por", nombre: "", cargo: `Jefe de ${serviceName}` },
+      { funcion: "Revisado por", nombre: "", cargo: "Jefe de División / Subdirección" },
+      { funcion: "Aprobado por", nombre: "Dra. Laura Estela Miranda Iraheta", cargo: "Directora del Hospital Nacional El Salvador" },
+    ],
+    membrete: { proceso: "", codigo: "", version: "Versión 01" },
+    seguimiento: POA_SEGUIMIENTO_DEFAULT,
+    medidas: [],
+  };
+}
+
+/**
+ * Crea el documento de un año nuevo. Solo el servicio que tiene semilla propia
+ * (hoy ESDOMED) arranca con su contenido; cualquier otro servicio recibe la
+ * plantilla en blanco: nunca se copian objetivos ni datos de otro servicio.
+ */
 export function createPoaDoc(serviceId: string, year: number, serviceName?: string): PoaDoc {
-  const seed = POA_SEEDS[serviceId] ?? POA_SEEDS.esdomed;
+  const seed = POA_SEEDS[serviceId];
+  if (!seed) {
+    return createPoaBlank(serviceId, year, serviceName || serviceId);
+  }
   const clone: PoaDoc = JSON.parse(JSON.stringify(seed)) as PoaDoc;
   clone.year = year;
   clone.serviceId = serviceId;
