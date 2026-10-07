@@ -93,7 +93,18 @@ import {
   POA_EMPTY_RIESGO_PREV,
   POA_EMPTY_MATRIZ,
   POA_EMPTY_ACTIVIDAD,
+  POA_EMPTY_MEDIDA,
+  POA_EMPTY_APROBACION,
+  POA_SEMAFORO_LABEL,
+  createPoaDocFromPrev,
+  normalizePoaDoc,
+  poaAcumulado,
+  poaCumplimientoDesde,
+  poaNum,
+  poaRiesgosPrevDesde,
+  poaSemaforo,
   type PoaDoc,
+  type PoaSemaforo,
 } from "@/lib/poa-template";
 import { getHorasTemplate, HORAS_TEMPLATES, type HorasTemplate } from "@/lib/horas-templates";
 import { INSUMOS_ALMACEN_TEMPLATE, INSUMOS_CONSOLIDADO_ORDER, type InsumoRow } from "@/lib/insumos-almacen";
@@ -4700,6 +4711,11 @@ export default function Home() {
   const [poaSaving, setPoaSaving] = useState(false);
   const [poaDirty, setPoaDirty] = useState(false);
   const [poaExporting, setPoaExporting] = useState(false);
+  /** Descarga en curso del PAO: PDF (documento completo) o Excel (matrices). */
+  const [poaExportando, setPoaExportando] = useState<"" | "pdf" | "excel">("");
+  /** Vista del PAO: el documento o el seguimiento trimestral (semáforo). */
+  const [poaVista, setPoaVista] = useState<"documento" | "seguimiento">("documento");
+  const [poaTrimestre, setPoaTrimestre] = useState<number>(() => Math.floor(new Date().getMonth() / 3) + 1);
   /** Año cargado actualmente (para no recargar en cada render). */
   const [poaLoadedKey, setPoaLoadedKey] = useState("");
   // Censo Diario de Pacientes (por mes). Editable solo por AMONTES.
@@ -8329,7 +8345,7 @@ export default function Home() {
       ]);
       if (snap.exists()) {
         const data = snap.data() as { doc?: unknown };
-        setPoaDoc((data.doc as PoaDoc) ?? null);
+        setPoaDoc(data.doc ? normalizePoaDoc(data.doc as PoaDoc) : null);
       } else {
         setPoaDoc(null);
       }
@@ -8365,11 +8381,29 @@ export default function Home() {
   }
 
   /** Crea el documento del año a partir de la plantilla base del servicio. */
-  function handleCreatePoaYear() {
+  /** PAO guardado de otro año del mismo servicio (o null si no existe). */
+  async function leerPoaDeAnio(year: number): Promise<PoaDoc | null> {
+    try {
+      const snap = await getDoc(doc(db, "poaDocuments", getPoaDocId(poaServiceId, year)));
+      const data = snap.exists() ? (snap.data() as { doc?: PoaDoc }) : null;
+      return data?.doc ? normalizePoaDoc(data.doc) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleCreatePoaYear() {
     const service = SERVICE_DEFINITIONS.find((sv) => sv.id === poaServiceId);
-    setPoaDoc(createPoaDoc(poaServiceId, poaYear, service?.name));
+    // Si existe el PAO del año anterior, el nuevo sale de ahí: mismo texto y
+    // programación, y el cumplimiento y los riesgos del año que cierra ya armados.
+    const anterior = await leerPoaDeAnio(poaYear - 1);
+    setPoaDoc(anterior ? createPoaDocFromPrev(anterior, poaYear) : createPoaDoc(poaServiceId, poaYear, service?.name));
     setPoaDirty(true);
-    setMessage(`POA ${poaYear} creado desde la plantilla. Revisá el contenido y guardá.`);
+    setMessage(
+      anterior
+        ? `PAO ${poaYear} creado desde el PAO ${poaYear - 1}: el cumplimiento y la evaluación de riesgos de ${poaYear - 1} ya vienen armados. Revisá y guardá.`
+        : `POA ${poaYear} creado desde la plantilla. Revisá el contenido y guardá.`,
+    );
   }
 
   /** Guarda documento y gráficos. */
@@ -8473,6 +8507,63 @@ export default function Home() {
     } finally {
       setPoaExporting(false);
     }
+  }
+
+  /** PDF: el documento completo con el formato oficial. */
+  async function handleExportPoaPdf() {
+    if (!poaDoc) return;
+    setPoaExportando("pdf");
+    try {
+      const { downloadPoaPdf } = await import("@/lib/poa-pdf");
+      await downloadPoaPdf(poaDoc, poaMedia);
+    } catch {
+      setError("No pudimos generar el PDF del PAO.");
+    } finally {
+      setPoaExportando("");
+    }
+  }
+
+  /** Excel: las 6 matrices de los Anexos PAO, llenas con los datos del servicio. */
+  async function handleExportPoaExcel() {
+    if (!poaDoc) return;
+    setPoaExportando("excel");
+    try {
+      const { downloadPoaExcel } = await import("@/lib/poa-excel");
+      await downloadPoaExcel(poaDoc);
+    } catch {
+      setError("No pudimos generar el Excel del PAO.");
+    } finally {
+      setPoaExportando("");
+    }
+  }
+
+  /** Arma el cumplimiento o la evaluación de riesgos con el PAO del año anterior. */
+  async function traerDelPoaAnterior(que: "cumplimiento" | "riesgos") {
+    if (!poaDoc) return;
+    const anterior = await leerPoaDeAnio(poaDoc.year - 1);
+    if (!anterior) {
+      setError(`No hay PAO ${poaDoc.year - 1} guardado en PULSO para traer los datos.`);
+      return;
+    }
+    const tieneDatos =
+      que === "cumplimiento"
+        ? poaDoc.cumplimiento.rows.some((r) => r.actividad.trim())
+        : poaDoc.riesgosPrev.rows.some((r) => r.riesgo.trim());
+    if (tieneDatos && !window.confirm(`Se reemplazarán las filas actuales con las del PAO ${poaDoc.year - 1}. ¿Continuar?`)) {
+      return;
+    }
+    updatePoa((d) => {
+      if (que === "cumplimiento") {
+        d.cumplimiento.rows = poaCumplimientoDesde(anterior);
+      } else {
+        d.riesgosPrev.rows = poaRiesgosPrevDesde(anterior);
+      }
+    });
+    setMessage(
+      que === "cumplimiento"
+        ? `Cumplimiento armado con la programación del PAO ${poaDoc.year - 1}. Revisá las observaciones y guardá.`
+        : `Riesgos traídos de la matriz ${poaDoc.year - 1}. Completá la ejecución de cada acción de control y guardá.`,
+    );
   }
 
   // Al entrar al panel del POA (en escritorio por seccion activa, en movil por
@@ -15584,6 +15675,278 @@ export default function Home() {
       new Set([...poaYears, poaYear, new Date().getFullYear(), new Date().getFullYear() + 1]),
     ).sort((a, b) => b - a);
 
+    /** Tabla editable "Medidas a adoptar" (sección 6 y pestaña de seguimiento). */
+    const poaMedidasTabla = poaDoc ? (
+      <div className="poa-table-wrap show-scrollbar">
+        <table className="poa-table poa-table-wide">
+          <thead>
+            <tr>
+              {poaTh("Trim.", "w-[70px]")}
+              {poaTh("Resultado esperado", "w-[22%]")}
+              {poaTh("Factor o situación que impidió la meta", "w-[22%]")}
+              {poaTh("Medidas a adoptar", "w-[24%]")}
+              {poaTh("Antes de (fecha)", "w-[110px]")}
+              {poaTh("Responsable", "w-[14%]")}
+              {canEditPoa ? poaTh("", "w-[46px]") : null}
+            </tr>
+          </thead>
+          <tbody>
+            {(poaDoc.medidas ?? []).length === 0 ? (
+              <tr>
+                <td colSpan={canEditPoa ? 7 : 6} className="py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
+                  Sin medidas registradas.
+                </td>
+              </tr>
+            ) : (
+              (poaDoc.medidas ?? []).map((m, index) => (
+                <tr key={`med-${index}`}>
+                  <td className="text-center">
+                    <select
+                      value={m.trimestre}
+                      disabled={!canEditPoa}
+                      onChange={(event) => updatePoa((d) => { d.medidas![index].trimestre = event.target.value; })}
+                      className="rounded-lg border px-1.5 py-1 text-xs font-semibold"
+                      style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text)" }}
+                    >
+                      <option value="">—</option>
+                      {["1", "2", "3", "4"].map((q) => (
+                        <option key={q} value={q}>T{q}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>{poaCell(m.resultado, (v) => updatePoa((d) => { d.medidas![index].resultado = v; }))}</td>
+                  <td>{poaCell(m.factor, (v) => updatePoa((d) => { d.medidas![index].factor = v; }), { placeholder: "¿Qué lo impidió?" })}</td>
+                  <td>{poaCell(m.medida, (v) => updatePoa((d) => { d.medidas![index].medida = v; }), { placeholder: "¿Qué se hará?" })}</td>
+                  <td>{poaCell(m.fecha, (v) => updatePoa((d) => { d.medidas![index].fecha = v; }), { center: true, placeholder: "dd/mm/aaaa" })}</td>
+                  <td>{poaCell(m.responsable, (v) => updatePoa((d) => { d.medidas![index].responsable = v; }), { small: true })}</td>
+                  {canEditPoa ? (
+                    <td className="text-center">
+                      {poaMiniBtn("×", () => updatePoa((d) => { d.medidas!.splice(index, 1); }), "del")}
+                    </td>
+                  ) : null}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    ) : null;
+
+    // --- Seguimiento trimestral: semáforo por actividad -----------------------
+    const poaSemaforoTone = (sem: PoaSemaforo): CSSProperties =>
+      sem === "verde"
+        ? { background: isLightPanelTheme ? "#e3f4ea" : "rgba(74,160,112,0.20)", color: isLightPanelTheme ? "#1f6b45" : "#9ed6b5" }
+        : sem === "amarillo"
+          ? { background: isLightPanelTheme ? "#fbf1d9" : "rgba(196,150,60,0.20)", color: isLightPanelTheme ? "#83600f" : "#e3c27f" }
+          : sem === "rojo"
+            ? { background: isLightPanelTheme ? "#fbe3e3" : "rgba(190,80,80,0.22)", color: isLightPanelTheme ? "#9b2f2f" : "#eaa5a5" }
+            : { background: "var(--surface-3)", color: "var(--text-muted)" };
+    const poaSeguimiento = poaDoc ? (() => {
+      const tIdx = poaTrimestre - 1;
+      const filas = poaDoc.actividades.flatMap((group, gi) =>
+        group.rows.map((row, ri) => ({ group, gi, row, ri })),
+      );
+      let progT = 0;
+      let realT = 0;
+      let progA = 0;
+      let realA = 0;
+      const conteo: Record<PoaSemaforo, number> = { verde: 0, amarillo: 0, rojo: 0, pendiente: 0, na: 0 };
+      const medidas = poaDoc.medidas ?? [];
+      const tieneMedida = (actividad: string) =>
+        medidas.some((m) => m.trimestre === String(poaTrimestre) && m.resultado.trim() === actividad.trim() && (m.medida.trim() || m.factor.trim()));
+      let sinMedida = 0;
+      for (const { row } of filas) {
+        const tri = row.trimestres[tIdx];
+        const sem = poaSemaforo(tri.prog, tri.real);
+        conteo[sem] += 1;
+        if (poaNum(tri.prog) > 0) {
+          progT += poaNum(tri.prog);
+          realT += poaNum(tri.real);
+        }
+        const acum = poaAcumulado(row, poaTrimestre);
+        progA += acum.prog;
+        realA += acum.real;
+        if (sem === "rojo" && !tieneMedida(row.actividad)) sinMedida += 1;
+      }
+      const pct = (r: number, p: number) => (p > 0 ? Math.round((r / p) * 100) : null);
+      const pctT = pct(realT, progT);
+      const pctA = pct(realA, progA);
+      const semT: PoaSemaforo = progT > 0 ? poaSemaforo(progT, realT) : "na";
+      const semA: PoaSemaforo = progA > 0 ? poaSemaforo(progA, realA) : "na";
+      const riesgos = poaDoc.matrizRiesgos.map((r) => ({ r, exp: poaExposicion(r) })).filter((x) => x.exp > 0);
+      const altos = riesgos.filter((x) => poaCategoria(x.exp) === "alto");
+      const moderados = riesgos.filter((x) => poaCategoria(x.exp) === "moderado");
+      const kpi = (label: string, value: string, sub: string, tone?: CSSProperties) => (
+        <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-3)" }}>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--text-muted)" }}>{label}</p>
+          <p className="mt-1 text-2xl font-bold" style={{ color: tone?.color ?? "var(--text)" }}>{value}</p>
+          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>{sub}</p>
+        </div>
+      );
+      return (
+        <div className="mt-5 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                Seguimiento del PAO {poaDoc.year}
+              </p>
+              <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                Registrá lo realizado de cada actividad. Verde: 90 % o más de lo programado · amarillo: 70 a 89 % · rojo: menos de 70 %, pide una medida a adoptar.
+              </p>
+            </div>
+            <div className="inline-flex rounded-xl border p-1" style={{ borderColor: "var(--border)", background: "var(--surface-3)" }}>
+              {[1, 2, 3, 4].map((q) => (
+                <button
+                  key={`tq-${q}`}
+                  type="button"
+                  onClick={() => setPoaTrimestre(q)}
+                  className="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                  style={
+                    poaTrimestre === q
+                      ? { background: isLightPanelTheme ? "#ffffff" : "#2c3b55", color: "var(--text)", boxShadow: "0 1px 3px rgba(0,0,0,0.18)" }
+                      : { color: "var(--text-muted)" }
+                  }
+                >
+                  Trimestre {q}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {kpi(`Cumplimiento T${poaTrimestre}`, pctT === null ? "—" : `${pctT} %`, `${realT} de ${progT} programado en el trimestre`, poaSemaforoTone(semT))}
+            {kpi(`Acumulado a T${poaTrimestre}`, pctA === null ? "—" : `${pctA} %`, `${realA} de ${progA} programado del T1 al T${poaTrimestre}`, poaSemaforoTone(semA))}
+            {kpi(
+              "Actividades del trimestre",
+              `${conteo.verde} · ${conteo.amarillo} · ${conteo.rojo}`,
+              `cumplidas · en riesgo · no cumplidas${conteo.pendiente ? ` · ${conteo.pendiente} sin registrar` : ""}`,
+            )}
+            {kpi(
+              "Medidas pendientes",
+              String(sinMedida),
+              sinMedida ? "actividades en rojo sin medida a adoptar" : "todas las metas en rojo tienen su medida",
+              sinMedida ? poaSemaforoTone("rojo") : poaSemaforoTone("verde"),
+            )}
+          </div>
+
+          <div className="poa-table-wrap show-scrollbar">
+            <table className="poa-table poa-table-wide">
+              <thead>
+                <tr>
+                  {poaTh("Actividad")}
+                  {poaTh("Responsable", "w-[150px]")}
+                  {poaTh(`Prog. T${poaTrimestre}`, "w-[80px]")}
+                  {poaTh(`Real T${poaTrimestre}`, "w-[90px]")}
+                  {poaTh("%", "w-[70px]")}
+                  {poaTh("Estado", "w-[120px]")}
+                  {poaTh("Acumulado", "w-[110px]")}
+                  {poaTh("Medida", "w-[130px]")}
+                </tr>
+              </thead>
+              <tbody>
+                {poaDoc.actividades.map((group, gi) => (
+                  <Fragment key={`sg-${gi}`}>
+                    <tr className="poa-group-row">
+                      <td colSpan={8}>
+                        <span className="poa-group-label">Objetivo:</span> {group.objetivo}
+                      </td>
+                    </tr>
+                    {group.rows.map((row, ri) => {
+                      const tri = row.trimestres[tIdx];
+                      const sem = poaSemaforo(tri.prog, tri.real);
+                      const acum = poaAcumulado(row, poaTrimestre);
+                      const pctAcum = acum.prog > 0 ? `${Math.round((acum.real / acum.prog) * 100)} %` : "—";
+                      const conMedida = tieneMedida(row.actividad);
+                      return (
+                        <tr key={`sr-${gi}-${ri}`}>
+                          <td className="text-xs" style={{ color: "var(--text)" }}>{row.actividad || "—"}</td>
+                          <td className="text-[11px]" style={{ color: "var(--text-muted)" }}>{row.responsable}</td>
+                          <td className="poa-calc">{tri.prog || "—"}</td>
+                          <td className="text-center">
+                            {poaNum(tri.prog) > 0 || tri.real ? (
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={tri.real}
+                                readOnly={!canEditPoa}
+                                onChange={(event) =>
+                                  updatePoa((d) => { d.actividades[gi].rows[ri].trimestres[tIdx].real = event.target.value.replace(/[^0-9.,]/g, ""); })
+                                }
+                                className="w-16 rounded-lg border px-2 py-1 text-center text-xs font-semibold"
+                                style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text)" }}
+                                placeholder="0"
+                              />
+                            ) : (
+                              <span className="text-xs" style={{ color: "var(--text-muted)" }}>—</span>
+                            )}
+                          </td>
+                          <td className="poa-calc">{poaPercent(tri.prog, tri.real) || "—"}</td>
+                          <td className="text-center">
+                            <span className="inline-block rounded-full px-2.5 py-1 text-[11px] font-semibold" style={poaSemaforoTone(sem)}>
+                              {POA_SEMAFORO_LABEL[sem]}
+                            </span>
+                          </td>
+                          <td className="poa-calc">{pctAcum}</td>
+                          <td className="text-center">
+                            {sem === "rojo" ? (
+                              conMedida ? (
+                                <span className="text-[11px] font-semibold" style={poaSemaforoTone("verde")}>Con medida</span>
+                              ) : canEditPoa ? (
+                                poaMiniBtn("+ Medida a adoptar", () =>
+                                  updatePoa((d) => {
+                                    d.medidas = [
+                                      ...(d.medidas ?? []),
+                                      { ...POA_EMPTY_MEDIDA, trimestre: String(poaTrimestre), resultado: row.actividad, responsable: row.responsable },
+                                    ];
+                                  }),
+                                )
+                              ) : (
+                                <span className="text-[11px] font-semibold" style={poaSemaforoTone("rojo")}>Sin medida</span>
+                              )
+                            ) : (
+                              <span className="text-xs" style={{ color: "var(--text-muted)" }}>—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>Medidas a adoptar</p>
+            <p className="mb-2 mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+              Completá qué impidió la meta, la medida, la fecha y el responsable. Van en la sección 6 del PDF y en la hoja &quot;Medidas a adoptar&quot; del Excel.
+            </p>
+            {poaMedidasTabla}
+          </div>
+
+          <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-3)" }}>
+            <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>Riesgos de la matriz {poaDoc.year}</p>
+            <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+              {altos.length} prioritarios (7 a 9, urge intervenir) · {moderados.length} moderados (4 a 6) · {riesgos.length - altos.length - moderados.length} no prioritarios.
+            </p>
+            {altos.length ? (
+              <ul className="mt-3 space-y-2">
+                {altos.map(({ r, exp }, i) => (
+                  <li key={`ra-${i}`} className="flex gap-3 text-xs" style={{ color: "var(--text)" }}>
+                    <span className="mt-0.5 inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-[11px] font-bold" style={poaSemaforoTone("rojo")}>{exp}</span>
+                    <span>
+                      {r.riesgo}
+                      <span className="mt-0.5 block" style={{ color: "var(--text-muted)" }}>Control: {r.acciones} · {r.responsables}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </div>
+      );
+    })() : null;
+
     const poaSection = (
       <section
         id="panel-poa"
@@ -15637,16 +16000,31 @@ export default function Home() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:brightness-110"
+                  onClick={() => void handleExportPoaPdf()}
+                  disabled={poaExportando !== ""}
+                  title="Descarga el documento completo en PDF"
+                  className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:brightness-110 disabled:opacity-50"
                   style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" }}
                 >
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M6 9V3h12v6" />
-                    <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
-                    <path d="M6 14h12v7H6z" />
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+                    <path d="M14 2v6h6M12 12v6m-3-3 3 3 3-3" />
                   </svg>
-                  PDF
+                  {poaExportando === "pdf" ? "Generando…" : "PDF"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExportPoaExcel()}
+                  disabled={poaExportando !== ""}
+                  title="Descarga las matrices de los Anexos PAO en Excel"
+                  className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:brightness-110 disabled:opacity-50"
+                  style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" }}
+                >
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M3 9h18M3 15h18M9 3v18" />
+                  </svg>
+                  {poaExportando === "excel" ? "Generando…" : "Excel"}
                 </button>
                 {canEditPoa ? (
                   <button
@@ -15705,6 +16083,30 @@ export default function Home() {
             ) : null}
           </div>
         ) : (
+          <>
+          <div className="mt-4 inline-flex rounded-xl border p-1" style={{ borderColor: "var(--border)", background: "var(--surface-3)" }} role="tablist">
+            {([
+              ["documento", "Documento"],
+              ["seguimiento", "Seguimiento trimestral"],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={poaVista === id}
+                onClick={() => setPoaVista(id)}
+                className="rounded-lg px-3.5 py-1.5 text-xs font-semibold transition"
+                style={
+                  poaVista === id
+                    ? { background: isLightPanelTheme ? "#ffffff" : "#2c3b55", color: "var(--text)", boxShadow: "0 1px 3px rgba(0,0,0,0.18)" }
+                    : { color: "var(--text-muted)" }
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {poaVista === "seguimiento" ? poaSeguimiento : (
           <div className="poa-sheet mt-5">
             {/* ---- Portada ---- */}
             <div className="poa-cover">
@@ -15714,6 +16116,61 @@ export default function Home() {
               </p>
               {poaField(poaDoc.cover.service, (v) => updatePoa((d) => { d.cover.service = v; }), { className: "poa-cover-service" })}
               {poaField(poaDoc.cover.place, (v) => updatePoa((d) => { d.cover.place = v; }), { className: "poa-cover-place" })}
+            </div>
+
+            {/* ---- Aprobaciones y membrete ---- */}
+            <h3 className="poa-h1">Aprobaciones</h3>
+            <p className="poa-hint">
+              Hoja de aprobaciones de los lineamientos PAO: va después de la portada, con la firma de cada responsable.
+            </p>
+            <div className="poa-table-wrap">
+              <table className="poa-table">
+                <thead>
+                  <tr>
+                    {poaTh("Función", "w-[130px]")}
+                    {poaTh("Nombre")}
+                    {poaTh("Cargo")}
+                    {canEditPoa ? poaTh("", "w-[46px]") : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(poaDoc.aprobaciones ?? []).map((row, index) => (
+                    <tr key={`apr-${index}`}>
+                      <td>{poaCell(row.funcion, (v) => updatePoa((d) => { d.aprobaciones![index].funcion = v; }))}</td>
+                      <td>{poaCell(row.nombre, (v) => updatePoa((d) => { d.aprobaciones![index].nombre = v; }))}</td>
+                      <td>{poaCell(row.cargo, (v) => updatePoa((d) => { d.aprobaciones![index].cargo = v; }))}</td>
+                      {canEditPoa ? (
+                        <td className="text-center">
+                          {poaMiniBtn("×", () => updatePoa((d) => { d.aprobaciones!.splice(index, 1); }), "del")}
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {canEditPoa ? poaMiniBtn("+ Firma", () => updatePoa((d) => { d.aprobaciones = [...(d.aprobaciones ?? []), { ...POA_EMPTY_APROBACION }]; })) : null}
+            <h4 className="poa-h2">Membrete de identificación</h4>
+            <p className="poa-hint">
+              Va en cada página desde Aprobaciones. Use el mismo código del MOF cambiando las siglas por PAO.
+            </p>
+            <div className="poa-table-wrap">
+              <table className="poa-table">
+                <thead>
+                  <tr>
+                    {poaTh("Macroproceso")}
+                    {poaTh("Código", "w-[200px]")}
+                    {poaTh("Versión", "w-[140px]")}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>{poaCell(poaDoc.membrete?.proceso ?? "", (v) => updatePoa((d) => { d.membrete = { ...(d.membrete ?? { proceso: "", codigo: "", version: "Versión 01" }), proceso: v }; }), { placeholder: "Ej.: E01- Dirección Estratégica" })}</td>
+                    <td>{poaCell(poaDoc.membrete?.codigo ?? "", (v) => updatePoa((d) => { d.membrete = { ...(d.membrete ?? { proceso: "", codigo: "", version: "Versión 01" }), codigo: v }; }), { center: true, placeholder: "Código MOF con siglas PAO" })}</td>
+                    <td>{poaCell(poaDoc.membrete?.version ?? "", (v) => updatePoa((d) => { d.membrete = { ...(d.membrete ?? { proceso: "", codigo: "", version: "Versión 01" }), version: v }; }), { center: true })}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
             {/* ---- 1. Introducción ---- */}
@@ -15931,7 +16388,12 @@ export default function Home() {
                 </tbody>
               </table>
             </div>
-            {canEditPoa ? poaMiniBtn("+ Actividad", () => updatePoa((d) => { d.cumplimiento.rows.push({ ...POA_EMPTY_CUMPLIMIENTO }); })) : null}
+            {canEditPoa ? (
+              <div className="flex flex-wrap gap-2">
+                {poaMiniBtn("+ Actividad", () => updatePoa((d) => { d.cumplimiento.rows.push({ ...POA_EMPTY_CUMPLIMIENTO }); }))}
+                {poaMiniBtn(`Traer del PAO ${poaDoc.year - 1}`, () => void traerDelPoaAnterior("cumplimiento"))}
+              </div>
+            ) : null}
             <p className="poa-label">Análisis</p>
             {poaField(poaDoc.cumplimiento.analisis, (v) => updatePoa((d) => { d.cumplimiento.analisis = v; }))}
 
@@ -15966,7 +16428,12 @@ export default function Home() {
                 </tbody>
               </table>
             </div>
-            {canEditPoa ? poaMiniBtn("+ Riesgo", () => updatePoa((d) => { d.riesgosPrev.rows.push({ ...POA_EMPTY_RIESGO_PREV }); })) : null}
+            {canEditPoa ? (
+              <div className="flex flex-wrap gap-2">
+                {poaMiniBtn("+ Riesgo", () => updatePoa((d) => { d.riesgosPrev.rows.push({ ...POA_EMPTY_RIESGO_PREV }); }))}
+                {poaMiniBtn(`Traer de la matriz ${poaDoc.year - 1}`, () => void traerDelPoaAnterior("riesgos"))}
+              </div>
+            ) : null}
             {poaDoc.riesgosPrev.analisis.map((text, index) => (
               <div key={`ra-${index}`} className="poa-para-row">
                 {poaField(text, (v) => updatePoa((d) => { d.riesgosPrev.analisis[index] = v; }))}
@@ -16119,7 +16586,19 @@ export default function Home() {
                   d.actividades.push({ objetivo: "", rows: [JSON.parse(JSON.stringify(POA_EMPTY_ACTIVIDAD))] });
                 }))
               : null}
+
+            {/* ---- 6. Seguimiento ---- */}
+            <h3 className="poa-h1">6. Seguimiento</h3>
+            {poaField(poaDoc.seguimiento ?? "", (v) => updatePoa((d) => { d.seguimiento = v; }))}
+            <h4 className="poa-h2">Medidas a adoptar</h4>
+            <p className="poa-hint">
+              Una fila por cada meta que no se cumplió en el trimestre. Desde la pestaña Seguimiento trimestral se agregan con un clic.
+            </p>
+            {poaMedidasTabla}
+            {canEditPoa ? poaMiniBtn("+ Medida", () => updatePoa((d) => { d.medidas = [...(d.medidas ?? []), { ...POA_EMPTY_MEDIDA, trimestre: String(poaTrimestre) }]; })) : null}
           </div>
+          )}
+          </>
         )}
       </section>
     );

@@ -43,3 +43,6 @@ yarn-error.log*
 next-env.d.ts
 
 build-log.txt
+
+# Documentos fuente del POA (insumo para construir el modulo; no se suben a GitHub)
+/POA/

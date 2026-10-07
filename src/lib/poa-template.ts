@@ -73,6 +73,32 @@ export type PoaProduccionBloque = {
   imageKey?: string;
 };
 
+/** Fila de la hoja de aprobaciones (Elaborado / Revisado / Aprobado por). */
+export type PoaAprobacion = { funcion: string; nombre: string; cargo: string };
+
+/** Membrete de identificación (ISO 37001) que va en cada página desde Aprobaciones. */
+export type PoaMembrete = {
+  /** Macroproceso del MOF, p. ej. "E01- Dirección Estratégica". */
+  proceso: string;
+  /** Código del MOF con las siglas PAO, p. ej. "E01-PYC-PAO". */
+  codigo: string;
+  version: string;
+};
+
+/** Matriz "Medidas a adoptar" (seguimiento trimestral). */
+export type PoaMedidaRow = {
+  /** Trimestre evaluado: "1" a "4". */
+  trimestre: string;
+  /** Resultado esperado (actividad de la programación). */
+  resultado: string;
+  /** Factor o situación que impidió la realización de la meta. */
+  factor: string;
+  medida: string;
+  /** Antes de (qué fecha). */
+  fecha: string;
+  responsable: string;
+};
+
 // --- Documento completo ------------------------------------------------------
 
 export type PoaDoc = {
@@ -112,6 +138,13 @@ export type PoaDoc = {
   };
   matrizRiesgos: PoaMatrizRiesgoRow[];
   actividades: PoaObjetivoGroup[];
+  // --- Agregados con los lineamientos PAO 2027 (opcionales: los documentos
+  // guardados antes no los tienen y se completan con normalizePoaDoc). ---
+  aprobaciones?: PoaAprobacion[];
+  membrete?: PoaMembrete;
+  /** Sección 6: texto de seguimiento. */
+  seguimiento?: string;
+  medidas?: PoaMedidaRow[];
 };
 
 // --- Helpers de cálculo ------------------------------------------------------
@@ -173,6 +206,46 @@ export function getPoaDocId(serviceId: string, year: number | string): string {
   return `${serviceId}__${year}`;
 }
 
+// --- Seguimiento (semáforo) --------------------------------------------------
+// Verde: lo realizado alcanza al menos el 90 % de lo programado; amarillo: 70 a
+// 89 %; rojo: menos de 70 % (pide "Medida a adoptar"). Sin programado no se evalúa.
+export const POA_UMBRAL_VERDE = 90;
+export const POA_UMBRAL_AMARILLO = 70;
+
+export type PoaSemaforo = "verde" | "amarillo" | "rojo" | "pendiente" | "na";
+
+/** Semáforo de un programado/realizado. "pendiente" = programado sin registrar. */
+export function poaSemaforo(prog: string | number | undefined, real: string | number | undefined): PoaSemaforo {
+  const p = typeof prog === "number" ? prog : poaNum(prog);
+  if (p <= 0) return "na";
+  const realVacio = typeof real === "number" ? false : (real ?? "").trim() === "";
+  if (realVacio) return "pendiente";
+  const r = typeof real === "number" ? real : poaNum(real);
+  const pct = (r / p) * 100;
+  if (pct >= POA_UMBRAL_VERDE) return "verde";
+  if (pct >= POA_UMBRAL_AMARILLO) return "amarillo";
+  return "rojo";
+}
+
+export const POA_SEMAFORO_LABEL: Record<PoaSemaforo, string> = {
+  verde: "Cumplida",
+  amarillo: "En riesgo",
+  rojo: "No cumplida",
+  pendiente: "Sin registrar",
+  na: "No programada",
+};
+
+/** Programado y realizado acumulados del trimestre 1 al `hasta` (1-4). */
+export function poaAcumulado(row: PoaActividadRow, hasta: number): { prog: number; real: number } {
+  let prog = 0;
+  let real = 0;
+  for (let i = 0; i < Math.min(4, Math.max(1, hasta)); i += 1) {
+    prog += poaNum(row.trimestres[i]?.prog);
+    real += poaNum(row.trimestres[i]?.real);
+  }
+  return { prog, real };
+}
+
 /** Filas vacías para agregar en cada tabla. */
 export const POA_EMPTY_RECURSO: PoaRecursoRow = { label: "", cantidad: "" };
 export const POA_EMPTY_FODA: PoaFodaItem = { title: "", text: "" };
@@ -196,6 +269,15 @@ export const POA_EMPTY_MATRIZ: PoaMatrizRiesgoRow = {
   acciones: "",
   responsables: "",
 };
+export const POA_EMPTY_MEDIDA: PoaMedidaRow = {
+  trimestre: "",
+  resultado: "",
+  factor: "",
+  medida: "",
+  fecha: "",
+  responsable: "",
+};
+export const POA_EMPTY_APROBACION: PoaAprobacion = { funcion: "", nombre: "", cargo: "" };
 export const POA_EMPTY_ACTIVIDAD: PoaActividadRow = {
   actividad: "",
   indicador: "",
@@ -586,6 +668,78 @@ export const POA_SEEDS: Record<string, PoaDoc> = {
 /** Servicios habilitados para el módulo POA. */
 export const POA_SERVICES: string[] = ["esdomed"];
 
+/** Aprobaciones por servicio (se pueden editar en el documento). */
+const POA_APROBACIONES_DEFAULT: Record<string, PoaAprobacion[]> = {
+  esdomed: [
+    { funcion: "Elaborado por", nombre: "Benjamín Cardoza", cargo: "Jefe del Servicio de Estadística y Documentos Médicos" },
+    { funcion: "Revisado por", nombre: "Dr. Roberto Centeno Zambrano", cargo: "Jefe Unidad de Planificación" },
+    { funcion: "Aprobado por", nombre: "Dra. Laura Estela Miranda Iraheta", cargo: "Directora del Hospital Nacional El Salvador" },
+  ],
+};
+
+/** Texto base de la sección 6 (Seguimiento), según los lineamientos. */
+export const POA_SEGUIMIENTO_DEFAULT =
+  "Los Jefes de División y Sub Direcciones son los responsables directos del seguimiento y evaluación periódica de las actividades planteadas en el presente PAO. La jefatura del servicio registrará trimestralmente lo realizado en la matriz \u201cActividades de Gestión\u201d y, cuando una meta no se cumpla, documentará en la matriz \u201cMedidas a adoptar\u201d el factor que lo impidió, la medida correctiva, la fecha límite y el responsable.";
+
+/**
+ * Completa un documento con los campos que agregaron los lineamientos PAO 2027
+ * (aprobaciones, membrete, seguimiento y medidas). Los documentos guardados antes
+ * no los tienen; no se toca nada de lo que ya traen.
+ */
+export function normalizePoaDoc(input: PoaDoc): PoaDoc {
+  const doc: PoaDoc = JSON.parse(JSON.stringify(input)) as PoaDoc;
+  if (!Array.isArray(doc.aprobaciones) || doc.aprobaciones.length === 0) {
+    doc.aprobaciones = JSON.parse(
+      JSON.stringify(
+        POA_APROBACIONES_DEFAULT[doc.serviceId] ?? [
+          { funcion: "Elaborado por", nombre: "", cargo: "" },
+          { funcion: "Revisado por", nombre: "", cargo: "" },
+          { funcion: "Aprobado por", nombre: "", cargo: "" },
+        ],
+      ),
+    ) as PoaAprobacion[];
+  }
+  if (!doc.membrete) {
+    doc.membrete = { proceso: "", codigo: "", version: "Versión 01" };
+  }
+  if (typeof doc.seguimiento !== "string") {
+    doc.seguimiento = POA_SEGUIMIENTO_DEFAULT;
+  }
+  if (!Array.isArray(doc.medidas)) {
+    doc.medidas = [];
+  }
+  return doc;
+}
+
+/**
+ * Cuadro de cumplimiento del PAO anterior, armado con su programación: lo
+ * programado y lo realizado de los 4 trimestres de cada actividad.
+ */
+export function poaCumplimientoDesde(prev: PoaDoc): PoaCumplimientoRow[] {
+  const rows: PoaCumplimientoRow[] = [];
+  for (const group of prev.actividades ?? []) {
+    for (const row of group.rows ?? []) {
+      if (!row.actividad.trim()) continue;
+      const prog = poaSumProg(row);
+      const real = poaSumReal(row);
+      rows.push({
+        actividad: row.actividad,
+        prog: prog ? String(prog) : "",
+        realiz: String(real),
+        obs: prog > 0 && real >= prog ? "Ninguna" : "",
+      });
+    }
+  }
+  return rows;
+}
+
+/** Riesgos del año anterior: los de su matriz, para evaluar la ejecución. */
+export function poaRiesgosPrevDesde(prev: PoaDoc): PoaRiesgoPrevRow[] {
+  return (prev.matrizRiesgos ?? [])
+    .filter((r) => r.riesgo.trim())
+    .map((r) => ({ riesgo: r.riesgo, acciones: r.acciones, ejecucion: "", obs: "" }));
+}
+
 /** Crea el documento de un año nuevo a partir de la semilla del servicio. */
 export function createPoaDoc(serviceId: string, year: number, serviceName?: string): PoaDoc {
   const seed = POA_SEEDS[serviceId] ?? POA_SEEDS.esdomed;
@@ -595,5 +749,28 @@ export function createPoaDoc(serviceId: string, year: number, serviceName?: stri
   if (serviceName) {
     clone.serviceName = serviceName;
   }
-  return clone;
+  return normalizePoaDoc(clone);
+}
+
+/**
+ * Crea el PAO de un año a partir del PAO del año anterior del mismo servicio:
+ * conserva el texto, los objetivos, las actividades y la matriz de riesgos, y
+ * arma solo el cumplimiento y la evaluación de riesgos del año que cierra. Lo
+ * realizado y las medidas arrancan en blanco.
+ */
+export function createPoaDocFromPrev(prev: PoaDoc, year: number): PoaDoc {
+  const base = normalizePoaDoc(prev);
+  const next: PoaDoc = JSON.parse(JSON.stringify(base)) as PoaDoc;
+  next.year = year;
+  next.cumplimiento = { rows: poaCumplimientoDesde(base), analisis: "" };
+  next.riesgosPrev = { rows: poaRiesgosPrevDesde(base), analisis: [""] };
+  next.actividades = next.actividades.map((group) => ({
+    objetivo: group.objetivo,
+    rows: group.rows.map((row) => ({
+      ...row,
+      trimestres: row.trimestres.map((t) => ({ prog: t.prog, real: "" })) as PoaActividadRow["trimestres"],
+    })),
+  }));
+  next.medidas = [];
+  return next;
 }

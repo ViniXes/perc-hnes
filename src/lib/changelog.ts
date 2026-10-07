@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.415",
+    para: ["serv:esdomed", "admin"],
+    texto:
+      "PAO (Plan Anual Operativo): ahora se descarga en PDF con el documento completo y el formato oficial (portada, aprobaciones, indice, secciones I a VI y membrete) y en Excel con las 6 matrices de los Anexos PAO llenas. Nueva pestana Seguimiento trimestral con semaforo por actividad y Medidas a adoptar.",
+  },
+  {
     version: "1986.414",
     para: ["admin"],
     texto:
