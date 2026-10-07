@@ -815,6 +815,7 @@ const CEC_DIVISION_LABEL: Record<string, string> = {
   medica: "División Médica",
   apoyo: "División de Apoyo",
   administrativa: "Subdirección Administrativa",
+  enfermeria: "División de Enfermería",
 };
 
 
@@ -21761,6 +21762,12 @@ export default function Home() {
                             <h3 className={`text-xl font-bold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
                               {plantilla.nombre}
                             </h3>
+                            {plantilla.instrumento ? (
+                              <p className={`mt-0.5 text-[11px] font-semibold uppercase tracking-wide ${suave}`}>{plantilla.instrumento}</p>
+                            ) : null}
+                            {plantilla.objetivo ? (
+                              <p className={`mt-0.5 text-xs ${suave}`}>{plantilla.objetivo}</p>
+                            ) : null}
                             <p className={`text-xs ${suave}`}>
                               {cecAutoria
                                 ? `Último guardado por ${cecAutoria.usuario} el ${cecAutoria.fecha}`
@@ -21934,7 +21941,7 @@ export default function Home() {
                                         )}
                                         <th className={`${th} text-center`}>Total</th>
                                         {bloque.acciones ? (
-                                          <th className={`${th} text-left`}>Cantidades, acciones o puntos de mejora</th>
+                                          <th className={`${th} text-left`}>{plantilla.etiquetaAcciones ?? "Cantidades, acciones o puntos de mejora"}</th>
                                         ) : null}
                                         {bloque.responsable ? (
                                           <th className={`${th} text-left`}>Responsable</th>
@@ -21951,7 +21958,7 @@ export default function Home() {
                                             <td className={`${td} px-3 py-2 align-top text-[11px] font-medium ${L ? "text-slate-500" : "text-slate-400"}`}>
                                               {fila.categoria === previa ? "" : fila.categoria}
                                             </td>
-                                            <td className={`${td} px-3 py-2 align-top leading-snug ${L ? "text-slate-800" : "text-slate-100"}`}>
+                                            <td className={`${td} whitespace-pre-line px-3 py-2 align-top leading-snug ${L ? "text-slate-800" : "text-slate-100"}`}>
                                               {fila.aspecto}
                                             </td>
                                             {Array.from({ length: cols }, (_, col) => {
@@ -22050,6 +22057,93 @@ export default function Home() {
                             );
                           })
                         )}
+
+                        {/* Resumen de puntaje (instrumento de Enfermería): por componente,
+                            puntaje evaluado = criterios con datos; puntaje obtenido = suma del
+                            cumplimiento de cada criterio (Sí sobre los evaluados). */}
+                        {!cecCargando && plantilla.resumenPuntaje ? (() => {
+                          const L = isLightPanelTheme;
+                          const filasResumen = plantilla.bloques.map((bloque) => {
+                            let evaluado = 0;
+                            let obtenido = 0;
+                            for (const fila of bloque.filas) {
+                              const t = cecTotalFila(bloque, fila.key);
+                              if (t === null) continue;
+                              evaluado += 1;
+                              obtenido += t / 100;
+                            }
+                            const [area, ...resto] = bloque.titulo.split(" · ");
+                            return { id: bloque.id, area, componente: resto.join(" · ") || bloque.titulo, evaluado, obtenido };
+                          });
+                          const totEval = filasResumen.reduce((a, f) => a + f.evaluado, 0);
+                          const totObt = filasResumen.reduce((a, f) => a + f.obtenido, 0);
+                          const pctFinal = totEval ? Math.round((totObt / totEval) * 1000) / 10 : null;
+                          const escala = plantilla.resumenPuntaje.escala;
+                          const nivel = pctFinal === null ? null : escala.find((e) => pctFinal >= e.desde) ?? escala[escala.length - 1];
+                          const tono = (c?: string) =>
+                            c === "verde"
+                              ? L ? "bg-emerald-100 text-emerald-800" : "bg-emerald-400/15 text-emerald-200"
+                              : c === "naranja"
+                                ? L ? "bg-orange-100 text-orange-800" : "bg-orange-400/15 text-orange-200"
+                                : c === "rojo"
+                                  ? L ? "bg-rose-100 text-rose-800" : "bg-rose-400/15 text-rose-200"
+                                  : L ? "bg-slate-100 text-slate-500" : "bg-white/5 text-slate-400";
+                          const th = `px-3 py-2 text-left text-[10.5px] font-bold uppercase tracking-[0.08em] ${L ? "bg-slate-100 text-slate-600" : "bg-[#223252] text-slate-200"}`;
+                          const td = `border-t px-3 py-2 align-top ${L ? "border-slate-100 text-slate-800" : "border-white/[0.06] text-slate-100"}`;
+                          const fmt = (n: number) => (Math.round(n * 100) / 100).toString();
+                          return (
+                            <div className={`mt-6 overflow-hidden rounded-2xl border ${L ? "border-slate-200 bg-white" : "border-white/10 bg-[#162034]"}`}>
+                              <div className={`px-4 py-3 ${L ? "border-b border-slate-200 bg-slate-50" : "border-b border-white/10 bg-white/[0.03]"}`}>
+                                <p className={`text-sm font-bold ${L ? "text-slate-900" : "text-white"}`}>Resumen de puntaje</p>
+                                <p className={`text-[11px] ${suave}`}>
+                                  Puntaje evaluado: criterios con al menos un expediente evaluado. Puntaje obtenido: suma del cumplimiento de cada criterio.
+                                </p>
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm">
+                                  <thead>
+                                    <tr>
+                                      <th className={th}>Área evaluada</th>
+                                      <th className={th}>Componente evaluado</th>
+                                      <th className={`${th} text-center`}>Puntaje evaluado</th>
+                                      <th className={`${th} text-center`}>Puntaje obtenido</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {filasResumen.map((f, i) => (
+                                      <tr key={f.id}>
+                                        <td className={`${td} text-[11px] font-semibold`}>{i > 0 && filasResumen[i - 1].area === f.area ? "" : f.area}</td>
+                                        <td className={td}>{f.componente}</td>
+                                        <td className={`${td} text-center font-semibold`}>{f.evaluado}</td>
+                                        <td className={`${td} text-center font-semibold`}>{fmt(f.obtenido)}</td>
+                                      </tr>
+                                    ))}
+                                    <tr>
+                                      <td className={`${td} font-bold`} colSpan={2}>TOTALES</td>
+                                      <td className={`${td} text-center font-extrabold`}>{totEval}</td>
+                                      <td className={`${td} text-center font-extrabold`}>{fmt(totObt)}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                              <div className={`flex flex-wrap items-center gap-3 px-4 py-3 ${L ? "border-t border-slate-200" : "border-t border-white/10"}`}>
+                                <span className={`text-sm font-semibold ${L ? "text-slate-800" : "text-slate-100"}`}>Porcentaje obtenido:</span>
+                                <span className={`rounded-full px-3 py-1 text-sm font-extrabold ${tono(nivel?.color)}`}>
+                                  {pctFinal === null ? "—" : `${pctFinal}%`}
+                                  {nivel ? ` · ${nivel.categoria} · ${nivel.accion}` : ""}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-2 px-4 pb-4">
+                                {escala.map((e, i) => (
+                                  <span key={e.categoria} className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold ${tono(e.color)}`}>
+                                    {i === 0 ? `Entre ${e.desde} y 100%` : i === escala.length - 1 ? `${escala[i - 1].desde - 1}% o menos` : `Entre ${e.desde} y ${escala[i - 1].desde - 1}%`}
+                                    {" · "}{e.categoria} · {e.accion}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })() : null}
 
                         {cecEditable ? (
                           <div className="mt-6 flex justify-end">
@@ -24957,7 +25051,7 @@ export default function Home() {
                                   Monitoreo general: Horas + C.E. Clínico
                                 </span>
                                 <span className="mt-0.5 block text-[11px] leading-5 text-slate-500">
-                                  Ve quién entregó Distribución de Horas en todo el hospital y las 13 listas del
+                                  Ve quién entregó Distribución de Horas en todo el hospital y las {CEC_TEMPLATES.length} listas del
                                   comité. Solo mirar.
                                 </span>
                               </span>
@@ -25079,7 +25173,7 @@ export default function Home() {
                                 Comité de Expediente Clínico
                               </p>
                               <p className="mt-1 text-[11px] leading-5 text-slate-400">
-                                Le agrega el menú <strong>C.E. Clínico</strong> con las 13 listas de
+                                Le agrega el menú <strong>C.E. Clínico</strong> con las {CEC_TEMPLATES.length} listas de
                                 monitoreo y se las deja llenar durante los primeros 5 días hábiles.
                                 No le quita ni le cambia nada de lo que ya tiene en su servicio.
                               </p>

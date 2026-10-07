@@ -44,8 +44,22 @@ export type CecTemplate = {
   serviceId: string;
   nombre: string;
   /** Division a la que responde: manda el monitoreo del jefe de division. */
-  division: "direccion" | "medica" | "apoyo" | "administrativa";
+  division: "direccion" | "medica" | "apoyo" | "administrativa" | "enfermeria";
   bloques: CecBloque[];
+  /** Titulo del instrumento, cuando la plantilla trae uno propio (Enfermeria). */
+  instrumento?: string;
+  /** Objetivo que trae el instrumento. */
+  objetivo?: string;
+  /** Como se llama la columna de texto libre (por defecto "acciones o puntos de mejora"). */
+  etiquetaAcciones?: string;
+  /**
+   * Resumen de puntaje al final, como el del Excel de Enfermeria: por componente,
+   * puntaje evaluado (criterios con datos) y obtenido (cumplimiento de cada
+   * criterio), y el porcentaje final con su categoria y accion.
+   */
+  resumenPuntaje?: {
+    escala: { desde: number; categoria: string; color: "verde" | "naranja" | "rojo"; accion: string }[];
+  };
 };
 
 export const CEC_TEMPLATES: CecTemplate[] = [
@@ -476,6 +490,211 @@ export const CEC_TEMPLATES: CecTemplate[] = [
     ],
   },
 ];
+
+// Plantilla 14: ENFERMERIA. Sale tal cual de "ENFERMERIA.xlsx" (Instrumento de
+// monitoreo del modulo de Enfermeria en el SIS): 3 areas, 12 componentes, 5
+// expedientes por componente con SI (1) / NO (0), observaciones y el resumen de
+// puntaje con su categoria (verde 80-100, naranja 60-79, rojo 59 o menos).
+CEC_TEMPLATES.push({
+  serviceId: "enfermeria",
+  nombre: "Enfermería",
+  division: "enfermeria",
+  instrumento: "INSTRUMENTO DE MONITOREO DEL MÓDULO DE ENFERMERÍA EN EL SISTEMA INTEGRAL DE SALUD (SIS)",
+  objetivo: "Objetivo: Verificar la calidad del registro del cuidado de enfermería en el Sistema Integrado de Salud (SIS)",
+  etiquetaAcciones: "Observaciones",
+  resumenPuntaje: {
+    escala: [
+      { desde: 80, categoria: "Verde", color: "verde", accion: "Monitoreo largo plazo" },
+      { desde: 60, categoria: "Naranja", color: "naranja", accion: "Monitoreo mediano plazo" },
+      { desde: 0, categoria: "Rojo", color: "rojo", accion: "Monitoreo inmediato" },
+    ],
+  },
+  bloques: [
+      {
+        id: "enfermeria-b1",
+        titulo: "Consulta externa · Registro en SIS/ Módulo de Enfermería/ Preparación",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "registran-a-toda-persona-que-demanda-atencio", categoria: "Consulta externa", aspecto: "Registran a toda persona que demanda atención\nTemperatura" },
+          { key: "peso", categoria: "Consulta externa", aspecto: "Peso" },
+          { key: "talla", categoria: "Consulta externa", aspecto: "Talla" },
+          { key: "registran-en-modulo-de-enfermeria-preparacio", categoria: "Consulta externa", aspecto: "Registran en módulo de enfermería/ preparación presión arterial, pulso, respiración según diagnóstico, edad de la persona y condición de salud de la persona." },
+        ],
+      },
+      {
+        id: "enfermeria-b2",
+        titulo: "Consulta externa · Registro de Notas de Enfermería",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "las-notas-de-enfermeria-son-clara-concisa-y", categoria: "Consulta externa", aspecto: "Las notas de enfermería son clara, concisa y precisas basadas en observaciones objetivas, proporcionadas a pacientes," },
+          { key: "notas-en-pacientes-prioritarios-embarazadas", categoria: "Consulta externa", aspecto: "Notas en pacientes prioritarios( embarazadas, crónicos, niños y patologías de interés epidemiológico)" },
+          { key: "notas-post-consulta-en-casos-de-ingreso-a-ho", categoria: "Consulta externa", aspecto: "Notas post consulta en casos de ingreso a hospitalización y/o procedimientos" },
+          { key: "notas-en-caso-de-encontrar-signos-vitales-co", categoria: "Consulta externa", aspecto: "Notas en caso de encontrar signos vitales con parámetros anormales." },
+        ],
+      },
+      {
+        id: "enfermeria-b3",
+        titulo: "Consulta externa · Registro en SIS/ módulo de servicios de apoyo y diagnóstico, en el apartado de educación para la salud/ consejerías",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "registran-orientacion-en-salud-o-consejeria", categoria: "Consulta externa", aspecto: "Registran orientación en salud o consejería por enfermería según condición de salud y riesgo de la persona describiendo:\nTipo de consejería" },
+          { key: "resumen-patologia-conocimiento-sobre-su-cond", categoria: "Consulta externa", aspecto: "Resumen (patología, conocimiento sobre su condición, desarrollo de consejería, evaluación del aprendizaje)" },
+          { key: "acuerdos", categoria: "Consulta externa", aspecto: "Acuerdos" },
+        ],
+      },
+      {
+        id: "enfermeria-b4",
+        titulo: "Consulta externa · Registro en SIS/ módulo de Enfermería/ Esquema de vacunación.",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "actualizacion-de-esquema-de-vacunacion-en-si", categoria: "Consulta externa", aspecto: "Actualización de esquema de vacunación en SIS (Embarazadas y niños)" },
+          { key: "registros-en-notas-de-enfermeria-de-vacunas", categoria: "Consulta externa", aspecto: "Registros en notas de enfermería de vacunas aplicadas describiendo; sitio anatómico, efectos secundarios, recomendaciones y entrega de cartilla" },
+        ],
+      },
+      {
+        id: "enfermeria-b5",
+        titulo: "Hospitalización · Registro en SIS/ Módulo de Enfermería Hospitalización",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "registran-en-modulo-de-enfermeria-signos-vit", categoria: "Hospitalizaci\u00f3n", aspecto: "Registran en módulo de enfermería signos vitales según diagnóstico y condición de salud de la persona.\nPeso" },
+          { key: "temperatura", categoria: "Hospitalizaci\u00f3n", aspecto: "Temperatura" },
+          { key: "presion-arterial", categoria: "Hospitalizaci\u00f3n", aspecto: "Presión arterial." },
+        ],
+      },
+      {
+        id: "enfermeria-b6",
+        titulo: "Hospitalización · Registro en SIS/ Cumplimiento de indicaciones médicas en Hospitalización.",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "realizan-agendamiento-de-medicamentos-al-ing", categoria: "Hospitalizaci\u00f3n", aspecto: "Realizan agendamiento de medicamentos al ingreso de la persona." },
+          { key: "se-actualiza-segun-necesidad", categoria: "Hospitalizaci\u00f3n", aspecto: "Se actualiza según necesidad" },
+          { key: "registros-de-indicaciones-medicas-segun-corr", categoria: "Hospitalizaci\u00f3n", aspecto: "Registros de indicaciones médicas según corresponda:\nHora de cumplimiento nombre y apellido del personal de enfermería que cumple." },
+          { key: "fecha-en-caso-de-medicamentos-que-tengan-ind", categoria: "Hospitalizaci\u00f3n", aspecto: "Fecha en caso de medicamentos que tengan indicación de cumplimiento mayor a 24 horas." },
+          { key: "anotan-en-el-recuadro-medicamentos-indicados", categoria: "Hospitalizaci\u00f3n", aspecto: "Anotan en el recuadro medicamentos indicados por esquema el valor encontrado dosis cumplida y/o segun indicacion medica" },
+        ],
+      },
+      {
+        id: "enfermeria-b7",
+        titulo: "Hospitalización · Registro en SIS/ Módulo de enfermería Cuidados Generales",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "registra-los-cuidados-generales-nombre-y-ape", categoria: "Hospitalizaci\u00f3n", aspecto: "Registra los Cuidados generales, nombre y apellido del personal de enfermería que cumple." },
+          { key: "registra-en-cumplimiento-de-alimentacion-nom", categoria: "Hospitalizaci\u00f3n", aspecto: "Registra en cumplimiento de alimentación, nombre y apellido del personal de enfermería que cumple." },
+          { key: "elaboran-notas-de-enfermeria-durante-la-pres", categoria: "Hospitalizaci\u00f3n", aspecto: "Elaboran notas de enfermería durante la prestación de cuidado de enfermería y procedimientos de atención, según la ruta de atención y según criterios establecidos." },
+          { key: "en-caso-de-referencia-y-traslado-elaboran-no", categoria: "Hospitalizaci\u00f3n", aspecto: "En caso de referencia y traslado elaboran notas según la ruta de atención y criterios establecidos" },
+          { key: "en-caso-de-encontrar-signos-vitales-con-para", categoria: "Hospitalizaci\u00f3n", aspecto: "En caso de encontrar signos vitales con parámetros anormales, elaboran notas según criterios establecidos." },
+          { key: "las-notas-de-enfermeria-son-objetivas-y-subj", categoria: "Hospitalizaci\u00f3n", aspecto: "Las notas de enfermería son objetivas y subjetivas, completas, concisa, organizada." },
+          { key: "registran-balance-hidrico-segun-indicacion-m", categoria: "Hospitalizaci\u00f3n", aspecto: "Registran balance hídrico, según indicación médica" },
+          { key: "registra-toma-de-examenes-de-laboratorio-esp", categoria: "Hospitalizaci\u00f3n", aspecto: "Registra toma de exámenes de laboratorio especificando la fecha y hora de la toma." },
+          { key: "realizan-uso-correcto-de-modulo-de-banco-de", categoria: "Hospitalizaci\u00f3n", aspecto: "Realizan uso correcto de módulo de banco de sangre:\nenvió de muestra" },
+          { key: "recibo-hemocomponente", categoria: "Hospitalizaci\u00f3n", aspecto: "Recibo hemocomponente." },
+          { key: "registro-de-signos-vitales-durante-el-proces", categoria: "Hospitalizaci\u00f3n", aspecto: "Registro de signos vitales durante el proceso de transfución" },
+          { key: "cambio-de-estado-de-la-trasfucion", categoria: "Hospitalizaci\u00f3n", aspecto: "Cambio de estado de la trasfución." },
+        ],
+      },
+      {
+        id: "enfermeria-b8",
+        titulo: "Hospitalización · Registro Módulo Educación Para la Salud",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "registran-orientacion-en-salud-o-consejeria", categoria: "Hospitalizaci\u00f3n", aspecto: "Registran orientación en salud o consejería por enfermería según condición de salud y riesgo de la persona describiendo:\nTipo de consejería," },
+          { key: "resumen-patologia-conocimiento-sobre-su-cond", categoria: "Hospitalizaci\u00f3n", aspecto: "Resumen (patología, conocimiento sobre su condición, desarrollo de consejería, evaluación del aprendizaje" },
+          { key: "se-completa-el-apartado-de-acuerdos-siguiend", categoria: "Hospitalizaci\u00f3n", aspecto: "Se completa el apartado de “Acuerdos” siguiendo las directrices establecidas por la consejería." },
+        ],
+      },
+      {
+        id: "enfermeria-b9",
+        titulo: "Hospitalización · Registro en SIS/ módulo de Enfermería/ Esquema de vacunación.",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "registrar-el-cumplimiento-posterior-a-la-apl", categoria: "Hospitalizaci\u00f3n", aspecto: "Registrar el cumplimiento posterior a la aplicación de vacuna en esquema de vacunación vigente." },
+          { key: "realizar-notas-de-enfermeria-post-aplicacion", categoria: "Hospitalizaci\u00f3n", aspecto: "Realizar notas de enfermería post aplicación de vacunas y/o en casos de contraindicación o reacion abversa de las mismas" },
+        ],
+      },
+      {
+        id: "enfermeria-b10",
+        titulo: "Emergencia · Registro en SIS/ Módulo de Enfermería EMERGENCIA",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "registran-en-modulo-de-enfermeria-signos-vit", categoria: "Emergencia", aspecto: "Registran en módulo de enfermería signos vitales según diagnóstico,edad y condición de salud de la persona." },
+          { key: "registran-medidas-antropometricas-peso", categoria: "Emergencia", aspecto: "Registran Medidas antropométricas:\nPeso" },
+          { key: "temperatura", categoria: "Emergencia", aspecto: "Temperatura" },
+          { key: "registro-de-presion-arterial", categoria: "Emergencia", aspecto: "Registro de Presión arterial." },
+        ],
+      },
+      {
+        id: "enfermeria-b11",
+        titulo: "Emergencia · Registro en SIS/ Cumplimiento en Emergencia.",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "registros-de-indicaciones-medicas-segun-corr", categoria: "Emergencia", aspecto: "Registros de indicaciones médicas según corresponda: nombre y apellido del personal de enfermería que cumple." },
+          { key: "fecha-en-caso-de-medicamentos-que-tengan-ind", categoria: "Emergencia", aspecto: "Fecha en caso de medicamentos que tengan indicación de cumplimiento mayor a 24 horas." },
+          { key: "en-medicamentos-indicados-como-esquema-por-c", categoria: "Emergencia", aspecto: "En medicamentos indicados como esquema por condición clínica anotan en el recuadro el valor encontrado y dosis cumplida." },
+        ],
+      },
+      {
+        id: "enfermeria-b12",
+        titulo: "Emergencia · Registro en SIS/ Módulo de enfermería Cuidados Generales",
+        tipo: "expedientes",
+        columnas: 5,
+        fecha: false,
+        acciones: true,
+        responsable: true,
+        filas: [
+          { key: "registra-los-cuidados-generales-nombre-y-ape", categoria: "Emergencia", aspecto: "Registra los Cuidados generales, nombre y apellido del personal de enfermería que cumple." },
+          { key: "registra-la-alimentacion-nombre-y-apellido-d", categoria: "Emergencia", aspecto: "Registra la alimentación: nombre y apellido del personal de enfermería que cumple." },
+          { key: "elaboran-notas-de-enfermeria-durante-la-pres", categoria: "Emergencia", aspecto: "Elaboran notas de enfermería durante la prestación de cuidado de enfermería y procedimientos de atención, según la ruta de atención y según criterios establecidos." },
+          { key: "registra-toma-de-examenes-de-laboratorio-esp", categoria: "Emergencia", aspecto: "Registra toma de exámenes de laboratorio especificando la fecha y hora de la toma." },
+          { key: "registran-balance-hidrico-en-personas-si-lo", categoria: "Emergencia", aspecto: "Registran balance hídrico en personas si lo tiene indicado" },
+        ],
+      },
+
+  ],
+});
 
 export const CEC_BY_SERVICE: Record<string, CecTemplate> = Object.fromEntries(
   CEC_TEMPLATES.map((t) => [t.serviceId, t]),

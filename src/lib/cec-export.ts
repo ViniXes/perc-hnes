@@ -116,7 +116,7 @@ export async function descargarCecExcel(
         } else encabezado.push("Sí 1 · No 0 · N/A");
       }
       encabezado.push("Total");
-      if (b.acciones) encabezado.push("Cantidades, acciones o puntos de mejora");
+      if (b.acciones) encabezado.push(e.plantilla.etiquetaAcciones ?? "Cantidades, acciones o puntos de mejora");
       if (b.responsable) encabezado.push("Responsable");
       fila(encabezado);
       if (b.tipo === "expedientes" && b.fecha) {
@@ -197,7 +197,7 @@ function tablaBloque(e: CecEntrada, b: CecBloque): string {
     } else cab.push(`<th>Sí 1 · No 0 · N/A</th>`);
   }
   cab.push(`<th>Total</th>`);
-  if (b.acciones) cab.push(`<th class="izq">Acciones / puntos de mejora</th>`);
+  if (b.acciones) cab.push(`<th class="izq">${esc(e.plantilla.etiquetaAcciones ?? "Acciones / puntos de mejora")}</th>`);
   if (b.responsable) cab.push(`<th class="izq">Responsable</th>`);
 
   const filas = b.filas
@@ -205,7 +205,7 @@ function tablaBloque(e: CecEntrada, b: CecBloque): string {
       const previa = idx > 0 ? b.filas[idx - 1].categoria : "";
       const celdas: string[] = [
         `<td class="izq cat">${f.categoria === previa ? "" : esc(f.categoria)}</td>`,
-        `<td class="izq">${esc(f.aspecto)}</td>`,
+        `<td class="izq">${esc(f.aspecto).replace(/\n/g, "<br>")}</td>`,
       ];
       for (let i = 0; i < cols; i += 1) celdas.push(`<td>${chip(valorCelda(d, b, f.key, i))}</td>`);
       const p = cecPctFila(d, b, f.key);

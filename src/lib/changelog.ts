@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.421",
+    para: ["admin", "div:enfermeria"],
+    texto:
+      "Comite de Expediente Clinico: nueva lista 14, Enfermeria (Instrumento de monitoreo del modulo de Enfermeria en el SIS). 3 areas y 12 componentes, 5 expedientes con Si (1) / No (0), observaciones y resumen de puntaje con categoria verde, naranja o rojo.",
+  },
+  {
     version: "1986.420",
     para: ["admin"],
     texto:
