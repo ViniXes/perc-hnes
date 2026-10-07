@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.418",
+    para: ["admin"],
+    texto:
+      "POA: ya nadie entra por ser de un servicio (tampoco ESDOMED). Lo ven los administradores, que eligen el servicio en la barra del POA, y la cuenta a la que se le otorgue el acceso 'POA (Plan Anual Operativo)' en Usuarios > Accesos extra, solo para el PAO de su propio servicio.",
+  },
+  {
     version: "1986.417",
     para: ["serv:esdomed", "admin"],
     texto:

@@ -236,13 +236,28 @@ service cloud.firestore {
         || request.auth.token.email == 'jcmiranda@perc-hnes.app'
         || (isSignedIn() && userProfile().role == 'admin');
     }
-    // POA - Plan Anual Operativo por servicio y año.
+    // POA - Plan Anual Operativo por servicio y año ("<servicio>__<año>" y
+    // "<servicio>__<año>__media"). Nadie entra por ser de un servicio: lo ven y
+    // editan los administradores (todos) y la cuenta a la que un administrador le
+    // otorgó el acceso "POA" (menuGrants 'panel-poa'), SOLO el de su servicio.
+    function adminPoa() {
+      return isAdmin() || (tienePerfil() && userProfile().role == 'admin');
+    }
+    function tieneAccesoPoa() {
+      return tienePerfil() && noEsMinsal()
+        && userProfile().get('menuGrants', []).hasAny(['panel-poa'])
+        && userProfile().get('serviceId', '') != '';
+    }
+    function poaDeSuServicio(docId) {
+      return tieneAccesoPoa() && docId.matches(userProfile().serviceId + '__.*');
+    }
     match /poaDocuments/{docId} {
-      allow read: if isSignedIn() && noEsMinsal();
-      allow write: if isSignedIn()
-        && (isAdmin()
-            || userProfile().role == 'admin'
-            || userProfile().serviceId == 'esdomed');
+      allow get: if adminPoa() || poaDeSuServicio(docId);
+      allow list: if adminPoa()
+        || (tieneAccesoPoa() && resource.data.serviceId == userProfile().serviceId);
+      allow create, update: if adminPoa()
+        || (poaDeSuServicio(docId) && request.resource.data.serviceId == userProfile().serviceId);
+      allow delete: if adminPoa();
     }
     // Censo Diario de Pacientes (id = "<periodo>", p.ej. "2026-06").
     match /censoDiario/{periodId} {

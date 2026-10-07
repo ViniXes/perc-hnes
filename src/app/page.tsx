@@ -46,6 +46,7 @@ import {
   MODULE_CAPTURE_DAYS,
   MODULE_DEFINITIONS,
   MODULE_ORDER,
+  AREA_DEFINITIONS,
   getAreaById,
   getAreaModules,
   type ModuleDefinition,
@@ -86,7 +87,6 @@ import {
   poaExposicion,
   poaCategoria,
   POA_CATEGORIA_LABEL,
-  POA_SERVICES,
   POA_EMPTY_RECURSO,
   POA_EMPTY_FODA,
   POA_EMPTY_CUMPLIMIENTO,
@@ -4703,6 +4703,8 @@ export default function Home() {
 
   // --- POA (Plan Anual Operativo por año) ------------------------------------
   const [poaYear, setPoaYear] = useState<number>(() => new Date().getFullYear() + 1);
+  /** Servicio cuyo PAO revisa el administrador (los demás ven solo el suyo). */
+  const [poaAdminServiceId, setPoaAdminServiceId] = useState<string>("esdomed");
   const [poaDoc, setPoaDoc] = useState<PoaDoc | null>(null);
   /** Gráficos de producción: clave -> dataURL. Se guardan en un doc aparte. */
   const [poaMedia, setPoaMedia] = useState<Record<string, string>>({});
@@ -5216,10 +5218,11 @@ export default function Home() {
   const allowViewSeps = _viewBypass || (!!_viewSvcId && viewSeps.includes(_viewSvcId));
   const allowViewHoras = _viewBypass || (!!_viewSvcId && viewHoras.includes(_viewSvcId));
   const canViewCenso = isAdmin || isSupervisor || hasGrant("panel-censo");
-  // POA (Plan Anual Operativo): por ahora SOLO el servicio de ESDOMED (su jefe y las
-  // cuentas del servicio), los administradores y quien tenga el acceso otorgado.
-  const isPoaService = POA_SERVICES.includes(serviceProfile?.serviceId ?? "");
-  const canViewPoa = isAdmin || isPoaService || hasGrant("panel-poa");
+  // POA (Plan Anual Operativo): NADIE entra por ser de un servicio. Lo ven los
+  // administradores (todos los servicios) y la cuenta a la que un administrador le
+  // otorgó el acceso "POA (Plan Anual Operativo)" en Usuarios: esa cuenta trabaja
+  // SOLO el PAO de su propio servicio (las reglas de Firestore lo exigen también).
+  const canViewPoa = isAdmin || (hasGrant("panel-poa") && !!serviceProfile?.serviceId);
   const canEditPoa = canViewPoa;
   const canEditCenso =
     isAdmin || normalizeKey(serviceProfile?.username || "") === CENSO_EDITOR_USERNAME;
@@ -8300,9 +8303,11 @@ export default function Home() {
   // ---- POA: Plan Anual Operativo (registro por año) -------------------------
   // El documento vive en `poaDocuments/<servicio>__<año>` y los gráficos, para no
   // inflar el documento principal, en `poaDocuments/<servicio>__<año>__media`.
-  const poaServiceId = POA_SERVICES.includes(serviceProfile?.serviceId ?? "")
-    ? (serviceProfile?.serviceId ?? "esdomed")
-    : "esdomed";
+  const poaServiceId = isAdmin ? poaAdminServiceId : (serviceProfile?.serviceId ?? "");
+  /** Servicios que hacen PAO: los que llenan Distribución de Horas. */
+  const poaServiciosHoras = AREA_DEFINITIONS.filter((area) => area.modules.includes("distribucion"))
+    .map((area) => ({ id: area.id, name: SERVICE_DEFINITIONS.find((sv) => sv.id === area.id)?.name ?? area.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
 
   /** Aplica un cambio sobre una copia del documento y lo marca como no guardado. */
   function updatePoa(mutate: (draft: PoaDoc) => void) {
@@ -8319,7 +8324,8 @@ export default function Home() {
   async function loadPoaYears() {
     if (firestoreUnavailable) return;
     try {
-      const snap = await getDocs(collection(db, "poaDocuments"));
+      // Solo los documentos del servicio (las reglas no dejan listar los de otros).
+      const snap = await getDocs(query(collection(db, "poaDocuments"), where("serviceId", "==", poaServiceId)));
       const years: number[] = [];
       snap.forEach((entry) => {
         const id = entry.id;
@@ -8580,7 +8586,7 @@ export default function Home() {
     void loadPoaYears();
     void loadPoa(poaYear);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSidebarSection, mobileView, canViewPoa, poaYear, poaLoadedKey, firestoreUnavailable]);
+  }, [activeSidebarSection, mobileView, canViewPoa, poaYear, poaServiceId, poaLoadedKey, firestoreUnavailable]);
 
   // ---- Censo Diario de Pacientes (guardado por mes) -------------------------
   async function loadCenso(period: string) {
@@ -15991,6 +15997,27 @@ export default function Home() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {isAdmin ? (
+              <label className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>
+                Servicio
+                <select
+                  value={poaAdminServiceId}
+                  onChange={(event) => {
+                    if (poaDirty && !window.confirm("Hay cambios sin guardar en el POA. ¿Cambiar de servicio y descartarlos?")) return;
+                    setPoaAdminServiceId(event.target.value);
+                    setPoaDoc(null);
+                    setPoaYears([]);
+                    setPoaDirty(false);
+                  }}
+                  className="max-w-[220px] rounded-xl border px-2.5 py-1.5 text-xs font-semibold"
+                  style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text)" }}
+                >
+                  {poaServiciosHoras.map((sv) => (
+                    <option key={sv.id} value={sv.id}>{sv.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>
               Año
               <select
