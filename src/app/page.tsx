@@ -99,6 +99,7 @@ import {
   POA_UNIDADES_DIVISION,
   poaEsDivision,
   poaUnidadDeDivision,
+  poaUnidadDeServicio,
   createPoaDocFromPrev,
   normalizePoaDoc,
   poaAcumulado,
@@ -5233,7 +5234,7 @@ export default function Home() {
   // SOLO el PAO de su propio servicio (las reglas de Firestore lo exigen también).
   // Unidad del PAO de esta cuenta: la que le asignó el administrador o, si no,
   // su propio servicio (las reglas de Firestore usan la misma regla).
-  const poaUnidadPropia = serviceProfile?.poaUnidad || serviceProfile?.serviceId || "";
+  const poaUnidadPropia = serviceProfile?.poaUnidad || poaUnidadDeServicio(serviceProfile?.serviceId) || "";
   const canViewPoa = isAdmin || (hasGrant("panel-poa") && !!poaUnidadPropia);
   const canEditPoa = canViewPoa;
   const canEditCenso =
@@ -8317,7 +8318,10 @@ export default function Home() {
   // inflar el documento principal, en `poaDocuments/<servicio>__<año>__media`.
   const poaServiceId = isAdmin ? poaAdminServiceId : poaUnidadPropia;
   /** Servicios que hacen PAO: los que llenan Distribución de Horas. */
-  const poaServiciosHoras = AREA_DEFINITIONS.filter((area) => area.modules.includes("distribucion"))
+  // Las jefaturas de división registradas como servicio no van aquí: su PAO es el de la división.
+  const poaServiciosHoras = AREA_DEFINITIONS.filter(
+    (area) => area.modules.includes("distribucion") && poaUnidadDeServicio(area.id) === area.id,
+  )
     .map((area) => ({ id: area.id, name: SERVICE_DEFINITIONS.find((sv) => sv.id === area.id)?.name ?? area.name }))
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
   /** Nombre visible de una unidad del PAO (servicio, División o Subdirección). */
@@ -13018,7 +13022,7 @@ export default function Home() {
     // PAO que elabora (solo con el acceso POA): lo elegido o, si no se tocó, la
     // unidad que se mostró por defecto (su división o su servicio).
     const nextPoaUnidad = draft.menuGrants.includes("panel-poa")
-      ? draft.poaUnidad || poaUnidadDeDivision(current.division) || effectiveServiceId || null
+      ? draft.poaUnidad || poaUnidadDeDivision(current.division) || poaUnidadDeServicio(effectiveServiceId) || null
       : null;
     const nextPermissions = {
       canEdit: draft.canEdit,
@@ -25255,7 +25259,7 @@ export default function Home() {
                                   </div>
                                   {grp === "General" && draft.menuGrants.includes("panel-poa") ? (() => {
                                     const unidadPorDefecto =
-                                      poaUnidadDeDivision(selectedUser.division) || draft.serviceId || "";
+                                      poaUnidadDeDivision(selectedUser.division) || poaUnidadDeServicio(draft.serviceId) || "";
                                     const unidad = draft.poaUnidad || unidadPorDefecto;
                                     return (
                                       <label className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-xs text-slate-300">

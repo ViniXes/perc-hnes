@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.420",
+    para: ["admin"],
+    texto:
+      "POA: las cuentas de Jefatura de Division Medica y Jefatura de Division de Apoyo trabajan directamente el PAO de su division (ya no aparecen como servicios aparte en el selector).",
+  },
+  {
     version: "1986.419",
     para: ["admin"],
     texto:

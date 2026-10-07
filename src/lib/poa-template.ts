@@ -674,12 +674,20 @@ export const POA_SEEDS: Record<string, PoaDoc> = {
 // Las Divisiones y la Subdirección Administrativa elaboran su propio PAO (con
 // misión y visión). No son servicios: se asignan a la cuenta del jefe desde
 // Usuarios al otorgarle el acceso POA.
-export const POA_UNIDADES_DIVISION: { id: string; name: string; division: string }[] = [
-  { id: "division-medica", name: "División Médica", division: "medica" },
-  { id: "division-apoyo", name: "División de Apoyo", division: "apoyo" },
-  { id: "division-enfermeria", name: "División de Enfermería", division: "enfermeria" },
-  { id: "subdireccion-administrativa", name: "Subdirección Administrativa", division: "administrativa" },
+export const POA_UNIDADES_DIVISION: { id: string; name: string; division: string; servicios: string[] }[] = [
+  // "servicios": cuentas de PULSO que SON la jefatura de esa división (se registran
+  // como un servicio). Su PAO es el de la división, no uno aparte.
+  { id: "division-medica", name: "División Médica", division: "medica", servicios: ["jefaturas-division-medica"] },
+  { id: "division-apoyo", name: "División de Apoyo", division: "apoyo", servicios: ["jefatura-division-apoyo"] },
+  { id: "division-enfermeria", name: "División de Enfermería", division: "enfermeria", servicios: [] },
+  { id: "subdireccion-administrativa", name: "Subdirección Administrativa", division: "administrativa", servicios: [] },
 ];
+
+/** Unidad del PAO de una cuenta de servicio: la división si es su jefatura; si no, el servicio. */
+export function poaUnidadDeServicio(serviceId: string | null | undefined): string {
+  if (!serviceId) return "";
+  return POA_UNIDADES_DIVISION.find((u) => u.servicios.includes(serviceId))?.id ?? serviceId;
+}
 
 /** Unidad de PAO que corresponde a un jefe de división (o "" si no aplica). */
 export function poaUnidadDeDivision(division: string | null | undefined): string {
