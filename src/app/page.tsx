@@ -4965,10 +4965,12 @@ export default function Home() {
       publicDashboardGroups.length > 0 ? publicDashboardGroups : fallbackDashboardGroups;
     const hayRecibidos = Object.keys(recibidosExternos).length > 0;
     if (PERC_FIXED_SERVICE_IDS.size === 0 && !hayRecibidos) return base;
-    // El periodo depende del modulo: el SEPS puede estar en un mes distinto al de
-    // PERC/Horas, asi que la clave del "recibido" se arma con el que corresponda.
-    const periodoSeps = getSepsWindow(now, currentBlockedDates).periodId;
-    const periodoDe = (label: string) => (label === "SEPS" ? periodoSeps : periodId);
+    // El tablero (PERC, SEPS y Horas) se arma con el mes EN CIERRE (periodId), asi
+    // que la marca de "recibido" se busca en ese mismo mes para los tres. Antes el
+    // SEPS usaba el mes de su ventana: desde el 6to dia habil (cuando el SEPS ya
+    // captura el mes en curso) las marcas del mes en cierre dejaban de contar y el
+    // avance bajaba (p. ej. Laboratorio y Nefrologia, recibidos por correo).
+
     return base.map((group) => ({
       ...group,
       services: group.services.map((service) => {
@@ -4977,7 +4979,7 @@ export default function Home() {
           if (fijo && mod.label === "PERC") return { ...mod, completed: true };
           if (
             hayRecibidos &&
-            recibidosExternos[`${periodoDe(mod.label)}__${service.id}__${mod.label}`]
+            recibidosExternos[`${periodId}__${service.id}__${mod.label}`]
           ) {
             return { ...mod, completed: true };
           }
@@ -22522,7 +22524,7 @@ export default function Home() {
                         ? 0
                         : Object.keys(recibidosExternos).filter(
                             (clave) =>
-                              clave.startsWith(`${m.key === "SEPS" ? sepsPeriodId : periodId}__`) &&
+                              clave.startsWith(`${periodId}__`) &&
                               clave.endsWith(`__${m.key}`),
                           ).length;
                       return (
@@ -26713,8 +26715,8 @@ export default function Home() {
                                     el tablero por correo o en papel. Lo marca el admin y
                                     a partir de ahi cuenta como completo. */}
                                 {isAdmin && !fam ? (() => {
-                                  const periodoItem =
-                                    statsLabel === "SEPS" ? sepsPeriodId : periodId;
+                                  // Mismo mes que muestra el monitoreo (el mes en cierre).
+                                  const periodoItem = periodId;
                                   const marcado =
                                     !!recibidosExternos[
                                       `${periodoItem}__${it.id}__${statsLabel}`

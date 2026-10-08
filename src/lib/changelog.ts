@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.422",
+    para: ["admin"],
+    texto:
+      "Monitoreo SEPS: los tableros marcados como recibidos fuera de PULSO vuelven a contar despues del 6to dia habil. El avance del mes en cierre ya no baja cuando el SEPS pasa a capturar el mes en curso.",
+  },
+  {
     version: "1986.421",
     para: ["admin", "div:enfermeria"],
     texto:
