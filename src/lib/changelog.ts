@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.423",
+    para: ["todos"],
+    texto:
+      "Modo claro renovado: tarjetas mas definidas, botones con texto blanco legible, iconos del menu visibles, campos y tablas con mejor contraste. El modo oscuro no cambia.",
+  },
+  {
     version: "1986.422",
     para: ["admin"],
     texto:

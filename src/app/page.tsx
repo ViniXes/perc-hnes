@@ -500,11 +500,14 @@ const FONT_SIZE_OPTIONS: { id: string; label: string; px: number }[] = [
   { id: "grande", label: "Grande", px: 17.5 },
   { id: "xl", label: "Más grande", px: 19 },
 ];
-const ACCENT_OPTIONS: { id: string; label: string; accent: string; ink: string }[] = [
-  { id: "dorado", label: "Dorado", accent: "#c79a4f", ink: "#17140c" },
-  { id: "azul", label: "Azul", accent: "#3b82f6", ink: "#ffffff" },
-  { id: "verde", label: "Verde", accent: "#10b981", ink: "#053226" },
-  { id: "violeta", label: "Violeta", accent: "#8b5cf6", ink: "#ffffff" },
+// accentClaro: el mismo color en un tono mas profundo para el modo claro. El
+// acento se usa como texto (rotulos, enlaces) y como relleno de botones; sobre
+// fondo claro el tono del modo oscuro no alcanza el contraste minimo (AA).
+const ACCENT_OPTIONS: { id: string; label: string; accent: string; ink: string; accentClaro: string }[] = [
+  { id: "dorado", label: "Dorado", accent: "#c79a4f", ink: "#17140c", accentClaro: "#a16207" },
+  { id: "azul", label: "Azul", accent: "#3b82f6", ink: "#ffffff", accentClaro: "#1d4ed8" },
+  { id: "verde", label: "Verde", accent: "#10b981", ink: "#053226", accentClaro: "#047857" },
+  { id: "violeta", label: "Violeta", accent: "#8b5cf6", ink: "#ffffff", accentClaro: "#6d28d9" },
 ];
 const BACKGROUND_OPTIONS: { id: string; label: string; css: string | null }[] = [
   { id: "default", label: "Por defecto", css: null },
@@ -18591,10 +18594,15 @@ export default function Home() {
         style={
           {
             fontFamily: getFontStack(uiPrefs.font),
-            "--accent": getAccentOption(uiPrefs.accent).accent,
-            "--accent-btn": getAccentOption(uiPrefs.accent).accent,
-            "--accent-ink": getAccentOption(uiPrefs.accent).ink,
-            ...(getBackgroundCss(uiPrefs.background)
+            "--accent": isLightPanelTheme
+              ? getAccentOption(uiPrefs.accent).accentClaro
+              : getAccentOption(uiPrefs.accent).accent,
+            "--accent-btn": isLightPanelTheme
+              ? getAccentOption(uiPrefs.accent).accentClaro
+              : getAccentOption(uiPrefs.accent).accent,
+            "--accent-ink": isLightPanelTheme ? "#ffffff" : getAccentOption(uiPrefs.accent).ink,
+            // Los fondos personalizados son degradados oscuros: en claro no aplican.
+            ...(!isLightPanelTheme && getBackgroundCss(uiPrefs.background)
               ? { backgroundImage: getBackgroundCss(uiPrefs.background) as string }
               : {}),
           } as CSSProperties
@@ -20567,9 +20575,9 @@ export default function Home() {
                   }
 
                   const series = [
-                    { clave: "perc" as const, label: "PERC", color: isLightPanelTheme ? "#0891b2" : "#22d3ee" },
+                    { clave: "perc" as const, label: "PERC", color: isLightPanelTheme ? "#0e7490" : "#22d3ee" },
                     { clave: "seps" as const, label: "SEPS", color: isLightPanelTheme ? "#2563eb" : "#60a5fa" },
-                    { clave: "horas" as const, label: "Horas", color: isLightPanelTheme ? "#d97706" : "#fbbf24" },
+                    { clave: "horas" as const, label: "Horas", color: isLightPanelTheme ? "#b45309" : "#fbbf24" },
                     { clave: "cec" as const, label: "C.E. Clínico", color: isLightPanelTheme ? "#7c3aed" : "#a78bfa" },
                   ];
                   const visibles = series.filter((serie) => tendenciasSeries[serie.clave] !== false);
@@ -20594,7 +20602,7 @@ export default function Home() {
                       : IZQ + (indice * (ANCHO - IZQ - DER)) / (filas.length - 1);
                   const py = (pct: number) => ARR + ((100 - pct) * (ALTO - ARR - ABA)) / 100;
                   const rejilla = isLightPanelTheme ? "#e2e8f0" : "rgba(255,255,255,0.07)";
-                  const tinta = isLightPanelTheme ? "#94a3b8" : "#64748b";
+                  const tinta = "#64748b"; // ejes: legible en claro y en oscuro
                   const fondoPunto = isLightPanelTheme ? "#ffffff" : "#202c41";
 
                   const chipDelta = (delta: number | null) => {

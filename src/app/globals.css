@@ -1313,3 +1313,274 @@ body[data-panel-theme="light"] .panel-shell
   .panel-shell .cursor-pointer,
   .panel-shell svg { transition: none; }
 }
+
+/* =============================================================================
+   MODO CLARO · EDICION PROFESIONAL (1986.423)
+   -----------------------------------------------------------------------------
+   Capa final del tema claro. Va AL FINAL del archivo para ganar por cascada a
+   los parches anteriores. Solo toca .theme-light / data-panel-theme="light":
+   el modo oscuro queda exactamente igual.
+   Criterios:
+     - Superficies limpias sin blanco puro (no encandila), separadas del fondo
+       por un borde fino y una sombra corta.
+     - Texto y botones con contraste AA (4.5:1) como minimo.
+     - Un solo lenguaje de botones: lleno (accion principal), tinte (secundario)
+       y contorno (neutro).
+   ============================================================================= */
+
+/* ----- 1) Paleta --------------------------------------------------------- */
+.panel-shell.theme-light {
+  --bg: #e6eaf0;
+  --surface: #f5f7fa;
+  --surface-2: #eef1f5;
+  --surface-3: #e6ebf1;
+  --chip: #e0e6ee;
+  --border: rgba(15, 23, 42, 0.11);
+  --border-strong: rgba(14, 116, 144, 0.45);
+  --text: #0f172a;
+  --text-muted: #3e4a5c;
+  --text-faint: #5f6b7d;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 28px -14px rgba(15, 23, 42, 0.22);
+  background-image:
+    radial-gradient(circle at 10% 0%, rgba(14, 116, 144, 0.07), transparent 38%),
+    radial-gradient(circle at 100% 100%, rgba(79, 70, 229, 0.05), transparent 45%),
+    linear-gradient(180deg, #e9edf2 0%, #e4e8ee 100%);
+}
+
+/* Tarjetas: borde nitido + sombra corta (antes "gris sobre gris"). */
+body[data-panel-theme="light"] [class*="bg-[#202c41]"],
+body[data-panel-theme="light"] .relieve {
+  border-color: rgba(15, 23, 42, 0.10) !important;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 12px 30px -16px rgba(15, 23, 42, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
+}
+body[data-panel-theme="light"] .modal-pop-in {
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  box-shadow:
+    0 2px 4px rgba(15, 23, 42, 0.06),
+    0 30px 60px -20px rgba(15, 23, 42, 0.40) !important;
+}
+
+/* ----- 2) Texto blanco SOBRE rellenos de color --------------------------
+   La regla vieja ".text-white -> oscuro" dejaba letras negras sobre botones
+   verdes/azules. Aca se devuelve el blanco a todo relleno solido o degradado. */
+.panel-shell.theme-light :is(
+  .bg-\[\#1f6f68\], .bg-\[\#25807a\], .bg-\[\#16212c\],
+  .bg-teal-500, .bg-teal-600, .bg-teal-700,
+  .bg-emerald-500, .bg-emerald-600, .bg-emerald-700,
+  .bg-green-600, .bg-green-700,
+  .bg-cyan-500, .bg-cyan-600, .bg-cyan-700,
+  .bg-sky-500, .bg-sky-600, .bg-sky-700,
+  .bg-blue-500, .bg-blue-600, .bg-blue-700,
+  .bg-indigo-500, .bg-indigo-600, .bg-indigo-700,
+  .bg-violet-500, .bg-violet-600, .bg-violet-700, .bg-purple-600,
+  .bg-rose-500, .bg-rose-600, .bg-rose-700, .bg-red-500, .bg-red-600, .bg-red-700,
+  .bg-orange-500, .bg-orange-600, .bg-amber-600, .bg-amber-700,
+  .bg-slate-600, .bg-slate-700, .bg-slate-800, .bg-slate-900,
+  .bg-gradient-to-br, .bg-gradient-to-r, .bg-gradient-to-b, .bg-gradient-to-tr
+).text-white,
+.panel-shell.theme-light :is(
+  .bg-\[\#1f6f68\], .bg-\[\#25807a\], .bg-\[\#16212c\],
+  .bg-teal-500, .bg-teal-600, .bg-teal-700,
+  .bg-emerald-500, .bg-emerald-600, .bg-emerald-700,
+  .bg-green-600, .bg-green-700,
+  .bg-cyan-500, .bg-cyan-600, .bg-cyan-700,
+  .bg-sky-500, .bg-sky-600, .bg-sky-700,
+  .bg-blue-500, .bg-blue-600, .bg-blue-700,
+  .bg-indigo-500, .bg-indigo-600, .bg-indigo-700,
+  .bg-violet-500, .bg-violet-600, .bg-violet-700, .bg-purple-600,
+  .bg-rose-500, .bg-rose-600, .bg-rose-700, .bg-red-500, .bg-red-600, .bg-red-700,
+  .bg-orange-500, .bg-orange-600, .bg-amber-600, .bg-amber-700,
+  .bg-slate-600, .bg-slate-700, .bg-slate-800, .bg-slate-900,
+  .bg-gradient-to-br, .bg-gradient-to-r, .bg-gradient-to-b, .bg-gradient-to-tr
+) .text-white {
+  color: #ffffff;
+}
+
+/* ----- 3) Menu lateral --------------------------------------------------- */
+/* Item activo: tinte suave del acento elegido, barra a la izquierda y texto
+   oscuro en seminegrita (el acento llega por variable desde el <main>). */
+.panel-shell.theme-light [aria-current="page"] {
+  background-color: color-mix(in srgb, var(--accent) 8%, #f8fafc) !important;
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent) !important;
+  box-shadow: inset 3px 0 0 var(--accent), 0 1px 2px rgba(15, 23, 42, 0.06) !important;
+}
+.panel-shell.theme-light [aria-current="page"] > span:last-child,
+.panel-shell.theme-light [aria-current="page"] p {
+  color: #0f172a;
+  font-weight: 600;
+}
+/* Mosaicos inactivos (escritorio): chip neutro con icono gris pizarra. */
+@media (width >= 1280px) {
+  .panel-shell.theme-light [class*="desk:bg-white/5"][class*="desk:bg-none"],
+  .panel-shell.theme-light [class*="desk:bg-white/5"][class*="desk:bg-none"].text-white {
+    background-color: #e3e8ef;
+    color: #475569;
+    --tw-ring-color: rgba(15, 23, 42, 0.08);
+  }
+  .panel-shell.theme-light button:hover > [class*="desk:bg-white/5"][class*="desk:bg-none"] {
+    background-color: #d9e1ea;
+    color: #1e293b;
+  }
+}
+:where(.forzar-escritorio) .panel-shell.theme-light [class*="desk:bg-white/5"][class*="desk:bg-none"] {
+  background-color: #e3e8ef;
+  color: #475569;
+}
+/* Items inactivos al pasar el mouse. */
+.panel-shell.theme-light aside button:not([aria-current="page"]):hover {
+  background-color: rgba(15, 23, 42, 0.045);
+  border-color: transparent;
+}
+
+/* ----- 4) Botones -------------------------------------------------------- */
+/* Principal (Guardar, confirmar): teal profundo, sombra corta, sin brillo. */
+.panel-shell.theme-light .bg-\[\#1f6f68\] {
+  background-color: #17695f;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --tw-ring-color: transparent;
+}
+.panel-shell.theme-light .hover\:bg-\[\#25807a\]:hover { background-color: #12574f; }
+
+/* Botones solidos de color: mismos tonos ~700, legibles en blanco. */
+.panel-shell.theme-light .bg-teal-500,
+.panel-shell.theme-light .bg-teal-600 { background-color: #0f766e; }
+.panel-shell.theme-light .hover\:bg-teal-400:hover { background-color: #115e59; }
+.panel-shell.theme-light .bg-emerald-500 { background-color: #047857; }
+.panel-shell.theme-light .hover\:bg-emerald-400:hover { background-color: #065f46; }
+.panel-shell.theme-light .bg-cyan-500,
+.panel-shell.theme-light .bg-cyan-400,
+.panel-shell.theme-light .bg-violet-500,
+.panel-shell.theme-light .bg-violet-500\/80 { background-color: var(--accent-btn); color: #ffffff; }
+.panel-shell.theme-light :is(.hover\:bg-cyan-400, .hover\:bg-cyan-300, .hover\:bg-violet-400):hover { background-color: color-mix(in srgb, var(--accent-btn) 86%, #000000); }
+
+/* Secundarios con tinte (Excel, PDF, Desbloquear, Bloquear, Consultar...):
+   en claro el tinte al 8% desaparecia. Fondo suave + borde y texto ~700. */
+.panel-shell.theme-light :is([class*="bg-emerald-400/[0.08]"], [class*="bg-emerald-300/[0.08]"], [class*="bg-emerald-500/10"]) {
+  background-color: #e6f4ee; border-color: rgba(4, 120, 87, 0.30); color: #065f46;
+}
+.panel-shell.theme-light :is([class*="bg-teal-300/[0.08]"], [class*="bg-teal-400/[0.08]"], [class*="bg-teal-400/[0.12]"], [class*="bg-teal-500/10"]) {
+  background-color: #e4f3f1; border-color: rgba(15, 118, 110, 0.32); color: #115e59;
+}
+.panel-shell.theme-light :is([class*="bg-sky-300/[0.08]"], [class*="bg-sky-400/[0.08]"], [class*="bg-sky-500/10"]) {
+  background-color: #e6f1f9; border-color: rgba(3, 105, 161, 0.30); color: #075985;
+}
+.panel-shell.theme-light :is([class*="bg-indigo-300/[0.08]"], [class*="bg-indigo-400/[0.08]"], [class*="bg-indigo-500/10"]) {
+  background-color: #ecebfb; border-color: rgba(67, 56, 202, 0.28); color: #3730a3;
+}
+.panel-shell.theme-light :is([class*="bg-amber-300/[0.08]"], [class*="bg-amber-400/[0.08]"], [class*="bg-amber-500/10"]) {
+  background-color: #fbf2df; border-color: rgba(146, 96, 10, 0.32); color: #7c4f06;
+}
+.panel-shell.theme-light :is([class*="bg-rose-300/[0.08]"], [class*="bg-rose-400/[0.08]"], [class*="bg-rose-500/10"]) {
+  background-color: #fbeaec; border-color: rgba(185, 28, 28, 0.28); color: #9f1239;
+}
+.panel-shell.theme-light :is(
+  [class*="bg-emerald-400/[0.08]"], [class*="bg-teal-300/[0.08]"], [class*="bg-sky-300/[0.08]"],
+  [class*="bg-indigo-300/[0.08]"], [class*="bg-amber-300/[0.08]"], [class*="bg-rose-300/[0.08]"]
+):is(button, a):hover {
+  filter: brightness(0.97) saturate(1.1);
+}
+/* El texto interno de esos botones hereda el tono del boton. */
+.panel-shell.theme-light :is([class*="bg-emerald-400/[0.08]"], [class*="bg-teal-300/[0.08]"], [class*="bg-sky-300/[0.08]"], [class*="bg-indigo-300/[0.08]"], [class*="bg-amber-300/[0.08]"]) :is(span, svg) {
+  color: inherit;
+}
+
+/* Neutros con contorno (chips, filtros, "Expandir todo"...). */
+.panel-shell.theme-light button.rounded-full.border:not([class*="bg-"]),
+.panel-shell.theme-light button.rounded-full.border.bg-transparent {
+  background-color: var(--surface);
+  border-color: rgba(15, 23, 42, 0.14);
+}
+.panel-shell.theme-light button.rounded-full.border:not([class*="bg-"]):hover {
+  border-color: rgba(15, 23, 42, 0.26);
+  background-color: #ffffff;
+}
+
+/* Rotulos cian 500/600 (p. ej. "Panel de administracion") -> cian 700. */
+body[data-panel-theme="light"] :is([class*="text-cyan-5"], [class*="text-cyan-6"]) {
+  color: #0e7490 !important;
+}
+
+/* Texto claro sin regla previa (teal 50/100) -> teal legible. */
+body[data-panel-theme="light"] :is(.text-teal-50, .text-teal-100, [class*="text-teal-50/"], [class*="text-teal-100/"]) {
+  color: #115e59 !important;
+}
+/* ...salvo sobre un relleno solido. */
+body[data-panel-theme="light"] :is(.bg-teal-600, .bg-\[\#1f6f68\], .bg-emerald-600) :is(.text-teal-50, .text-teal-100) {
+  color: #ffffff !important;
+}
+
+/* ----- 5) Campos de formulario ------------------------------------------- */
+.panel-shell.theme-light :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea):not(.poa-input) {
+  background-color: #fbfcfd;
+  border-color: rgba(15, 23, 42, 0.16);
+  color: var(--text);
+}
+.panel-shell.theme-light :is(input, select, textarea):not(.poa-input):hover:not(:disabled):not(:focus) {
+  border-color: rgba(15, 23, 42, 0.28);
+}
+.panel-shell.theme-light :is(input, select, textarea):not(.poa-input):focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  outline: none;
+}
+.panel-shell.theme-light :is(input, textarea)::placeholder { color: #8a95a6; }
+.panel-shell.theme-light :is(input, select, textarea):disabled,
+.panel-shell.theme-light :is(input, textarea):read-only:not(.poa-input) {
+  background-color: var(--surface-2);
+}
+.panel-shell.theme-light input[type="checkbox"],
+.panel-shell.theme-light input[type="radio"] { accent-color: #0f766e; }
+
+/* Selectores propios (fecha, mes, servicio) que usan la superficie oscura:
+   en claro se ven como un campo, igual que los inputs. */
+.panel-shell.theme-light button.border.bg-\[\#2a3448\],
+.panel-shell.theme-light button.border.bg-\[\#313d54\] {
+  background-color: #fbfcfd;
+  border-color: rgba(15, 23, 42, 0.16);
+  color: var(--text);
+}
+.panel-shell.theme-light button.border.bg-\[\#2a3448\]:hover:not(:disabled),
+.panel-shell.theme-light button.border.bg-\[\#313d54\]:hover:not(:disabled) {
+  border-color: rgba(15, 23, 42, 0.28);
+}
+/* Botones secundarios "fantasma" (borde blanco translucido del modo oscuro). */
+.panel-shell.theme-light button.border.bg-white\/5 {
+  background-color: #fbfcfd;
+  border-color: rgba(15, 23, 42, 0.16);
+  color: #1e293b;
+}
+.panel-shell.theme-light button.border.bg-white\/5:hover:not(:disabled) {
+  background-color: #ffffff;
+  border-color: rgba(15, 23, 42, 0.28);
+}
+
+/* ----- 6) Tablas ---------------------------------------------------------- */
+.panel-shell.theme-light thead th {
+  color: #334155;
+  border-color: rgba(15, 23, 42, 0.10);
+}
+.panel-shell.theme-light tbody tr:nth-child(even) {
+  background-color: rgba(15, 23, 42, 0.022);
+}
+.panel-shell.theme-light tbody tr:hover {
+  background-color: rgba(14, 116, 144, 0.06);
+}
+
+/* ----- 7) Rotulos de seccion (kicker dorado) ------------------------------
+   Antes: dorado palido y pesado. Ahora un bronce sobrio, legible y uniforme. */
+body[data-panel-theme="light"] [class*="text-amber-"][class*="uppercase"],
+body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
+  color: #8a5a07 !important;
+  font-weight: 700;
+}
+
+/* ----- 8) Detalles -------------------------------------------------------- */
+.panel-shell.theme-light hr { background: rgba(15, 23, 42, 0.10); }
+.panel-shell.theme-light .hospital-shimmer { color: #334155; }
+.panel-shell.theme-light ::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+/* Barras de progreso: riel visible. */
+.panel-shell.theme-light .bg-white\/10 { background-color: rgba(15, 23, 42, 0.08); }
