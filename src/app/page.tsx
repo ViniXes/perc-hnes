@@ -1,5 +1,6 @@
 "use client";
 
+import { PoaUnidadPicker, type PoaUnidadGrupo } from "@/components/poa-unidad-picker";
 import { ChangeEvent, CSSProperties, Fragment, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Auth,
@@ -8347,6 +8348,27 @@ export default function Home() {
         ),
     }))
     .filter((grupo) => grupo.servicios.length > 0);
+  const POA_TITULO_GRUPO: Record<string, string> = {
+    direccion: "Dirección",
+    apoyo: "División de Apoyo",
+    medica: "División Médica",
+    enfermeria: "División de Enfermería",
+    administrativa: "Subdirección Administrativa",
+  };
+  /** Grupos para el selector con buscador: primero las Divisiones/Subdirección
+   *  (su propio PAO) y luego los servicios de cada una. */
+  const poaGruposUnidades: PoaUnidadGrupo[] = [
+    {
+      id: "divisiones",
+      titulo: "Divisiones y Subdirección",
+      unidades: POA_UNIDADES_DIVISION.map((u) => ({ id: u.id, name: u.name })),
+    },
+    ...poaServiciosPorGrupo.map((g) => ({
+      id: g.id,
+      titulo: POA_TITULO_GRUPO[g.id] ?? g.titulo,
+      unidades: g.servicios,
+    })),
+  ];
   /** Nombre visible de una unidad del PAO (servicio, División o Subdirección). */
   const poaNombreUnidad = (id: string) =>
     POA_UNIDADES_DIVISION.find((u) => u.id === id)?.name ??
@@ -16050,34 +16072,21 @@ export default function Home() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {isAdmin ? (
-              <label className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>
+              <div className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>
                 Servicio
-                <select
+                <PoaUnidadPicker
                   value={poaAdminServiceId}
-                  onChange={(event) => {
+                  grupos={poaGruposUnidades}
+                  ariaLabel="Unidad del POA"
+                  onChange={(id) => {
                     if (poaDirty && !window.confirm("Hay cambios sin guardar en el POA. ¿Cambiar de servicio y descartarlos?")) return;
-                    setPoaAdminServiceId(event.target.value);
+                    setPoaAdminServiceId(id);
                     setPoaDoc(null);
                     setPoaYears([]);
                     setPoaDirty(false);
                   }}
-                  className="max-w-[220px] rounded-xl border px-2.5 py-1.5 text-xs font-semibold"
-                  style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text)" }}
-                >
-                  <optgroup label="Divisiones y Subdirección">
-                    {POA_UNIDADES_DIVISION.map((u) => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                  </optgroup>
-                  {poaServiciosPorGrupo.map((grupo) => (
-                    <optgroup key={grupo.id} label={`Servicios · ${grupo.titulo}`}>
-                      {grupo.servicios.map((sv) => (
-                        <option key={sv.id} value={sv.id}>{sv.name}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </label>
+                />
+              </div>
             ) : null}
             <label className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>
               Año
@@ -25385,32 +25394,21 @@ export default function Home() {
                                       poaUnidadDeDivision(selectedUser.division) || poaUnidadDeServicio(draft.serviceId) || "";
                                     const unidad = draft.poaUnidad || unidadPorDefecto;
                                     return (
-                                      <label className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-xs text-slate-300">
+                                      <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-xs text-slate-300">
                                         <span className="font-semibold text-white">PAO que elabora:</span>
-                                        <select
+                                        <PoaUnidadPicker
                                           value={unidad}
-                                          onChange={(event) => updateAdminDraft(selectedUser.uid, { poaUnidad: event.target.value })}
-                                          className="min-w-[220px] rounded-lg border border-white/15 bg-[#0e1626] px-2 py-1.5 text-xs text-white"
-                                        >
-                                          <option value="">— Elegir —</option>
-                                          <optgroup label="Divisiones y Subdirección">
-                                            {POA_UNIDADES_DIVISION.map((u) => (
-                                              <option key={u.id} value={u.id}>{u.name}</option>
-                                            ))}
-                                          </optgroup>
-                                          {poaServiciosPorGrupo.map((grupo) => (
-                                            <optgroup key={grupo.id} label={`Servicios · ${grupo.titulo}`}>
-                                              {grupo.servicios.map((sv) => (
-                                                <option key={sv.id} value={sv.id}>{sv.name}</option>
-                                              ))}
-                                            </optgroup>
-                                          ))}
-                                        </select>
+                                          grupos={poaGruposUnidades}
+                                          permitirVacio
+                                          placeholder="— Elegir —"
+                                          ariaLabel="PAO que elabora"
+                                          onChange={(id) => updateAdminDraft(selectedUser.uid, { poaUnidad: id })}
+                                        />
                                         <span className="w-full text-[11px] text-slate-400">
                                           Solo verá y editará el PAO de esa unidad.
                                           {!draft.poaUnidad && unidadPorDefecto ? " Si no se cambia, queda la que aparece seleccionada." : ""}
                                         </span>
-                                      </label>
+                                      </div>
                                     );
                                   })() : null}
                                 </div>

@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.425",
+    para: ["admin"],
+    texto:
+      "POA: el selector de unidad ahora tiene buscador. Escriba parte del nombre (por ejemplo \"planif\") y filtra al instante, sin importar tildes. Tambien en Usuarios, \"PAO que elabora\". Flechas y Enter para elegir con el teclado.",
+  },
+  {
     version: "1986.424",
     para: ["admin"],
     texto:
