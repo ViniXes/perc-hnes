@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.424",
+    para: ["admin"],
+    texto:
+      "POA: el selector de unidad (en el POA y en Usuarios, \"PAO que elabora\") agrupa los servicios por Division. La Unidad de Planificacion aparece en Direccion, despues de ESDOMED.",
+  },
+  {
     version: "1986.423",
     para: ["todos"],
     texto:

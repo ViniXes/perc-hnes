@@ -8330,6 +8330,23 @@ export default function Home() {
   )
     .map((area) => ({ id: area.id, name: SERVICE_DEFINITIONS.find((sv) => sv.id === area.id)?.name ?? area.name }))
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  /** Los mismos servicios agrupados por División (como en el resto de PULSO), para
+   *  que en los selectores cada unidad aparezca donde se la busca: la Unidad de
+   *  Planificación, Calidad y ESDOMED quedan primero dentro de Dirección. */
+  const POA_PRIORIDAD_DIRECCION: Record<string, number> = { esdomed: 0, planificacion: 1, calidad: 2 };
+  const poaServiciosPorGrupo = Object.entries(SERVICE_GROUP_LABELS)
+    .map(([gid, titulo]) => ({
+      id: gid,
+      titulo,
+      servicios: poaServiciosHoras
+        .filter((sv) => (SERVICE_GROUP_BY_ID[sv.id] || "apoyo") === gid)
+        .sort(
+          (a, b) =>
+            (POA_PRIORIDAD_DIRECCION[a.id] ?? 99) - (POA_PRIORIDAD_DIRECCION[b.id] ?? 99) ||
+            a.name.localeCompare(b.name, "es"),
+        ),
+    }))
+    .filter((grupo) => grupo.servicios.length > 0);
   /** Nombre visible de una unidad del PAO (servicio, División o Subdirección). */
   const poaNombreUnidad = (id: string) =>
     POA_UNIDADES_DIVISION.find((u) => u.id === id)?.name ??
@@ -16052,11 +16069,13 @@ export default function Home() {
                       <option key={u.id} value={u.id}>{u.name}</option>
                     ))}
                   </optgroup>
-                  <optgroup label="Servicios">
-                    {poaServiciosHoras.map((sv) => (
-                      <option key={sv.id} value={sv.id}>{sv.name}</option>
-                    ))}
-                  </optgroup>
+                  {poaServiciosPorGrupo.map((grupo) => (
+                    <optgroup key={grupo.id} label={`Servicios · ${grupo.titulo}`}>
+                      {grupo.servicios.map((sv) => (
+                        <option key={sv.id} value={sv.id}>{sv.name}</option>
+                      ))}
+                    </optgroup>
+                  ))}
                 </select>
               </label>
             ) : null}
@@ -25379,11 +25398,13 @@ export default function Home() {
                                               <option key={u.id} value={u.id}>{u.name}</option>
                                             ))}
                                           </optgroup>
-                                          <optgroup label="Servicios">
-                                            {poaServiciosHoras.map((sv) => (
-                                              <option key={sv.id} value={sv.id}>{sv.name}</option>
-                                            ))}
-                                          </optgroup>
+                                          {poaServiciosPorGrupo.map((grupo) => (
+                                            <optgroup key={grupo.id} label={`Servicios · ${grupo.titulo}`}>
+                                              {grupo.servicios.map((sv) => (
+                                                <option key={sv.id} value={sv.id}>{sv.name}</option>
+                                              ))}
+                                            </optgroup>
+                                          ))}
                                         </select>
                                         <span className="w-full text-[11px] text-slate-400">
                                           Solo verá y editará el PAO de esa unidad.
