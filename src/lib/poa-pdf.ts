@@ -505,14 +505,13 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
     head: [["RIESGO INVOLUCRADO", "ACCIONES DE CONTROL", "EJECUCIÓN DE LAS ACCIONES DE CONTROL", "OBSERVACIONES"]],
     headStyles: { fillColor: PREV_RISK_FILL, textColor: TEXT, fontStyle: "bold", halign: "center" },
     body: doc.riesgosPrev.rows.map((r) => [t(r.riesgo), t(r.acciones), t(r.ejecucion), t(r.obs)]),
-    columnStyles: { 0: { cellWidth: 52 }, 1: { cellWidth: 48 }, 2: { cellWidth: 48 }, 3: { halign: "center", cellWidth: "auto" } },
+    columnStyles: { 0: { cellWidth: 46 }, 1: { cellWidth: 44 }, 2: { cellWidth: 44 }, 3: { halign: "center", cellWidth: "auto" } },
   });
   doc.riesgosPrev.analisis
     .filter((a) => a.trim())
     .forEach((a, i) => para(i === 0 ? `Análisis: ${a}` : a));
 
-  // Matriz (horizontal)
-  newPage("landscape");
+  // Matriz de riesgos: en la misma hoja vertical que el resto del documento.
   h2(`b) Matriz de valoración de riesgos ${anio}`);
   tabla({
     head: [[
@@ -524,7 +523,8 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
       "6. Acciones para control de riesgos",
       "7. Responsables",
     ]],
-    headStyles: { fillColor: RISK_HEAD_FILL, textColor: TEXT, fontStyle: "bold", halign: "center", fontSize: 8 },
+    styles: { font: FONT, fontSize: 7.6, cellPadding: 1.4, lineColor: GRID, lineWidth: 0.2, textColor: TEXT, valign: "middle", overflow: "linebreak" },
+    headStyles: { fillColor: RISK_HEAD_FILL, textColor: TEXT, fontStyle: "bold", halign: "center", fontSize: 6.6 },
     body: doc.matrizRiesgos.map((r) => {
       const exp = poaExposicion(r);
       return [
@@ -537,14 +537,15 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
         t(r.responsables),
       ];
     }),
+    // Ancho util vertical: ~176 mm.
     columnStyles: {
-      0: { cellWidth: 32, fontSize: 7.5 },
-      1: { cellWidth: 62 },
-      2: { cellWidth: 20, halign: "center" },
-      3: { cellWidth: 20, halign: "center" },
-      4: { cellWidth: 24, halign: "center", fontStyle: "bold" },
+      0: { cellWidth: 27, fontSize: 6.5, cellPadding: 1 },
+      1: { cellWidth: 33 },
+      2: { cellWidth: 18.5, halign: "center" },
+      3: { cellWidth: 17, halign: "center" },
+      4: { cellWidth: 19, halign: "center", fontStyle: "bold" },
       5: { cellWidth: "auto" },
-      6: { cellWidth: 36 },
+      6: { cellWidth: 24 },
     },
     didParseCell: (data) => {
       if (data.section !== "body" || data.column.index !== 4) return;
@@ -562,9 +563,9 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
   );
 
   // ===========================================================================
-  // V. Programación de actividades de gestión (horizontal)
+  // V. Programación de actividades de gestión (hoja vertical, tabla compacta)
   // ===========================================================================
-  newPage("landscape");
+  newPage("portrait");
   h1(4, "Programación de actividades de gestión");
   {
     type Cell = string | { content: string; colSpan?: number; styles?: Record<string, unknown> };
@@ -601,14 +602,15 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
         ["Prog", "Real", "%", "Prog", "Real", "%", "Prog", "Real", "%", "Prog", "Real", "%"],
       ],
       body,
-      styles: { font: FONT, fontSize: 7.8, cellPadding: 1.3, lineColor: GRID, lineWidth: 0.2, textColor: TEXT, valign: "middle" },
-      headStyles: { fillColor: HEAD_FILL, textColor: TEXT, fontStyle: "bold", halign: "center", fontSize: 7.8 },
+      // 17 columnas en ~176 mm: letra chica y trimestres angostos (solo cifras).
+      styles: { font: FONT, fontSize: 6.6, cellPadding: 1, lineColor: GRID, lineWidth: 0.2, textColor: TEXT, valign: "middle", overflow: "linebreak" },
+      headStyles: { fillColor: HEAD_FILL, textColor: TEXT, fontStyle: "bold", halign: "center", fontSize: 6.4, cellPadding: 0.8 },
       columnStyles: {
-        0: { cellWidth: 46 },
-        1: { cellWidth: 34 },
-        2: { cellWidth: 11, halign: "center" },
-        3: { cellWidth: 23 },
-        ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 4, { cellWidth: 8.6, halign: "center", cellPadding: 0.8 }])),
+        0: { cellWidth: 34 },
+        1: { cellWidth: 24 },
+        2: { cellWidth: 9.5, halign: "center" },
+        3: { cellWidth: 16 },
+        ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 4, { cellWidth: 6.4, halign: "center", cellPadding: 0.4, fontSize: 6.2 }])),
         16: { cellWidth: "auto" },
       },
       didParseCell: (data) => {
@@ -623,7 +625,6 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
   // ===========================================================================
   // VI. Seguimiento + Medidas a adoptar
   // ===========================================================================
-  newPage("landscape");
   h1(5, "Seguimiento");
   para(doc.seguimiento ?? "");
   h2("Medidas a adoptar");
@@ -640,13 +641,15 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
     body: medidas.length
       ? medidas.map((m) => [m.trimestre ? `T${t(m.trimestre)}` : "", t(m.resultado), t(m.factor), t(m.medida), t(m.fecha), t(m.responsable)])
       : [[{ content: "Sin medidas registradas: todas las metas evaluadas se cumplieron.", colSpan: 6, styles: { halign: "center", fontStyle: "italic" } }]],
+    styles: { font: FONT, fontSize: 8, cellPadding: 1.5, lineColor: GRID, lineWidth: 0.2, textColor: TEXT, valign: "middle", overflow: "linebreak" },
+    headStyles: { fillColor: HEAD_FILL, textColor: TEXT, fontStyle: "bold", halign: "center", fontSize: 7.4 },
     columnStyles: {
-      0: { cellWidth: 18, halign: "center" },
-      1: { cellWidth: 55 },
-      2: { cellWidth: 55 },
+      0: { cellWidth: 15, halign: "center" },
+      1: { cellWidth: 36 },
+      2: { cellWidth: 36 },
       3: { cellWidth: "auto" },
-      4: { cellWidth: 26, halign: "center" },
-      5: { cellWidth: 36 },
+      4: { cellWidth: 19, halign: "center" },
+      5: { cellWidth: 26 },
     },
   });
 

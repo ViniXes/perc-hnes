@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.427",
+    para: ["admin"],
+    texto:
+      "POA en PDF: todo el documento sale en hoja vertical. La matriz de riesgos, la programacion de actividades y las medidas a adoptar se ajustaron a ese ancho, sin hojas horizontales.",
+  },
+  {
     version: "1986.426",
     para: ["admin"],
     texto:
