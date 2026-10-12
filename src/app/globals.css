@@ -871,6 +871,9 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
   flex-shrink: 0;
 }
 .poa-add-row { padding: 4px 8px !important; text-align: left; }
+/* Celda de prosa (descripcion del recurso humano): se lee como parrafo. */
+.poa-table td.poa-prosa { padding: 8px 10px; }
+.poa-prosa .poa-input { min-height: 4.8em; }
 .poa-foda td { padding: 8px 10px; }
 
 /* Gráficos de producción. */

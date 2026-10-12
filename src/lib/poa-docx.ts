@@ -295,6 +295,15 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
   const diagnostico: object[] = [
     H1("DIAGNÓSTICO SITUACIONAL DEL SERVICIO"),
     H2(`Descripción de los recursos con que cuenta el ${doc.serviceName}`),
+    ...((doc.recursosDescripcion ?? "").trim()
+      ? [
+          table([
+            new TableRow({ children: [cell("Descripción del recurso humano", { bold: true, fill: HEAD_FILL, align: "center", width: 100 })] }),
+            new TableRow({ children: [cell(doc.recursosDescripcion ?? "", { width: 100 })] }),
+          ]),
+          P("", { after: 0 }),
+        ]
+      : []),
     recursosTable,
     P("", { after: 0 }),
     H2("Análisis FODA"),

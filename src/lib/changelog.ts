@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.426",
+    para: ["admin"],
+    texto:
+      "POA: en el Diagnostico situacional hay un cuadro nuevo, Descripcion del recurso humano, para redactar en prosa como esta conformado el personal. Va antes del cuadro de recursos y sale en el PDF y en el Word.",
+  },
+  {
     version: "1986.425",
     para: ["admin"],
     texto:

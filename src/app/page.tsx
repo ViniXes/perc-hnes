@@ -16351,6 +16351,24 @@ export default function Home() {
 
             {/* ---- 3. Diagnóstico situacional ---- */}
             <h3 className="poa-h1">3. Diagnóstico situacional</h3>
+            <div className="poa-table-wrap">
+              <table className="poa-table">
+                <thead>
+                  <tr>{poaTh("Descripción del recurso humano")}</tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="poa-prosa">
+                      {poaField(
+                        poaDoc.recursosDescripcion ?? "",
+                        (v) => updatePoa((d) => { d.recursosDescripcion = v; }),
+                        { placeholder: "Describa en prosa el recurso humano del servicio: cómo está conformado el equipo, sus perfiles, turnos y si es suficiente para la demanda. El detalle por cargo va en el cuadro de abajo." },
+                      )}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
             <h4 className="poa-h2">Recursos con que cuenta el servicio</h4>
             <div className="poa-table-wrap">
               <table className="poa-table">

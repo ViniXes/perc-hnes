@@ -116,6 +116,8 @@ export type PoaDoc = {
   objetivoGeneral: string;
   objetivosEspecificos: string[];
   funciones: PoaFodaItem[];
+  /** Prosa sobre el recurso humano del servicio (va antes del cuadro de recursos). */
+  recursosDescripcion?: string;
   recursos: PoaRecursoRow[];
   foda: {
     fortalezas: PoaFodaItem[];
@@ -742,6 +744,9 @@ export function normalizePoaDoc(input: PoaDoc): PoaDoc {
   if (!Array.isArray(doc.medidas)) {
     doc.medidas = [];
   }
+  if (typeof doc.recursosDescripcion !== "string") {
+    doc.recursosDescripcion = "";
+  }
   return doc;
 }
 
@@ -809,6 +814,7 @@ export function createPoaBlank(serviceId: string, year: number, serviceName: str
     objetivoGeneral: "",
     objetivosEspecificos: [""],
     funciones: [{ ...POA_EMPTY_FODA }],
+    recursosDescripcion: "",
     recursos: [{ ...POA_EMPTY_RECURSO }],
     foda: {
       fortalezas: [{ ...POA_EMPTY_FODA }],

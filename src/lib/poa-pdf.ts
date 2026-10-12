@@ -389,6 +389,13 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
   // ===========================================================================
   h1(2, "Diagnóstico situacional");
   h2(`a) Descripción de los recursos con que cuenta el ${doc.serviceName}`);
+  if ((doc.recursosDescripcion ?? "").trim()) {
+    tabla({
+      head: [["Descripción del recurso humano"]],
+      body: [[t(doc.recursosDescripcion ?? "")]],
+      styles: { font: FONT, fontSize: 9.5, cellPadding: 3, lineColor: GRID, lineWidth: 0.2, textColor: TEXT, halign: "justify" },
+    });
+  }
   tabla({
     head: [["Recurso humano", "Cantidad"]],
     body: doc.recursos.map((r) => [t(r.label), t(r.cantidad)]),
