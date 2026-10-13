@@ -98,6 +98,7 @@ import {
   POA_EMPTY_APROBACION,
   POA_SEMAFORO_LABEL,
   POA_UNIDADES_DIVISION,
+  POA_NOMBRE_UNIDAD,
   poaEsDivision,
   poaUnidadDeDivision,
   poaUnidadDeServicio,
@@ -8329,7 +8330,10 @@ export default function Home() {
   const poaServiciosHoras = AREA_DEFINITIONS.filter(
     (area) => area.modules.includes("distribucion") && poaUnidadDeServicio(area.id) === area.id,
   )
-    .map((area) => ({ id: area.id, name: SERVICE_DEFINITIONS.find((sv) => sv.id === area.id)?.name ?? area.name }))
+    .map((area) => ({
+      id: area.id,
+      name: POA_NOMBRE_UNIDAD[area.id] ?? SERVICE_DEFINITIONS.find((sv) => sv.id === area.id)?.name ?? area.name,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
   /** Los mismos servicios agrupados por División (como en el resto de PULSO), para
    *  que en los selectores cada unidad aparezca donde se la busca: la Unidad de
@@ -8371,6 +8375,7 @@ export default function Home() {
   ];
   /** Nombre visible de una unidad del PAO (servicio, División o Subdirección). */
   const poaNombreUnidad = (id: string) =>
+    POA_NOMBRE_UNIDAD[id] ??
     POA_UNIDADES_DIVISION.find((u) => u.id === id)?.name ??
     SERVICE_DEFINITIONS.find((sv) => sv.id === id)?.name ??
     poaServiciosHoras.find((sv) => sv.id === id)?.name ??

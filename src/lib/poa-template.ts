@@ -320,7 +320,7 @@ const POA_SEED_ESDOMED: PoaDoc = {
     "El presente Plan Anual Operativo establece los objetivos, actividades y líneas de acción que orientarán el trabajo del servicio durante el año. Incluye las funciones prioritarias, los recursos disponibles y las áreas de mejora identificadas, así como estrategias para fortalecer la eficiencia operativa y la calidad de los procesos estadísticos.",
     "Este plan reafirma el compromiso de ESDOMED con la mejora continua, el uso de herramientas tecnológicas y la gestión eficaz de la información como soporte fundamental para la planificación, el monitoreo y la toma de decisiones que contribuyen a la misión institucional de brindar atención de calidad a la población salvadoreña.",
   ],
-  dependencia: "Unidad de Planificación.",
+  dependencia: "Unidad de Planificación y Calidad.",
   objetivoGeneral:
     "Gestionar la información estadística y documental del Hospital Nacional El Salvador a través de procesos de registro, validación, conservación y custodia del expediente clínico, garantizando la calidad e integridad de la información y el cumplimiento de las normas técnicas institucionales vigentes, en apoyo a la planificación y la gestión institucional.",
   objetivosEspecificos: [
@@ -708,7 +708,7 @@ export const POA_SERVICES: string[] = ["esdomed"];
 const POA_APROBACIONES_DEFAULT: Record<string, PoaAprobacion[]> = {
   esdomed: [
     { funcion: "Elaborado por", nombre: "Benjamín Cardoza", cargo: "Jefe del Servicio de Estadística y Documentos Médicos" },
-    { funcion: "Revisado por", nombre: "Dr. Roberto Centeno Zambrano", cargo: "Jefe Unidad de Planificación" },
+    { funcion: "Revisado por", nombre: "Dr. Roberto Centeno Zambrano", cargo: "Jefe Unidad de Planificación y Calidad" },
     { funcion: "Aprobado por", nombre: "Dra. Laura Estela Miranda Iraheta", cargo: "Directora del Hospital Nacional El Salvador" },
   ],
 };
@@ -722,8 +722,25 @@ export const POA_SEGUIMIENTO_DEFAULT =
  * (aprobaciones, membrete, seguimiento y medidas). Los documentos guardados antes
  * no los tienen; no se toca nada de lo que ya traen.
  */
+/**
+ * Nombres que el POA usa en lugar del nombre del servicio en PULSO (solo en el
+ * POA: Horas y el resto de modulos siguen con el nombre original). La Unidad de
+ * Calidad mantiene su nombre.
+ */
+export const POA_NOMBRE_UNIDAD: Record<string, string> = {
+  planificacion: "Unidad de Planificación y Calidad",
+};
+
 export function normalizePoaDoc(input: PoaDoc): PoaDoc {
   const doc: PoaDoc = JSON.parse(JSON.stringify(input)) as PoaDoc;
+  // POA guardados con el nombre anterior de la unidad: se actualiza el nombre
+  // (encabezado y portada) solo si seguia siendo el nombre automatico.
+  const nombrePoa = POA_NOMBRE_UNIDAD[doc.serviceId];
+  if (nombrePoa) {
+    const viejo = (v: string | undefined) => !v || /^unidad de planificaci[oó]n\.?$/i.test(v.trim());
+    if (viejo(doc.serviceName)) doc.serviceName = nombrePoa;
+    if (doc.cover && viejo(doc.cover.service)) doc.cover.service = nombrePoa;
+  }
   if (!Array.isArray(doc.aprobaciones) || doc.aprobaciones.length === 0) {
     doc.aprobaciones = JSON.parse(
       JSON.stringify(

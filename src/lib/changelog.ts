@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.428",
+    para: ["admin"],
+    texto:
+      "POA: la Unidad de Planificacion ahora se llama Unidad de Planificacion y Calidad (selector, portada, encabezado y documento). La Unidad de Calidad sigue igual. En el resto de PULSO no cambia el nombre.",
+  },
+  {
     version: "1986.427",
     para: ["admin"],
     texto:
