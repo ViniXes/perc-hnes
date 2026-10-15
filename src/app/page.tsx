@@ -4143,6 +4143,10 @@ export default function Home() {
   const [isLoadingDistribuida, setIsLoadingDistribuida] = useState(false);
   /** Numero de camas por centro (dato fijo, editable por el admin). */
   const [camasFijas, setCamasFijas] = useState<Record<string, number>>({});
+  // Modulo HOSPITALES oculto del menu (documentControl/modulosOcultos). Solo
+  // esconde los accesos de administradores y Direccion; el modulo, sus datos y
+  // las cuentas MINSAL quedan intactos. Se vuelve a mostrar desde Configuracion.
+  const [hospitalesOculto, setHospitalesOculto] = useState(false);
   const [camasBusy, setCamasBusy] = useState(false);
   const [distribuidaStats, setDistribuidaStats] = useState<{
     total: number;
@@ -5129,8 +5133,10 @@ export default function Home() {
   // Cuenta MINSAL: entra solo al menu Hospitales. Ni PERC, ni SEPS, ni Horas, ni
   // nada del HNES: unicamente el avance de la red nacional.
   const isMinsal = serviceProfile?.isMinsal === true;
-  // Menu HOSPITALES: admin, Direccion/Subdireccion y MINSAL. Nadie mas.
-  const puedeVerHospitales = isAdmin || isDirector || isMinsal;
+  // Menu HOSPITALES: admin, Direccion/Subdireccion y MINSAL. Nadie mas. Si un
+  // administrador lo oculto (Configuracion), desaparece para admin y Direccion;
+  // MINSAL lo sigue viendo porque es su unica pantalla.
+  const puedeVerHospitales = isMinsal || ((isAdmin || isDirector) && !hospitalesOculto);
   // Monitor de RRHH (aamaya): SOLO monitorea horas y descarga; no habilita tableros.
   const isHorasMonitor = normalizeKey(serviceProfile?.username || "") === normalizeKey("aamaya");
   // Jefe de division que ADEMAS captura su propio servicio (p. ej. Enfermeria):
@@ -7107,6 +7113,46 @@ export default function Home() {
 
   // Camas: se guardan en documentControl/camas (lo lee cualquier usuario con sesion
   // y solo lo escribe el admin, igual que el resto del control documental).
+  // Al entrar (o cambiar de cuenta) se lee si Hospitales esta oculto del menu.
+  useEffect(() => {
+    if (!user || !serviceProfile || isMinsal) return;
+    void loadModulosOcultos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, serviceProfile?.role, isMinsal]);
+
+  /** Lee si el modulo Hospitales esta oculto del menu. */
+  async function loadModulosOcultos() {
+    if (firestoreUnavailable || !user) return;
+    try {
+      const snap = await getDoc(doc(db, "documentControl", "modulosOcultos"));
+      setHospitalesOculto(snap.exists() && snap.data()?.hospitales === true);
+    } catch {
+      // Sin permiso o sin conexion: se deja visible (comportamiento de siempre).
+    }
+  }
+
+  /** Oculta o vuelve a mostrar el modulo Hospitales en el menu (solo admin). */
+  async function toggleHospitalesOculto(ocultar: boolean) {
+    if (!isAdmin || firestoreUnavailable) return;
+    const anterior = hospitalesOculto;
+    setHospitalesOculto(ocultar);
+    try {
+      await setDoc(
+        doc(db, "documentControl", "modulosOcultos"),
+        { hospitales: ocultar, actualizadoPor: user?.email ?? "", actualizadoEn: serverTimestamp() },
+        { merge: true },
+      );
+      if (ocultar && (activeSidebarSection === "panel-hospitales" || mobileView === "panel-hospitales")) {
+        setActiveSidebarSection("panel-overview");
+        setMobileView("home");
+      }
+      setMessage(ocultar ? "Hospitales quedó oculto del menu." : "Hospitales vuelve a estar visible en el menu.");
+    } catch (toggleError) {
+      setHospitalesOculto(anterior);
+      setError(getAuthErrorMessage(toggleError));
+    }
+  }
+
   async function loadCamasFijas(): Promise<Record<string, number>> {
     if (firestoreUnavailable || !user) return {};
     try {
@@ -27643,6 +27689,46 @@ export default function Home() {
                   </div>
 
                   <div className="space-y-2.5">
+                    {/* Modulos visibles (solo administradores): ocultar Hospitales del
+                        menu sin tocar el modulo ni sus datos. */}
+                    {isAdmin ? (
+                      <section className="rounded-2xl border p-3.5" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ background: "var(--surface-3)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+                              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M10 21v-5h4v5" /><path d="M12 8v4M10 10h4" /></svg>
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Módulos · solo administradores</p>
+                              <p className="text-sm font-bold" style={{ color: "var(--text)" }}>Hospitales en el menú</p>
+                              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                                {hospitalesOculto
+                                  ? "Oculto para administradores y Dirección. Los datos y las cuentas MINSAL siguen igual."
+                                  : "Visible para administradores y Dirección."}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={!hospitalesOculto}
+                            aria-label={hospitalesOculto ? "Mostrar Hospitales en el menú" : "Ocultar Hospitales del menú"}
+                            onClick={() => void toggleHospitalesOculto(!hospitalesOculto)}
+                            className="relative h-6 w-11 shrink-0 rounded-full border transition"
+                            style={{
+                              borderColor: "var(--border)",
+                              background: hospitalesOculto ? "var(--surface-3)" : "var(--accent-btn)",
+                            }}
+                          >
+                            <span
+                              className="absolute top-0.5 h-[18px] w-[18px] rounded-full shadow transition-all"
+                              style={{ left: hospitalesOculto ? 3 : 22, background: hospitalesOculto ? "var(--text-faint)" : "#ffffff" }}
+                            />
+                          </button>
+                        </div>
+                      </section>
+                    ) : null}
+
                     {/* Tema */}
                     <section className="rounded-2xl border p-3.5" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
                       <div className="mb-2.5 flex items-center gap-2">

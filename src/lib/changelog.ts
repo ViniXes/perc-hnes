@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.429",
+    para: ["admin"],
+    texto:
+      "Configuracion: nuevo interruptor \"Hospitales en el menu\" (solo administradores) para ocultar o volver a mostrar el modulo Hospitales a administradores y Direccion. No borra nada: los datos y las cuentas MINSAL siguen igual.",
+  },
+  {
     version: "1986.428",
     para: ["admin"],
     texto:
