@@ -26,8 +26,38 @@ const PALETA = [
   "#e34948",
 ];
 const MAX_PORCIONES = 8;
-const TEXTO = "#1f2937";
-const TEXTO_SUAVE = "#52514e";
+// Los mismos ocho tonos, ajustados para fondo oscuro (PULSO en tema oscuro).
+const PALETA_OSCURO = [
+  "#3987e5",
+  "#d95926",
+  "#199e70",
+  "#c98500",
+  "#d55181",
+  "#008300",
+  "#9085e9",
+  "#e66767",
+];
+
+/** "claro": texto oscuro (PDF, Word, PULSO claro). "oscuro": texto claro (PULSO oscuro). */
+export type PoaTemaGrafico = "claro" | "oscuro";
+
+const TINTA: Record<
+  PoaTemaGrafico,
+  { texto: string; suave: string; linea: string; sombra: string }
+> = {
+  claro: {
+    texto: "#1f2937",
+    suave: "#52514e",
+    linea: "rgba(31,41,55,0.18)",
+    sombra: "rgba(15,23,42,0.10)",
+  },
+  oscuro: {
+    texto: "#f0efec",
+    suave: "#c3c2b7",
+    linea: "rgba(240,239,236,0.22)",
+    sombra: "rgba(0,0,0,0.35)",
+  },
+};
 const FONT = "Arial, Helvetica, sans-serif";
 
 /** Número de un valor digitado ("1,234" o "1234.5"); vacío o inválido = 0. */
@@ -75,79 +105,76 @@ const fmt = (n: number) =>
 const cache = new Map<string, string>();
 
 /**
- * Dibuja el pastel 3D y devuelve el PNG como dataURL, o null si no hay datos
- * (o si no hay canvas, por ejemplo en el servidor).
+ * Dibuja el pastel 3D (compacto y con fondo transparente) y devuelve el PNG
+ * como dataURL, o null si no hay datos (o si no hay canvas, en el servidor).
  */
 export function poaGraficoPastel3D(
   titulo: string,
   datos: PoaProduccionDato[] | undefined,
+  tema: PoaTemaGrafico = "claro",
 ): string | null {
   const porciones = poaDatosGrafico(datos);
   if (!porciones.length || typeof document === "undefined") return null;
-  const key = JSON.stringify([titulo, porciones]);
+  const key = JSON.stringify([titulo, porciones, tema]);
   const enCache = cache.get(key);
   if (enCache) return enCache;
 
+  const tinta = TINTA[tema];
+  const paleta = tema === "oscuro" ? PALETA_OSCURO : PALETA;
   const total = porciones.reduce((acc, d) => acc + d.valor, 0);
-  const S = 2; // resolución doble para que se vea nítido impreso
-  const W = 900;
-  const legendRowH = 34;
-  const H = Math.max(430, 120 + porciones.length * legendRowH + 60);
+  const S = 3; // resolución triple: se ve nítido aunque se imprima chico
+  const W = 620;
+  const rowH = 24;
+  const H = Math.max(240, 64 + porciones.length * rowH + 44);
   const canvas = document.createElement("canvas");
   canvas.width = W * S;
   canvas.height = H * S;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   ctx.scale(S, S);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, W, H);
+  // Sin fondo: el PNG queda transparente.
 
   // Título
-  ctx.fillStyle = TEXTO;
-  ctx.font = `bold 22px ${FONT}`;
+  ctx.fillStyle = tinta.texto;
+  ctx.font = `bold 16px ${FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  ctx.fillText(titulo, W / 2, 40);
+  ctx.fillText(titulo, W / 2, 22);
 
   // Geometría del pastel
-  const cx = 250;
-  const rx = 190;
+  const cx = 150;
+  const rx = 125;
   const ry = rx * 0.55;
-  const depth = 34;
-  const cy = Math.max(70 + ry, (H - depth) / 2 + 20);
-  const start = -Math.PI / 2;
+  const depth = 22;
+  const cy = Math.max(44 + ry, (H - depth) / 2 + 12);
   const angulos: { a0: number; a1: number; color: string }[] = [];
-  let acc = start;
+  let acc = -Math.PI / 2;
   porciones.forEach((d, i) => {
     const sweep = (d.valor / total) * Math.PI * 2;
     angulos.push({
       a0: acc,
       a1: acc + sweep,
-      color: PALETA[i % PALETA.length],
+      color: paleta[i % paleta.length],
     });
     acc += sweep;
   });
 
   // Sombra suave bajo el pastel
-  ctx.save();
-  ctx.fillStyle = "rgba(15, 23, 42, 0.10)";
+  ctx.fillStyle = tinta.sombra;
   ctx.beginPath();
-  ctx.ellipse(cx, cy + depth + 10, rx * 1.02, ry * 0.9, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy + depth + 6, rx * 1.02, ry * 0.9, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.restore();
 
   const pt = (a: number, dy = 0) =>
     [cx + rx * Math.cos(a), cy + ry * Math.sin(a) + dy] as const;
-
-  // Paredes laterales: solo la mitad del frente (ángulos entre 0 y π) es visible.
   const norm = (a: number) => {
     const t = a % (Math.PI * 2);
     return t < 0 ? t + Math.PI * 2 : t;
   };
+
+  // Paredes laterales: solo la mitad del frente (ángulos entre 0 y π) es visible.
   const tramosFrente: { a0: number; a1: number; color: string }[] = [];
   for (const s of angulos) {
-    // Se recorre la porción en sus dos vueltas posibles y se recorta a [0, π].
     for (const off of [0, Math.PI * 2, -Math.PI * 2]) {
       const a0 = Math.max(s.a0 + off, 0);
       const a1 = Math.min(s.a1 + off, Math.PI);
@@ -167,17 +194,13 @@ export function poaGraficoPastel3D(
     ctx.ellipse(cx, cy + depth, rx, ry, 0, t.a1, t.a0, true);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.55)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
   }
-  // Bordes verticales donde una porción termina en el frente.
   for (const s of angulos) {
     const a = norm(s.a0);
     if (a > 0.001 && a < Math.PI - 0.001) {
       const [x, y] = pt(a);
-      ctx.strokeStyle = "rgba(255,255,255,0.9)";
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.lineTo(x, y + depth);
@@ -204,25 +227,25 @@ export function poaGraficoPastel3D(
     ctx.ellipse(cx, cy, rx, ry, 0, s.a0, s.a1, false);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   }
 
   // Porcentaje sobre cada porción (si cabe).
-  ctx.font = `bold 15px ${FONT}`;
+  ctx.font = `bold 13px ${FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
   porciones.forEach((d, i) => {
     const pct = (d.valor / total) * 100;
-    if (pct < 5) return;
+    if (pct < 6) return;
     const mid = (angulos[i].a0 + angulos[i].a1) / 2;
     const r = porciones.length === 1 ? 0 : 0.62;
     const x = cx + rx * r * Math.cos(mid);
     const y = cy + ry * r * Math.sin(mid);
     const txt = `${fmt(Math.round(pct * 10) / 10)}%`;
     ctx.lineWidth = 3;
-    ctx.lineJoin = "round";
     ctx.strokeStyle = "rgba(15, 23, 42, 0.45)";
     ctx.strokeText(txt, x, y);
     ctx.fillStyle = "#ffffff";
@@ -230,46 +253,49 @@ export function poaGraficoPastel3D(
   });
 
   // Leyenda: color, nombre, valor y porcentaje (en tinta de texto, no en color).
-  const lx = 500;
-  let ly = Math.max(90, cy - (porciones.length * legendRowH) / 2 + 6);
-  ctx.textAlign = "left";
+  const lx = 310;
+  const xValor = W - 64;
+  const xPct = W - 8;
+  const conTotal = !porciones.every((d) => /^(19|20)\d{2}$/.test(d.label));
+  const filas = porciones.length + (conTotal ? 1 : 0);
+  let ly = Math.max(52, cy - ((filas - 1) * rowH) / 2);
   ctx.textBaseline = "middle";
   porciones.forEach((d, i) => {
     ctx.fillStyle = angulos[i].color;
     ctx.beginPath();
-    ctx.roundRect(lx, ly - 8, 16, 16, 4);
+    ctx.roundRect(lx, ly - 6, 12, 12, 3);
     ctx.fill();
-    ctx.fillStyle = TEXTO;
-    ctx.font = `15px ${FONT}`;
-    const nombre = d.label.length > 26 ? `${d.label.slice(0, 25)}…` : d.label;
-    ctx.fillText(nombre, lx + 26, ly);
-    ctx.textAlign = "right";
-    ctx.font = `bold 15px ${FONT}`;
-    ctx.fillText(fmt(d.valor), W - 110, ly);
-    ctx.fillStyle = TEXTO_SUAVE;
+    ctx.textAlign = "left";
+    ctx.fillStyle = tinta.texto;
     ctx.font = `14px ${FONT}`;
+    const nombre = d.label.length > 24 ? `${d.label.slice(0, 23)}…` : d.label;
+    ctx.fillText(nombre, lx + 20, ly);
+    ctx.textAlign = "right";
+    ctx.font = `bold 14px ${FONT}`;
+    ctx.fillText(fmt(d.valor), xValor, ly);
+    ctx.fillStyle = tinta.suave;
+    ctx.font = `13px ${FONT}`;
     ctx.fillText(
       `${fmt(Math.round((d.valor / total) * 1000) / 10)}%`,
-      W - 30,
+      xPct,
       ly,
     );
-    ctx.textAlign = "left";
-    ly += legendRowH;
+    ly += rowH;
   });
   // Total (no aplica cuando se comparan años: sumarlos no dice nada).
-  const sonAnios = porciones.every((d) => /^(19|20)\d{2}$/.test(d.label));
-  if (!sonAnios) {
-    ctx.strokeStyle = "#d1d5db";
+  if (conTotal) {
+    ctx.strokeStyle = tinta.linea;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(lx, ly - 14);
-    ctx.lineTo(W - 30, ly - 14);
+    ctx.moveTo(lx, ly - rowH / 2);
+    ctx.lineTo(xPct, ly - rowH / 2);
     ctx.stroke();
-    ctx.fillStyle = TEXTO;
-    ctx.font = `bold 15px ${FONT}`;
-    ctx.fillText("Total", lx + 26, ly + 4);
+    ctx.fillStyle = tinta.texto;
+    ctx.font = `bold 14px ${FONT}`;
+    ctx.textAlign = "left";
+    ctx.fillText("Total", lx + 20, ly + 2);
     ctx.textAlign = "right";
-    ctx.fillText(fmt(total), W - 110, ly + 4);
+    ctx.fillText(fmt(total), xValor, ly + 2);
   }
 
   const url = canvas.toDataURL("image/png");
@@ -367,23 +393,25 @@ export function poaDatosBloque(
 }
 
 /**
- * Imagen que lleva un bloque de producción: el gráfico con los datos digitados;
- * si no hay, el gráfico subido; si tampoco, el armado con las cifras del texto.
+ * Imagen que lleva un bloque de producción en el PDF y el Word: el gráfico con
+ * los datos digitados; si no hay, el gráfico subido; si tampoco, el armado con
+ * las cifras del texto. `generado` indica que es el pastel (va más chico).
  */
 export function poaImagenBloque(
   bloques: PoaProduccionBloque[],
   index: number,
   media: Record<string, string>,
   anio: number,
-): string | undefined {
+): { url: string; generado: boolean } | null {
   const bloque = bloques[index];
   const titulo = `${bloque.title} ${anio}`;
   const digitado = poaGraficoPastel3D(titulo, bloque.datos);
-  if (digitado) return digitado;
+  if (digitado) return { url: digitado, generado: true };
   const subido = bloque.imageKey ? media[bloque.imageKey] : undefined;
-  if (subido) return subido;
-  return (
-    poaGraficoPastel3D(titulo, poaDatosBloque(bloques, index, anio).datos) ??
-    undefined
+  if (subido) return { url: subido, generado: false };
+  const texto = poaGraficoPastel3D(
+    titulo,
+    poaDatosBloque(bloques, index, anio).datos,
   );
+  return texto ? { url: texto, generado: true } : null;
 }
