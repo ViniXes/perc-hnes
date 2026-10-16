@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.434",
+    para: ["admin", "serv:esdomed"],
+    texto:
+      "POA 2027: nuevo boton \"Lineamientos PAO 2027\" que agrega los riesgos del SGAS (antisoborno), pasa las actividades a infinitivo, llena los supuestos externos, agrega la verificacion de controles antisoborno, deja la dependencia en Unidad de Planificacion y actualiza las firmas. El membrete ISO 37001 se completa solo (ESDOMED03-HNES-PAO). El Word ahora sale con el formato oficial: aprobaciones, indice, membrete con Pagina X de Y y seguimiento.",
+  },
+  {
     version: "1986.429",
     para: ["admin"],
     texto:

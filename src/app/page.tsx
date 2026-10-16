@@ -110,6 +110,9 @@ import {
   poaRiesgosPrevDesde,
   poaSemaforo,
   poaSemillaDeAnio,
+  poaAplicarCorrecciones,
+  poaTieneCorrecciones,
+  poaTituloCorrecciones,
   type PoaDoc,
   type PoaSemaforo,
 } from "@/lib/poa-template";
@@ -8624,6 +8627,20 @@ export default function Home() {
     setPoaDirty(true);
   }
 
+  /** Aplica al PAO abierto las correcciones de los lineamientos del año (sin guardar). */
+  function handleAplicarCorreccionesPoa() {
+    if (!poaDoc) return;
+    const { doc: corregido, cambios } = poaAplicarCorrecciones(poaDoc);
+    if (!cambios.length) {
+      setMessage("El PAO ya tiene todas las correcciones de los lineamientos.");
+      return;
+    }
+    if (!window.confirm(`Se aplicarán estos cambios:\n\n- ${cambios.join("\n- ")}\n\nNo se guarda hasta que presiones Guardar. ¿Continuar?`)) return;
+    setPoaDoc(corregido);
+    setPoaDirty(true);
+    setMessage(`Correcciones aplicadas (${cambios.length}). Revisá y guardá.`);
+  }
+
   /** Descarga el documento en Word. */
   async function handleExportPoaWord() {
     if (!poaDoc) return;
@@ -16157,6 +16174,20 @@ export default function Home() {
             </label>
             {poaDoc ? (
               <>
+                {canEditPoa && poaTieneCorrecciones(poaDoc.serviceId, poaDoc.year) ? (
+                  <button
+                    type="button"
+                    onClick={handleAplicarCorreccionesPoa}
+                    title="Agrega los riesgos SGAS, pasa las actividades a infinitivo, llena supuestos y actualiza las firmas"
+                    className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:brightness-110"
+                    style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" }}
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                    {poaTituloCorrecciones(poaDoc.serviceId, poaDoc.year)}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => void handleExportPoaWord()}

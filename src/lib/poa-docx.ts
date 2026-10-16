@@ -1,23 +1,27 @@
 // =============================================================================
 // Exportación del POA a Word (.docx).
 // -----------------------------------------------------------------------------
-// Arma el documento con el MISMO orden y estructura que el POA impreso: portada,
-// introducción, descripción general, diagnóstico situacional (recursos, FODA,
-// producción con gráficos), cumplimiento del PAO anterior, valoración de riesgos
-// y la programación anual de actividades.
+// Arma el documento con la estructura del formato oficial PAO 2027 (igual que el
+// PDF): Portada · Aprobaciones · Índice · I. Introducción · II. Descripción
+// general · III. Diagnóstico situacional · IV. Valoración de riesgos ·
+// V. Programación de actividades de gestión · VI. Seguimiento.
+// Desde Aprobaciones, cada página lleva el membrete de identificación (ISO 37001)
+// con el código, la versión y "Página X de Y".
 //
-// El documento tiene DOS secciones: la primera vertical (texto y tablas angostas)
-// y la segunda horizontal, porque la matriz de riesgos y el cuadro de programación
-// no caben en vertical.
+// Secciones: portada (sin membrete), cuerpo vertical, y una hoja horizontal para
+// la matriz de riesgos, la programación y el seguimiento, que no caben en vertical.
 //
 // La librería `docx` se carga de forma dinámica (solo al exportar) para no pesar
 // en la carga inicial de la app.
 // =============================================================================
 import {
+  normalizePoaDoc,
+  poaEsDivision,
   poaPercent,
   poaExposicion,
   poaCategoria,
   POA_CATEGORIA_FILL,
+  POA_CATEGORIA_LABEL,
   type PoaDoc,
   type PoaFodaItem,
 } from "@/lib/poa-template";
@@ -63,11 +67,34 @@ const MESES = [
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
 
-export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promise<void> {
+/** Imagen de /public como bytes (o null si no se pudo leer). */
+async function fetchImage(url: string): Promise<{ bytes: Uint8Array; type: "png" | "jpg"; w: number; h: number } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    const parsed = dataUrlToBytes(dataUrl);
+    if (!parsed) return null;
+    const size = await measureImage(dataUrl, 1000);
+    return { ...parsed, w: size.w, h: size.h };
+  } catch {
+    return null;
+  }
+}
+
+export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Promise<void> {
   const {
-    Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-    WidthType, AlignmentType, BorderStyle, VerticalAlign, PageOrientation, ImageRun,
+    Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, Header, PageNumber,
+    WidthType, AlignmentType, BorderStyle, VerticalAlign, PageOrientation, ImageRun, PageBreak, HeightRule,
   } = await import("docx");
+  const doc = normalizePoaDoc(input);
+  const [logoHnes, foto] = await Promise.all([fetchImage("/poa/hnes.png"), fetchImage("/poa/hospital.jpg")]);
 
   // --- Helpers de construcción ---------------------------------------------
   const P = (text: string, opts: { bold?: boolean; size?: number; align?: "left" | "center" | "justify"; after?: number; color?: string } = {}) =>
@@ -143,9 +170,13 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
         : cellPar(text, opts),
     });
 
-  const table = (rows: InstanceType<typeof TableRow>[]) =>
+  /** Tabla a todo el ancho; `columnWidths` (twips) fija los anchos en tablas de muchas columnas. */
+  const table = (rows: InstanceType<typeof TableRow>[], columnWidths?: number[]) =>
     new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
+      width: columnWidths
+        ? { size: columnWidths.reduce((a, b) => a + b, 0), type: WidthType.DXA }
+        : { size: 100, type: WidthType.PERCENTAGE },
+      columnWidths,
       borders: {
         top: { style: BorderStyle.SINGLE, size: 4, color: "808080" },
         bottom: { style: BorderStyle.SINGLE, size: 4, color: "808080" },
@@ -157,21 +188,64 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
       rows,
     });
 
-  // --- 1. Portada -----------------------------------------------------------
+  const imagen = (img: { bytes: Uint8Array; type: "png" | "jpg"; w: number; h: number }, width: number) =>
+    new ImageRun({ type: img.type, data: img.bytes, transformation: { width, height: Math.round((width * img.h) / (img.w || 1)) } });
+  const salto = () => new Paragraph({ children: [new PageBreak()] });
+  const servicio = doc.cover.service || doc.serviceName;
+
+  // --- Portada --------------------------------------------------------------
   const now = new Date();
   const portada: object[] = [
-    P(doc.cover.hospital, { bold: true, size: 32, align: "center", after: 600 }),
-    P(`${doc.cover.title} ${doc.year}`, { bold: true, size: 44, align: "center", after: 400 }),
-    P(doc.cover.service, { bold: true, size: 28, align: "center", after: 1200 }),
-    P(`${doc.cover.place} ${MESES[now.getMonth()]} ${now.getFullYear()}`, { align: "center", size: 24 }),
+    ...(logoHnes ? [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 600 }, children: [imagen(logoHnes, 300)] })] : []),
+    P(`${doc.cover.title} ${doc.year}`, { bold: true, size: 44, align: "center", after: 300 }),
+    P(servicio, { bold: true, size: 30, align: "center", after: 600 }),
+    ...(foto ? [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 600 }, children: [imagen(foto, 480)] })] : []),
+    P(`${doc.cover.place}, ${MESES[now.getMonth()]} de ${now.getFullYear()}.`, { align: "center", size: 24 }),
   ];
 
-  // --- 2. Introducción ------------------------------------------------------
-  const intro: object[] = [H1("INTRODUCCIÓN"), ...doc.intro.map((t) => P(t, { align: "justify" }))];
+  // --- Aprobaciones -----------------------------------------------------------
+  const aprobaciones = (doc.aprobaciones ?? []).filter((a) => a.funcion.trim() || a.nombre.trim() || a.cargo.trim());
+  const aprobRows: InstanceType<typeof TableRow>[] = [
+    new TableRow({ children: [cell("Aprobaciones", { bold: true, fill: HEAD_FILL, align: "center", span: 4, size: 22 })] }),
+    new TableRow({
+      children: ["Función", "Nombre", "Cargo", "Firma"].map((h, i) =>
+        cell(h, { bold: true, fill: HEAD_FILL, align: "center", width: [18, 32, 32, 18][i] }),
+      ),
+    }),
+  ];
+  aprobaciones.forEach((a, i) => {
+    // La función se escribe solo en la primera fila de cada grupo.
+    const nuevaFuncion = i === 0 || aprobaciones[i - 1].funcion !== a.funcion;
+    aprobRows.push(
+      new TableRow({
+        height: { value: 620, rule: HeightRule.ATLEAST },
+        children: [cell(nuevaFuncion ? a.funcion : "", { bold: true }), cell(a.nombre), cell(a.cargo), cell("")],
+      }),
+    );
+  });
+  const aprobacionesPag: object[] = [table(aprobRows), salto()];
 
-  // --- 3. Descripción general ----------------------------------------------
+  // --- Índice -----------------------------------------------------------------
+  const secciones = [
+    "I. Introducción",
+    poaEsDivision(doc.serviceId) ? "II. Descripción general de la unidad" : "II. Descripción general del servicio",
+    "III. Diagnóstico situacional",
+    "IV. Valoración de riesgos",
+    "V. Programación de actividades de gestión",
+    "VI. Seguimiento",
+  ];
+  const indicePag: object[] = [
+    P("Índice", { bold: true, size: 28, align: "center", after: 240 }),
+    table(["Aprobaciones", "Índice", ...secciones].map((t) => new TableRow({ children: [cell(t, { size: 20 })] }))),
+    salto(),
+  ];
+
+  // --- I. Introducción ------------------------------------------------------
+  const intro: object[] = [H1(secciones[0]), ...doc.intro.map((t) => P(t, { align: "justify" }))];
+
+  // --- II. Descripción general ------------------------------------------------
   const descripcion: object[] = [
-    H1(doc.mision !== undefined ? "DESCRIPCIÓN GENERAL DE LA UNIDAD" : "DESCRIPCIÓN GENERAL DEL SERVICIO"),
+    H1(secciones[1]),
     ...(doc.mision !== undefined
       ? [H2("Misión"), P(doc.mision || ""), H2("Visión"), P(doc.vision || "")]
       : []),
@@ -236,7 +310,7 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
 
   // Bloques de producción, con el gráfico incrustado cuando se subió.
   const produccion: object[] = [
-    H2(`Producción General Resumida del año ${doc.year - 1}`),
+    H2(`c) Producción general resumida del año ${doc.year - 1}`),
     P(doc.produccion.intro, { align: "justify" }),
   ];
   for (let i = 0; i < doc.produccion.bloques.length; i += 1) {
@@ -293,8 +367,8 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
   ]);
 
   const diagnostico: object[] = [
-    H1("DIAGNÓSTICO SITUACIONAL DEL SERVICIO"),
-    H2(`Descripción de los recursos con que cuenta el ${doc.serviceName}`),
+    H1(secciones[2]),
+    H2(`a) Descripción de los recursos con que cuenta el ${doc.serviceName}`),
     ...((doc.recursosDescripcion ?? "").trim()
       ? [
           table([
@@ -306,11 +380,11 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
       : []),
     recursosTable,
     P("", { after: 0 }),
-    H2("Análisis FODA"),
+    H2("b) Análisis FODA"),
     fodaTable,
     P("", { after: 0 }),
     ...produccion,
-    H2(`Cuadro de cumplimiento de actividades de PAO ${doc.year - 1}`),
+    H2(`d) Cumplimiento de actividades del PAO ${doc.year - 1}`),
     cumplimientoTable,
     P("", { after: 0 }),
     P(`Análisis: ${doc.cumplimiento.analisis}`, { align: "justify" }),
@@ -334,8 +408,8 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
   ]);
 
   const riesgos: object[] = [
-    H1("VALORACIÓN DE RIESGOS"),
-    H2(`Valoración de riesgos del año ${doc.year - 1}`),
+    H1(secciones[3]),
+    H2(`a) Cumplimiento de las actividades de control de la matriz de riesgos ${doc.year - 1}`),
     riesgosPrevTable,
     P("", { after: 0 }),
     ...doc.riesgosPrev.analisis.map((t, i) => P(i === 0 ? `Análisis: ${t}` : t, { align: "justify" })),
@@ -363,7 +437,7 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
           cell(r.riesgo),
           cell(r.probabilidad, { align: "center" }),
           cell(r.impacto, { align: "center" }),
-          cell(String(exp), {
+          cell(exp ? `${exp}\n${POA_CATEGORIA_LABEL[cat]}` : "", {
             align: "center",
             bold: true,
             fill: POA_CATEGORIA_FILL[cat],
@@ -374,7 +448,7 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
         ],
       });
     }),
-  ]);
+  ], [1700, 3400, 900, 900, 1100, 3300, 2840]);
 
   // Cuadro de programación anual (encabezado de 2 filas con los trimestres).
   const progHeader1 = new TableRow({
@@ -432,13 +506,93 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
     }
   }
 
-  const horizontal: object[] = [
-    H1(`Matriz de valoración de riesgos ${doc.year}`),
-    matrizTable,
-    P("", { after: 0 }),
-    H1("PROGRAMACIÓN DE ACTIVIDADES DE GESTIÓN"),
-    table(progRows),
+  // --- VI. Seguimiento + Medidas a adoptar ----------------------------------
+  const medidas = (doc.medidas ?? []).filter((m) => m.resultado.trim() || m.medida.trim() || m.factor.trim());
+  const medidasHead = [
+    "Trimestre",
+    "Resultado esperado (según la programación anual)",
+    "Factor o situación que impidió la realización de la meta",
+    "Medidas a adoptar",
+    "Antes de (qué fecha)",
+    "Responsable",
   ];
+  const medidasTable = table([
+    new TableRow({ children: medidasHead.map((h, i) => cell(h, { bold: true, fill: HEAD_FILL, align: "center", width: [8, 22, 22, 22, 10, 16][i] })) }),
+    ...(medidas.length
+      ? medidas.map((m) =>
+          new TableRow({
+            children: [
+              cell(m.trimestre ? `T${m.trimestre}` : "", { align: "center" }),
+              cell(m.resultado),
+              cell(m.factor),
+              cell(m.medida),
+              cell(m.fecha, { align: "center" }),
+              cell(m.responsable),
+            ],
+          }),
+        )
+      : [new TableRow({ children: [cell("Sin medidas registradas: todas las metas evaluadas se cumplieron.", { align: "center", span: 6 })] })]),
+  ]);
+
+  const horizontal: object[] = [
+    H2(`b) Matriz de valoración de riesgos ${doc.year}`),
+    matrizTable,
+    P(
+      "Probabilidad: Baja = 1, Media = 2, Alta = 3. Impacto: Leve = 1, Moderado = 2, Severo = 3. Categoría: 1 - 3 no prioritario; 4 - 6 puede considerarse prioritario; 7 - 9 es prioritario, urge intervenir.",
+      { size: 16, after: 0 },
+    ),
+    salto(),
+    H1(secciones[4]),
+    // Ancho útil horizontal: 14140 twips (17 columnas).
+    table(progRows, [2500, 1800, 700, 1300, ...Array(12).fill(430), 2680]),
+    salto(),
+    H1(secciones[5]),
+    P(doc.seguimiento ?? "", { align: "justify" }),
+    H2("Medidas a adoptar"),
+    medidasTable,
+  ];
+
+  // --- Membrete ISO 37001 (desde Aprobaciones) --------------------------------
+  const membrete = doc.membrete ?? { proceso: "", codigo: "", version: "Versión 01" };
+  const hCell = (children: object[], opts: { width?: number; rowSpan?: number } = {}) =>
+    new TableCell({
+      width: opts.width ? { size: opts.width, type: WidthType.PERCENTAGE } : undefined,
+      rowSpan: opts.rowSpan,
+      verticalAlign: VerticalAlign.CENTER,
+      margins: { top: 30, bottom: 30, left: 60, right: 60 },
+      children: children as never[],
+    });
+  const hText = (text: string, bold = false) =>
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text, bold, size: 16, font: FONT })] });
+  const membreteHeader = () =>
+    new Header({
+      children: [
+        table([
+          new TableRow({
+            children: [
+              hCell(logoHnes ? [new Paragraph({ alignment: AlignmentType.CENTER, children: [imagen(logoHnes, 110)] })] : [hText("")], { width: 22, rowSpan: 3 }),
+              hCell([hText(membrete.proceso)], { width: 53 }),
+              hCell([hText(membrete.codigo)], { width: 25 }),
+            ],
+          }),
+          new TableRow({ children: [hCell([hText(`Plan Anual Operativo del ${servicio}`)]), hCell([hText(membrete.version || "Versión 01")])] }),
+          new TableRow({
+            children: [
+              hCell([hText(String(doc.year))]),
+              hCell([
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [
+                    new TextRun({ children: ["Página ", PageNumber.CURRENT, " de ", PageNumber.TOTAL_PAGES], bold: true, size: 16, font: FONT }),
+                  ],
+                }),
+              ]),
+            ],
+          }),
+        ]),
+        new Paragraph({ children: [] }),
+      ],
+    });
 
   // --- Documento ------------------------------------------------------------
   const wordDoc = new Document({
@@ -448,15 +602,21 @@ export async function downloadPoaDocx(doc: PoaDoc, media: PoaMedia = {}): Promis
     sections: [
       {
         properties: { page: { margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } },
-        children: [...portada, ...intro, ...descripcion, ...diagnostico, ...riesgos] as never[],
+        children: portada as never[],
+      },
+      {
+        properties: { page: { margin: { top: 1134, bottom: 1134, left: 1134, right: 1134, header: 400 } } },
+        headers: { default: membreteHeader() },
+        children: [...aprobacionesPag, ...indicePag, ...intro, ...descripcion, ...diagnostico, ...riesgos] as never[],
       },
       {
         properties: {
           page: {
             size: { orientation: PageOrientation.LANDSCAPE },
-            margin: { top: 850, bottom: 850, left: 850, right: 850 },
+            margin: { top: 1134, bottom: 850, left: 850, right: 850, header: 400 },
           },
         },
+        headers: { default: membreteHeader() },
         children: horizontal as never[],
       },
     ],

@@ -320,7 +320,7 @@ const POA_SEED_ESDOMED: PoaDoc = {
     "El presente Plan Anual Operativo establece los objetivos, actividades y líneas de acción que orientarán el trabajo del servicio durante el año. Incluye las funciones prioritarias, los recursos disponibles y las áreas de mejora identificadas, así como estrategias para fortalecer la eficiencia operativa y la calidad de los procesos estadísticos.",
     "Este plan reafirma el compromiso de ESDOMED con la mejora continua, el uso de herramientas tecnológicas y la gestión eficaz de la información como soporte fundamental para la planificación, el monitoreo y la toma de decisiones que contribuyen a la misión institucional de brindar atención de calidad a la población salvadoreña.",
   ],
-  dependencia: "Unidad de Planificación y Calidad.",
+  dependencia: "Unidad de Planificación.",
   objetivoGeneral:
     "Gestionar la información estadística y documental del Hospital Nacional El Salvador a través de procesos de registro, validación, conservación y custodia del expediente clínico, garantizando la calidad e integridad de la información y el cumplimiento de las normas técnicas institucionales vigentes, en apoyo a la planificación y la gestión institucional.",
   objetivosEspecificos: [
@@ -705,12 +705,29 @@ export function poaEsDivision(unidadId: string | null | undefined): boolean {
 export const POA_SERVICES: string[] = ["esdomed"];
 
 /** Aprobaciones por servicio (se pueden editar en el documento). */
+// ESDOMED: mismas firmas que su MOF 2025 (elaboración participativa; lo revisa
+// la Subdirección General por ser dependencia de la Dirección).
 const POA_APROBACIONES_DEFAULT: Record<string, PoaAprobacion[]> = {
   esdomed: [
-    { funcion: "Elaborado por", nombre: "Benjamín Cardoza", cargo: "Jefe del Servicio de Estadística y Documentos Médicos" },
-    { funcion: "Revisado por", nombre: "Dr. Roberto Centeno Zambrano", cargo: "Jefe Unidad de Planificación y Calidad" },
+    { funcion: "Elaborado por", nombre: "Heber Benjamín Cardoza Guevara", cargo: "Coordinador del Servicio de Estadística y Documentos Médicos" },
+    { funcion: "Elaborado por", nombre: "José Daniel Hernández Zepeda", cargo: "Supervisor" },
+    { funcion: "Elaborado por", nombre: "Juan Carlos Miranda Marroquín", cargo: "Técnico Estadístico" },
+    { funcion: "Revisado por", nombre: "Dr. José Roberto Centeno Zambrano", cargo: "Jefe Unidad de Planificación" },
+    { funcion: "Revisado por", nombre: "Dr. Rudy Armando Bonilla Carranza", cargo: "Subdirector General" },
     { funcion: "Aprobado por", nombre: "Dra. Laura Estela Miranda Iraheta", cargo: "Directora del Hospital Nacional El Salvador" },
   ],
+};
+
+/**
+ * Membrete ISO 37001 por servicio: el código del MOF con las siglas PAO
+ * (MOF de ESDOMED: ESDOMED03-HNES-P -> ESDOMED03-HNES-PAO).
+ */
+const POA_MEMBRETE_DEFAULT: Record<string, PoaMembrete> = {
+  esdomed: {
+    proceso: "Servicio de Estadística y Documentos Médicos",
+    codigo: "ESDOMED03-HNES-PAO",
+    version: "Versión 01",
+  },
 };
 
 /** Texto base de la sección 6 (Seguimiento), según los lineamientos. */
@@ -752,9 +769,13 @@ export function normalizePoaDoc(input: PoaDoc): PoaDoc {
       ),
     ) as PoaAprobacion[];
   }
-  if (!doc.membrete) {
-    doc.membrete = { proceso: "", codigo: "", version: "Versión 01" };
-  }
+  // Membrete: los campos vacíos se completan con el del servicio (no pisa lo escrito).
+  const membreteBase = POA_MEMBRETE_DEFAULT[doc.serviceId] ?? { proceso: "", codigo: "", version: "Versión 01" };
+  doc.membrete = {
+    proceso: doc.membrete?.proceso?.trim() ? doc.membrete.proceso : membreteBase.proceso,
+    codigo: doc.membrete?.codigo?.trim() ? doc.membrete.codigo : membreteBase.codigo,
+    version: doc.membrete?.version?.trim() ? doc.membrete.version : membreteBase.version,
+  };
   if (typeof doc.seguimiento !== "string") {
     doc.seguimiento = POA_SEGUIMIENTO_DEFAULT;
   }
@@ -881,7 +902,7 @@ export function createPoaDoc(serviceId: string, year: number, serviceName?: stri
   if (serviceName) {
     clone.serviceName = serviceName;
   }
-  return normalizePoaDoc(clone);
+  return poaAplicarCorrecciones(clone).doc;
 }
 
 /**
@@ -904,5 +925,213 @@ export function createPoaDocFromPrev(prev: PoaDoc, year: number): PoaDoc {
     })),
   }));
   next.medidas = [];
-  return next;
+  return poaAplicarCorrecciones(next).doc;
+}
+
+// =============================================================================
+// Correcciones por lineamientos de un año (hoy: ESDOMED 2027).
+// -----------------------------------------------------------------------------
+// Ajustes que pide la revisión contra los lineamientos e instrucciones PAO 2027:
+// riesgos del SGAS (antisoborno) en la matriz, actividades en infinitivo con sus
+// supuestos externos, firmas de aprobación y membrete. Se aplican solos al crear
+// el PAO de ese año, y a un PAO ya guardado desde el botón del editor. Nunca
+// borran nada: solo agregan lo que falta, renombran actividades al infinitivo y
+// llenan supuestos vacíos.
+// =============================================================================
+
+type PoaCorreccionActividad = { antes: string; despues: string; supuestos: string };
+
+type PoaCorrecciones = {
+  /** Etiqueta para el botón y el aviso. */
+  titulo: string;
+  /** Dependencia jerárquica correcta del servicio. */
+  dependencia?: string;
+  riesgosNuevos: PoaMatrizRiesgoRow[];
+  /** Texto que identifica si un riesgo nuevo ya está en la matriz. */
+  riesgosClave: string[];
+  actividades: PoaCorreccionActividad[];
+  /** Actividad nueva y el objetivo (texto) al que se agrega. */
+  actividadesNuevas: { objetivo: string; row: PoaActividadRow }[];
+};
+
+const POA_CORRECCIONES: Record<string, Record<number, PoaCorrecciones>> = {
+  esdomed: {
+    2027: {
+      titulo: "Lineamientos PAO 2027",
+      dependencia: "Unidad de Planificación.",
+      riesgosClave: ["Art. 334", "Art. 330"],
+      riesgosNuevos: [
+        {
+          // Matriz 4.5 SGAS de ESDOMED, reevaluación enero 2026 (riesgo residual).
+          proceso: "ESDOMED02-HNES-P\n(Proceso de defunciones)",
+          riesgo:
+            "Riesgo SGAS: Infidelidad en la custodia de documentos públicos (Art. 334 CP). Una persona u organización externa (por ejemplo, funerarias) ofrece un soborno o beneficio al personal de ESDOMED a cambio de información de pacientes fallecidos.",
+          probabilidad: "1",
+          impacto: "3",
+          acciones:
+            "Aplicar el procedimiento de defunciones actualizado y el libro de firmas para la entrega del certificado de defunción con Trabajo Social / Psicología. Mantener la política de confidencialidad, los canales únicos de información y el acceso a la información clínica solo para el personal del flujo de trabajo.",
+          responsables: "Coordinador de ESDOMED / Supervisor",
+        },
+        {
+          proceso: "ESDOMED01-HNES-P\n(Gestión del expediente clínico electrónico)",
+          riesgo:
+            "Riesgo SGAS: Cohecho propio (Art. 330 CP), cohecho impropio (Art. 331 CP) e infidelidad en la custodia de documentos públicos (Art. 334 CP). Personas externas o familiares sobornan al personal para obtener información clínica o documentos médicos (constancias, certificados, resúmenes) sin seguir los canales oficiales.",
+          probabilidad: "2",
+          impacto: "3",
+          acciones:
+            "Aplicar el lineamiento de creación de accesos al expediente clínico electrónico por roles (acta de firmas), revisar trimestralmente los reportes de acceso (logs) del SIS y capacitar al personal en confidencialidad y protección de la información del paciente.",
+          responsables: "Coordinador de ESDOMED / Supervisor / TI",
+        },
+      ],
+      actividades: [
+        {
+          antes: "Realizar capacitaciones en herramientas de gestión estadística.",
+          despues: "Realizar capacitaciones en herramientas de gestión estadística.",
+          supuestos: "Falta de espacio físico o de facilitadores; demanda asistencial que impida liberar al personal.",
+        },
+        {
+          antes: "Evaluar competencias técnicas y habilidades blandas del personal de ESDOMED.",
+          despues: "Evaluar competencias técnicas y habilidades blandas del personal de ESDOMED.",
+          supuestos: "Rotación de personal o ausencias prolongadas (incapacidades, traslados).",
+        },
+        {
+          antes: "Vigilancia de calidad de los expedientes clínicos realizados por el personal de ESDOMED.",
+          despues: "Vigilar la calidad de los expedientes clínicos elaborados por el personal de ESDOMED.",
+          supuestos: "Fallas o caídas del Sistema Integrado de Salud (SIS).",
+        },
+        {
+          antes: "Respaldo de expedientes clínicos generados por el personal del hospital.",
+          despues: "Respaldar los expedientes clínicos generados por el personal del hospital.",
+          supuestos: "Fallas del equipo informático o falta de capacidad de almacenamiento.",
+        },
+        {
+          antes: "Actualización del portal digital para óptimo funcionamiento del servicio de ESDOMED.",
+          despues: "Actualizar el portal digital para el óptimo funcionamiento del servicio de ESDOMED.",
+          supuestos: "Restricciones institucionales de TI o falta de conectividad.",
+        },
+        {
+          antes: "Reuniones con personal estadístico.",
+          despues: "Realizar reuniones con el personal estadístico.",
+          supuestos: "Demanda asistencial que impida reunir al personal de los distintos turnos.",
+        },
+        {
+          antes: "Reuniones con jefatura, supervisores y responsables de archivo digital.",
+          despues: "Realizar reuniones con jefatura, supervisores y responsables de archivo digital.",
+          supuestos: "Convocatorias institucionales no programadas en las mismas fechas.",
+        },
+        {
+          antes: "Generación de tabla censo de pacientes.",
+          despues: "Generar la tabla censo de pacientes.",
+          supuestos: "Fallas del sistema o de la conectividad que retrasen el registro de ingresos y egresos.",
+        },
+        {
+          antes: "Captura de datos de productividad del personal de ESDOMED en la FDI.",
+          despues: "Capturar los datos de productividad del personal de ESDOMED en la FDI.",
+          supuestos: "Cambios en el formato o la plataforma de la FDI definidos por el MINSAL.",
+        },
+      ],
+      actividadesNuevas: [
+        {
+          objetivo: "Monitorear la calidad de los procesos de atención al paciente.",
+          row: {
+            actividad:
+              "Verificar los controles antisoborno del servicio: libro de firmas de entrega de certificados de defunción y reportes de acceso al expediente clínico electrónico.",
+            indicador: "Acta trimestral de verificación de controles SGAS.",
+            meta: "4",
+            responsable: "Coordinador de ESDOMED / Supervisor",
+            trimestres: [
+              { prog: "1", real: "" },
+              { prog: "1", real: "" },
+              { prog: "1", real: "" },
+              { prog: "1", real: "" },
+            ],
+            supuestos: "Disponibilidad de los reportes de acceso (logs) del SIS por parte de TI.",
+          },
+        },
+      ],
+    },
+  },
+};
+
+/** true si hay correcciones de lineamientos para ese servicio y año. */
+export function poaTieneCorrecciones(serviceId: string, year: number): boolean {
+  return Boolean(POA_CORRECCIONES[serviceId]?.[year]);
+}
+
+/** Título de las correcciones disponibles ("" si no hay). */
+export function poaTituloCorrecciones(serviceId: string, year: number): string {
+  return POA_CORRECCIONES[serviceId]?.[year]?.titulo ?? "";
+}
+
+const normTexto = (v: string) => v.trim().replace(/\s+/g, " ").toLowerCase();
+
+/**
+ * Aplica las correcciones del año al documento. Devuelve el documento nuevo y la
+ * lista de cambios hechos (vacía si ya estaba todo corregido).
+ */
+export function poaAplicarCorrecciones(input: PoaDoc): { doc: PoaDoc; cambios: string[] } {
+  const doc = normalizePoaDoc(input);
+  const corr = POA_CORRECCIONES[doc.serviceId]?.[doc.year];
+  const cambios: string[] = [];
+  if (!corr) return { doc, cambios };
+
+  // 0. Dependencia jerárquica.
+  if (corr.dependencia && normTexto(doc.dependencia) !== normTexto(corr.dependencia)) {
+    doc.dependencia = corr.dependencia;
+    cambios.push(`Dependencia jerárquica: ${corr.dependencia}`);
+  }
+
+  // 1. Riesgos SGAS en la matriz del año.
+  const textoMatriz = doc.matrizRiesgos.map((r) => r.riesgo).join(" ");
+  const faltaSgas = corr.riesgosClave.some((k) => !textoMatriz.includes(k));
+  if (faltaSgas) {
+    const nuevos = corr.riesgosNuevos.filter((r) => !doc.matrizRiesgos.some((m) => normTexto(m.riesgo) === normTexto(r.riesgo)));
+    if (nuevos.length) {
+      // Si solo había una fila vacía, se reemplaza.
+      doc.matrizRiesgos = doc.matrizRiesgos.filter((m) => m.riesgo.trim() || m.proceso.trim());
+      doc.matrizRiesgos.push(...nuevos.map((r) => ({ ...r })));
+      cambios.push(`Se agregaron ${nuevos.length} riesgos del SGAS (antisoborno) a la matriz de riesgos.`);
+    }
+  }
+
+  // 2. Actividades en infinitivo y supuestos externos.
+  let renombradas = 0;
+  let supuestos = 0;
+  for (const group of doc.actividades) {
+    for (const row of group.rows) {
+      const c = corr.actividades.find((a) => normTexto(a.antes) === normTexto(row.actividad) || normTexto(a.despues) === normTexto(row.actividad));
+      if (!c) continue;
+      if (normTexto(row.actividad) !== normTexto(c.despues)) {
+        row.actividad = c.despues;
+        renombradas += 1;
+      }
+      if (!row.supuestos.trim()) {
+        row.supuestos = c.supuestos;
+        supuestos += 1;
+      }
+    }
+  }
+  if (renombradas) cambios.push(`${renombradas} actividades quedaron redactadas en infinitivo.`);
+  if (supuestos) cambios.push(`Se llenaron los supuestos externos de ${supuestos} actividades.`);
+
+  // 3. Actividades nuevas (controles SGAS).
+  for (const nueva of corr.actividadesNuevas) {
+    const yaEsta = doc.actividades.some((g) => g.rows.some((r) => normTexto(r.actividad) === normTexto(nueva.row.actividad)));
+    if (yaEsta) continue;
+    const row = JSON.parse(JSON.stringify(nueva.row)) as PoaActividadRow;
+    const group = doc.actividades.find((g) => normTexto(g.objetivo) === normTexto(nueva.objetivo));
+    if (group) group.rows.push(row);
+    else doc.actividades.push({ objetivo: nueva.objetivo, rows: [row] });
+    cambios.push("Se agregó la actividad de verificación trimestral de los controles antisoborno.");
+  }
+
+  // 4. Firmas: lo revisa la Subdirección General y se elabora en equipo (MOF).
+  const firmas = POA_APROBACIONES_DEFAULT[doc.serviceId];
+  const tieneSubdireccion = (doc.aprobaciones ?? []).some((a) => /subdirector/i.test(a.cargo) && a.nombre.trim());
+  if (firmas && !tieneSubdireccion) {
+    doc.aprobaciones = JSON.parse(JSON.stringify(firmas)) as PoaAprobacion[];
+    cambios.push("Hoja de aprobaciones actualizada con las firmas del MOF (incluye Subdirección General).");
+  }
+
+  return { doc, cambios };
 }
