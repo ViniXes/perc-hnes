@@ -317,7 +317,7 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
   for (let i = 0; i < doc.produccion.bloques.length; i += 1) {
     const bloque = doc.produccion.bloques[i];
     produccion.push(P(`${i + 1}. ${bloque.title} ${doc.year - 1}`, { bold: true, after: 80 }));
-    const dataUrl = poaImagenBloque(bloque, media, doc.year - 1);
+    const dataUrl = poaImagenBloque(doc.produccion.bloques, i, media, doc.year - 1);
     if (dataUrl) {
       const parsed = dataUrlToBytes(dataUrl);
       if (parsed) {

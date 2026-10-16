@@ -1,7 +1,7 @@
 "use client";
 
 import { PoaUnidadPicker, type PoaUnidadGrupo } from "@/components/poa-unidad-picker";
-import { poaDatosGrafico, poaGraficoPastel3D } from "@/lib/poa-chart";
+import { poaDatosBloque, poaDatosGrafico, poaGraficoPastel3D } from "@/lib/poa-chart";
 import { ChangeEvent, CSSProperties, Fragment, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Auth,
@@ -16541,8 +16541,12 @@ export default function Home() {
             {poaField(poaDoc.produccion.intro, (v) => updatePoa((d) => { d.produccion.intro = v; }), { placeholder: "Resumen cualitativo de la producción del año anterior: qué áreas abarca." })}
             {poaDoc.produccion.bloques.map((bloque, index) => {
               const mediaKey = bloque.imageKey || `grafico${index + 1}`;
-              const grafico = poaGraficoPastel3D(`${bloque.title} ${poaDoc.year - 1}`, bloque.datos);
-              const image = grafico ?? poaMedia[mediaKey];
+              const tituloGrafico = `${bloque.title} ${poaDoc.year - 1}`;
+              const grafico = poaGraficoPastel3D(tituloGrafico, bloque.datos);
+              // Sin datos digitados ni imagen subida: se arma con las cifras del texto.
+              const auto = !grafico && !poaMedia[mediaKey] ? poaDatosBloque(poaDoc.produccion.bloques, index, poaDoc.year - 1) : null;
+              const graficoTexto = auto?.desdeTexto ? poaGraficoPastel3D(tituloGrafico, auto.datos) : null;
+              const image = grafico ?? poaMedia[mediaKey] ?? graficoTexto ?? undefined;
               const datos = bloque.datos ?? [];
               const totalDatos = poaDatosGrafico(datos).reduce((acc, d) => acc + d.valor, 0);
               const presetDatos = (labels: string[]) =>
@@ -16558,7 +16562,14 @@ export default function Home() {
                       <>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={image} alt={bloque.title} className="poa-figure-img" />
-                        {canEditPoa && !grafico ? (
+                        {graficoTexto ? (
+                          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                            Armado con las cifras del texto.
+                            {canEditPoa
+                              ? poaMiniBtn("Editar datos", () => updatePoa((d) => { d.produccion.bloques[index].datos = auto!.datos.map((x) => ({ ...x })); }))
+                              : null}
+                          </div>
+                        ) : canEditPoa && !grafico ? (
                           <div className="mt-2 flex justify-center">
                             {poaMiniBtn("Quitar gráfico", () => handleRemovePoaImage(mediaKey), "del")}
                           </div>
@@ -16624,7 +16635,7 @@ export default function Home() {
                         </div>
                       ) : null}
                     </div>
-                  ) : canEditPoa ? (
+                  ) : canEditPoa && !graficoTexto ? (
                     <div className="mb-2 flex flex-wrap items-center justify-center gap-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
                       Gráfico automático (pastel 3D) con datos:
                       {poaMiniBtn("Por sexo", () => presetDatos(["Femenino", "Masculino"]))}
