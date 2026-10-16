@@ -454,7 +454,7 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
   para(doc.produccion.intro);
   for (let i = 0; i < doc.produccion.bloques.length; i += 1) {
     const bloque = doc.produccion.bloques[i];
-    const img = await fromDataUrl(poaImagenBloque(bloque, media, anio - 1));
+    const img = await fromDataUrl(poaImagenBloque(doc.produccion.bloques, i, media, anio - 1));
     const imgW = Math.min(usable(), 160);
     const imgH = img ? (imgW * img.h) / img.w : 0;
     ensure(img ? imgH + 12 : 20);

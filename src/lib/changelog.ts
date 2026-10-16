@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.437",
+    para: ["admin", "serv:esdomed"],
+    texto:
+      "POA: si un bloque de produccion no tiene datos ni imagen, el pastel 3D se arma solo con las cifras del texto (por ejemplo, ingresos 2026 contra 2025, o egresos vivos contra fallecidos). Con \"Editar datos\" se pueden corregir.",
+  },
+  {
     version: "1986.435",
     para: ["admin", "serv:esdomed"],
     texto:
