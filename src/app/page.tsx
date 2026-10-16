@@ -1,6 +1,7 @@
 "use client";
 
 import { PoaUnidadPicker, type PoaUnidadGrupo } from "@/components/poa-unidad-picker";
+import { poaDatosGrafico, poaGraficoPastel3D } from "@/lib/poa-chart";
 import { ChangeEvent, CSSProperties, Fragment, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Auth,
@@ -110,6 +111,9 @@ import {
   poaRiesgosPrevDesde,
   poaSemaforo,
   poaSemillaDeAnio,
+  poaAplicarCorrecciones,
+  poaTieneCorrecciones,
+  poaTituloCorrecciones,
   type PoaDoc,
   type PoaSemaforo,
 } from "@/lib/poa-template";
@@ -8624,6 +8628,20 @@ export default function Home() {
     setPoaDirty(true);
   }
 
+  /** Aplica al PAO abierto las correcciones de los lineamientos del año (sin guardar). */
+  function handleAplicarCorreccionesPoa() {
+    if (!poaDoc) return;
+    const { doc: corregido, cambios } = poaAplicarCorrecciones(poaDoc);
+    if (!cambios.length) {
+      setMessage("El PAO ya tiene todas las correcciones de los lineamientos.");
+      return;
+    }
+    if (!window.confirm(`Se aplicarán estos cambios:\n\n- ${cambios.join("\n- ")}\n\nNo se guarda hasta que presiones Guardar. ¿Continuar?`)) return;
+    setPoaDoc(corregido);
+    setPoaDirty(true);
+    setMessage(`Correcciones aplicadas (${cambios.length}). Revisá y guardá.`);
+  }
+
   /** Descarga el documento en Word. */
   async function handleExportPoaWord() {
     if (!poaDoc) return;
@@ -16157,6 +16175,20 @@ export default function Home() {
             </label>
             {poaDoc ? (
               <>
+                {canEditPoa && poaTieneCorrecciones(poaDoc.serviceId, poaDoc.year) ? (
+                  <button
+                    type="button"
+                    onClick={handleAplicarCorreccionesPoa}
+                    title="Agrega los riesgos SGAS, pasa las actividades a infinitivo, llena supuestos y actualiza las firmas"
+                    className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:brightness-110"
+                    style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" }}
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                    {poaTituloCorrecciones(poaDoc.serviceId, poaDoc.year)}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => void handleExportPoaWord()}
@@ -16509,7 +16541,12 @@ export default function Home() {
             {poaField(poaDoc.produccion.intro, (v) => updatePoa((d) => { d.produccion.intro = v; }), { placeholder: "Resumen cualitativo de la producción del año anterior: qué áreas abarca." })}
             {poaDoc.produccion.bloques.map((bloque, index) => {
               const mediaKey = bloque.imageKey || `grafico${index + 1}`;
-              const image = poaMedia[mediaKey];
+              const grafico = poaGraficoPastel3D(`${bloque.title} ${poaDoc.year - 1}`, bloque.datos);
+              const image = grafico ?? poaMedia[mediaKey];
+              const datos = bloque.datos ?? [];
+              const totalDatos = poaDatosGrafico(datos).reduce((acc, d) => acc + d.valor, 0);
+              const presetDatos = (labels: string[]) =>
+                updatePoa((d) => { d.produccion.bloques[index].datos = labels.map((label) => ({ label, valor: "" })); });
               return (
                 <div key={`prod-${index}`} className="poa-block">
                   <div className="poa-item-head">
@@ -16521,7 +16558,7 @@ export default function Home() {
                       <>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={image} alt={bloque.title} className="poa-figure-img" />
-                        {canEditPoa ? (
+                        {canEditPoa && !grafico ? (
                           <div className="mt-2 flex justify-center">
                             {poaMiniBtn("Quitar gráfico", () => handleRemovePoaImage(mediaKey), "del")}
                           </div>
@@ -16548,6 +16585,54 @@ export default function Home() {
                       <p className="poa-figure-empty">Sin gráfico</p>
                     )}
                   </div>
+                  {datos.length ? (
+                    <div className="poa-table-wrap mx-auto max-w-[560px]">
+                      <table className="poa-table">
+                        <thead>
+                          <tr>
+                            {poaTh("Dato del gráfico")}
+                            {poaTh("Valor", "w-[120px]")}
+                            {poaTh("%", "w-[70px]")}
+                            {canEditPoa ? poaTh("", "w-[46px]") : null}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {datos.map((dato, di) => {
+                            const valor = Number.parseFloat((dato.valor || "").replace(/[\s,]/g, ""));
+                            const pct = totalDatos > 0 && valor > 0 ? `${Math.round((valor / totalDatos) * 1000) / 10}%` : "";
+                            return (
+                              <tr key={`dato-${index}-${di}`}>
+                                <td>{poaCell(dato.label, (v) => updatePoa((d) => { d.produccion.bloques[index].datos![di].label = v; }), { placeholder: "Ej. Femenino" })}</td>
+                                <td>{poaCell(dato.valor, (v) => updatePoa((d) => { d.produccion.bloques[index].datos![di].valor = v; }), { center: true, placeholder: "0" })}</td>
+                                <td className="text-center text-xs">{pct}</td>
+                                {canEditPoa ? (
+                                  <td className="text-center">
+                                    {poaMiniBtn("×", () => updatePoa((d) => { d.produccion.bloques[index].datos!.splice(di, 1); }), "del")}
+                                  </td>
+                                ) : null}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {canEditPoa ? (
+                        <div className="mt-2 flex flex-wrap justify-center gap-2">
+                          {datos.length < 8
+                            ? poaMiniBtn("+ Dato", () => updatePoa((d) => { d.produccion.bloques[index].datos!.push({ label: "", valor: "" }); }))
+                            : null}
+                          {poaMiniBtn("Quitar datos del gráfico", () => updatePoa((d) => { delete d.produccion.bloques[index].datos; }), "del")}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : canEditPoa ? (
+                    <div className="mb-2 flex flex-wrap items-center justify-center gap-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                      Gráfico automático (pastel 3D) con datos:
+                      {poaMiniBtn("Por sexo", () => presetDatos(["Femenino", "Masculino"]))}
+                      {poaMiniBtn("Por trimestre", () => presetDatos(["Trimestre 1", "Trimestre 2", "Trimestre 3", "Trimestre 4"]))}
+                      {poaMiniBtn("Por semestre", () => presetDatos(["Enero a junio", "Julio a diciembre"]))}
+                      {poaMiniBtn("Otro", () => presetDatos(["", ""]))}
+                    </div>
+                  ) : null}
                   {poaField(bloque.text, (v) => updatePoa((d) => { d.produccion.bloques[index].text = v; }), { placeholder: "Análisis del comportamiento del indicador." })}
                 </div>
               );
