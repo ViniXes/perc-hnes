@@ -25,6 +25,7 @@ import {
   type PoaDoc,
   type PoaFodaItem,
 } from "@/lib/poa-template";
+import { poaImagenBloque } from "@/lib/poa-chart";
 
 /** Imágenes del documento: clave -> dataURL (data:image/...;base64,....). */
 export type PoaMedia = Record<string, string>;
@@ -316,7 +317,7 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
   for (let i = 0; i < doc.produccion.bloques.length; i += 1) {
     const bloque = doc.produccion.bloques[i];
     produccion.push(P(`${i + 1}. ${bloque.title} ${doc.year - 1}`, { bold: true, after: 80 }));
-    const dataUrl = bloque.imageKey ? media[bloque.imageKey] : undefined;
+    const dataUrl = poaImagenBloque(bloque, media, doc.year - 1);
     if (dataUrl) {
       const parsed = dataUrlToBytes(dataUrl);
       if (parsed) {

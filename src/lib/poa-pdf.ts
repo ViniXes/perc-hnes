@@ -25,6 +25,7 @@ import {
   type PoaSemaforo,
 } from "@/lib/poa-template";
 import type { PoaMedia } from "@/lib/poa-docx";
+import { poaImagenBloque } from "@/lib/poa-chart";
 
 type RGB = [number, number, number];
 
@@ -453,7 +454,7 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
   para(doc.produccion.intro);
   for (let i = 0; i < doc.produccion.bloques.length; i += 1) {
     const bloque = doc.produccion.bloques[i];
-    const img = await fromDataUrl(bloque.imageKey ? media[bloque.imageKey] : undefined);
+    const img = await fromDataUrl(poaImagenBloque(bloque, media, anio - 1));
     const imgW = Math.min(usable(), 160);
     const imgH = img ? (imgW * img.h) / img.w : 0;
     ensure(img ? imgH + 12 : 20);

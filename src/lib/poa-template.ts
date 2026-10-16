@@ -65,12 +65,17 @@ export type PoaObjetivoGroup = {
   rows: PoaActividadRow[];
 };
 
-/** Bloque de producción: título, análisis y (opcional) gráfico subido. */
+/** Un dato del gráfico de producción (p. ej. "Femenino" = "5,820"). */
+export type PoaProduccionDato = { label: string; valor: string };
+
+/** Bloque de producción: título, análisis y gráfico (automático o subido). */
 export type PoaProduccionBloque = {
   title: string;
   text: string;
   /** Clave de la imagen dentro del documento de medios (`<id>__media`). */
   imageKey?: string;
+  /** Datos digitados: si tienen valores, el gráfico de pastel 3D se genera solo. */
+  datos?: PoaProduccionDato[];
 };
 
 /** Fila de la hoja de aprobaciones (Elaborado / Revisado / Aprobado por). */

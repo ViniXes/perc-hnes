@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.435",
+    para: ["admin", "serv:esdomed"],
+    texto:
+      "POA: en Produccion general resumida ya no hace falta subir imagenes. Elegi Por sexo, Por trimestre, Por semestre u Otro, digita los valores y el grafico de pastel 3D se arma solo, con porcentajes y total. Sale igual en el PDF y en el Word.",
+  },
+  {
     version: "1986.434",
     para: ["admin", "serv:esdomed"],
     texto:
