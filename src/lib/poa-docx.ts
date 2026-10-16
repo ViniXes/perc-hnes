@@ -317,11 +317,13 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
   for (let i = 0; i < doc.produccion.bloques.length; i += 1) {
     const bloque = doc.produccion.bloques[i];
     produccion.push(P(`${i + 1}. ${bloque.title} ${doc.year - 1}`, { bold: true, after: 80 }));
-    const dataUrl = poaImagenBloque(doc.produccion.bloques, i, media, doc.year - 1);
+    const fig = poaImagenBloque(doc.produccion.bloques, i, media, doc.year - 1);
+    const dataUrl = fig?.url;
     if (dataUrl) {
       const parsed = dataUrlToBytes(dataUrl);
       if (parsed) {
-        const size = await measureImage(dataUrl, 560);
+        // El pastel generado va compacto; un gráfico subido conserva el ancho de antes.
+        const size = await measureImage(dataUrl, fig?.generado ? 400 : 560);
         produccion.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,

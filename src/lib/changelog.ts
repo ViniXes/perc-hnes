@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.439",
+    para: ["admin", "serv:esdomed"],
+    texto:
+      "POA: los graficos de pastel 3D ahora son mas compactos y sin fondo blanco. En PULSO se adaptan al tema claro u oscuro, y en el PDF y el Word salen mas chicos.",
+  },
+  {
     version: "1986.437",
     para: ["admin", "serv:esdomed"],
     texto:

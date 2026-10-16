@@ -16542,10 +16542,11 @@ export default function Home() {
             {poaDoc.produccion.bloques.map((bloque, index) => {
               const mediaKey = bloque.imageKey || `grafico${index + 1}`;
               const tituloGrafico = `${bloque.title} ${poaDoc.year - 1}`;
-              const grafico = poaGraficoPastel3D(tituloGrafico, bloque.datos);
+              const temaGrafico = isLightPanelTheme ? "claro" : "oscuro";
+              const grafico = poaGraficoPastel3D(tituloGrafico, bloque.datos, temaGrafico);
               // Sin datos digitados ni imagen subida: se arma con las cifras del texto.
               const auto = !grafico && !poaMedia[mediaKey] ? poaDatosBloque(poaDoc.produccion.bloques, index, poaDoc.year - 1) : null;
-              const graficoTexto = auto?.desdeTexto ? poaGraficoPastel3D(tituloGrafico, auto.datos) : null;
+              const graficoTexto = auto?.desdeTexto ? poaGraficoPastel3D(tituloGrafico, auto.datos, temaGrafico) : null;
               const image = grafico ?? poaMedia[mediaKey] ?? graficoTexto ?? undefined;
               const datos = bloque.datos ?? [];
               const totalDatos = poaDatosGrafico(datos).reduce((acc, d) => acc + d.valor, 0);
@@ -16561,7 +16562,7 @@ export default function Home() {
                     {image ? (
                       <>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={image} alt={bloque.title} className="poa-figure-img" />
+                        <img src={image} alt={bloque.title} className={grafico || graficoTexto ? "poa-figure-chart" : "poa-figure-img"} />
                         {graficoTexto ? (
                           <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
                             Armado con las cifras del texto.
