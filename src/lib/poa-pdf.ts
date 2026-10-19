@@ -457,7 +457,7 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
     const fig = poaImagenBloque(doc.produccion.bloques, i, media, anio - 1);
     const img = await fromDataUrl(fig?.url);
     // El pastel generado va compacto; un gráfico subido conserva el ancho de antes.
-    const imgW = Math.min(usable(), fig?.generado ? 115 : 160);
+    const imgW = Math.min(usable(), fig?.generado ? 80 : 160);
     const imgH = img ? (imgW * img.h) / img.w : 0;
     ensure(img ? imgH + 12 : 20);
     para(`${i + 1}. ${bloque.title} ${anio - 1}`, { bold: true, after: 1.5 });

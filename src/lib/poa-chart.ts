@@ -380,8 +380,14 @@ export function poaDatosBloque(
   // Composición de los egresos (vivos y fallecidos).
   const esEgreso = (b: PoaProduccionBloque) => /egreso/i.test(b.title);
   if (esEgreso(bloque)) {
+    const sinDatos = (b: PoaProduccionBloque) =>
+      esEgreso(b) && !poaDatosGrafico(b.datos).length;
+    // La composición sale una sola vez, en el primer bloque de egresos; los
+    // demás (p. ej. fallecidos) repetirían el mismo pastel.
+    if (bloques.findIndex(esEgreso) !== index)
+      return { datos: [], desdeTexto: false };
     const egresos = bloques
-      .filter((b) => esEgreso(b) && !poaDatosGrafico(b.datos).length)
+      .filter(sinDatos)
       .map((b) => ({
         label: nombreCorto(b.title),
         valor: String(totalDelTexto(b.text ?? "")),

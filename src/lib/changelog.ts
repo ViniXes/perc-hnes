@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.442",
+    para: ["admin", "serv:esdomed"],
+    texto:
+      "POA: los graficos de produccion son mas pequenos en PULSO, el PDF y el Word. El bloque de egresos fallecidos ya no repite el pastel de vivos contra fallecidos; queda solo el texto.",
+  },
+  {
     version: "1986.439",
     para: ["admin", "serv:esdomed"],
     texto:
