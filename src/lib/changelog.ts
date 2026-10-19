@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.444",
+    para: ["admin", "serv:esdomed"],
+    texto:
+      "POA: en el PDF los graficos de produccion salen un 25 % mas grandes. En PULSO se mantienen pequenos.",
+  },
+  {
     version: "1986.442",
     para: ["admin", "serv:esdomed"],
     texto:
