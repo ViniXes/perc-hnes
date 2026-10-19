@@ -885,7 +885,7 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
   background: #ffffff;
 }
 /* Pastel 3D generado: PNG transparente y compacto, sin marco ni fondo. */
-.poa-figure-chart { display: block; margin: 0 auto; width: 100%; max-width: 480px; height: auto; }
+.poa-figure-chart { display: block; margin: 0 auto; width: 100%; max-width: 320px; height: auto; }
 .poa-figure-empty { font-size: 11.5px; color: var(--text-faint); }
 .poa-upload {
   display: inline-flex;

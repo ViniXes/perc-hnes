@@ -323,7 +323,7 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
       const parsed = dataUrlToBytes(dataUrl);
       if (parsed) {
         // El pastel generado va compacto; un gráfico subido conserva el ancho de antes.
-        const size = await measureImage(dataUrl, fig?.generado ? 400 : 560);
+        const size = await measureImage(dataUrl, fig?.generado ? 280 : 560);
         produccion.push(
           new Paragraph({
             alignment: AlignmentType.CENTER,
