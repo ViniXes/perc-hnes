@@ -955,6 +955,8 @@ type PoaCorrecciones = {
   /** Texto que identifica si un riesgo nuevo ya está en la matriz. */
   riesgosClave: string[];
   actividades: PoaCorreccionActividad[];
+  /** true: las actividades quedan como en el PAO anterior (sin renombrar ni agregar). */
+  mantenerActividades?: boolean;
   /** Actividad nueva y el objetivo (texto) al que se agrega. */
   actividadesNuevas: { objetivo: string; row: PoaActividadRow }[];
 };
@@ -963,6 +965,7 @@ const POA_CORRECCIONES: Record<string, Record<number, PoaCorrecciones>> = {
   esdomed: {
     2027: {
       titulo: "Lineamientos PAO 2027",
+      mantenerActividades: true,
       dependencia: "Unidad de Planificación.",
       riesgosClave: ["Art. 334", "Art. 330"],
       riesgosNuevos: [
@@ -1106,7 +1109,9 @@ export function poaAplicarCorrecciones(input: PoaDoc): { doc: PoaDoc; cambios: s
     for (const row of group.rows) {
       const c = corr.actividades.find((a) => normTexto(a.antes) === normTexto(row.actividad) || normTexto(a.despues) === normTexto(row.actividad));
       if (!c) continue;
-      if (normTexto(row.actividad) !== normTexto(c.despues)) {
+      // El usuario pidió (2026-10-20) dejar las actividades tal como en el PAO
+      // 2026: ya no se renombran al infinitivo, solo se llenan los supuestos.
+      if (!corr.mantenerActividades && normTexto(row.actividad) !== normTexto(c.despues)) {
         row.actividad = c.despues;
         renombradas += 1;
       }
@@ -1120,7 +1125,7 @@ export function poaAplicarCorrecciones(input: PoaDoc): { doc: PoaDoc; cambios: s
   if (supuestos) cambios.push(`Se llenaron los supuestos externos de ${supuestos} actividades.`);
 
   // 3. Actividades nuevas (controles SGAS).
-  for (const nueva of corr.actividadesNuevas) {
+  for (const nueva of corr.mantenerActividades ? [] : corr.actividadesNuevas) {
     const yaEsta = doc.actividades.some((g) => g.rows.some((r) => normTexto(r.actividad) === normTexto(nueva.row.actividad)));
     if (yaEsta) continue;
     const row = JSON.parse(JSON.stringify(nueva.row)) as PoaActividadRow;
