@@ -40,8 +40,9 @@ rules_version = '2';
 //     ('poaUnidad': un servicio, una Division o la Subdireccion Administrativa) o,
 //     si no tiene, su propio servicio. 'poaUnidad' solo lo escribe un admin.
 //  9) Cierre de Horas y del Comite en el servidor (igual que el PERC del punto
-//     7): captureWindows/{mes}.horasCierre (2:30 p. m. del 5to dia habil). Despues de esa hora solo el administrador guarda, salvo reapertura
-//     vigente (24 h) o, en el Comite, lista desbloqueada por el gestor.
+//     7): captureWindows/{mes}.horasCierre (2:30 p. m. del 5to dia habil).
+//     Despues de esa hora solo el administrador guarda, salvo reapertura vigente
+//     (24 h) o, en el Comite, lista desbloqueada por el gestor.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
