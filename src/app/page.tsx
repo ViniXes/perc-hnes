@@ -14,6 +14,7 @@ import {
   poaTamanoLegible,
 } from "@/lib/poa-comprobantes";
 import { ChangeEvent, CSSProperties, Fragment, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   type Auth,
   type AuthError,
@@ -16555,6 +16556,68 @@ export default function Home() {
           </div>
         ) : (
           <>
+      {poaComp && poaDoc ? (() => {
+        const row = poaDoc.actividades[poaComp.gi]?.rows[poaComp.ri];
+        const tri = row?.trimestres[poaComp.t];
+        if (!row || !tri) return null;
+        const lista = tri.comprobantes ?? [];
+        const cerrar = () => { if (poaCompBusy !== "subir") setPoaComp(null); };
+        return createPortal(
+          <div role="dialog" aria-modal="true" aria-labelledby="poa-comp-title" className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={cerrar}>
+            <div className="modal-fade-in absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))", color: "var(--text)" }}
+              className="modal-pop-in relative w-full max-w-lg overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+            >
+              <div className="px-6 pb-6 pt-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+                  Comprobantes · Trimestre {poaComp.t + 1} · PAO {poaDoc.year}
+                </p>
+                <h3 id="poa-comp-title" className="mt-1 text-sm font-semibold">{row.actividad || "Actividad"}</h3>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  Programado {tri.prog || "0"} · Realizado {tri.real || "0"} · {poaPercent(tri.prog, tri.real) || "—"}
+                </p>
+                <ul className="mt-4 space-y-2">
+                  {lista.length ? lista.map((comp) => (
+                    <li key={comp.id} className="flex items-center gap-3 rounded-xl border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--surface-3)" }}>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold">{comp.nombre}</p>
+                        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                          {poaTamanoLegible(comp.tamano)} · {new Date(comp.fecha).toLocaleDateString("es-SV")}{comp.por ? ` · ${comp.por}` : ""}
+                        </p>
+                      </div>
+                      <button type="button" className="poa-mini" style={{ borderColor: "var(--border)", color: "var(--text)" }} disabled={Boolean(poaCompBusy)} onClick={() => void handleVerComprobantePoa(comp)}>
+                        {poaCompBusy === comp.id ? "Abriendo…" : poaComprobanteVisible(comp.tipo) ? "Ver" : "Descargar"}
+                      </button>
+                      {canEditPoa ? (
+                        <button type="button" className="poa-mini" style={{ borderColor: "rgba(190,110,110,0.35)", color: isLightPanelTheme ? "#9b3d3d" : "#d9a2a2" }} disabled={Boolean(poaCompBusy)} onClick={() => void handleQuitarComprobantePoa(comp)}>
+                          Quitar
+                        </button>
+                      ) : null}
+                    </li>
+                  )) : (
+                    <li className="text-xs" style={{ color: "var(--text-muted)" }}>Todavía no hay comprobantes en este trimestre.</li>
+                  )}
+                </ul>
+                {canEditPoa ? (
+                  <label className={`poa-upload mt-4 ${poaCompBusy ? "pointer-events-none opacity-60" : ""}`}>
+                    <input type="file" accept={POA_COMPROBANTE_ACCEPT} className="hidden" disabled={Boolean(poaCompBusy)} onChange={(event) => { const f = event.target.files?.[0]; event.target.value = ""; void handleSubirComprobantePoa(f); }} />
+                    {poaCompBusy === "subir" ? "Subiendo…" : "Subir comprobante"}
+                  </label>
+                ) : null}
+                <p className="mt-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  PDF, foto, Word o Excel de hasta {poaTamanoLegible(POA_COMPROBANTE_MAX_BYTES)}. Cada comprobante suma 1 a lo realizado del trimestre y se guarda solo.
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <button type="button" className="poa-mini" style={{ borderColor: "var(--border)", color: "var(--text)" }} onClick={cerrar}>Cerrar</button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        );
+      })() : null}
           <div className="mt-4 inline-flex rounded-xl border p-1" style={{ borderColor: "var(--border)", background: "var(--surface-3)" }} role="tablist">
             {([
               ["documento", "Documento"],
@@ -17823,68 +17886,6 @@ export default function Home() {
           </p>
         )}
       </section>
-
-      {poaComp && poaDoc ? (() => {
-        const row = poaDoc.actividades[poaComp.gi]?.rows[poaComp.ri];
-        const tri = row?.trimestres[poaComp.t];
-        if (!row || !tri) return null;
-        const lista = tri.comprobantes ?? [];
-        const cerrar = () => { if (poaCompBusy !== "subir") setPoaComp(null); };
-        return (
-          <div role="dialog" aria-modal="true" aria-labelledby="poa-comp-title" className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={cerrar}>
-            <div className="modal-fade-in absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
-            <div
-              onClick={(event) => event.stopPropagation()}
-              style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))", color: "var(--text)" }}
-              className="modal-pop-in relative w-full max-w-lg overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
-            >
-              <div className="px-6 pb-6 pt-5">
-                <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
-                  Comprobantes · Trimestre {poaComp.t + 1} · PAO {poaDoc.year}
-                </p>
-                <h3 id="poa-comp-title" className="mt-1 text-sm font-semibold">{row.actividad || "Actividad"}</h3>
-                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                  Programado {tri.prog || "0"} · Realizado {tri.real || "0"} · {poaPercent(tri.prog, tri.real) || "—"}
-                </p>
-                <ul className="mt-4 space-y-2">
-                  {lista.length ? lista.map((comp) => (
-                    <li key={comp.id} className="flex items-center gap-3 rounded-xl border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--surface-3)" }}>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-semibold">{comp.nombre}</p>
-                        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                          {poaTamanoLegible(comp.tamano)} · {new Date(comp.fecha).toLocaleDateString("es-SV")}{comp.por ? ` · ${comp.por}` : ""}
-                        </p>
-                      </div>
-                      <button type="button" className="poa-mini" style={{ borderColor: "var(--border)", color: "var(--text)" }} disabled={Boolean(poaCompBusy)} onClick={() => void handleVerComprobantePoa(comp)}>
-                        {poaCompBusy === comp.id ? "Abriendo…" : poaComprobanteVisible(comp.tipo) ? "Ver" : "Descargar"}
-                      </button>
-                      {canEditPoa ? (
-                        <button type="button" className="poa-mini" style={{ borderColor: "rgba(190,110,110,0.35)", color: isLightPanelTheme ? "#9b3d3d" : "#d9a2a2" }} disabled={Boolean(poaCompBusy)} onClick={() => void handleQuitarComprobantePoa(comp)}>
-                          Quitar
-                        </button>
-                      ) : null}
-                    </li>
-                  )) : (
-                    <li className="text-xs" style={{ color: "var(--text-muted)" }}>Todavía no hay comprobantes en este trimestre.</li>
-                  )}
-                </ul>
-                {canEditPoa ? (
-                  <label className={`poa-upload mt-4 ${poaCompBusy ? "pointer-events-none opacity-60" : ""}`}>
-                    <input type="file" accept={POA_COMPROBANTE_ACCEPT} className="hidden" disabled={Boolean(poaCompBusy)} onChange={(event) => { const f = event.target.files?.[0]; event.target.value = ""; void handleSubirComprobantePoa(f); }} />
-                    {poaCompBusy === "subir" ? "Subiendo…" : "Subir comprobante"}
-                  </label>
-                ) : null}
-                <p className="mt-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                  PDF, foto, Word o Excel de hasta {poaTamanoLegible(POA_COMPROBANTE_MAX_BYTES)}. Cada comprobante suma 1 a lo realizado del trimestre y se guarda solo.
-                </p>
-                <div className="mt-4 flex justify-end">
-                  <button type="button" className="poa-mini" style={{ borderColor: "var(--border)", color: "var(--text)" }} onClick={cerrar}>Cerrar</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })() : null}
 
       {horasEmployeeToRemove !== null ? (
         <div

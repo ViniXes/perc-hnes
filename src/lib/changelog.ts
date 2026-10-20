@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.453",
+    para: ["admin", "serv:esdomed"],
+    texto:
+      "POA: el boton del clip de comprobantes ahora si abre la ventana para subir, ver y quitar los documentos del trimestre.",
+  },
+  {
     version: "1986.451",
     para: ["admin", "serv:esdomed"],
     texto:
