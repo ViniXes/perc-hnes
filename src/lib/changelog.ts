@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.451",
+    para: ["admin", "serv:esdomed"],
+    texto:
+      "POA: cada actividad tiene un boton con clip en cada trimestre para subir sus comprobantes (PDF, foto, Word o Excel). Cada comprobante suma 1 a lo realizado, el % se recalcula solo y el archivo queda guardado en PULSO para verlo desde la matriz de actividades o el seguimiento trimestral.",
+  },
+  {
     version: "1986.449",
     para: ["admin", "serv:esdomed"],
     texto:
