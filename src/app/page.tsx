@@ -8728,29 +8728,44 @@ export default function Home() {
   }
 
   /** Arma el cumplimiento o la evaluación de riesgos con el PAO del año anterior. */
-  async function traerDelPoaAnterior(que: "cumplimiento" | "riesgos") {
+  async function traerDelPoaAnterior(que: "cumplimiento" | "riesgos" | "actividades") {
     if (!poaDoc) return;
     const anterior = await leerPoaDeAnio(poaDoc.year - 1);
     if (!anterior) {
       setError(`No hay PAO ${poaDoc.year - 1} guardado en PULSO para traer los datos.`);
       return;
     }
+    if (que === "actividades" && !anterior.actividades?.some((g) => g.rows.some((r) => r.actividad.trim()))) {
+      setError(`El PAO ${poaDoc.year - 1} no tiene actividades para traer.`);
+      return;
+    }
     const tieneDatos =
-      que === "cumplimiento"
+      que === "actividades"
+        ? poaDoc.actividades.some((g) => g.rows.some((r) => r.actividad.trim()))
+        : que === "cumplimiento"
         ? poaDoc.cumplimiento.rows.some((r) => r.actividad.trim())
         : poaDoc.riesgosPrev.rows.some((r) => r.riesgo.trim());
     if (tieneDatos && !window.confirm(`Se reemplazarán las filas actuales con las del PAO ${poaDoc.year - 1}. ¿Continuar?`)) {
       return;
     }
     updatePoa((d) => {
-      if (que === "cumplimiento") {
+      if (que === "actividades") {
+        // Mismos objetivos, actividades, indicadores, metas y programación;
+        // lo realizado arranca en blanco.
+        d.actividades = (JSON.parse(JSON.stringify(anterior.actividades)) as typeof d.actividades).map((g) => ({
+          ...g,
+          rows: g.rows.map((r) => ({ ...r, trimestres: r.trimestres.map((t) => ({ prog: t.prog, real: "" })) as typeof r.trimestres })),
+        }));
+      } else if (que === "cumplimiento") {
         d.cumplimiento.rows = poaCumplimientoDesde(anterior);
       } else {
         d.riesgosPrev.rows = poaRiesgosPrevDesde(anterior);
       }
     });
     setMessage(
-      que === "cumplimiento"
+      que === "actividades"
+        ? `Actividades traídas del PAO ${poaDoc.year - 1} (lo realizado queda en blanco). Revisá y guardá.`
+        : que === "cumplimiento"
         ? `Cumplimiento armado con la programación del PAO ${poaDoc.year - 1}. Revisá las observaciones y guardá.`
         : `Riesgos traídos de la matriz ${poaDoc.year - 1}. Completá la ejecución de cada acción de control y guardá.`,
     );
@@ -16950,11 +16965,14 @@ export default function Home() {
                 </tbody>
               </table>
             </div>
-            {canEditPoa
-              ? poaMiniBtn("+ Objetivo", () => updatePoa((d) => {
+            {canEditPoa ? (
+              <div className="flex flex-wrap gap-2">
+                {poaMiniBtn("+ Objetivo", () => updatePoa((d) => {
                   d.actividades.push({ objetivo: "", rows: [JSON.parse(JSON.stringify(POA_EMPTY_ACTIVIDAD))] });
-                }))
-              : null}
+                }))}
+                {poaMiniBtn(`Traer actividades del PAO ${poaDoc.year - 1}`, () => void traerDelPoaAnterior("actividades"))}
+              </div>
+            ) : null}
 
             {/* ---- 6. Seguimiento ---- */}
             <h3 className="poa-h1">6. Seguimiento</h3>

@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.449",
+    para: ["admin", "serv:esdomed"],
+    texto:
+      "POA: nuevo boton \"Traer actividades del PAO anterior\" en la matriz de actividades, que copia objetivos, actividades, indicadores, metas y programacion (lo realizado queda en blanco). El PAO 2027 de ESDOMED ya no renombra ni agrega actividades: quedan las mismas del 2026.",
+  },
+  {
     version: "1986.445",
     para: ["todos"],
     texto:
