@@ -27,6 +27,68 @@ export function isBusinessDay(date: Date) {
   return day !== 0 && day !== 6;
 }
 
+// Domingo de Pascua (algoritmo gregoriano de Meeus/Jones/Butcher).
+function getEasterSunday(year: number) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day, 12, 0, 0, 0);
+}
+
+// Asuetos nacionales de El Salvador (Codigo de Trabajo, art. 190), con las
+// fiestas agostinas de San Salvador (3 al 6 de agosto). Se descuentan SOLOS de
+// la ventana de captura: el administrador ya no tiene que cargarlos cada año.
+// Lo extraordinario (vacaciones, cierres) se sigue agregando en el calendario.
+const FERIADOS_FIJOS: Record<string, string> = {
+  "01-01": "Año Nuevo",
+  "05-01": "Día del Trabajo",
+  "05-10": "Día de la Madre",
+  "06-17": "Día del Padre",
+  "08-03": "Fiestas Agostinas",
+  "08-04": "Fiestas Agostinas",
+  "08-05": "Fiestas Agostinas",
+  "08-06": "Fiestas Agostinas",
+  "09-15": "Día de la Independencia",
+  "11-02": "Día de los Difuntos",
+  "12-25": "Navidad",
+};
+
+const feriadosCache = new Map<number, Map<string, string>>();
+
+/** Asuetos nacionales del año: mapa "YYYY-MM-DD" -> nombre. */
+export function getFeriadosNacionales(year: number): Map<string, string> {
+  const cached = feriadosCache.get(year);
+  if (cached) return cached;
+  const result = new Map<string, string>();
+  for (const [monthDay, name] of Object.entries(FERIADOS_FIJOS)) {
+    result.set(`${year}-${monthDay}`, name);
+  }
+  const easter = getEasterSunday(year);
+  const juevesSanto = new Date(easter);
+  juevesSanto.setDate(easter.getDate() - 3);
+  const viernesSanto = new Date(easter);
+  viernesSanto.setDate(easter.getDate() - 2);
+  result.set(getDateKey(juevesSanto), "Jueves Santo");
+  result.set(getDateKey(viernesSanto), "Viernes Santo");
+  feriadosCache.set(year, result);
+  return result;
+}
+
+export function getFeriadoNacional(date: Date): string | null {
+  return getFeriadosNacionales(date.getFullYear()).get(getDateKey(date)) ?? null;
+}
+
 export function getDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
     date.getDate(),
@@ -65,7 +127,11 @@ export function getFirstBusinessDays(referenceDate: Date, blockedDates: string[]
   const blockedDateSet = new Set(blockedDates);
 
   while (result.length < totalDays) {
-    if (isBusinessDay(current) && !blockedDateSet.has(getDateKey(current))) {
+    if (
+      isBusinessDay(current) &&
+      !blockedDateSet.has(getDateKey(current)) &&
+      !getFeriadoNacional(current)
+    ) {
       result.push(new Date(current));
     }
 
@@ -103,7 +169,7 @@ export function getCaptureWindow(
 export type SepsPhase = "cierre" | "transicion" | "captura";
 
 // Ventana especial de SEPS (doble fase) por mes calendario:
-// - "cierre": dias 1 .. 3er dia habil -> abierto para CERRAR el mes anterior.
+// - "cierre": dias 1 .. 5to dia habil -> abierto para CERRAR el mes anterior.
 // - "transicion": despues del cierre y antes del dia 6 -> cerrado.
 // - "captura": dia 6 .. fin de mes -> abierto para digitar el mes EN CURSO (diarios).
 export function getSepsWindow(referenceDate: Date, blockedDates: string[]) {
@@ -112,7 +178,7 @@ export function getSepsWindow(referenceDate: Date, blockedDates: string[]) {
     blockedDates,
     MODULE_CAPTURE_DAYS.sesps,
   );
-  // El cierre cierra a las 2:30 PM del ultimo (3er) dia habil.
+  // El cierre cierra a las 2:30 PM del ultimo (5to) dia habil.
   const lastCloseDay = closeDays[closeDays.length - 1];
   const onLastCloseDay = isSameCalendarDay(lastCloseDay, referenceDate);
   const inClosing =
@@ -153,6 +219,34 @@ export function getSepsWindow(referenceDate: Date, blockedDates: string[]) {
     closeDays,
     reopenDay: reopenDate.getDate(),
     lastCloseDay,
+  };
+}
+
+/** 2:30 p. m. del dia indicado, en milisegundos (hora local). */
+export function getCloseMillis(day: Date) {
+  return new Date(
+    day.getFullYear(),
+    day.getMonth(),
+    day.getDate(),
+    CAPTURE_CLOSE_HOUR,
+    CAPTURE_CLOSE_MINUTE,
+    0,
+    0,
+  ).getTime();
+}
+
+/**
+ * Horas de cierre del mes que se esta cerrando (el anterior al calendario de
+ * `referenceDate`), ya con feriados y fechas no habiles aplicados. Se publican en
+ * captureWindows/{periodo} para que las reglas de Firestore rechacen guardados
+ * tardios. Horas y el Comite comparten ventana (SEPS cierra ese mismo dia).
+ */
+export function getModuleCloseMillis(referenceDate: Date, blockedDates: string[]) {
+  const perc = getCaptureWindow(referenceDate, blockedDates, "perc").lastOpenDay;
+  const horas = getCaptureWindow(referenceDate, blockedDates, "distribucion").lastOpenDay;
+  return {
+    perc: getCloseMillis(perc),
+    horas: getCloseMillis(horas),
   };
 }
 

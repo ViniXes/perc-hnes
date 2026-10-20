@@ -39,6 +39,9 @@ rules_version = '2';
 //     'panel-poa', SOLO el PAO de su unidad: la que le asigno el administrador
 //     ('poaUnidad': un servicio, una Division o la Subdireccion Administrativa) o,
 //     si no tiene, su propio servicio. 'poaUnidad' solo lo escribe un admin.
+//  9) Cierre de Horas y del Comite en el servidor (igual que el PERC del punto
+//     7): captureWindows/{mes}.horasCierre (2:30 p. m. del 5to dia habil). Despues de esa hora solo el administrador guarda, salvo reapertura
+//     vigente (24 h) o, en el Comite, lista desbloqueada por el gestor.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -131,31 +134,48 @@ service cloud.firestore {
     match /serviceAssignments/{serviceId} {
       allow read, write: if isAdmin();
     }
-    // --- Cierre de PERC ------------------------------------------------------
-    // Si el mes todavia no tiene hora de cierre publicada, no se bloquea nada
-    // (la publica el administrador al entrar a PULSO).
-    function percEnPlazo(periodId) {
+    // --- Cierre de captura en el servidor --------------------------------------
+    // captureWindows/{mes} guarda la hora de cierre de cada modulo: percCierre
+    // (3er dia habil) y horasCierre (5to, tambien la usa el Comite). SEPS queda
+    // sin cierre en el servidor: en esa coleccion tambien viven Gastos,
+    // Depreciacion, Laboratorio y comentarios, con otros plazos. Si el mes todavia no la tiene publicada, no se bloquea nada (la
+    // publican el administrador al entrar y el recordatorio diario del servidor).
+    function enPlazo(periodId, campo) {
       let ref = /databases/$(database)/documents/captureWindows/$(periodId);
-      return !exists(ref) || request.time < get(ref).data.percCierre;
+      return !exists(ref)
+        || get(ref).data.get(campo, null) == null
+        || request.time < get(ref).data.get(campo, null);
     }
-    function percOverride(periodId, serviceId) {
-      let id = periodId + '__' + serviceId + '__perc';
+    function overrideRef(periodId, serviceId, moduleId) {
+      let id = periodId + '__' + serviceId + '__' + moduleId;
       return /databases/$(database)/documents/captureOverrides/$(id);
     }
     // Reapertura vigente: estado 'open' de menos de 24 horas.
-    function percReabierto(periodId, serviceId) {
-      let ref = percOverride(periodId, serviceId);
+    function reabierto(periodId, serviceId, moduleId) {
+      let ref = overrideRef(periodId, serviceId, moduleId);
       return exists(ref)
         && get(ref).data.state == 'open'
         && request.time < get(ref).data.updatedAt + duration.value(24, 'h');
     }
-    function percCerradoAMano(periodId, serviceId) {
-      let ref = percOverride(periodId, serviceId);
+    function cerradoAMano(periodId, serviceId, moduleId) {
+      let ref = overrideRef(periodId, serviceId, moduleId);
       return exists(ref) && get(ref).data.state == 'closed';
     }
+    function capturaAbierta(periodId, serviceId, moduleId, campo) {
+      return reabierto(periodId, serviceId, moduleId)
+        || (enPlazo(periodId, campo) && !cerradoAMano(periodId, serviceId, moduleId));
+    }
     function percAbierto(periodId, serviceId) {
-      return percReabierto(periodId, serviceId)
-        || (percEnPlazo(periodId) && !percCerradoAMano(periodId, serviceId));
+      return capturaAbierta(periodId, serviceId, 'perc', 'percCierre');
+    }
+    function horasAbierto(periodId, serviceId) {
+      return capturaAbierta(periodId, serviceId, 'distribucion', 'horasCierre');
+    }
+    // Comite: misma ventana que Horas, o lista desbloqueada a mano ese mes.
+    function cecAbierto(periodId, serviceId) {
+      return enPlazo(periodId, 'horasCierre')
+        || get(/databases/$(database)/documents/documentControl/cecDesbloqueos)
+             .data.get(periodId + '__' + serviceId, null) != null;
     }
     match /captureWindows/{periodId} {
       allow read: if isSignedIn();
@@ -184,8 +204,10 @@ service cloud.firestore {
     match /horasTabulators/{docId} {
       allow read: if isSignedIn() && noEsMinsal();
       allow create, update: if isAdmin()
+        || (tienePerfil() && userProfile().role == 'admin')
         || (isSignedIn() && noEsMinsal()
-            && request.resource.data.userId == request.auth.uid);
+            && request.resource.data.userId == request.auth.uid
+            && horasAbierto(request.resource.data.periodId, request.resource.data.serviceId));
       allow delete: if isAdmin();
     }
     // El calendario si lo lee MINSAL: el tablero lo necesita para saber de que
@@ -310,7 +332,8 @@ service cloud.firestore {
       // Escribe el administrador, o el miembro del comite al que se le asigno
       // ESTA lista. Guardar la de otro servicio se rechaza desde el servidor.
       allow create, update: if isAdmin()
-        || (llenaListaDelComite() && request.resource.data.userId == request.auth.uid);
+        || (llenaListaDelComite() && request.resource.data.userId == request.auth.uid
+            && cecAbierto(request.resource.data.periodId, request.resource.data.serviceId));
       allow delete: if isAdmin();
     }
     // Solicitudes de registro (jefes de servicio, direccion, MINSAL y comite).

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Timestamp } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { APP_URL, enviarCorreo, envolverHtml, esCorreo, escaparHtml } from "@/lib/correo";
 import {
   getCaptureWindow,
   getClosingPeriodId,
+  getModuleCloseMillis,
   getPeriodId,
   getPeriodLabel,
   getSepsWindow,
@@ -271,10 +273,41 @@ async function calcularEnvios(db: FirebaseFirestore.Firestore) {
   };
 }
 
+/**
+ * Publica en captureWindows/{mes que se cierra} la hora de cierre de PERC y de Horas
+ * (y Comite). Con eso las reglas de Firestore rechazan guardados tardios
+ * aunque ningun administrador haya entrado a PULSO ese mes.
+ */
+async function publicarCierres(db: FirebaseFirestore.Firestore) {
+  const hoy = ahoraEnElSalvador();
+  // `hoy` es la hora de pared de El Salvador leida en la zona del servidor (UTC):
+  // esta diferencia convierte "2:30 p. m. en El Salvador" al instante real.
+  const desfase = Math.round((Date.now() - hoy.getTime()) / 900_000) * 900_000;
+  const bloqueados = await diasBloqueados(db, hoy.getFullYear());
+  const cierres = getModuleCloseMillis(hoy, bloqueados);
+  await db
+    .collection("captureWindows")
+    .doc(getClosingPeriodId(hoy))
+    .set(
+      {
+        periodId: getClosingPeriodId(hoy),
+        percCierre: Timestamp.fromMillis(cierres.perc + desfase),
+        horasCierre: Timestamp.fromMillis(cierres.horas + desfase),
+      },
+      { merge: true },
+    );
+}
+
 async function ejecutar(simular: boolean, origen: string) {
   const db = getAdminDb();
   if (!db) {
     return NextResponse.json({ ok: false, error: "Servidor no configurado." }, { status: 500 });
+  }
+
+  try {
+    await publicarCierres(db);
+  } catch {
+    // Si falla, el administrador las vuelve a publicar al entrar a PULSO.
   }
 
   const { hoy, modulos, destinatarios } = await calcularEnvios(db);

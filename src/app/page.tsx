@@ -139,6 +139,8 @@ import {
   PERIOD_FORMATTER,
   buildRecentPeriods,
   getCaptureWindow,
+  getFeriadoNacional,
+  getModuleCloseMillis,
   getClosingPeriodId,
   getDateKey,
   getPeriodId,
@@ -5399,33 +5401,35 @@ export default function Home() {
   // PERC posterior, salvo que el tablero tenga una reapertura vigente. La publica
   // cualquier administrador al entrar (solo si cambio), con el calendario ya
   // aplicado (feriados y fechas no habiles).
-  const percCierreMillis = percWindow.lastOpenDay
-    ? new Date(
-        percWindow.lastOpenDay.getFullYear(),
-        percWindow.lastOpenDay.getMonth(),
-        percWindow.lastOpenDay.getDate(),
-        CAPTURE_CLOSE_HOUR,
-        CAPTURE_CLOSE_MINUTE,
-        0,
-        0,
-      ).getTime()
-    : null;
+  // Lo mismo para Horas y el Comite (cierran el 5to dia habil). Tambien las
+  // publica el recordatorio diario del servidor, por si ningun admin entra.
+  const moduleCloseMillis = useMemo(
+    () => getModuleCloseMillis(now, currentBlockedDates),
+    [now, currentBlockedDates],
+  );
+  const percCierreMillis = moduleCloseMillis.perc;
+  const horasCierreMillis = moduleCloseMillis.horas;
   useEffect(() => {
     if (!isAdmin || ghostUid || firestoreUnavailable || !firestoreStatusReady || !user) return;
-    if (percCierreMillis === null) return;
     const ref = doc(db, "captureWindows", periodId);
     void (async () => {
       try {
         const snap = await getDoc(ref);
-        const guardado = snap.exists()
-          ? readOverrideMillis((snap.data() as { percCierre?: unknown }).percCierre)
-          : null;
-        if (guardado === percCierreMillis) return;
+        const data = snap.exists()
+          ? (snap.data() as { percCierre?: unknown; horasCierre?: unknown })
+          : {};
+        if (
+          readOverrideMillis(data.percCierre) === percCierreMillis &&
+          readOverrideMillis(data.horasCierre) === horasCierreMillis
+        ) {
+          return;
+        }
         await setDoc(
           ref,
           {
             periodId,
             percCierre: Timestamp.fromMillis(percCierreMillis),
+            horasCierre: Timestamp.fromMillis(horasCierreMillis),
             updatedAt: serverTimestamp(),
           },
           { merge: true },
@@ -5434,7 +5438,16 @@ export default function Home() {
         // Si no se puede publicar, la pantalla igual bloquea; se reintenta al volver a entrar.
       }
     })();
-  }, [isAdmin, ghostUid, firestoreUnavailable, firestoreStatusReady, user, periodId, percCierreMillis]);
+  }, [
+    isAdmin,
+    ghostUid,
+    firestoreUnavailable,
+    firestoreStatusReady,
+    user,
+    periodId,
+    percCierreMillis,
+    horasCierreMillis,
+  ]);
   // SEPS: plantilla del servicio (si tiene), ventana de doble fase y estado efectivo.
   const sepsBaseTemplate = useMemo(
     () => getSepsTemplate(effectiveServiceId),
@@ -5618,6 +5631,31 @@ export default function Home() {
     }
 
     return getCaptureWindow(calendarPreviewDate, calendarEditorBlockedDates);
+  }, [calendarEditorBlockedDates, calendarPreviewDate]);
+  // Asuetos nacionales del mes que se configura: se descuentan solos.
+  const calendarEditorFeriados = useMemo(() => {
+    if (!calendarPreviewDate) return [] as { key: string; name: string }[];
+    const result: { key: string; name: string }[] = [];
+    const cursor = new Date(calendarPreviewDate);
+    while (cursor.getMonth() === calendarPreviewDate.getMonth()) {
+      const name = getFeriadoNacional(cursor);
+      if (name) result.push({ key: getDateKey(cursor), name });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return result;
+  }, [calendarPreviewDate]);
+  // Que cierra cada dia de la vista previa (PERC el 3ro; Horas, SEPS y Comite el 5to).
+  const calendarPreviewCierres = useMemo(() => {
+    if (!calendarPreviewDate) return new Map<string, string>();
+    const cierres = getModuleCloseMillis(calendarPreviewDate, calendarEditorBlockedDates);
+    const result = new Map<string, string>();
+    const agregar = (millis: number, texto: string) => {
+      const key = getDateKey(new Date(millis));
+      result.set(key, result.has(key) ? `${result.get(key)} · ${texto}` : texto);
+    };
+    agregar(cierres.perc, "cierra PERC");
+    agregar(cierres.horas, "cierra Horas, SEPS y Comité");
+    return result;
   }, [calendarEditorBlockedDates, calendarPreviewDate]);
 
   async function handleFirestoreError(error: unknown) {
@@ -8066,6 +8104,11 @@ export default function Home() {
       }));
     } catch (error) {
       if (await handleFirestoreError(error)) return;
+      const textoError = (error instanceof Error ? error.message : String(error)).toLowerCase();
+      if (textoError.includes("permission") || textoError.includes("permiso")) {
+        setError("El servidor rechazó el guardado: la captura del comité de este mes ya cerró.");
+        return;
+      }
       setError("No pudimos guardar la lista. Volvé a intentarlo.");
     } finally {
       setCecGuardando(false);
@@ -12568,6 +12611,13 @@ export default function Home() {
       if (await handleFirestoreError(saveError)) {
         return;
       }
+      const textoError = (saveError instanceof Error ? saveError.message : String(saveError)).toLowerCase();
+      if (textoError.includes("permission") || textoError.includes("permiso")) {
+        setError(
+          "El servidor rechazó el guardado: la captura de Distribución de Horas de este mes ya cerró. Si necesitás registrar, pedí la reapertura del tablero.",
+        );
+        return;
+      }
       setError("No pudimos guardar Distribucion de Horas. Revisa Firestore e intentalo de nuevo.");
     } finally {
       setIsSavingHoras(false);
@@ -13897,6 +13947,23 @@ export default function Home() {
                   <p className="text-sm text-slate-400">No hay fechas excluidas para este mes.</p>
                 )}
               </div>
+              {calendarEditorFeriados.length > 0 ? (
+                <div className="mt-4">
+                  <p className="text-xs text-slate-300">
+                    Asuetos nacionales (se descuentan solos, no hace falta agregarlos):
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {calendarEditorFeriados.map((feriado) => (
+                      <span
+                        key={feriado.key}
+                        className="inline-flex items-center rounded-full border border-amber-400/40 bg-amber-950/30 px-3 py-1.5 text-xs font-semibold text-amber-100"
+                      >
+                        {feriado.key} · {feriado.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-[#1b2537] p-3">
@@ -13917,6 +13984,12 @@ export default function Home() {
                       }`}
                     >
                       Dia habil {index + 1}: {DATE_TIME_FORMATTER.format(day).split(", ")[0]}
+                      {calendarPreviewCierres.has(getDateKey(day)) ? (
+                        <span className="font-semibold">
+                          {" "}
+                          · {calendarPreviewCierres.get(getDateKey(day))} (2:30 p. m.)
+                        </span>
+                      ) : null}
                     </div>
                   ))
                 ) : (

@@ -1,14 +1,48 @@
 rules_version = '2';
-
 // =============================================================================
 // Reglas de seguridad de Firestore para PERC-HNES.
 // -----------------------------------------------------------------------------
 // Pegalas en: Firebase Console > Firestore Database > Reglas > Publicar.
-// (Asegurate de aplicarlas a la base de datos correcta si usas una con nombre;
-//  este proyecto usa la base "(default)" salvo que definas
-//  NEXT_PUBLIC_FIREBASE_FIRESTORE_DATABASE_ID.)
+//
+// CAMBIOS DE ESTA VERSION
+//  1) Cuentas MINSAL: solo pueden leer lo que alimenta el monitoreo nacional de
+//     hospitales (serviceTabulators, calendario y overrides) y su propio perfil.
+//     Todo lo demas del HNES (SEPS, Horas, POA, Censo, Insumos, matrices) les
+//     queda cerrado desde el servidor, no solo escondido en la pantalla.
+//  2) Nadie puede ascenderse solo: un usuario ya no puede tocar su propio rol,
+//     permisos, servicio ni la marca isMinsal de su documento. Antes podia.
+//  3) Comite de Expediente Clinico: coleccion cecTabulators. La LEEN los miembros
+//     del comite completa (las 13 listas), mas Direccion, supervisores y los jefes
+//     de division. La ESCRIBEN solo los administradores y el miembro del comite AL
+//     QUE SE LE ASIGNO ESA LISTA: el campo 'cecServicios' de su perfil dice cuales
+//     puede llenar; si intenta guardar otra, el servidor se lo rechaza aunque la
+//     pantalla se lo permitiera. 'cec' y 'cecServicios' son campos que solo un
+//     administrador puede escribir, para que nadie se agregue solo al comite ni se
+//     asigne listas ajenas.
+//  4) Gestor del comite: si el perfil tiene cec == true y cecGestor == true, puede
+//     desbloquear y bloquear las listas del comite fuera de fecha (documento
+//     documentControl/cecDesbloqueos). 'cecGestor' solo lo escribe un admin.
+//  5) Bitacora (auditLog): toda cuenta con sesion deja constancia de sus acciones
+//     sensibles (desbloqueos, cierres, permisos, claves, bajas). Solo el
+//     administrador la LEE y nadie la edita ni la borra: es un registro.
+//  6) Acceso "Monitoreo del C.E. Clinico" (menuGrants incluye 'panel-monitor-cec'):
+//     la cuenta puede LEER las listas del comite (cecTabulators) para ver su
+//     avance en "Monitoreo general". No puede escribirlas. 'menuGrants' solo lo
+//     escribe un admin, asi que nadie se lo puede dar a si mismo.
+//  7) Cierre de PERC en el servidor: captureWindows/{mes}.percCierre guarda la
+//     hora de cierre (2:30 p. m. del 3er dia habil). Despues de esa hora nadie
+//     que no sea administrador puede guardar el PERC de ese mes, salvo que el
+//     tablero tenga una reapertura vigente (captureOverrides, 24 horas). Si un
+//     supervisor lo cerro a mano, tampoco se puede guardar.
+//  8) POA (Plan Anual Operativo): nadie entra por ser de un servicio. Lo leen y
+//     escriben los administradores (todos los PAO) y la cuenta con el acceso
+//     'panel-poa', SOLO el PAO de su unidad: la que le asigno el administrador
+//     ('poaUnidad': un servicio, una Division o la Subdireccion Administrativa) o,
+//     si no tiene, su propio servicio. 'poaUnidad' solo lo escribe un admin.
+//  9) Cierre de Horas y del Comite en el servidor (igual que el PERC del punto
+//     7): captureWindows/{mes}.horasCierre (2:30 p. m. del 5to dia habil). Despues de esa hora solo el administrador guarda, salvo reapertura
+//     vigente (24 h) o, en el Comite, lista desbloqueada por el gestor.
 // =============================================================================
-
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() {
@@ -31,34 +65,153 @@ service cloud.firestore {
     function isSupervisor() {
       return isSignedIn() && userProfile().role == 'supervisor';
     }
+
+    // --- MINSAL ---------------------------------------------------------------
+    // Cuenta del nivel ministerial: entra solo al monitoreo nacional de
+    // hospitales. Se comprueba con exists() antes de leer para que una cuenta
+    // recien creada, o sin documento de perfil, no rompa la evaluacion.
+    function tienePerfil() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/serviceUsers/$(request.auth.uid));
+    }
+    function esMinsal() {
+      return tienePerfil() && userProfile().get('isMinsal', false) == true;
+    }
+    // Se usa en todo lo que NO le corresponde ver ni tocar a una cuenta MINSAL.
+    function noEsMinsal() {
+      return !esMinsal();
+    }
+
+    // --- Comite de Expediente Clinico ----------------------------------------
+    function esComite() {
+      return tienePerfil() && userProfile().get('cec', false) == true;
+    }
+    // Jefe de division: tiene division asignada, o una division que monitorea.
+    function esJefeDivision() {
+      return tienePerfil()
+        && (userProfile().get('division', '') != ''
+            || userProfile().get('monitorDivision', '') != '');
+    }
+    function esDireccion() {
+      return tienePerfil() && userProfile().get('isDirector', false) == true;
+    }
+    // El comite VE las 13 listas, pero cada quien LLENA solo la de su servicio.
+    // 'cecServicios' es la lista de ids que el administrador le asigno. Si esta
+    // vacia, la cuenta entra en solo lectura.
+    function llenaListaDelComite() {
+      return esComite()
+        && userProfile().get('cecServicios', [])
+             .hasAny([request.resource.data.serviceId]);
+    }
+
+    // Campos del perfil que SOLO un administrador puede escribir. Son los que
+    // definen quien es cada quien: si un usuario pudiera tocarlos, se daria a si
+    // mismo el rol que quisiera. Lo demas de su documento (contrasena cambiada,
+    // aceptacion de politicas, documento de identidad) si lo escribe el mismo.
+    function camposDePrivilegio() {
+      return [
+        'role', 'permissions', 'isDirector', 'isMinsal', 'isActive', 'isChief',
+        'serviceId', 'serviceName', 'menuGrants', 'noCapture', 'supervisorModules',
+        'captureModules', 'viewPerc', 'viewSeps', 'viewHoras', 'division',
+        'department', 'monitorDivision', 'username', 'loginEmail', 'sepsTables',
+        'cec', 'cecServicios', 'cecGestor', 'poaUnidad'
+      ];
+    }
+    function noTocaPrivilegios() {
+      return !request.resource.data.diff(resource.data)
+        .affectedKeys().hasAny(camposDePrivilegio());
+    }
+
     match /serviceUsers/{uid} {
-      allow read, write: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      // Crear cuentas es cosa del administrador (es quien aprueba las solicitudes).
+      allow create: if isAdmin();
+      // El propio usuario actualiza su documento, pero sin tocar su privilegio.
+      allow update: if isAdmin()
+        || (isSignedIn() && request.auth.uid == uid && noTocaPrivilegios());
+      allow delete: if isAdmin();
     }
     match /serviceAssignments/{serviceId} {
       allow read, write: if isAdmin();
     }
+    // --- Cierre de captura en el servidor --------------------------------------
+    // captureWindows/{mes} guarda la hora de cierre de cada modulo: percCierre
+    // (3er dia habil) y horasCierre (5to, tambien la usa el Comite). SEPS queda
+    // sin cierre en el servidor: en esa coleccion tambien viven Gastos,
+    // Depreciacion, Laboratorio y comentarios, con otros plazos. Si el mes todavia no la tiene publicada, no se bloquea nada (la
+    // publican el administrador al entrar y el recordatorio diario del servidor).
+    function enPlazo(periodId, campo) {
+      let ref = /databases/$(database)/documents/captureWindows/$(periodId);
+      return !exists(ref)
+        || get(ref).data.get(campo, null) == null
+        || request.time < get(ref).data.get(campo, null);
+    }
+    function overrideRef(periodId, serviceId, moduleId) {
+      let id = periodId + '__' + serviceId + '__' + moduleId;
+      return /databases/$(database)/documents/captureOverrides/$(id);
+    }
+    // Reapertura vigente: estado 'open' de menos de 24 horas.
+    function reabierto(periodId, serviceId, moduleId) {
+      let ref = overrideRef(periodId, serviceId, moduleId);
+      return exists(ref)
+        && get(ref).data.state == 'open'
+        && request.time < get(ref).data.updatedAt + duration.value(24, 'h');
+    }
+    function cerradoAMano(periodId, serviceId, moduleId) {
+      let ref = overrideRef(periodId, serviceId, moduleId);
+      return exists(ref) && get(ref).data.state == 'closed';
+    }
+    function capturaAbierta(periodId, serviceId, moduleId, campo) {
+      return reabierto(periodId, serviceId, moduleId)
+        || (enPlazo(periodId, campo) && !cerradoAMano(periodId, serviceId, moduleId));
+    }
+    function percAbierto(periodId, serviceId) {
+      return capturaAbierta(periodId, serviceId, 'perc', 'percCierre');
+    }
+    function horasAbierto(periodId, serviceId) {
+      return capturaAbierta(periodId, serviceId, 'distribucion', 'horasCierre');
+    }
+    // Comite: misma ventana que Horas, o lista desbloqueada a mano ese mes.
+    function cecAbierto(periodId, serviceId) {
+      return enPlazo(periodId, 'horasCierre')
+        || get(/databases/$(database)/documents/documentControl/cecDesbloqueos)
+             .data.get(periodId + '__' + serviceId, null) != null;
+    }
+    match /captureWindows/{periodId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || (tienePerfil() && userProfile().role == 'admin');
+    }
+    // PRODUCCION DISTRIBUIDA (PERC). Es lo unico del HNES que una cuenta MINSAL
+    // puede LEER: de aca sale el avance del Hospital Nacional El Salvador dentro
+    // del monitoreo de hospitales. Escribir, nunca.
     match /serviceTabulators/{docId} {
       allow read: if isSignedIn();
       allow create, update: if isAdmin()
-        || (isSignedIn() && request.resource.data.userId == request.auth.uid);
+        || (tienePerfil() && userProfile().role == 'admin')
+        || (isSignedIn() && noEsMinsal()
+            && request.resource.data.userId == request.auth.uid
+            && percAbierto(request.resource.data.periodId, request.resource.data.serviceId));
       allow delete: if isAdmin();
     }
     match /sepsTabulators/{docId} {
-      allow read: if isSignedIn();
-      // Escriben: admin, el dueño del servicio (su propio userId) y el revisor de
-      // SEPS Juan Carlos Miranda (usuario jcmiranda), que edita/agrega-quita filas
-      // y deja comentarios en el SEPS de cualquier servicio.
+      allow read: if isSignedIn() && noEsMinsal();
       allow create, update: if isAdmin()
-        || (isSignedIn() && request.resource.data.userId == request.auth.uid)
+        || (isSignedIn() && noEsMinsal()
+            && request.resource.data.userId == request.auth.uid)
         || request.auth.token.email == 'jcmiranda@perc-hnes.app';
       allow delete: if isAdmin();
     }
     match /horasTabulators/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && noEsMinsal();
       allow create, update: if isAdmin()
-        || (isSignedIn() && request.resource.data.userId == request.auth.uid);
+        || (tienePerfil() && userProfile().role == 'admin')
+        || (isSignedIn() && noEsMinsal()
+            && request.resource.data.userId == request.auth.uid
+            && horasAbierto(request.resource.data.periodId, request.resource.data.serviceId));
       allow delete: if isAdmin();
     }
+    // El calendario si lo lee MINSAL: el tablero lo necesita para saber de que
+    // mes esta hablando. No trae ninguna cifra.
     match /captureCalendar/{periodId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -73,8 +226,8 @@ service cloud.firestore {
             && userProfile().supervisorModules.hasAny([resource.data.moduleId]));
     }
     match /captureRequests/{docId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn()
+      allow read: if isSignedIn() && noEsMinsal();
+      allow create: if isSignedIn() && noEsMinsal()
         && request.resource.data.requestedByUid == request.auth.uid;
       allow update: if isAdmin()
         || (isSupervisor()
@@ -82,36 +235,69 @@ service cloud.firestore {
         || (isSignedIn() && resource.data.requestedByUid == request.auth.uid);
       allow delete: if isAdmin();
     }
+    // BITACORA: registro de acciones sensibles. Cualquier cuenta con sesion la
+    // ESCRIBE (queda constancia de lo que hace, siempre con su propia identidad),
+    // pero solo el admin la LEE, y nadie puede editarla ni borrarla.
+    match /auditLog/{docId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+    // Desbloqueos del Comite de Expediente Clinico: los escribe el admin o el
+    // gestor del comite (cec == true y cecGestor == true).
+    match /documentControl/cecDesbloqueos {
+      allow read: if isSignedIn() && noEsMinsal();
+      allow write: if isAdmin()
+        || (esComite() && userProfile().get('cecGestor', false) == true);
+    }
     match /documentControl/{year} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && noEsMinsal();
       allow write: if isAdmin();
     }
     // Estructura (matriz) de los tabuladores SEPS: un documento por servicio con
     // las tablas y filas agregadas, ocultas o renombradas. La LEE cualquier usuario
-    // autenticado (todos necesitan ver el tabulador ya ajustado); la ESCRIBEN los
-    // administradores y el revisor de SEPS (Juan Carlos Miranda).
+    // autenticado que no sea MINSAL; la ESCRIBEN los administradores y el revisor.
     match /sepsLayouts/{serviceId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && noEsMinsal();
       allow write: if isAdmin()
         || request.auth.token.email == 'jcmiranda@perc-hnes.app'
         || (isSignedIn() && userProfile().role == 'admin');
     }
-    // POA - Plan Anual Operativo por servicio y año.
-    // Ids: "<servicio>__<año>" para el documento y "<servicio>__<año>__media"
-    // para los graficos de produccion. Lo VE cualquier usuario autenticado; lo
-    // EDITAN los admins y las cuentas del servicio dueño del POA (hoy ESDOMED).
+    // POA - Plan Anual Operativo por unidad y año ("<unidad>__<año>" y
+    // "<unidad>__<año>__media"); la unidad es un servicio, una División o la
+    // Subdirección Administrativa. Nadie entra por ser de un servicio: lo ven y
+    // editan los administradores (todos) y la cuenta a la que un administrador le
+    // otorgó el acceso "POA" (menuGrants 'panel-poa'), SOLO el de su unidad.
+    function adminPoa() {
+      return isAdmin() || (tienePerfil() && userProfile().role == 'admin');
+    }
+    // Unidad del PAO de la cuenta: la que le asignó el administrador (poaUnidad,
+    // p. ej. "division-medica") o, si no tiene, su propio servicio.
+    function unidadPoa() {
+      let p = userProfile();
+      let u = p.get('poaUnidad', '');
+      let s = p.get('serviceId', '');
+      return (u is string && u != '') ? u : ((s is string) ? s : '');
+    }
+    function tieneAccesoPoa() {
+      return tienePerfil() && noEsMinsal()
+        && userProfile().get('menuGrants', []).hasAny(['panel-poa'])
+        && unidadPoa() != '';
+    }
+    function poaDeSuUnidad(docId) {
+      return tieneAccesoPoa() && docId.matches(unidadPoa() + '__.*');
+    }
     match /poaDocuments/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn()
-        && (isAdmin()
-            || userProfile().role == 'admin'
-            || userProfile().serviceId == 'esdomed');
+      allow get: if adminPoa() || poaDeSuUnidad(docId);
+      allow list: if adminPoa()
+        || (tieneAccesoPoa() && resource.data.serviceId == unidadPoa());
+      allow create, update: if adminPoa()
+        || (poaDeSuUnidad(docId) && request.resource.data.serviceId == unidadPoa());
+      allow delete: if adminPoa();
     }
     // Censo Diario de Pacientes (id = "<periodo>", p.ej. "2026-06").
-    // Lo VEN admin y supervisores (NINGUN servicio). Lo EDITAN los admins y
-    // Alfonso Montes (amontes@perc-hnes.app). Sin cierre ni restricciones.
     match /censoDiario/{periodId} {
-      allow read: if isSignedIn()
+      allow read: if isSignedIn() && noEsMinsal()
         && (isAdmin()
             || userProfile().role == 'admin'
             || userProfile().role == 'supervisor');
@@ -121,11 +307,8 @@ service cloud.firestore {
             || request.auth.token.email == 'amontes@perc-hnes.app');
     }
     // Insumos de Almacen (id = "<periodo>", p.ej. "2026-06"). Guardado por mes.
-    // Lo VEN admin, supervisores y el servicio Almacen. Lo EDITAN esos mismos:
-    // admin y Almacen capturan valores; admin y supervisores tambien pueden
-    // agregar/quitar filas (se guardan junto con los valores del mes).
     match /insumosAlmacen/{periodId} {
-      allow read: if isSignedIn()
+      allow read: if isSignedIn() && noEsMinsal()
         && (isAdmin()
             || userProfile().role == 'admin'
             || userProfile().role == 'supervisor'
@@ -135,9 +318,25 @@ service cloud.firestore {
             || userProfile().role == 'admin'
             || userProfile().serviceId == 'almacen');
     }
-    // Solicitudes de registro de jefes de servicio: cualquiera puede CREAR su
-    // solicitud (sin sesion, con validacion de campos y estado "pending"); solo
-    // los admins pueden leerlas, aprobarlas o rechazarlas.
+    // COMITE DE EXPEDIENTE CLINICO. Un documento por mes y por servicio
+    // ("<periodo>__<servicio>"): las listas de monitoreo del comite.
+    match /cecTabulators/{docId} {
+      allow read: if isAdmin()
+        || esComite()
+        || esDireccion()
+        || esJefeDivision()
+        || isSupervisor()
+        // Acceso otorgado "Monitoreo del C.E. Clinico" (solo ver el avance).
+        || (tienePerfil()
+            && userProfile().get('menuGrants', []).hasAny(['panel-monitor-cec']));
+      // Escribe el administrador, o el miembro del comite al que se le asigno
+      // ESTA lista. Guardar la de otro servicio se rechaza desde el servidor.
+      allow create, update: if isAdmin()
+        || (llenaListaDelComite() && request.resource.data.userId == request.auth.uid
+            && cecAbierto(request.resource.data.periodId, request.resource.data.serviceId));
+      allow delete: if isAdmin();
+    }
+    // Solicitudes de registro (jefes de servicio, direccion, MINSAL y comite).
     match /signupRequests/{id} {
       allow read: if isAdmin();
       allow create: if request.resource.data.status == 'pending'
@@ -148,9 +347,8 @@ service cloud.firestore {
         && request.resource.data.serviceName is string;
       allow update, delete: if isAdmin();
     }
-    // Centro de Soporte: cualquier usuario con sesion CREA su ticket (estado
-    // "pendiente", con su propio uid y descripcion). Solo admin y supervisores
-    // leen la bandeja y cambian el estado. Borrado solo admin.
+    // Centro de Soporte. Una cuenta MINSAL SI puede abrir un ticket (tiene el
+    // boton de Soporte en su menu), pero no puede leer los de nadie.
     match /supportTickets/{ticketId} {
       allow read: if isAdmin() || isSupervisor();
       allow create: if isSignedIn()
@@ -161,10 +359,7 @@ service cloud.firestore {
       allow update: if isAdmin() || isSupervisor();
       allow delete: if isAdmin();
     }
-    // Registro global de documentos de identidad (DUI/pasaporte/carne) para impedir
-    // que una misma persona se registre varias veces. El id del doc = documento
-    // normalizado. Cualquiera puede consultar UN documento puntual (get) y crear el
-    // suyo si no existe; solo el admin puede listar, sobrescribir o borrar.
+    // Registro global de documentos de identidad (DUI/pasaporte/carne).
     match /documentRegistry/{docId} {
       allow get: if true;
       allow list: if isAdmin();

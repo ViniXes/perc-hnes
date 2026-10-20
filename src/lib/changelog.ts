@@ -27,6 +27,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.445",
+    para: ["todos"],
+    texto:
+      "Calendario: los asuetos nacionales (Año Nuevo, Jueves y Viernes Santo, 1 y 10 de mayo, 17 de junio, 3 al 6 de agosto, 15 de septiembre, 2 de noviembre y 25 de diciembre) ya no cuentan como dias habiles de captura.",
+  },
+  {
+    version: "1986.445",
+    para: ["admin"],
+    texto:
+      "Calendario: la vista previa marca que dia cierra PERC y cual Horas, SEPS y Comite. El servidor ahora tambien cierra Horas y el Comite a las 2:30 p. m. del 5to dia habil (hay que publicar las reglas nuevas de Firestore).",
+  },
+  {
     version: "1986.444",
     para: ["admin", "serv:esdomed"],
     texto:
