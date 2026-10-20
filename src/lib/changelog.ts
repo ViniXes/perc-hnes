@@ -27,7 +27,7 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "1986.",
+    version: "1986.454",
     para: ["admin", "serv:esdomed"],
     texto:
       "POA: la ventana de comprobantes ya no sale como un cuadro negro; se ve con los colores del tema y con el boton para subir archivos.",
