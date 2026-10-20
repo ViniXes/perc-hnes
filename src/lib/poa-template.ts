@@ -46,8 +46,20 @@ export type PoaMatrizRiesgoRow = {
   responsables: string;
 };
 
+/** Documento que respalda lo realizado en un trimestre (el archivo va aparte). */
+export type PoaComprobante = {
+  id: string;
+  nombre: string;
+  tipo: string;
+  tamano: number;
+  /** Cuántos trozos ocupa el archivo en Firestore. */
+  partes: number;
+  fecha: string;
+  por: string;
+};
+
 /** Programación trimestral: programado y realizado (el % se calcula solo). */
-export type PoaTrimestre = { prog: string; real: string };
+export type PoaTrimestre = { prog: string; real: string; comprobantes?: PoaComprobante[] };
 
 /** Una actividad dentro de un objetivo de la programación anual. */
 export type PoaActividadRow = {

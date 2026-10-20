@@ -2,6 +2,17 @@
 
 import { PoaUnidadPicker, type PoaUnidadGrupo } from "@/components/poa-unidad-picker";
 import { poaDatosBloque, poaDatosGrafico, poaGraficoPastel3D } from "@/lib/poa-chart";
+import {
+  POA_COMPROBANTE_ACCEPT,
+  POA_COMPROBANTE_MAX_BYTES,
+  poaArmarComprobante,
+  poaComprobanteDocId,
+  poaComprobanteVisible,
+  poaContarComprobantes,
+  poaNuevoComprobanteId,
+  poaPrepararComprobante,
+  poaTamanoLegible,
+} from "@/lib/poa-comprobantes";
 import { ChangeEvent, CSSProperties, Fragment, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Auth,
@@ -114,6 +125,7 @@ import {
   poaAplicarCorrecciones,
   poaTieneCorrecciones,
   poaTituloCorrecciones,
+  type PoaComprobante,
   type PoaDoc,
   type PoaSemaforo,
 } from "@/lib/poa-template";
@@ -4734,6 +4746,10 @@ export default function Home() {
   const [poaDoc, setPoaDoc] = useState<PoaDoc | null>(null);
   /** Gráficos de producción: clave -> dataURL. Se guardan en un doc aparte. */
   const [poaMedia, setPoaMedia] = useState<Record<string, string>>({});
+  /** Actividad y trimestre cuyos comprobantes se están viendo (ventana abierta). */
+  const [poaComp, setPoaComp] = useState<{ gi: number; ri: number; t: number } | null>(null);
+  /** "" libre · "subir" subiendo · <id> abriendo o quitando ese comprobante. */
+  const [poaCompBusy, setPoaCompBusy] = useState("");
   /** Años que ya tienen documento guardado (para el selector). */
   const [poaYears, setPoaYears] = useState<number[]>([]);
   const [poaLoading, setPoaLoading] = useState(false);
@@ -8489,15 +8505,19 @@ export default function Home() {
   async function loadPoaYears() {
     if (firestoreUnavailable) return;
     try {
-      // Solo los documentos del servicio (las reglas no dejan listar los de otros).
-      const snap = await getDocs(query(collection(db, "poaDocuments"), where("serviceId", "==", poaServiceId)));
-      const years: number[] = [];
-      snap.forEach((entry) => {
-        const id = entry.id;
-        if (!id.startsWith(`${poaServiceId}__`) || id.endsWith("__media")) return;
-        const year = Number.parseInt(id.slice(poaServiceId.length + 2), 10);
-        if (Number.isFinite(year)) years.push(year);
-      });
+      // Se consulta año por año: listar la colección también bajaría los
+      // archivos de los comprobantes, que viven en la misma colección.
+      const anioActual = new Date().getFullYear();
+      const candidatos: number[] = [];
+      for (let y = 2020; y <= anioActual + 3; y += 1) candidatos.push(y);
+      const encontrados = await Promise.all(
+        candidatos.map((y) =>
+          getDoc(doc(db, "poaDocuments", getPoaDocId(poaServiceId, y)))
+            .then((snap) => (snap.exists() ? y : null))
+            .catch(() => null),
+        ),
+      );
+      const years = encontrados.filter((y): y is number => y !== null);
       years.sort((a, b) => b - a);
       setPoaYears(years);
     } catch (poaError) {
@@ -8669,6 +8689,143 @@ export default function Home() {
       return next;
     });
     setPoaDirty(true);
+  }
+
+  /** Guarda el PAO con la lista de comprobantes al día (el archivo ya se subió aparte). */
+  async function guardarPoaConComprobantes(next: PoaDoc) {
+    await setDoc(
+      doc(db, "poaDocuments", getPoaDocId(poaServiceId, next.year)),
+      { serviceId: poaServiceId, year: next.year, doc: next, updatedAt: serverTimestamp(), updatedBy: user?.email || "" },
+      { merge: true },
+    );
+  }
+
+  /**
+   * Sube un comprobante a la actividad y trimestre abiertos. Lo realizado del
+   * trimestre pasa a ser, como mínimo, la cantidad de comprobantes, y el PAO se
+   * guarda en el acto para que el archivo no quede huérfano.
+   */
+  async function handleSubirComprobantePoa(file: File | undefined | null) {
+    if (!file || !poaDoc || !poaComp || !canEditPoa || firestoreUnavailable) return;
+    if (file.size > POA_COMPROBANTE_MAX_BYTES) {
+      setError(`El archivo pesa ${poaTamanoLegible(file.size)}. El máximo es ${poaTamanoLegible(POA_COMPROBANTE_MAX_BYTES)}.`);
+      return;
+    }
+    const { gi, ri, t } = poaComp;
+    setPoaCompBusy("subir");
+    setError("");
+    try {
+      const listo = await poaPrepararComprobante(file);
+      if (listo.tamano > POA_COMPROBANTE_MAX_BYTES) {
+        setError(`El archivo pesa ${poaTamanoLegible(listo.tamano)}. El máximo es ${poaTamanoLegible(POA_COMPROBANTE_MAX_BYTES)}.`);
+        return;
+      }
+      const baseId = getPoaDocId(poaServiceId, poaDoc.year);
+      const id = poaNuevoComprobanteId();
+      for (let n = 0; n < listo.trozos.length; n += 1) {
+        await setDoc(doc(db, "poaDocuments", poaComprobanteDocId(baseId, id, n)), {
+          serviceId: poaServiceId,
+          year: poaDoc.year,
+          comprobante: id,
+          parte: n,
+          data: listo.trozos[n],
+        });
+      }
+      const ficha: PoaComprobante = {
+        id,
+        nombre: listo.nombre,
+        tipo: listo.tipo,
+        tamano: listo.tamano,
+        partes: listo.trozos.length,
+        fecha: new Date().toISOString(),
+        por: user?.displayName || user?.email || "",
+      };
+      const next = JSON.parse(JSON.stringify(poaDoc)) as PoaDoc;
+      const tri = next.actividades[gi]?.rows[ri]?.trimestres[t];
+      if (!tri) return;
+      tri.comprobantes = [...(tri.comprobantes ?? []), ficha];
+      const cuenta = tri.comprobantes.length;
+      if (poaNum(tri.real) < cuenta) tri.real = String(cuenta);
+      await guardarPoaConComprobantes(next);
+      setPoaDoc(next);
+      setMessage(`Comprobante subido al T${t + 1}. Realizado: ${tri.real}.`);
+    } catch (compError) {
+      if (await handleFirestoreError(compError)) return;
+      setError("No pudimos subir el comprobante. Probá de nuevo.");
+    } finally {
+      setPoaCompBusy("");
+    }
+  }
+
+  /** Abre el comprobante (PDF o imagen en otra pestaña; Word o Excel se descarga). */
+  async function handleVerComprobantePoa(comp: PoaComprobante) {
+    if (!poaDoc) return;
+    const visible = poaComprobanteVisible(comp.tipo);
+    // La pestaña se abre ya, antes de esperar a Firestore, para que el navegador no la bloquee.
+    const tab = visible ? window.open("", "_blank") : null;
+    setPoaCompBusy(comp.id);
+    try {
+      const baseId = getPoaDocId(poaServiceId, poaDoc.year);
+      const snaps = await Promise.all(
+        Array.from({ length: comp.partes }, (_, n) => getDoc(doc(db, "poaDocuments", poaComprobanteDocId(baseId, comp.id, n)))),
+      );
+      const trozos = snaps.map((snap) => (snap.exists() ? String((snap.data() as { data?: string }).data ?? "") : ""));
+      if (trozos.some((t) => !t)) throw new Error("incompleto");
+      const url = URL.createObjectURL(poaArmarComprobante(trozos, comp.tipo));
+      if (tab) {
+        tab.location.href = url;
+      } else {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = comp.nombre;
+        a.click();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (compError) {
+      tab?.close();
+      if (await handleFirestoreError(compError)) return;
+      setError("No pudimos abrir el comprobante.");
+    } finally {
+      setPoaCompBusy("");
+    }
+  }
+
+  /** Quita el comprobante: borra el archivo y descuenta lo realizado si venía de los comprobantes. */
+  async function handleQuitarComprobantePoa(comp: PoaComprobante) {
+    if (!poaDoc || !poaComp || !canEditPoa) return;
+    if (!window.confirm(`¿Quitar el comprobante "${comp.nombre}"?`)) return;
+    const { gi, ri, t } = poaComp;
+    setPoaCompBusy(comp.id);
+    try {
+      const next = JSON.parse(JSON.stringify(poaDoc)) as PoaDoc;
+      const tri = next.actividades[gi]?.rows[ri]?.trimestres[t];
+      if (!tri) return;
+      const antes = poaContarComprobantes(tri.comprobantes);
+      tri.comprobantes = (tri.comprobantes ?? []).filter((c) => c.id !== comp.id);
+      if (poaNum(tri.real) === antes) tri.real = tri.comprobantes.length ? String(tri.comprobantes.length) : "";
+      await guardarPoaConComprobantes(next);
+      setPoaDoc(next);
+      // El archivo se vacía (las reglas solo dejan borrar documentos al administrador).
+      const baseId = getPoaDocId(poaServiceId, poaDoc.year);
+      await Promise.all(
+        Array.from({ length: comp.partes }, (_, n) =>
+          setDoc(doc(db, "poaDocuments", poaComprobanteDocId(baseId, comp.id, n)), {
+            serviceId: poaServiceId,
+            year: poaDoc.year,
+            comprobante: comp.id,
+            parte: n,
+            data: "",
+            borrado: true,
+          }).catch(() => {}),
+        ),
+      );
+      setMessage("Comprobante quitado.");
+    } catch (compError) {
+      if (await handleFirestoreError(compError)) return;
+      setError("No pudimos quitar el comprobante.");
+    } finally {
+      setPoaCompBusy("");
+    }
   }
 
   /** Aplica al PAO abierto las correcciones de los lineamientos del año (sin guardar). */
@@ -15910,6 +16067,25 @@ export default function Home() {
         {label}
       </button>
     );
+    /** Botón de comprobantes de una actividad en un trimestre: muestra cuántos hay. */
+    const poaCompBtn = (gi: number, ri: number, t: number, tri: PoaDoc["actividades"][number]["rows"][number]["trimestres"][number]) => {
+      const n = poaContarComprobantes(tri.comprobantes);
+      if (!n && !canEditPoa) return null;
+      return (
+        <button
+          type="button"
+          onClick={() => setPoaComp({ gi, ri, t })}
+          className="poa-comp-btn"
+          title={n ? `${n} comprobante${n === 1 ? "" : "s"} del T${t + 1}` : `Subir comprobante del T${t + 1}`}
+          style={n ? poaSemaforoTone("verde") : { borderColor: "var(--border)", color: "var(--text-muted)" }}
+        >
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+          </svg>
+          {n ? n : "+"}
+        </button>
+      );
+    };
     const poaTh = (text: string, className = "") => (
       <th className={`poa-th ${className}`}>{text}</th>
     );
@@ -16098,6 +16274,7 @@ export default function Home() {
                   {poaTh("Responsable", "w-[150px]")}
                   {poaTh(`Prog. T${poaTrimestre}`, "w-[80px]")}
                   {poaTh(`Real T${poaTrimestre}`, "w-[90px]")}
+                  {poaTh("Comprobantes", "w-[100px]")}
                   {poaTh("%", "w-[70px]")}
                   {poaTh("Estado", "w-[120px]")}
                   {poaTh("Acumulado", "w-[110px]")}
@@ -16108,7 +16285,7 @@ export default function Home() {
                 {poaDoc.actividades.map((group, gi) => (
                   <Fragment key={`sg-${gi}`}>
                     <tr className="poa-group-row">
-                      <td colSpan={8}>
+                      <td colSpan={9}>
                         <span className="poa-group-label">Objetivo:</span> {group.objetivo}
                       </td>
                     </tr>
@@ -16142,6 +16319,7 @@ export default function Home() {
                               <span className="text-xs" style={{ color: "var(--text-muted)" }}>—</span>
                             )}
                           </td>
+                          <td className="text-center">{poaCompBtn(gi, ri, tIdx, tri) ?? <span className="text-xs" style={{ color: "var(--text-muted)" }}>—</span>}</td>
                           <td className="poa-calc">{poaPercent(tri.prog, tri.real) || "—"}</td>
                           <td className="text-center">
                             <span className="inline-block rounded-full px-2.5 py-1 text-[11px] font-semibold" style={poaSemaforoTone(sem)}>
@@ -16940,7 +17118,10 @@ export default function Home() {
                               <td className="poa-tri">
                                 {poaCell(tri.real, (v) => updatePoa((d) => { d.actividades[gIndex].rows[rIndex].trimestres[tIndex].real = v; }), { center: true, small: true })}
                               </td>
-                              <td className="poa-tri poa-calc">{poaPercent(tri.prog, tri.real) || "—"}</td>
+                              <td className="poa-tri poa-calc">
+                                {poaPercent(tri.prog, tri.real) || "—"}
+                                {poaCompBtn(gIndex, rIndex, tIndex, tri)}
+                              </td>
                             </Fragment>
                           ))}
                           <td>{poaCell(row.supuestos, (v) => updatePoa((d) => { d.actividades[gIndex].rows[rIndex].supuestos = v; }), { small: true })}</td>
@@ -17642,6 +17823,68 @@ export default function Home() {
           </p>
         )}
       </section>
+
+      {poaComp && poaDoc ? (() => {
+        const row = poaDoc.actividades[poaComp.gi]?.rows[poaComp.ri];
+        const tri = row?.trimestres[poaComp.t];
+        if (!row || !tri) return null;
+        const lista = tri.comprobantes ?? [];
+        const cerrar = () => { if (poaCompBusy !== "subir") setPoaComp(null); };
+        return (
+          <div role="dialog" aria-modal="true" aria-labelledby="poa-comp-title" className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={cerrar}>
+            <div className="modal-fade-in absolute inset-0 bg-slate-950/70 backdrop-blur-sm" />
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{ backgroundColor: "var(--surface, #181a1f)", borderColor: "var(--border, rgba(255,255,255,0.08))", color: "var(--text)" }}
+              className="modal-pop-in relative w-full max-w-lg overflow-hidden rounded-3xl border shadow-2xl shadow-black/50"
+            >
+              <div className="px-6 pb-6 pt-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+                  Comprobantes · Trimestre {poaComp.t + 1} · PAO {poaDoc.year}
+                </p>
+                <h3 id="poa-comp-title" className="mt-1 text-sm font-semibold">{row.actividad || "Actividad"}</h3>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  Programado {tri.prog || "0"} · Realizado {tri.real || "0"} · {poaPercent(tri.prog, tri.real) || "—"}
+                </p>
+                <ul className="mt-4 space-y-2">
+                  {lista.length ? lista.map((comp) => (
+                    <li key={comp.id} className="flex items-center gap-3 rounded-xl border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--surface-3)" }}>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold">{comp.nombre}</p>
+                        <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                          {poaTamanoLegible(comp.tamano)} · {new Date(comp.fecha).toLocaleDateString("es-SV")}{comp.por ? ` · ${comp.por}` : ""}
+                        </p>
+                      </div>
+                      <button type="button" className="poa-mini" style={{ borderColor: "var(--border)", color: "var(--text)" }} disabled={Boolean(poaCompBusy)} onClick={() => void handleVerComprobantePoa(comp)}>
+                        {poaCompBusy === comp.id ? "Abriendo…" : poaComprobanteVisible(comp.tipo) ? "Ver" : "Descargar"}
+                      </button>
+                      {canEditPoa ? (
+                        <button type="button" className="poa-mini" style={{ borderColor: "rgba(190,110,110,0.35)", color: isLightPanelTheme ? "#9b3d3d" : "#d9a2a2" }} disabled={Boolean(poaCompBusy)} onClick={() => void handleQuitarComprobantePoa(comp)}>
+                          Quitar
+                        </button>
+                      ) : null}
+                    </li>
+                  )) : (
+                    <li className="text-xs" style={{ color: "var(--text-muted)" }}>Todavía no hay comprobantes en este trimestre.</li>
+                  )}
+                </ul>
+                {canEditPoa ? (
+                  <label className={`poa-upload mt-4 ${poaCompBusy ? "pointer-events-none opacity-60" : ""}`}>
+                    <input type="file" accept={POA_COMPROBANTE_ACCEPT} className="hidden" disabled={Boolean(poaCompBusy)} onChange={(event) => { const f = event.target.files?.[0]; event.target.value = ""; void handleSubirComprobantePoa(f); }} />
+                    {poaCompBusy === "subir" ? "Subiendo…" : "Subir comprobante"}
+                  </label>
+                ) : null}
+                <p className="mt-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  PDF, foto, Word o Excel de hasta {poaTamanoLegible(POA_COMPROBANTE_MAX_BYTES)}. Cada comprobante suma 1 a lo realizado del trimestre y se guarda solo.
+                </p>
+                <div className="mt-4 flex justify-end">
+                  <button type="button" className="poa-mini" style={{ borderColor: "var(--border)", color: "var(--text)" }} onClick={cerrar}>Cerrar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
 
       {horasEmployeeToRemove !== null ? (
         <div
