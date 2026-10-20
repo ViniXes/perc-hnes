@@ -16615,7 +16615,9 @@ export default function Home() {
               </div>
             </div>
           </div>,
-          document.body,
+          // Dentro de .panel-shell (no en body): ahi viven los colores del tema
+          // (--surface, --text...). En body la ventana salia como un cuadro negro.
+          document.querySelector("main.panel-shell") ?? document.body,
         );
       })() : null}
           <div className="mt-4 inline-flex rounded-xl border p-1" style={{ borderColor: "var(--border)", background: "var(--surface-3)" }} role="tablist">
