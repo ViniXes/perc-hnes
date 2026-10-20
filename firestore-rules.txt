@@ -139,8 +139,9 @@ service cloud.firestore {
     // captureWindows/{mes} guarda la hora de cierre de cada modulo: percCierre
     // (3er dia habil) y horasCierre (5to, tambien la usa el Comite). SEPS queda
     // sin cierre en el servidor: en esa coleccion tambien viven Gastos,
-    // Depreciacion, Laboratorio y comentarios, con otros plazos. Si el mes todavia no la tiene publicada, no se bloquea nada (la
-    // publican el administrador al entrar y el recordatorio diario del servidor).
+    // Depreciacion, Laboratorio y comentarios, con otros plazos. Si el mes
+    // todavia no tiene la hora publicada, no se bloquea nada (la publican el
+    // administrador al entrar y el recordatorio diario del servidor).
     function enPlazo(periodId, campo) {
       let ref = /databases/$(database)/documents/captureWindows/$(periodId);
       return !exists(ref)
