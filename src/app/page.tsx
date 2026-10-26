@@ -8929,6 +8929,22 @@ export default function Home() {
     );
   }
 
+  // En las tablas del POA, tocar cualquier parte de una celda pone el cursor en
+  // su campo: el campo vacío mide una línea y lo demás de la celda no respondía.
+  useEffect(() => {
+    const enfocarCelda = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target || target.tagName !== "TD" || !target.closest(".poa-table")) return;
+      const campo = target.querySelector<HTMLTextAreaElement | HTMLInputElement>("textarea:not([readonly]), input:not([readonly]):not([type=file])");
+      if (!campo) return;
+      campo.focus();
+      const fin = campo.value.length;
+      campo.setSelectionRange?.(fin, fin);
+    };
+    document.addEventListener("click", enfocarCelda);
+    return () => document.removeEventListener("click", enfocarCelda);
+  }, []);
+
   // Al entrar al panel del POA (en escritorio por seccion activa, en movil por
   // vista activa) se traen los años guardados y el documento del año elegido.
   useEffect(() => {
@@ -17041,10 +17057,10 @@ export default function Home() {
                 <tbody>
                   {poaDoc.riesgosPrev.rows.map((row, index) => (
                     <tr key={`rp-${index}`}>
-                      <td>{poaCell(row.riesgo, (v) => updatePoa((d) => { d.riesgosPrev.rows[index].riesgo = v; }))}</td>
-                      <td>{poaCell(row.acciones, (v) => updatePoa((d) => { d.riesgosPrev.rows[index].acciones = v; }))}</td>
-                      <td>{poaCell(row.ejecucion, (v) => updatePoa((d) => { d.riesgosPrev.rows[index].ejecucion = v; }))}</td>
-                      <td>{poaCell(row.obs, (v) => updatePoa((d) => { d.riesgosPrev.rows[index].obs = v; }), { center: true })}</td>
+                      <td>{poaCell(row.riesgo ?? "", (v) => updatePoa((d) => { d.riesgosPrev.rows[index].riesgo = v; }), { placeholder: "Riesgo" })}</td>
+                      <td>{poaCell(row.acciones ?? "", (v) => updatePoa((d) => { d.riesgosPrev.rows[index].acciones = v; }), { placeholder: "Acciones de control" })}</td>
+                      <td>{poaCell(row.ejecucion ?? "", (v) => updatePoa((d) => { d.riesgosPrev.rows[index].ejecucion = v; }), { placeholder: canEditPoa ? "Escribí cómo se ejecutaron las acciones…" : "" })}</td>
+                      <td>{poaCell(row.obs ?? "", (v) => updatePoa((d) => { d.riesgosPrev.rows[index].obs = v; }), { placeholder: canEditPoa ? "Observaciones…" : "" })}</td>
                       {canEditPoa ? (
                         <td className="text-center">
                           {poaMiniBtn("×", () => updatePoa((d) => { d.riesgosPrev.rows.splice(index, 1); }), "del")}

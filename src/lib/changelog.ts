@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.457",
+    para: ["admin", "serv:esdomed"],
+    texto:
+      "POA: en las tablas del PAO se puede tocar cualquier parte de la celda para escribir. En la valoracion de riesgos, la ejecucion y las observaciones muestran donde escribir.",
+  },
+  {
     version: "1986.454",
     para: ["admin", "serv:esdomed"],
     texto:
