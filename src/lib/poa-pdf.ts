@@ -122,7 +122,7 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
   const pdf = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait", compress: true });
   const ML = 20;
   const MR = 20;
-  const TOP = 42;
+  const TOP = 45;
   const BOTTOM = 18;
   const LH = 5;
   const FONT = "helvetica";
@@ -694,7 +694,7 @@ export async function buildPoaPdf(input: PoaDoc, media: PoaMedia = {}): Promise<
     pdf.setPage(p);
     const W = pageW();
     const x0 = ML;
-    const y0 = 12;
+    const y0 = 15;
     const w = W - ML - MR;
     const rowH = 7;
     const c1 = 36;

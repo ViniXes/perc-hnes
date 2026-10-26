@@ -9,7 +9,8 @@
 // con el código, la versión y "Página X de Y".
 //
 // Secciones: portada (sin membrete), cuerpo vertical, y una hoja horizontal para
-// la matriz de riesgos, la programación y el seguimiento, que no caben en vertical.
+// la valoración y la matriz de riesgos, la programación y el seguimiento, que no
+// caben en vertical. Todo en tamaño carta.
 //
 // La librería `docx` se carga de forma dinámica (solo al exportar) para no pesar
 // en la carga inicial de la app.
@@ -171,6 +172,9 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
         : cellPar(text, opts),
     });
 
+  /** Fila que no se parte entre dos páginas al imprimir. */
+  const fila = (opts: ConstructorParameters<typeof TableRow>[0]) => new TableRow({ cantSplit: true, ...opts });
+
   /** Tabla a todo el ancho; `columnWidths` (twips) fija los anchos en tablas de muchas columnas. */
   const table = (rows: InstanceType<typeof TableRow>[], columnWidths?: number[]) =>
     new Table({
@@ -207,8 +211,8 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
   // --- Aprobaciones -----------------------------------------------------------
   const aprobaciones = (doc.aprobaciones ?? []).filter((a) => a.funcion.trim() || a.nombre.trim() || a.cargo.trim());
   const aprobRows: InstanceType<typeof TableRow>[] = [
-    new TableRow({ children: [cell("Aprobaciones", { bold: true, fill: HEAD_FILL, align: "center", span: 4, size: 22 })] }),
-    new TableRow({
+    fila({ children: [cell("Aprobaciones", { bold: true, fill: HEAD_FILL, align: "center", span: 4, size: 22 })] }),
+    fila({
       children: ["Función", "Nombre", "Cargo", "Firma"].map((h, i) =>
         cell(h, { bold: true, fill: HEAD_FILL, align: "center", width: [18, 32, 32, 18][i] }),
       ),
@@ -218,7 +222,7 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
     // La función se escribe solo en la primera fila de cada grupo.
     const nuevaFuncion = i === 0 || aprobaciones[i - 1].funcion !== a.funcion;
     aprobRows.push(
-      new TableRow({
+      fila({
         height: { value: 620, rule: HeightRule.ATLEAST },
         children: [cell(nuevaFuncion ? a.funcion : "", { bold: true }), cell(a.nombre), cell(a.cargo), cell("")],
       }),
@@ -237,7 +241,7 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
   ];
   const indicePag: object[] = [
     P("Índice", { bold: true, size: 28, align: "center", after: 240 }),
-    table(["Aprobaciones", "Índice", ...secciones].map((t) => new TableRow({ children: [cell(t, { size: 20 })] }))),
+    table(["Aprobaciones", "Índice", ...secciones].map((t) => fila({ children: [cell(t, { size: 20 })] }))),
     salto(),
   ];
 
@@ -263,14 +267,14 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
 
   // --- 4. Diagnóstico situacional ------------------------------------------
   const recursosTable = table([
-    new TableRow({
+    fila({
       children: [
         cell("Recurso Humano", { bold: true, fill: HEAD_FILL, align: "center", width: 70 }),
         cell("Cantidad", { bold: true, fill: HEAD_FILL, align: "center", width: 30 }),
       ],
     }),
     ...doc.recursos.map((r) =>
-      new TableRow({ children: [cell(r.label), cell(r.cantidad, { align: "center" })] }),
+      fila({ children: [cell(r.label), cell(r.cantidad, { align: "center" })] }),
     ),
   ]);
 
@@ -293,20 +297,20 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
     });
 
   const fodaTable = table([
-    new TableRow({
+    fila({
       children: [
         cell("Fortalezas", { bold: true, fill: HEAD_FILL, align: "center", width: 50 }),
         cell("Oportunidades", { bold: true, fill: HEAD_FILL, align: "center", width: 50 }),
       ],
     }),
-    new TableRow({ children: [fodaCol(doc.foda.fortalezas), fodaCol(doc.foda.oportunidades)] }),
-    new TableRow({
+    fila({ children: [fodaCol(doc.foda.fortalezas), fodaCol(doc.foda.oportunidades)] }),
+    fila({
       children: [
         cell("Debilidades", { bold: true, fill: HEAD_FILL, align: "center" }),
         cell("Amenazas", { bold: true, fill: HEAD_FILL, align: "center" }),
       ],
     }),
-    new TableRow({ children: [fodaCol(doc.foda.debilidades), fodaCol(doc.foda.amenazas)] }),
+    fila({ children: [fodaCol(doc.foda.debilidades), fodaCol(doc.foda.amenazas)] }),
   ]);
 
   // Bloques de producción, con el gráfico incrustado cuando se subió.
@@ -345,7 +349,7 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
 
   // Cumplimiento del PAO del año anterior.
   const cumplimientoTable = table([
-    new TableRow({
+    fila({
       children: [
         cell("No.", { bold: true, fill: HEAD_FILL, align: "center", width: 6 }),
         cell("ACTIVIDAD", { bold: true, fill: HEAD_FILL, align: "center", width: 40 }),
@@ -356,7 +360,7 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
       ],
     }),
     ...doc.cumplimiento.rows.map((r, i) =>
-      new TableRow({
+      fila({
         children: [
           cell(String(i + 1), { align: "center" }),
           cell(r.actividad),
@@ -375,8 +379,8 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
     ...((doc.recursosDescripcion ?? "").trim()
       ? [
           table([
-            new TableRow({ children: [cell("Descripción del recurso humano", { bold: true, fill: HEAD_FILL, align: "center", width: 100 })] }),
-            new TableRow({ children: [cell(doc.recursosDescripcion ?? "", { width: 100 })] }),
+            fila({ children: [cell("Descripción del recurso humano", { bold: true, fill: HEAD_FILL, align: "center", width: 100 })] }),
+            fila({ children: [cell(doc.recursosDescripcion ?? "", { width: 100 })] }),
           ]),
           P("", { after: 0 }),
         ]
@@ -395,7 +399,8 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
 
   // --- 5. Valoración de riesgos (año anterior) ------------------------------
   const riesgosPrevTable = table([
-    new TableRow({
+    fila({
+      tableHeader: true,
       children: [
         cell("RIESGO INVOLUCRADO", { bold: true, fill: HEAD_FILL, align: "center", width: 27 }),
         cell("ACCIONES DE CONTROL", { bold: true, fill: HEAD_FILL, align: "center", width: 27 }),
@@ -404,7 +409,7 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
       ],
     }),
     ...doc.riesgosPrev.rows.map((r) =>
-      new TableRow({
+      fila({
         children: [cell(r.riesgo), cell(r.acciones), cell(r.ejecucion), cell(r.obs, { align: "center" })],
       }),
     ),
@@ -420,7 +425,8 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
 
   // --- 6. Secciones horizontales: matriz de riesgos y programación ----------
   const matrizTable = table([
-    new TableRow({
+    fila({
+      tableHeader: true,
       children: [
         cell("1. Proceso / Procedimiento", { bold: true, fill: "C6E0B4", align: "center", width: 12 }),
         cell("2. Riesgos", { bold: true, fill: "C6E0B4", align: "center", width: 26 }),
@@ -434,7 +440,7 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
     ...doc.matrizRiesgos.map((r) => {
       const exp = poaExposicion(r);
       const cat = poaCategoria(exp);
-      return new TableRow({
+      return fila({
         children: [
           cell(r.proceso),
           cell(r.riesgo),
@@ -454,7 +460,8 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
   ], [1700, 3400, 900, 900, 1100, 3300, 2840]);
 
   // Cuadro de programación anual (encabezado de 2 filas con los trimestres).
-  const progHeader1 = new TableRow({
+  const progHeader1 = fila({
+    tableHeader: true,
     children: [
       cell("Objetivos / actividades", { bold: true, fill: HEAD_FILL, align: "center", width: 20 }),
       cell("Indicadores", { bold: true, fill: HEAD_FILL, align: "center", width: 18 }),
@@ -467,7 +474,8 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
       cell("Supuestos Externos", { bold: true, fill: HEAD_FILL, align: "center", width: 8 }),
     ],
   });
-  const progHeader2 = new TableRow({
+  const progHeader2 = fila({
+    tableHeader: true,
     children: [
       cell("", { fill: HEAD_FILL }),
       cell("", { fill: HEAD_FILL }),
@@ -485,13 +493,13 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
   const progRows: InstanceType<typeof TableRow>[] = [progHeader1, progHeader2];
   for (const group of doc.actividades) {
     progRows.push(
-      new TableRow({
+      fila({
         children: [cell(`Objetivo: ${group.objetivo}`, { bold: true, fill: GROUP_FILL, span: 17 })],
       }),
     );
     for (const row of group.rows) {
       progRows.push(
-        new TableRow({
+        fila({
           children: [
             cell(row.actividad),
             cell(row.indicador),
@@ -520,10 +528,10 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
     "Responsable",
   ];
   const medidasTable = table([
-    new TableRow({ children: medidasHead.map((h, i) => cell(h, { bold: true, fill: HEAD_FILL, align: "center", width: [8, 22, 22, 22, 10, 16][i] })) }),
+    fila({ children: medidasHead.map((h, i) => cell(h, { bold: true, fill: HEAD_FILL, align: "center", width: [8, 22, 22, 22, 10, 16][i] })) }),
     ...(medidas.length
       ? medidas.map((m) =>
-          new TableRow({
+          fila({
             children: [
               cell(m.trimestre ? `T${m.trimestre}` : "", { align: "center" }),
               cell(m.resultado),
@@ -534,7 +542,7 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
             ],
           }),
         )
-      : [new TableRow({ children: [cell("Sin medidas registradas: todas las metas evaluadas se cumplieron.", { align: "center", span: 6 })] })]),
+      : [fila({ children: [cell("Sin medidas registradas: todas las metas evaluadas se cumplieron.", { align: "center", span: 6 })] })]),
   ]);
 
   const horizontal: object[] = [
@@ -571,15 +579,15 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
     new Header({
       children: [
         table([
-          new TableRow({
+          fila({
             children: [
               hCell(logoHnes ? [new Paragraph({ alignment: AlignmentType.CENTER, children: [imagen(logoHnes, 110)] })] : [hText("")], { width: 22, rowSpan: 3 }),
               hCell([hText(membrete.proceso)], { width: 53 }),
               hCell([hText(membrete.codigo)], { width: 25 }),
             ],
           }),
-          new TableRow({ children: [hCell([hText(`Plan Anual Operativo del ${servicio}`)]), hCell([hText(membrete.version || "Versión 01")])] }),
-          new TableRow({
+          fila({ children: [hCell([hText(`Plan Anual Operativo del ${servicio}`)]), hCell([hText(membrete.version || "Versión 01")])] }),
+          fila({
             children: [
               hCell([hText(String(doc.year))]),
               hCell([
@@ -598,29 +606,32 @@ export async function downloadPoaDocx(input: PoaDoc, media: PoaMedia = {}): Prom
     });
 
   // --- Documento ------------------------------------------------------------
+  // Tamaño carta (21.59 x 27.94 cm), el papel del hospital. En A4 la hoja es más
+  // alta y al imprimir en carta se cortaba el membrete de arriba.
+  const CARTA = { width: 12240, height: 15840 };
   const wordDoc = new Document({
     creator: "PULSO — Hospital Nacional El Salvador",
     title: `Plan Anual Operativo ${doc.year}`,
     description: doc.serviceName,
     sections: [
       {
-        properties: { page: { margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } },
+        properties: { page: { size: CARTA, margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } },
         children: portada as never[],
       },
       {
-        properties: { page: { margin: { top: 1134, bottom: 1134, left: 1134, right: 1134, header: 400 } } },
+        properties: { page: { size: CARTA, margin: { top: 2268, bottom: 1134, left: 1134, right: 1134, header: 567, footer: 567 } } },
         headers: { default: membreteHeader() },
-        children: [...aprobacionesPag, ...indicePag, ...intro, ...descripcion, ...diagnostico, ...riesgos] as never[],
+        children: [...aprobacionesPag, ...indicePag, ...intro, ...descripcion, ...diagnostico] as never[],
       },
       {
         properties: {
           page: {
-            size: { orientation: PageOrientation.LANDSCAPE },
-            margin: { top: 1134, bottom: 850, left: 850, right: 850, header: 400 },
+            size: { ...CARTA, orientation: PageOrientation.LANDSCAPE },
+            margin: { top: 2268, bottom: 850, left: 850, right: 850, header: 567, footer: 567 },
           },
         },
         headers: { default: membreteHeader() },
-        children: horizontal as never[],
+        children: [...riesgos, ...horizontal] as never[],
       },
     ],
   });
