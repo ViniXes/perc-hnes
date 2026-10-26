@@ -8365,6 +8365,8 @@ export default function Home() {
   // --- Documentos (control anual de entregas a Calidad) ---
   // Editan solo admin y ffuentes (ffuentes ya es admin); el resto solo visualiza.
   const canEditDocs = isAdmin;
+  // Los PDF adjuntos solo los abren los administradores (las reglas lo exigen igual).
+  const canViewDocsPdf = isAdmin;
 
   async function loadDocs(year: number = docsYear) {
     setDocsLoading(true);
@@ -8565,7 +8567,7 @@ export default function Home() {
   /** Abre el PDF de la celda en otra pestaña. */
   async function handleVerPdfDocs(depKey: string, colKey: string) {
     const ficha = docsArchivos[depKey]?.[colKey];
-    if (!ficha || docsFileBusy) return;
+    if (!ficha || !canViewDocsPdf || docsFileBusy) return;
     // La pestaña se abre ya, antes de esperar a Firestore, para que el navegador no la bloquee.
     const tab = window.open("", "_blank");
     setDocsFileBusy(`${depKey}__${colKey}`);
@@ -28709,7 +28711,7 @@ export default function Home() {
                   <span className="ml-auto text-[11px]" style={{ color: "var(--text-faint)" }}>
                     {canEditDocs
                       ? "Toque una celda para cambiar su estado · el clip adjunta el PDF y lo marca Entregado"
-                      : "Solo lectura · toque el PDF para verlo"}
+                      : "Solo lectura"}
                   </span>
                 </div>
 
@@ -28821,7 +28823,7 @@ export default function Home() {
                                           <path d="M21 12a9 9 0 1 1-6.2-8.56" />
                                         </svg>
                                       </span>
-                                    ) : ficha ? (
+                                    ) : ficha && canViewDocsPdf ? (
                                       <>
                                         <button
                                           type="button"

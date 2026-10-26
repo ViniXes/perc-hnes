@@ -252,8 +252,11 @@ service cloud.firestore {
       allow write: if isAdmin()
         || (esComite() && userProfile().get('cecGestor', false) == true);
     }
+    // DOCS-POA/MOF: el documento del año lo lee cualquiera (menos MINSAL), pero
+    // los PDF adjuntos ("<año>__pdf__...") solo los abre un administrador.
     match /documentControl/{year} {
-      allow read: if isSignedIn() && noEsMinsal();
+      allow read: if isSignedIn() && noEsMinsal()
+        && (!year.matches('.*__pdf__.*') || adminPoa());
       allow write: if isAdmin();
     }
     // Estructura (matriz) de los tabuladores SEPS: un documento por servicio con

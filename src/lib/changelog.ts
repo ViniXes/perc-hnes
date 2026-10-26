@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.463",
+    para: ["admin"],
+    texto:
+      "DOCS-POA/MOF: los PDF adjuntos ahora solo los pueden abrir los administradores. Los demas siguen viendo el estado de cada celda.",
+  },
+  {
     version: "1986.462",
     para: ["admin", "serv:esdomed"],
     texto:
