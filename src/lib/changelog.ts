@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.462",
+    para: ["admin", "serv:esdomed"],
+    texto:
+      "POA: el Word sale en tamano carta (antes A4) y con mas espacio arriba, asi el membrete se imprime completo. La valoracion de riesgos, la matriz, la programacion y el seguimiento van en hojas horizontales, y las filas de las tablas ya no se cortan entre paginas. En el PDF el membrete baja un poco para que la impresora no lo corte.",
+  },
+  {
     version: "1986.458",
     para: ["admin"],
     texto:
