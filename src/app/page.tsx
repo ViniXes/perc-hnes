@@ -33,6 +33,7 @@ import {
   arrayUnion,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -207,6 +208,10 @@ import {
   DEP_ICON_PROPS,
   DOC_COLUMNS,
   DOC_DEPENDENCIAS,
+  DOC_PRIMER_ANIO,
+  getDocArchivoDocId,
+  type DocArchivo,
+  type DocArchivos,
   DOC_STATUS_CYCLE,
   DOC_STATUS_LABEL,
   DOC_STATUS_SHORT,
@@ -4739,6 +4744,14 @@ export default function Home() {
   const [docsLoading, setDocsLoading] = useState(false);
   const [docsSaving, setDocsSaving] = useState(false);
   const [docsLoaded, setDocsLoaded] = useState(false);
+  // Año del control documental (desde 2026) y PDF adjunto por celda.
+  const [docsYear, setDocsYear] = useState<number>(() => Math.max(DOC_PRIMER_ANIO, new Date().getFullYear()));
+  const [docsArchivos, setDocsArchivos] = useState<DocArchivos>({});
+  /** Celda "dep__col" con un PDF subiéndose, abriéndose o quitándose. */
+  const [docsFileBusy, setDocsFileBusy] = useState("");
+  const [docsDirty, setDocsDirty] = useState(false);
+  const docsFileInputRef = useRef<HTMLInputElement | null>(null);
+  const docsFileTargetRef = useRef<{ dep: string; col: string } | null>(null);
 
   // --- POA (Plan Anual Operativo por año) ------------------------------------
   const [poaYear, setPoaYear] = useState<number>(() => new Date().getFullYear() + 1);
@@ -8353,13 +8366,15 @@ export default function Home() {
   // Editan solo admin y ffuentes (ffuentes ya es admin); el resto solo visualiza.
   const canEditDocs = isAdmin;
 
-  async function loadDocs() {
+  async function loadDocs(year: number = docsYear) {
     setDocsLoading(true);
     try {
-      const snap = await getDoc(doc(db, "documentControl", String(currentYear)));
-      const saved = (snap.exists() ? (snap.data() as { values?: unknown }).values : null) || {};
-      const savedMap = saved as Record<string, Record<string, unknown>>;
+      const snap = await getDoc(doc(db, "documentControl", String(year)));
+      const data = (snap.exists() ? snap.data() : {}) as { values?: unknown; archivos?: unknown };
+      const savedMap = (data.values || {}) as Record<string, Record<string, unknown>>;
+      const archivosMap = (data.archivos || {}) as Record<string, Record<string, DocArchivo | null>>;
       const values: DocValues = {};
+      const archivos: DocArchivos = {};
       DOC_DEPENDENCIAS.forEach((_, i) => {
         const key = getDocKey(i);
         const row = savedMap[key] || {};
@@ -8369,8 +8384,17 @@ export default function Home() {
             return [col.key, v === "entregado" || v === "pendiente" ? v : ""];
           }),
         ) as Record<string, DocStatus>;
+        const filaArchivos = archivosMap[key] || {};
+        DOC_COLUMNS.forEach((col) => {
+          const ficha = filaArchivos[col.key];
+          if (ficha && ficha.id && ficha.partes > 0) {
+            archivos[key] = { ...(archivos[key] || {}), [col.key]: ficha };
+          }
+        });
       });
       setDocsValues(values);
+      setDocsArchivos(archivos);
+      setDocsDirty(false);
       setDocsLoaded(true);
     } catch (docError) {
       if (await handleFirestoreError(docError)) {
@@ -8389,10 +8413,24 @@ export default function Home() {
     }
   }
 
+  function handleDocsYearChange(year: number) {
+    if (year === docsYear || docsLoading) return;
+    if (docsDirty && !window.confirm("Hay cambios sin guardar en este año. ¿Cambiar de año sin guardarlos?")) {
+      return;
+    }
+    setDocsYear(year);
+    setDocsValues({});
+    setDocsArchivos({});
+    if (!firestoreUnavailable) {
+      void loadDocs(year);
+    }
+  }
+
   function handleDocsCellCycle(depKey: string, colKey: string) {
     if (!canEditDocs) {
       return;
     }
+    setDocsDirty(true);
     setDocsValues((current) => {
       const currentStatus = (current[depKey]?.[colKey] ?? "") as DocStatus;
       const index = DOC_STATUS_CYCLE.indexOf(currentStatus);
@@ -8411,15 +8449,16 @@ export default function Home() {
     setMessage("");
     try {
       await setDoc(
-        doc(db, "documentControl", String(currentYear)),
+        doc(db, "documentControl", String(docsYear)),
         {
-          year: currentYear,
+          year: docsYear,
           values: docsValues,
           updatedAt: serverTimestamp(),
           updatedBy: user?.email || "",
         },
         { merge: true },
       );
+      setDocsDirty(false);
       setMessage("Control de documentos guardado correctamente.");
     } catch (docError) {
       if (await handleFirestoreError(docError)) {
@@ -8428,6 +8467,167 @@ export default function Home() {
       setError(getAuthErrorMessage(docError));
     } finally {
       setDocsSaving(false);
+    }
+  }
+
+  /** Abre el selector de archivo para adjuntar (o reemplazar) el PDF de una celda. */
+  function pedirPdfDocs(depKey: string, colKey: string) {
+    if (!canEditDocs || firestoreUnavailable || docsFileBusy) return;
+    docsFileTargetRef.current = { dep: depKey, col: colKey };
+    if (docsFileInputRef.current) {
+      docsFileInputRef.current.value = "";
+      docsFileInputRef.current.click();
+    }
+  }
+
+  /** Borra los trozos de un PDF ya reemplazado o quitado (si falla, queda huérfano sin romper nada). */
+  async function borrarTrozosPdfDocs(year: number, depKey: string, colKey: string, ficha: DocArchivo) {
+    await Promise.all(
+      Array.from({ length: ficha.partes }, (_, n) =>
+        deleteDoc(doc(db, "documentControl", getDocArchivoDocId(year, depKey, colKey, ficha.id, n))).catch(() => {}),
+      ),
+    );
+  }
+
+  /**
+   * Sube el PDF de la celda y la marca como Entregada en el acto (sin esperar a
+   * "Guardar cambios"). El estado se puede seguir cambiando a mano después.
+   */
+  async function handleSubirPdfDocs(file: File | undefined | null) {
+    const target = docsFileTargetRef.current;
+    docsFileTargetRef.current = null;
+    if (!file || !target || !canEditDocs || firestoreUnavailable) return;
+    if (blockedByGhost()) return;
+    const esPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+    if (!esPdf) {
+      setError("Solo se pueden adjuntar archivos PDF.");
+      return;
+    }
+    if (file.size > POA_COMPROBANTE_MAX_BYTES) {
+      setError(`El archivo pesa ${poaTamanoLegible(file.size)}. El máximo es ${poaTamanoLegible(POA_COMPROBANTE_MAX_BYTES)}.`);
+      return;
+    }
+    const { dep, col } = target;
+    const year = docsYear;
+    const anterior = docsArchivos[dep]?.[col];
+    setDocsFileBusy(`${dep}__${col}`);
+    setError("");
+    setMessage("");
+    try {
+      const listo = await poaPrepararComprobante(file);
+      const id = poaNuevoComprobanteId();
+      for (let n = 0; n < listo.trozos.length; n += 1) {
+        await setDoc(doc(db, "documentControl", getDocArchivoDocId(year, dep, col, id, n)), {
+          year,
+          dependencia: dep,
+          documento: col,
+          archivo: id,
+          parte: n,
+          data: listo.trozos[n],
+        });
+      }
+      const ficha: DocArchivo = {
+        id,
+        nombre: listo.nombre,
+        tipo: "application/pdf",
+        tamano: listo.tamano,
+        partes: listo.trozos.length,
+        fecha: new Date().toISOString(),
+        por: user?.displayName || user?.email || "",
+      };
+      await setDoc(
+        doc(db, "documentControl", String(year)),
+        {
+          year,
+          values: { [dep]: { [col]: "entregado" } },
+          archivos: { [dep]: { [col]: ficha } },
+          updatedAt: serverTimestamp(),
+          updatedBy: user?.email || "",
+        },
+        { merge: true },
+      );
+      setDocsArchivos((current) => ({ ...current, [dep]: { ...(current[dep] || {}), [col]: ficha } }));
+      setDocsValues((current) => ({ ...current, [dep]: { ...(current[dep] || {}), [col]: "entregado" } }));
+      if (anterior) {
+        void borrarTrozosPdfDocs(year, dep, col, anterior);
+      }
+      const nombreDep = DOC_DEPENDENCIAS[Number(dep.replace("dep-", ""))] || "";
+      const nombreCol = DOC_COLUMNS.find((c) => c.key === col)?.label || "";
+      setMessage(`PDF adjuntado: ${nombreDep} · ${nombreCol} quedó Entregado.`);
+    } catch (pdfError) {
+      if (await handleFirestoreError(pdfError)) return;
+      setError("No pudimos subir el PDF. Probá de nuevo.");
+    } finally {
+      setDocsFileBusy("");
+    }
+  }
+
+  /** Abre el PDF de la celda en otra pestaña. */
+  async function handleVerPdfDocs(depKey: string, colKey: string) {
+    const ficha = docsArchivos[depKey]?.[colKey];
+    if (!ficha || docsFileBusy) return;
+    // La pestaña se abre ya, antes de esperar a Firestore, para que el navegador no la bloquee.
+    const tab = window.open("", "_blank");
+    setDocsFileBusy(`${depKey}__${colKey}`);
+    try {
+      const snaps = await Promise.all(
+        Array.from({ length: ficha.partes }, (_, n) =>
+          getDoc(doc(db, "documentControl", getDocArchivoDocId(docsYear, depKey, colKey, ficha.id, n))),
+        ),
+      );
+      const trozos = snaps.map((snap) => (snap.exists() ? String((snap.data() as { data?: string }).data ?? "") : ""));
+      if (trozos.some((t) => !t)) throw new Error("incompleto");
+      const url = URL.createObjectURL(poaArmarComprobante(trozos, "application/pdf"));
+      if (tab) {
+        tab.location.href = url;
+      } else {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = ficha.nombre;
+        a.click();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (pdfError) {
+      tab?.close();
+      if (await handleFirestoreError(pdfError)) return;
+      setError("No pudimos abrir el PDF.");
+    } finally {
+      setDocsFileBusy("");
+    }
+  }
+
+  /** Quita el PDF de la celda. El estado no cambia: se ajusta a mano si hace falta. */
+  async function handleQuitarPdfDocs(depKey: string, colKey: string) {
+    const ficha = docsArchivos[depKey]?.[colKey];
+    if (!ficha || !canEditDocs || docsFileBusy || firestoreUnavailable) return;
+    if (blockedByGhost()) return;
+    if (!window.confirm(`¿Quitar el PDF "${ficha.nombre}"?`)) return;
+    const year = docsYear;
+    setDocsFileBusy(`${depKey}__${colKey}`);
+    setError("");
+    setMessage("");
+    try {
+      await setDoc(
+        doc(db, "documentControl", String(year)),
+        {
+          archivos: { [depKey]: { [colKey]: deleteField() } },
+          updatedAt: serverTimestamp(),
+          updatedBy: user?.email || "",
+        },
+        { merge: true },
+      );
+      setDocsArchivos((current) => {
+        const fila = { ...(current[depKey] || {}) };
+        delete fila[colKey];
+        return { ...current, [depKey]: fila };
+      });
+      void borrarTrozosPdfDocs(year, depKey, colKey, ficha);
+      setMessage("PDF quitado. El estado de la celda se mantiene.");
+    } catch (pdfError) {
+      if (await handleFirestoreError(pdfError)) return;
+      setError("No pudimos quitar el PDF.");
+    } finally {
+      setDocsFileBusy("");
     }
   }
 
@@ -28451,8 +28651,31 @@ export default function Home() {
                       <p className="mt-0.5 text-[11.5px]" style={{ color: "var(--text-muted)" }}>
                         Control de entregas a Calidad
                         <span className="mx-1.5" style={{ color: "var(--text-faint)" }}>·</span>
-                        <span className="font-semibold tabular-nums">{currentYear}</span>
+                        <select
+                          value={docsYear}
+                          onChange={(event) => handleDocsYearChange(Number(event.target.value))}
+                          disabled={docsLoading || docsSaving || Boolean(docsFileBusy)}
+                          aria-label="Año del control documental"
+                          className="rounded-md border px-1.5 py-[1px] text-[11.5px] font-semibold tabular-nums outline-none disabled:opacity-60"
+                          style={{ borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text)" }}
+                        >
+                          {Array.from(
+                            { length: Math.max(DOC_PRIMER_ANIO, new Date().getFullYear() + 1) - DOC_PRIMER_ANIO + 1 },
+                            (_, i) => DOC_PRIMER_ANIO + i,
+                          ).map((y) => (
+                            <option key={y} value={y}>
+                              {y}
+                            </option>
+                          ))}
+                        </select>
                       </p>
+                      <input
+                        ref={docsFileInputRef}
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        className="hidden"
+                        onChange={(event) => void handleSubirPdfDocs(event.target.files?.[0])}
+                      />
                     </div>
                   </div>
                   <button
@@ -28484,7 +28707,9 @@ export default function Home() {
                     </span>
                   ))}
                   <span className="ml-auto text-[11px]" style={{ color: "var(--text-faint)" }}>
-                    {canEditDocs ? "Toque una celda para cambiar su estado" : "Solo lectura"}
+                    {canEditDocs
+                      ? "Toque una celda para cambiar su estado · el clip adjunta el PDF y lo marca Entregado"
+                      : "Solo lectura · toque el PDF para verlo"}
                   </span>
                 </div>
 
@@ -28520,7 +28745,7 @@ export default function Home() {
                           {DOC_COLUMNS.map((col) => (
                             <th
                               key={col.key}
-                              className="sticky top-0 z-10 w-[168px] px-2 py-3 text-center text-[10.5px] font-semibold uppercase tracking-[0.14em]"
+                              className="sticky top-0 z-10 w-[230px] px-2 py-3 text-center text-[10.5px] font-semibold uppercase tracking-[0.14em]"
                               style={{ background: "var(--surface)", color: "var(--text-muted)", boxShadow: "inset 0 -1px 0 var(--border)" }}
                             >
                               {col.label}
@@ -28567,8 +28792,14 @@ export default function Home() {
                                     <span>{DOC_STATUS_SHORT[status]}</span>
                                   </>
                                 );
+                                const ficha = docsArchivos[key]?.[col.key];
+                                const celdaBusy = docsFileBusy === `${key}__${col.key}`;
+                                const iconBtnClass =
+                                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50";
+                                const iconBtnStyle = { borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" };
                                 return (
                                   <td key={col.key} className="px-2 py-1.5 text-center">
+                                    <span className="inline-flex items-center justify-center gap-1.5">
                                     {canEditDocs ? (
                                       <button
                                         type="button"
@@ -28584,6 +28815,76 @@ export default function Home() {
                                         {chipInner}
                                       </span>
                                     )}
+                                    {celdaBusy ? (
+                                      <span className={iconBtnClass} style={iconBtnStyle} aria-label="Procesando PDF">
+                                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="animate-spin" aria-hidden="true">
+                                          <path d="M21 12a9 9 0 1 1-6.2-8.56" />
+                                        </svg>
+                                      </span>
+                                    ) : ficha ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleVerPdfDocs(key, col.key)}
+                                          disabled={Boolean(docsFileBusy)}
+                                          title={`Ver PDF: ${ficha.nombre} (${poaTamanoLegible(ficha.tamano)})${ficha.por ? ` · subido por ${ficha.por}` : ""}`}
+                                          aria-label={`Ver PDF de ${dep} · ${col.label}`}
+                                          className={iconBtnClass}
+                                          style={{ ...iconBtnStyle, color: "#c9605a", borderColor: "rgba(201,96,90,0.35)" }}
+                                        >
+                                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                            <path d="M14 2v6h6M9 15h6M9 18h4" />
+                                          </svg>
+                                        </button>
+                                        {canEditDocs ? (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() => pedirPdfDocs(key, col.key)}
+                                              disabled={Boolean(docsFileBusy)}
+                                              title="Reemplazar PDF"
+                                              aria-label={`Reemplazar PDF de ${dep} · ${col.label}`}
+                                              className={iconBtnClass}
+                                              style={iconBtnStyle}
+                                            >
+                                              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8" />
+                                                <path d="M21 3v5h-5M3 21v-5h5" />
+                                              </svg>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => void handleQuitarPdfDocs(key, col.key)}
+                                              disabled={Boolean(docsFileBusy)}
+                                              title="Quitar PDF"
+                                              aria-label={`Quitar PDF de ${dep} · ${col.label}`}
+                                              className={iconBtnClass}
+                                              style={iconBtnStyle}
+                                            >
+                                              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                                                <path d="M18 6 6 18M6 6l12 12" />
+                                              </svg>
+                                            </button>
+                                          </>
+                                        ) : null}
+                                      </>
+                                    ) : canEditDocs ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => pedirPdfDocs(key, col.key)}
+                                        disabled={Boolean(docsFileBusy) || docsLoading}
+                                        title={`Adjuntar PDF: ${dep} · ${col.label}`}
+                                        aria-label={`Adjuntar PDF de ${dep} · ${col.label}`}
+                                        className={iconBtnClass}
+                                        style={iconBtnStyle}
+                                      >
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                          <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                                        </svg>
+                                      </button>
+                                    ) : null}
+                                    </span>
                                   </td>
                                 );
                               })}

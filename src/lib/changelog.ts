@@ -27,6 +27,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.
+1986.458",
+    para: ["admin"],
+    texto:
+      "DOCS-POA/MOF: ahora se elige el año (desde 2026) y cada celda tiene un clip para adjuntar el PDF de la dependencia. Al subirlo la celda queda Entregado sola; el estado se sigue pudiendo cambiar a mano.",
+  },
+  {
     version: "1986.457",
     para: ["admin", "serv:esdomed"],
     texto:

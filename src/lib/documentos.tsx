@@ -335,3 +335,27 @@ export function getDepIcon(name: string) {
 // abierto = un poco mas vivo). Se recorren por indice de grupo.
 
 export type DocValues = Record<string, Record<string, DocStatus>>;
+
+// -----------------------------------------------------------------------------
+// PDF adjunto por celda (dependencia x documento x año). El archivo se guarda en
+// la misma coleccion 'documentControl', partido en trozos de 900 KB (como los
+// comprobantes del PAO): "<año>__pdf__<dep>__<col>__<id>__<n>". En el documento
+// del año solo queda la ficha, en 'archivos[dep][col]'.
+// -----------------------------------------------------------------------------
+export type DocArchivo = {
+  id: string;
+  nombre: string;
+  tipo: string;
+  tamano: number;
+  partes: number;
+  fecha: string;
+  por: string;
+};
+export type DocArchivos = Record<string, Record<string, DocArchivo>>;
+
+/** Primer año del control documental con adjuntos. */
+export const DOC_PRIMER_ANIO = 2026;
+
+export function getDocArchivoDocId(year: number, depKey: string, colKey: string, id: string, parte: number) {
+  return `${year}__pdf__${depKey}__${colKey}__${id}__${parte}`;
+}
