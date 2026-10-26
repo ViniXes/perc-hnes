@@ -780,6 +780,8 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
   text-align: left;
 }
 .poa-cell.text-center { text-align: center; }
+.poa-table td:has(> .poa-cell:not([readonly])) { cursor: text; }
+.poa-cell::placeholder { color: var(--text-faint); font-style: italic; }
 
 .poa-para-row { display: flex; align-items: flex-start; gap: 6px; }
 .poa-bullet-num {
