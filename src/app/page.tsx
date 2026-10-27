@@ -1,6 +1,7 @@
 "use client";
 
 import { PoaUnidadPicker, type PoaUnidadGrupo } from "@/components/poa-unidad-picker";
+import { MemosEsdomed } from "@/components/memos-esdomed";
 import { poaDatosBloque, poaDatosGrafico, poaGraficoPastel3D } from "@/lib/poa-chart";
 import {
   POA_COMPROBANTE_ACCEPT,
@@ -19149,6 +19150,18 @@ export default function Home() {
             },
           ]
         : []),
+      // ESDOMED: memorandums del servicio (membrete oficial, PDF y Word). Solo
+      // administradores.
+      ...(isAdmin
+        ? [
+            {
+              id: "panel-esdomed",
+              label: "ESDOMED",
+              detail: "Memorándums del servicio",
+              badge: "ES",
+            },
+          ]
+        : []),
       {
         id: "panel-config",
         label: "Configuración",
@@ -19547,6 +19560,7 @@ export default function Home() {
                                 "panel-admin-export",
                                 "panel-capture-toggle",
                                 "panel-poa",
+                                "panel-esdomed",
                                 "panel-hospitales",
                                 "panel-cec",
                               ].includes(item.id)
@@ -20226,7 +20240,9 @@ export default function Home() {
                               ? "Hospitales"
                               : mobileView === "panel-cec"
                                 ? "Comité de Expediente Clínico"
-                                : ""}
+                                : mobileView === "panel-esdomed"
+                                  ? "ESDOMED · Memorándums"
+                                  : ""}
               </span>
             </div>
 
@@ -24327,6 +24343,14 @@ export default function Home() {
             {renderSectionDivider("POA", "Plan Anual Operativo por año", "indigo", isLightPanelTheme)}
             <div data-view="panel-poa">{poaSection}</div>
             </>
+          ) : null}
+
+          {/* ESDOMED: memorandums con membrete (solo administradores). */}
+          {isAdmin &&
+          (activeSidebarSection === "panel-esdomed" || mobileView === "panel-esdomed") ? (
+            <div data-view="panel-esdomed">
+              <MemosEsdomed isLight={isLightPanelTheme} usuario={serviceProfile?.email || ""} />
+            </div>
           ) : null}
 
           {/* Gastos PERC: matriz mensual de distribucion de gasto general (solo admin). */}

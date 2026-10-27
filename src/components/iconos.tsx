@@ -378,6 +378,15 @@ export const IconCalendar = (
   </svg>
 );
 
+// Memorándum (sobre con hoja): menú ESDOMED.
+export const IconMemo = (
+  <svg {...ICON_PROPS} aria-hidden="true">
+    <path d="M7 3.5h10a.5.5 0 0 1 .5.5v7.5M6.5 11.5V4a.5.5 0 0 1 .5-.5" />
+    <path d="M9.5 7h5M9.5 9.5h5" />
+    <path d="M3.5 10.5 12 16l8.5-5.5V20a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5Z" />
+  </svg>
+);
+
 // Icono por id de item del sidebar. Lo que no esta aqui conserva su badge de letras
 // (PERC -> PE, SEPS -> SE, etc., segun pidio el usuario).
 export const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
@@ -400,6 +409,7 @@ export const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-signups": IconMessage,
   "panel-services": IconDashboard,
   "panel-tendencias": IconTrend,
+  "panel-esdomed": IconMemo,
 };
 
 // Color del recuadro del icono de cada submenu bajo PERC (distinto por item, para
@@ -518,4 +528,5 @@ export const SIDEBAR_TILE_GRADIENT: Record<string, string> = {
   "panel-request-form": "from-cyan-400 to-sky-600",
   "panel-signups": "from-teal-400 to-emerald-600",
   "panel-services": "from-sky-400 to-cyan-600",
+  "panel-esdomed": "from-teal-500 to-emerald-700",
 };

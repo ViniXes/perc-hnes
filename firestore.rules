@@ -300,6 +300,11 @@ service cloud.firestore {
         || (poaDeSuUnidad(docId) && request.resource.data.serviceId == unidadPoa());
       allow delete: if adminPoa();
     }
+    // Memorandums de ESDOMED (menu "ESDOMED"): "<año>__<numero>", p. ej.
+    // "2026__0021". Solo los administradores los ven, crean, editan y borran.
+    match /esdomedMemos/{docId} {
+      allow read, write: if adminPoa();
+    }
     // Censo Diario de Pacientes (id = "<periodo>", p.ej. "2026-06").
     match /censoDiario/{periodId} {
       allow read: if isSignedIn() && noEsMinsal()

@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.465",
+    para: ["admin"],
+    texto:
+      "Nuevo menu ESDOMED (solo administradores): memorandums con el membrete oficial, guardados por numero correlativo, editables y descargables en PDF y Word.",
+  },
+  {
     version: "1986.464",
     para: ["admin"],
     texto:
