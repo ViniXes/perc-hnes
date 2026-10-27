@@ -4751,6 +4751,7 @@ export default function Home() {
   /** Celda "dep__col" con un PDF subiéndose, abriéndose o quitándose. */
   const [docsFileBusy, setDocsFileBusy] = useState("");
   const [docsDirty, setDocsDirty] = useState(false);
+  const [docsSearch, setDocsSearch] = useState("");
   const docsFileInputRef = useRef<HTMLInputElement | null>(null);
   const docsFileTargetRef = useRef<{ dep: string; col: string } | null>(null);
 
@@ -28717,30 +28718,94 @@ export default function Home() {
                   </button>
                 </div>
 
-                {/* Leyenda de estados */}
+                {/* Resumen por documento + buscador */}
                 <div
-                  className="flex flex-wrap items-center gap-2 border-y px-6 py-2.5"
+                  className="border-y px-4 py-4 sm:px-6"
                   style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
                 >
-                  {(["entregado", "pendiente", ""] as DocStatus[]).map((status) => (
-                    <span
-                      key={status || "vacio"}
-                      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-[3px] text-[10.5px] font-semibold leading-none"
-                      style={getDocChipStyle(status, isLightPanelTheme)}
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {DOC_COLUMNS.map((col) => {
+                      const total = DOC_DEPENDENCIAS.length;
+                      let entregados = 0;
+                      let pendientes = 0;
+                      DOC_DEPENDENCIAS.forEach((_, i) => {
+                        const v = docsValues[getDocKey(i)]?.[col.key];
+                        if (v === "entregado") entregados += 1;
+                        else if (v === "pendiente") pendientes += 1;
+                      });
+                      const pct = total ? Math.round((entregados / total) * 100) : 0;
+                      const verde = getDocChipStyle("entregado", isLightPanelTheme);
+                      return (
+                        <div
+                          key={col.key}
+                          className="rounded-2xl border px-4 py-3"
+                          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+                        >
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[10.5px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--text-muted)" }}>
+                              {col.label}
+                            </span>
+                            <span className="text-[11px] font-semibold tabular-nums" style={{ color: verde.color }}>
+                              {pct}%
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[13px]" style={{ color: "var(--text)" }}>
+                            <span className="text-[20px] font-semibold tabular-nums leading-none">{docsLoading ? "–" : entregados}</span>
+                            <span className="ml-1 tabular-nums" style={{ color: "var(--text-muted)" }}>de {total} entregados</span>
+                          </p>
+                          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+                            <div
+                              className="h-full rounded-full transition-[width] duration-500"
+                              style={{ width: `${docsLoading ? 0 : pct}%`, background: verde.color }}
+                            />
+                          </div>
+                          <p className="mt-2 flex flex-wrap gap-x-3 text-[10.5px] tabular-nums" style={{ color: "var(--text-faint)" }}>
+                            <span>{pendientes} pendientes</span>
+                            <span>{total - entregados - pendientes} sin definir</span>
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <label
+                      className="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl border px-3 py-1.5 sm:max-w-[320px]"
+                      style={{ borderColor: "var(--border)", background: "var(--surface)", color: "var(--text-faint)" }}
                     >
-                      {getDocStatusIcon(status)}
-                      {DOC_STATUS_LABEL[status] === "—" ? "Sin definir" : DOC_STATUS_LABEL[status]}
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="m20 20-3.5-3.5" />
+                      </svg>
+                      <input
+                        type="search"
+                        value={docsSearch}
+                        onChange={(event) => setDocsSearch(event.target.value)}
+                        placeholder="Buscar dependencia"
+                        aria-label="Buscar dependencia"
+                        className="w-full bg-transparent text-[12px] outline-none"
+                        style={{ color: "var(--text)" }}
+                      />
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(["entregado", "pendiente", ""] as DocStatus[]).map((status) => (
+                        <span
+                          key={status || "vacio"}
+                          className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-[3px] text-[10.5px] font-semibold leading-none"
+                          style={getDocChipStyle(status, isLightPanelTheme)}
+                        >
+                          {getDocStatusIcon(status)}
+                          {DOC_STATUS_LABEL[status] === "—" ? "Sin definir" : DOC_STATUS_LABEL[status]}
+                        </span>
+                      ))}
+                    </div>
+                    <span className="text-[11px] sm:ml-auto" style={{ color: "var(--text-faint)" }}>
+                      {canEditDocs ? "Toque el estado para cambiarlo · el clip adjunta el PDF" : "Solo lectura"}
                     </span>
-                  ))}
-                  <span className="ml-auto text-[11px]" style={{ color: "var(--text-faint)" }}>
-                    {canEditDocs
-                      ? "Toque una celda para cambiar su estado · el clip adjunta el PDF y lo marca Entregado"
-                      : "Solo lectura"}
-                  </span>
+                  </div>
                 </div>
 
                 {/* Tabla */}
-                <div className="max-h-[70vh] overflow-y-auto px-3 pb-2 sm:px-5">
+                <div className="max-h-[62vh] overflow-auto px-3 pb-2 sm:px-5">
                   {docsLoading ? (
                     <div className="pulso-skel-stack px-1 py-4" role="status" aria-label="Cargando control documental">
                       <div className="flex items-center gap-3">
@@ -28759,7 +28824,7 @@ export default function Home() {
                       ))}
                     </div>
                   ) : (
-                    <table className="w-full border-collapse">
+                    <table className="w-full min-w-[980px] border-collapse">
                       <thead>
                         <tr>
                           <th
@@ -28771,7 +28836,7 @@ export default function Home() {
                           {DOC_COLUMNS.map((col) => (
                             <th
                               key={col.key}
-                              className="sticky top-0 z-10 w-[230px] px-2 py-3 text-center text-[10.5px] font-semibold uppercase tracking-[0.14em]"
+                              className="sticky top-0 z-10 w-[236px] px-2 py-3 text-center text-[10.5px] font-semibold uppercase tracking-[0.14em]"
                               style={{ background: "var(--surface)", color: "var(--text-muted)", boxShadow: "inset 0 -1px 0 var(--border)" }}
                             >
                               {col.label}
@@ -28780,12 +28845,17 @@ export default function Home() {
                         </tr>
                       </thead>
                       <tbody>
-                        {DOC_DEPENDENCIAS.map((dep, index) => {
+                        {DOC_DEPENDENCIAS.map((dep, index) => ({ dep, index }))
+                          .filter(({ dep }) => {
+                            const sinTildes = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                            return !docsSearch.trim() || sinTildes(dep).includes(sinTildes(docsSearch));
+                          })
+                          .map(({ dep, index }) => {
                           const key = getDocKey(index);
                           return (
                             <tr key={key} className="docs-row">
                               <td className="px-3 py-2">
-                                <span className="flex items-center gap-2.5">
+                                <span className="flex items-center gap-3">
                                   <span
                                     className="w-5 shrink-0 text-right text-[10.5px] tabular-nums"
                                     style={{ color: "var(--text-faint)" }}
@@ -28793,7 +28863,7 @@ export default function Home() {
                                     {index + 1}
                                   </span>
                                   <span
-                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
                                     style={{
                                       background: "var(--surface-3)",
                                       border: "1px solid var(--border)",
@@ -28811,7 +28881,7 @@ export default function Home() {
                                 const status = (docsValues[key]?.[col.key] ?? "") as DocStatus;
                                 const chipStyle = getDocChipStyle(status, isLightPanelTheme);
                                 const chipClass =
-                                  "inline-flex min-w-[124px] items-center justify-center gap-1.5 rounded-full border px-3 py-[6px] text-[11.5px] font-semibold leading-none";
+                                  "inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full border px-2.5 py-[5px] text-[11.5px] font-semibold leading-none";
                                 const chipInner = (
                                   <>
                                     {getDocStatusIcon(status)}
@@ -28820,12 +28890,17 @@ export default function Home() {
                                 );
                                 const ficha = docsArchivos[key]?.[col.key];
                                 const celdaBusy = docsFileBusy === `${key}__${col.key}`;
-                                const iconBtnClass =
-                                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50";
-                                const iconBtnStyle = { borderColor: "var(--border)", background: "var(--surface-3)", color: "var(--text-muted)" };
+                                const iconBtnBase =
+                                  "docs-icon-btn flex h-[26px] shrink-0 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-40";
+                                const iconBtnClass = `${iconBtnBase} w-[26px]`;
+                                const iconBtnStyle = {};
+                                const conAcciones = canEditDocs || (Boolean(ficha) && canViewDocsPdf) || celdaBusy;
                                 return (
-                                  <td key={col.key} className="px-2 py-1.5 text-center">
-                                    <span className="inline-flex items-center justify-center gap-1.5">
+                                  <td key={col.key} className="px-2 py-1.5">
+                                    <div
+                                      className="mx-auto flex w-[220px] items-center gap-1 rounded-full border p-[3px]"
+                                      style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+                                    >
                                     {canEditDocs ? (
                                       <button
                                         type="button"
@@ -28841,6 +28916,8 @@ export default function Home() {
                                         {chipInner}
                                       </span>
                                     )}
+                                    {conAcciones ? (
+                                    <span className="flex w-[82px] shrink-0 items-center justify-end gap-0.5">
                                     {celdaBusy ? (
                                       <span className={iconBtnClass} style={iconBtnStyle} aria-label="Procesando PDF">
                                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="animate-spin" aria-hidden="true">
@@ -28856,9 +28933,9 @@ export default function Home() {
                                           title={`Ver PDF: ${ficha.nombre} (${poaTamanoLegible(ficha.tamano)})${ficha.por ? ` · subido por ${ficha.por}` : ""}`}
                                           aria-label={`Ver PDF de ${dep} · ${col.label}`}
                                           className={iconBtnClass}
-                                          style={{ ...iconBtnStyle, color: "#c9605a", borderColor: "rgba(201,96,90,0.35)" }}
+                                          style={{ color: "#d06a63" }}
                                         >
-                                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                             <path d="M14 2v6h6M9 15h6M9 18h4" />
                                           </svg>
@@ -28885,7 +28962,7 @@ export default function Home() {
                                               disabled={Boolean(docsFileBusy)}
                                               title="Quitar PDF"
                                               aria-label={`Quitar PDF de ${dep} · ${col.label}`}
-                                              className={iconBtnClass}
+                                              className={`${iconBtnClass} docs-icon-btn--danger`}
                                               style={iconBtnStyle}
                                             >
                                               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
@@ -28902,15 +28979,18 @@ export default function Home() {
                                         disabled={Boolean(docsFileBusy) || docsLoading}
                                         title={`Adjuntar PDF: ${dep} · ${col.label}`}
                                         aria-label={`Adjuntar PDF de ${dep} · ${col.label}`}
-                                        className={iconBtnClass}
+                                        className={`${iconBtnBase} gap-1 px-2 text-[10.5px] font-semibold`}
                                         style={iconBtnStyle}
                                       >
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                           <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                                         </svg>
+                                        PDF
                                       </button>
                                     ) : null}
                                     </span>
+                                    ) : null}
+                                    </div>
                                   </td>
                                 );
                               })}

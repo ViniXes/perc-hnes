@@ -679,6 +679,16 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
 .docs-chip:active {
   transform: translateY(0);
 }
+.docs-icon-btn {
+  color: var(--text-muted);
+}
+.docs-icon-btn:not(:disabled):hover {
+  background-color: var(--surface-3);
+  color: var(--text);
+}
+.docs-icon-btn--danger:not(:disabled):hover {
+  color: #e2786f;
+}
 .docs-close:hover {
   color: #fda4af;
   border-color: rgba(244, 63, 94, 0.45);

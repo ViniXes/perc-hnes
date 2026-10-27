@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.468",
+    para: ["admin"],
+    texto:
+      "DOCS-POA/MOF: vista renovada. Arriba hay un resumen de avance por documento y un buscador de dependencias; cada celda tiene el mismo tamaño, con el estado y los botones del PDF alineados.",
+  },
+  {
     version: "1986.467",
     para: ["admin"],
     texto:
