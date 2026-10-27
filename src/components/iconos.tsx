@@ -409,7 +409,7 @@ export const SIDEBAR_ICON_BY_ID: Record<string, ReactNode> = {
   "panel-signups": IconMessage,
   "panel-services": IconDashboard,
   "panel-tendencias": IconTrend,
-  "panel-esdomed": IconMemo,
+  "panel-memos": IconMemo,
 };
 
 // Color del recuadro del icono de cada submenu bajo PERC (distinto por item, para
@@ -423,6 +423,7 @@ export const SUBMENU_ICON_TINT: Record<string, string> = {
   servicios: "bg-sky-500/15 text-sky-300",
   seps: "bg-blue-500/15 text-blue-300",
   horas: "bg-amber-500/15 text-amber-300",
+  memo: "bg-teal-500/15 text-teal-300",
 };
 
 // Icono propio de cada submenu bajo PERC (Abrir PERC / Monitoreo / Censo / Insumos).
@@ -488,6 +489,14 @@ export function renderSubmenuIcon(icon: string | undefined): ReactNode {
       </svg>
     );
   }
+  if (icon === "memo") {
+    return (
+      <svg {...common}>
+        <path d="M4 6.5h16v11H4z" />
+        <path d="m4 7 8 6 8-6" />
+      </svg>
+    );
+  }
   if (icon === "horas") {
     return (
       <svg {...common}>
@@ -528,5 +537,5 @@ export const SIDEBAR_TILE_GRADIENT: Record<string, string> = {
   "panel-request-form": "from-cyan-400 to-sky-600",
   "panel-signups": "from-teal-400 to-emerald-600",
   "panel-services": "from-sky-400 to-cyan-600",
-  "panel-esdomed": "from-teal-500 to-emerald-700",
+  "panel-memos": "from-teal-500 to-emerald-700",
 };

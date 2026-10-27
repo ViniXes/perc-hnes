@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * MENÚ "ESDOMED" (solo administradores): memorándums del servicio.
+ * MENÚ "MEMORÁNDUMS" (solo administradores), submenús ESDOMED y Planificación:
+ * cada área con sus memos, su numeración y su remitente por defecto.
  *
  * Lista de memos guardados por año y número correlativo, editor con los campos
  * del formato oficial (No., bloques PARA / CC.: / DE / A TRAVÉS DE…, ASUNTO, FECHA, cuerpo, despedida,
@@ -13,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firestore";
 import {
+  MEMO_AREAS,
   MEMO_COLECCION,
   MEMO_ETIQUETA_OPCIONES,
   memoEtiqueta,
@@ -25,6 +27,7 @@ import {
   memoNuevo,
   normalizarMemo,
   type MemoEsdomed,
+  type MemoArea,
   type MemoBloque,
   type MemoPersona,
 } from "@/lib/memo-esdomed";
@@ -33,6 +36,8 @@ import { BTN_GUARDAR } from "@/components/ui-basicos";
 type MemoGuardado = MemoEsdomed & { id: string; actualizado: string; actualizadoPor: string };
 
 type Props = {
+  /** Área cuyos memos se muestran (submenú de MEMORÁNDUMS). */
+  area: MemoArea;
   isLight: boolean;
   /** Correo o usuario de quien guarda (queda en el memo). */
   usuario: string;
@@ -55,7 +60,7 @@ function fechaDe(valor: unknown): string {
   return "";
 }
 
-export function MemosEsdomed({ isLight, usuario }: Props) {
+export function MemosEsdomed({ area, isLight, usuario }: Props) {
   const [memos, setMemos] = useState<MemoGuardado[]>([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -85,7 +90,8 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
         };
       });
       lista.sort((a, b) => b.year - a.year || b.numero - a.numero);
-      setMemos(lista);
+      // Todas las áreas comparten la colección; cada submenú ve solo los suyos.
+      setMemos(lista.filter((m) => m.area === area));
     } catch (e) {
       setError(
         (e as { code?: string })?.code === "permission-denied"
@@ -95,7 +101,7 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [area]);
 
   // Carga inicial de la lista al entrar al menú.
   useEffect(() => {
@@ -125,7 +131,7 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
       (m) =>
         m.year === anio &&
         (!q ||
-          normalizar(`${memoCodigo(m.year, m.numero)} ${m.asunto} ${m.bloques.flatMap((b) => b.personas.map((p) => p.nombre)).join(" ")}`).includes(q)),
+          normalizar(`${memoCodigo(m)} ${m.asunto} ${m.bloques.flatMap((b) => b.personas.map((p) => p.nombre)).join(" ")}`).includes(q)),
     );
   }, [memos, anio, busqueda]);
 
@@ -137,7 +143,7 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
   const abrirNuevo = () => {
     if (!confirmarDescartar()) return;
     const year = new Date().getFullYear();
-    const nuevo = memoNuevo(year, siguienteNumero(year), hoyIso());
+    const nuevo = memoNuevo(area, year, siguienteNumero(year), hoyIso());
     setMemo(nuevo);
     setIdOriginal(null);
     setGuardadoJson("");
@@ -209,7 +215,7 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
     setError("");
     setAviso("");
     try {
-      const id = memoDocId(memo.year, memo.numero);
+      const id = memoDocId(memo.area, memo.year, memo.numero);
       const ref = doc(db, MEMO_COLECCION, id);
       const datos = { ...memo, updatedAt: serverTimestamp(), updatedBy: usuario };
       if (id === idOriginal) {
@@ -218,7 +224,7 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
         // Número nuevo (memo nuevo o se le cambió el número): no pisar otro memo.
         const existe = await getDoc(ref);
         if (existe.exists()) {
-          setError(`Ya existe el memo No. ${memoCodigo(memo.year, memo.numero)}. Usá otro número.`);
+          setError(`Ya existe el memo No. ${memoCodigo(memo)}. Usá otro número.`);
           return;
         }
         await setDoc(ref, { ...datos, createdAt: serverTimestamp(), createdBy: usuario });
@@ -227,7 +233,7 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
       setIdOriginal(id);
       setGuardadoJson(JSON.stringify(memo));
       setAnio(memo.year);
-      setAviso(`Memo No. ${memoCodigo(memo.year, memo.numero)} guardado.`);
+      setAviso(`Memo No. ${memoCodigo(memo)} guardado.`);
       void cargar();
     } catch (e) {
       setError(
@@ -242,7 +248,7 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
 
   const borrar = async () => {
     if (!memo || !idOriginal) return;
-    if (!window.confirm(`¿Eliminar el memo No. ${memoCodigo(memo.year, memo.numero)}? No se puede deshacer.`)) return;
+    if (!window.confirm(`¿Eliminar el memo No. ${memoCodigo(memo)}? No se puede deshacer.`)) return;
     setOcupado("borrar");
     try {
       await deleteDoc(doc(db, MEMO_COLECCION, idOriginal));
@@ -400,11 +406,13 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
   }, [memo?.cuerpo]);
 
   return (
-    <section id="panel-esdomed" className={`rounded-[24px] p-5 ${tarjeta}`}>
+    <section id={`panel-memos-${area}`} className={`rounded-[24px] p-5 ${tarjeta}`}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${sub}`}>ESDOMED</p>
-          <h2 className={`mt-1 text-xl font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>Memorándums</h2>
+          <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${sub}`}>Memorándums</p>
+          <h2 className={`mt-1 text-xl font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>
+            {MEMO_AREAS[area].nombre}
+          </h2>
           <p className={`mt-1 max-w-2xl text-sm ${isLight ? "text-slate-600" : "text-slate-400"}`}>
             Memos con el membrete oficial, guardados por número correlativo. Se descargan en PDF o en Word
             (para firmar o seguir editando). Solo los administradores ven este menú.
@@ -493,7 +501,7 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
           <div className="min-w-0 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-semibold">
-                {idOriginal ? "Editando" : "Nuevo"} · No. {memoCodigo(memo.year, memo.numero)}
+                {idOriginal ? "Editando" : "Nuevo"} · No. {memoCodigo(memo)}
                 {cambiosSinGuardar ? <span className="ml-2 text-xs font-normal text-amber-500">sin guardar</span> : null}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -517,7 +525,15 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-[110px_110px_1fr_170px]">
+            <div className="grid gap-3 sm:grid-cols-[150px_100px_100px_1fr_170px]">
+              <label title="Va en el número: HNES-año-CÓDIGO-número">
+                <span className={etiqueta}>Código</span>
+                <input
+                  className={`${input} uppercase`}
+                  value={memo.codigoArea}
+                  onChange={(e) => editar({ codigoArea: e.target.value })}
+                />
+              </label>
               <label>
                 <span className={etiqueta}>Año</span>
                 <input

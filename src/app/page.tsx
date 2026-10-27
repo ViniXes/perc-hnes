@@ -19151,15 +19151,31 @@ export default function Home() {
             },
           ]
         : []),
-      // ESDOMED: memorandums del servicio (membrete oficial, PDF y Word). Solo
-      // administradores.
+      // MEMORANDUMS: memos con membrete oficial (PDF y Word), uno por area en el
+      // submenu. Solo administradores.
       ...(isAdmin
         ? [
             {
-              id: "panel-esdomed",
-              label: "ESDOMED",
-              detail: "Memorándums del servicio",
-              badge: "ES",
+              id: "panel-memos",
+              label: "Memorándums",
+              detail: "Memos con membrete por área",
+              badge: "ME",
+              children: [
+                {
+                  id: "panel-memos-esdomed",
+                  label: "ESDOMED",
+                  detail: "Memorándums de ESDOMED",
+                  badge: "ES",
+                  icon: "memo",
+                },
+                {
+                  id: "panel-memos-planificacion",
+                  label: "Planificación",
+                  detail: "Memorándums de la Unidad de Planificación",
+                  badge: "PL",
+                  icon: "memo",
+                },
+              ],
             },
           ]
         : []),
@@ -19561,7 +19577,6 @@ export default function Home() {
                                 "panel-admin-export",
                                 "panel-capture-toggle",
                                 "panel-poa",
-                                "panel-esdomed",
                                 "panel-hospitales",
                                 "panel-cec",
                               ].includes(item.id)
@@ -20241,9 +20256,11 @@ export default function Home() {
                               ? "Hospitales"
                               : mobileView === "panel-cec"
                                 ? "Comité de Expediente Clínico"
-                                : mobileView === "panel-esdomed"
-                                  ? "ESDOMED · Memorándums"
-                                  : ""}
+                                : mobileView === "panel-memos-esdomed"
+                                  ? "Memorándums · ESDOMED"
+                                  : mobileView === "panel-memos-planificacion"
+                                    ? "Memorándums · Planificación"
+                                    : ""}
               </span>
             </div>
 
@@ -24346,13 +24363,21 @@ export default function Home() {
             </>
           ) : null}
 
-          {/* ESDOMED: memorandums con membrete (solo administradores). */}
-          {isAdmin &&
-          (activeSidebarSection === "panel-esdomed" || mobileView === "panel-esdomed") ? (
-            <div data-view="panel-esdomed">
-              <MemosEsdomed isLight={isLightPanelTheme} usuario={serviceProfile?.email || ""} />
-            </div>
-          ) : null}
+          {/* MEMORANDUMS: memos con membrete por area (solo administradores). */}
+          {isAdmin
+            ? (["esdomed", "planificacion"] as const).map((area) =>
+                activeSidebarSection === `panel-memos-${area}` || mobileView === `panel-memos-${area}` ? (
+                  <div key={area} data-view={`panel-memos-${area}`}>
+                    <MemosEsdomed
+                      key={area}
+                      area={area}
+                      isLight={isLightPanelTheme}
+                      usuario={serviceProfile?.email || ""}
+                    />
+                  </div>
+                ) : null,
+              )
+            : null}
 
           {/* Gastos PERC: matriz mensual de distribucion de gasto general (solo admin). */}
           {(isAdmin || hasGrant("panel-gastos-perc")) &&

@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.469",
+    para: ["admin"],
+    texto:
+      "El menu ESDOMED ahora se llama Memorandums y tiene dos submenus: ESDOMED y Planificacion, cada uno con sus memos y su propia numeracion.",
+  },
+  {
     version: "1986.468",
     para: ["admin"],
     texto:

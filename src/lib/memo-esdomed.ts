@@ -28,7 +28,13 @@ export type MemoPersona = { nombre: string; cargo: string };
  */
 export type MemoBloque = { etiqueta: string; personas: MemoPersona[] };
 
+/** Área dueña del memo (cada una con su numeración y su remitente). */
+export type MemoArea = "esdomed" | "planificacion";
+
 export type MemoEsdomed = {
+  area: MemoArea;
+  /** Lo que va en el número: "HNES-<año>-<codigoArea>-<n>". */
+  codigoArea: string;
   year: number;
   numero: number;
   bloques: MemoBloque[];
@@ -74,13 +80,30 @@ export function memoFirmante(memo: Pick<MemoEsdomed, "bloques">): MemoPersona | 
   return de ? (personasValidas(de.personas)[0] ?? null) : null;
 }
 
-export function memoDocId(year: number, numero: number): string {
-  return `${year}__${String(numero).padStart(4, "0")}`;
+export type MemoAreaConfig = { nombre: string; codigo: string; de: MemoPersona };
+
+export const MEMO_AREAS: Record<MemoArea, MemoAreaConfig> = {
+  esdomed: { nombre: "ESDOMED", codigo: "ESDOMED", de: MEMO_DE_DEFAULT },
+  planificacion: {
+    nombre: "Planificación",
+    codigo: "PLANIFICACION",
+    de: { nombre: "Dr. Roberto Centeno Zambrano", cargo: "Jefe de Unidad de Planificación" },
+  },
+};
+
+/**
+ * ESDOMED conserva los ids de siempre ("2026__0021"); las demás áreas llevan su
+ * nombre adelante ("planificacion__2026__0001"). Todo en la misma colección.
+ */
+export function memoDocId(area: MemoArea, year: number, numero: number): string {
+  const base = `${year}__${String(numero).padStart(4, "0")}`;
+  return area === "esdomed" ? base : `${area}__${base}`;
 }
 
 /** "No. HNES-2026-ESDOMED-20" */
-export function memoCodigo(year: number, numero: number): string {
-  return `HNES-${year}-ESDOMED-${numero}`;
+export function memoCodigo(memo: Pick<MemoEsdomed, "year" | "numero" | "codigoArea">): string {
+  const codigo = (memo.codigoArea || "").trim().toUpperCase() || "ESDOMED";
+  return `HNES-${memo.year}-${codigo}-${memo.numero}`;
 }
 
 /** "2026-10-23" -> "23/10/2026" */
@@ -89,7 +112,7 @@ export function memoFechaTexto(fecha: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : fecha || "";
 }
 
-export function memoNombreArchivo(memo: Pick<MemoEsdomed, "year" | "numero" | "asunto">): string {
+export function memoNombreArchivo(memo: Pick<MemoEsdomed, "year" | "numero" | "codigoArea" | "asunto">): string {
   const asunto = (memo.asunto || "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -98,16 +121,18 @@ export function memoNombreArchivo(memo: Pick<MemoEsdomed, "year" | "numero" | "a
     .split(/\s+/)
     .slice(0, 6)
     .join(" ");
-  return `Memo ${memoCodigo(memo.year, memo.numero)}${asunto ? ` - ${asunto}` : ""}`;
+  return `Memo ${memoCodigo(memo)}${asunto ? ` - ${asunto}` : ""}`;
 }
 
-export function memoNuevo(year: number, numero: number, hoy: string): MemoEsdomed {
+export function memoNuevo(area: MemoArea, year: number, numero: number, hoy: string): MemoEsdomed {
   return {
+    area,
+    codigoArea: MEMO_AREAS[area].codigo,
     year,
     numero,
     bloques: [
       { etiqueta: "PARA:", personas: [{ ...MEMO_PARA_DEFAULT }] },
-      { etiqueta: "DE:", personas: [{ ...MEMO_DE_DEFAULT }] },
+      { etiqueta: "DE:", personas: [{ ...MEMO_AREAS[area].de }] },
     ],
     asunto: "",
     lugar: "San Salvador Centro",
@@ -141,7 +166,12 @@ export function normalizarMemo(raw: Record<string, unknown>): MemoEsdomed {
     }
     bloques.push({ etiqueta: "DE:", personas: [persona(raw.de)] });
   }
+  // Los memos de antes de que hubiera áreas son todos de ESDOMED.
+  const area: MemoArea = raw.area === "planificacion" ? "planificacion" : "esdomed";
   return {
+    area,
+    codigoArea:
+      typeof raw.codigoArea === "string" && raw.codigoArea.trim() ? raw.codigoArea : MEMO_AREAS[area].codigo,
     year: Number(raw.year) || new Date().getFullYear(),
     numero: Number(raw.numero) || 1,
     bloques,
@@ -247,7 +277,7 @@ export function memoDocxCuerpoXml(memo: MemoEsdomed): string {
   const p: string[] = [];
   p.push(wVacio());
   p.push(
-    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr>${wRun(rArial(true, 20), `No. ${memoCodigo(memo.year, memo.numero)}`)}</w:p>`,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr>${wRun(rArial(true, 20), `No. ${memoCodigo(memo)}`)}</w:p>`,
   );
   p.push(wVacio());
 
@@ -444,7 +474,7 @@ export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes)
   pdf.setTextColor(0);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(10);
-  pdf.text(t(`No. ${memoCodigo(memo.year, memo.numero)}`), PW - MR, y, { align: "right" });
+  pdf.text(t(`No. ${memoCodigo(memo)}`), PW - MR, y, { align: "right" });
   y += L_ARIAL * 2.4;
 
   // Columna de los nombres, la misma para todo el encabezado: si un título es
