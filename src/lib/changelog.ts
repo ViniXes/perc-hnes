@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.466",
+    para: ["admin"],
+    texto:
+      "Memos ESDOMED: el titulo del bloque VIA ahora se elige (VIA, A TRAVES DE, CC) o se escribe a mano, y sale asi en el PDF y en el Word.",
+  },
+  {
     version: "1986.465",
     para: ["admin"],
     texto:

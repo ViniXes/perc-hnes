@@ -26,6 +26,8 @@ export type MemoEsdomed = {
   numero: number;
   para: MemoPersona[];
   via: MemoPersona[];
+  /** Título del bloque VÍA: "VÍA", "A TRAVÉS DE", "CC" o lo que se escriba. */
+  viaEtiqueta: string;
   de: MemoPersona;
   asunto: string;
   lugar: string;
@@ -52,6 +54,15 @@ export const MEMO_DE_DEFAULT: MemoPersona = {
 };
 
 export const MEMO_SALUDO_DEFAULT = "Reciba un cordial saludo y mis mejores deseos de éxito en sus labores.";
+
+/** Títulos sugeridos para el bloque VÍA (también se puede escribir otro). */
+export const MEMO_VIA_OPCIONES = ["VÍA", "A TRAVÉS DE", "CC"];
+
+/** "a través de" -> "A TRAVÉS DE:" (vacío -> "VÍA:"). */
+export function memoViaEtiqueta(memo: Pick<MemoEsdomed, "viaEtiqueta">): string {
+  const limpio = (memo.viaEtiqueta || "").trim().replace(/\s*:+$/, "").trim();
+  return `${(limpio || "VÍA").toUpperCase()}:`;
+}
 
 export function memoDocId(year: number, numero: number): string {
   return `${year}__${String(numero).padStart(4, "0")}`;
@@ -86,6 +97,7 @@ export function memoNuevo(year: number, numero: number, hoy: string): MemoEsdome
     numero,
     para: [{ ...MEMO_PARA_DEFAULT }],
     via: [],
+    viaEtiqueta: "VÍA",
     de: { ...MEMO_DE_DEFAULT },
     asunto: "",
     lugar: "San Salvador Centro",
@@ -109,6 +121,7 @@ export function normalizarMemo(raw: Record<string, unknown>): MemoEsdomed {
     numero: Number(raw.numero) || 1,
     para: lista(raw.para),
     via: lista(raw.via),
+    viaEtiqueta: typeof raw.viaEtiqueta === "string" ? raw.viaEtiqueta : "VÍA",
     de: persona(raw.de),
     asunto: String(raw.asunto ?? ""),
     lugar: String(raw.lugar ?? ""),
@@ -165,6 +178,9 @@ const wVacio = () => `<w:p/>`;
 
 /** Bloque "ETIQUETA:  valor" con sangría francesa para que el valor quede alineado. */
 function wCampo(etiqueta: string, renglones: { texto: string; bold: boolean }[]): string {
+  // Un título largo (p. ej. "A TRAVÉS DE:") corre la sangría de su bloque para que
+  // el nombre y el cargo sigan alineados (~2.75 mm por letra, Arial negrita 11).
+  const tab = Math.max(TAB_VALOR, Math.round(etiqueta.length * 2.75 * 56.7) + 170);
   const runs: string[] = [];
   if (etiqueta) runs.push(wRun(rArial(true, 22), etiqueta));
   runs.push(`<w:r>${rArial(true, 20)}<w:tab/></w:r>`);
@@ -172,7 +188,7 @@ function wCampo(etiqueta: string, renglones: { texto: string; bold: boolean }[])
     if (i > 0) runs.push(`<w:r>${rArial(r.bold, 20)}<w:br/></w:r>`);
     runs.push(wRun(rArial(r.bold, 20), r.texto));
   });
-  return `<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="${TAB_VALOR}"/></w:tabs><w:ind w:left="${TAB_VALOR}" w:hanging="${TAB_VALOR}"/></w:pPr>${runs.join("")}</w:p>`;
+  return `<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="${tab}"/></w:tabs><w:ind w:left="${tab}" w:hanging="${tab}"/></w:pPr>${runs.join("")}</w:p>`;
 }
 
 function wPersonas(etiqueta: string, lista: MemoPersona[]): string[] {
@@ -209,7 +225,7 @@ export function memoDocxCuerpoXml(memo: MemoEsdomed): string {
   p.push(...wPersonas("PARA:", memo.para));
   if (personasValidas(memo.via).length > 0) {
     separar();
-    p.push(...wPersonas("VÍA:", memo.via));
+    p.push(...wPersonas(memoViaEtiqueta(memo), memo.via));
   }
   separar();
   p.push(...wPersonas("DE:", [memo.de]));
@@ -399,11 +415,15 @@ export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes)
   y += L_ARIAL * 2.4;
 
   const campo = (etiqueta: string, renglones: { texto: string; bold: boolean }[]) => {
+    // Si el título es largo (p. ej. uno escrito a mano en VÍA), el valor se corre.
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(11);
+    const xValor = etiqueta ? Math.max(X_VALOR, ML + pdf.getTextWidth(t(etiqueta)) + 3) : X_VALOR;
     const lineas: { texto: string; bold: boolean }[] = [];
     for (const r of renglones) {
       pdf.setFont("helvetica", r.bold ? "bold" : "normal");
       pdf.setFontSize(10);
-      for (const l of pdf.splitTextToSize(t(r.texto), PW - MR - X_VALOR)) lineas.push({ texto: l, bold: r.bold });
+      for (const l of pdf.splitTextToSize(t(r.texto), PW - MR - xValor)) lineas.push({ texto: l, bold: r.bold });
     }
     espacio(lineas.length * L_ARIAL);
     if (etiqueta) {
@@ -414,7 +434,7 @@ export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes)
     lineas.forEach((l, i) => {
       pdf.setFont("helvetica", l.bold ? "bold" : "normal");
       pdf.setFontSize(10);
-      pdf.text(l.texto, X_VALOR, y + i * L_ARIAL);
+      pdf.text(l.texto, xValor, y + i * L_ARIAL);
     });
     y += Math.max(1, lineas.length) * L_ARIAL;
   };
@@ -436,7 +456,7 @@ export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes)
   personas("PARA:", memo.para);
   if (personasValidas(memo.via).length > 0) {
     y += SEP;
-    personas("VÍA:", memo.via);
+    personas(memoViaEtiqueta(memo), memo.via);
   }
   y += SEP;
   personas("DE:", [memo.de]);

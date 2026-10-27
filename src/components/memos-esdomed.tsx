@@ -14,6 +14,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc } 
 import { db } from "@/lib/firestore";
 import {
   MEMO_COLECCION,
+  MEMO_VIA_OPCIONES,
   buildMemoPdfConMembrete,
   downloadMemoDocx,
   downloadMemoPdf,
@@ -482,7 +483,41 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
             </div>
 
             {bloquePersonas("para", "Para", "Agregá al menos un destinatario.")}
-            {bloquePersonas("via", "Vía (opcional)", "Sin «VÍA». Agregalo solo si el memo pasa por otra jefatura.")}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`${etiqueta} mb-0`}>Título del bloque Vía</span>
+                {MEMO_VIA_OPCIONES.map((op) => (
+                  <button
+                    key={op}
+                    type="button"
+                    onClick={() => editar({ viaEtiqueta: op })}
+                    className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+                      memo.viaEtiqueta.trim().toUpperCase() === op
+                        ? isLight
+                          ? "bg-teal-600 text-white"
+                          : "bg-teal-400/20 text-teal-100 ring-1 ring-inset ring-teal-300/40"
+                        : isLight
+                          ? "border border-slate-200 text-slate-600 hover:bg-slate-100"
+                          : "border border-white/10 text-slate-300 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    {op}
+                  </button>
+                ))}
+                <input
+                  className={`${input} w-48`}
+                  value={memo.viaEtiqueta}
+                  placeholder="O escribí otro"
+                  aria-label="Título del bloque Vía"
+                  onChange={(e) => editar({ viaEtiqueta: e.target.value })}
+                />
+              </div>
+              {bloquePersonas(
+                "via",
+                `${memo.viaEtiqueta.trim() || "Vía"} (opcional)`,
+                "Sin este bloque. Agregalo solo si el memo pasa por otra jefatura.",
+              )}
+            </div>
 
             <div>
               <span className={etiqueta}>De</span>
