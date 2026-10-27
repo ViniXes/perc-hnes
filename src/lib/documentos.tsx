@@ -137,6 +137,8 @@ export const DOC_DEPENDENCIAS: string[] = [
   "Departamento de Tecnologia y Comunicaciones",
   "Servicio de Lavanderia",
   "Unidad de Gestion Documental",
+  // Las nuevas van al final: la clave de cada fila (dep-N) sale de su posicion.
+  "Subdirección de Telemedicina",
 ];
 
 // Clave estable por dependencia (no cambia aunque se edite el nombre visible).

@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.464",
+    para: ["admin"],
+    texto:
+      "DOCS-POA/MOF: se agrego la Subdireccion de Telemedicina, con sus estados y PDF adjuntos igual que las demas dependencias.",
+  },
+  {
     version: "1986.463",
     para: ["admin"],
     texto:
