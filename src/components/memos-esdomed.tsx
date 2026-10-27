@@ -4,7 +4,7 @@
  * MENÚ "ESDOMED" (solo administradores): memorándums del servicio.
  *
  * Lista de memos guardados por año y número correlativo, editor con los campos
- * del formato oficial (No., PARA, VÍA, DE, ASUNTO, FECHA, cuerpo, despedida,
+ * del formato oficial (No., bloques PARA / CC.: / DE / A TRAVÉS DE…, ASUNTO, FECHA, cuerpo, despedida,
  * firma y copias) y descargas en PDF y Word con el membrete de la plantilla.
  * Los memos viven en Firestore `esdomedMemos/<año>__<número>`.
  */
@@ -14,7 +14,8 @@ import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc } 
 import { db } from "@/lib/firestore";
 import {
   MEMO_COLECCION,
-  MEMO_VIA_OPCIONES,
+  MEMO_ETIQUETA_OPCIONES,
+  memoEtiqueta,
   buildMemoPdfConMembrete,
   downloadMemoDocx,
   downloadMemoPdf,
@@ -24,6 +25,7 @@ import {
   memoNuevo,
   normalizarMemo,
   type MemoEsdomed,
+  type MemoBloque,
   type MemoPersona,
 } from "@/lib/memo-esdomed";
 import { BTN_GUARDAR } from "@/components/ui-basicos";
@@ -123,7 +125,7 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
       (m) =>
         m.year === anio &&
         (!q ||
-          normalizar(`${memoCodigo(m.year, m.numero)} ${m.asunto} ${m.para.map((p) => p.nombre).join(" ")}`).includes(q)),
+          normalizar(`${memoCodigo(m.year, m.numero)} ${m.asunto} ${m.bloques.flatMap((b) => b.personas.map((p) => p.nombre)).join(" ")}`).includes(q)),
     );
   }, [memos, anio, busqueda]);
 
@@ -162,17 +164,36 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
 
   const editar = (cambios: Partial<MemoEsdomed>) => setMemo((m) => (m ? { ...m, ...cambios } : m));
 
-  const editarPersona = (campo: "para" | "via", i: number, cambios: Partial<MemoPersona>) =>
-    setMemo((m) => {
-      if (!m) return m;
-      const lista = m[campo].map((p, j) => (j === i ? { ...p, ...cambios } : p));
-      return { ...m, [campo]: lista };
+  const editarBloques = (cambiar: (bloques: MemoBloque[]) => MemoBloque[]) =>
+    setMemo((m) => (m ? { ...m, bloques: cambiar(m.bloques) } : m));
+
+  const editarBloque = (b: number, cambios: Partial<MemoBloque>) =>
+    editarBloques((lista) => lista.map((x, j) => (j === b ? { ...x, ...cambios } : x)));
+
+  const editarPersona = (b: number, i: number, cambios: Partial<MemoPersona>) =>
+    editarBloques((lista) =>
+      lista.map((x, j) =>
+        j === b ? { ...x, personas: x.personas.map((p, k) => (k === i ? { ...p, ...cambios } : p)) } : x,
+      ),
+    );
+
+  /** Sube (-1) o baja (+1) un bloque en el encabezado. */
+  const moverBloque = (b: number, paso: -1 | 1) =>
+    editarBloques((lista) => {
+      const destino = b + paso;
+      if (destino < 0 || destino >= lista.length) return lista;
+      const copia = [...lista];
+      [copia[b], copia[destino]] = [copia[destino], copia[b]];
+      return copia;
     });
 
   const validar = (m: MemoEsdomed): string => {
     if (!Number.isInteger(m.numero) || m.numero < 1) return "El número del memo debe ser un entero mayor que 0.";
     if (!Number.isInteger(m.year) || m.year < 2000 || m.year > 2100) return "El año del memo no es válido.";
-    if (!m.para.some((p) => p.nombre.trim())) return "Falta el destinatario (PARA).";
+    if (!m.bloques.some((b) => b.personas.some((p) => p.nombre.trim()))) return "Falta el destinatario (PARA).";
+    if (m.bloques.some((b) => !b.etiqueta.trim() && b.personas.some((p) => p.nombre.trim() || p.cargo.trim()))) {
+      return "Hay un bloque del encabezado sin título (PARA, CC.:, DE…).";
+    }
     if (!m.asunto.trim()) return "Falta el ASUNTO.";
     return "";
   };
@@ -275,51 +296,100 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
     isLight ? "text-slate-500 hover:bg-slate-100 hover:text-rose-600" : "text-slate-400 hover:bg-white/[0.06] hover:text-rose-300"
   }`;
 
-  const bloquePersonas = (campo: "para" | "via", titulo: string, ayuda: string) => {
-    if (!memo) return null;
-    const lista = memo[campo];
-    return (
-      <div>
-        <div className="flex items-center justify-between gap-2">
-          <span className={etiqueta}>{titulo}</span>
+  const chip = (activo: boolean) =>
+    `rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+      activo
+        ? isLight
+          ? "bg-teal-600 text-white"
+          : "bg-teal-400/20 text-teal-100 ring-1 ring-inset ring-teal-300/40"
+        : isLight
+          ? "border border-slate-200 text-slate-600 hover:bg-slate-100"
+          : "border border-white/10 text-slate-300 hover:bg-white/[0.06]"
+    }`;
+  const btnLink = `text-[11px] font-semibold hover:underline ${isLight ? "text-teal-700" : "text-teal-300"}`;
+
+  /** Un bloque del encabezado: título (rápido o libre) y sus personas. */
+  const editorBloque = (bloque: MemoBloque, b: number, total: number) => (
+    <div
+      key={b}
+      className={`rounded-2xl border p-3 ${isLight ? "border-slate-200 bg-slate-50/60" : "border-white/[0.07] bg-white/[0.02]"}`}
+    >
+      <div className="flex flex-wrap items-center gap-1.5">
+        <input
+          className={`${input} w-40 font-bold uppercase`}
+          value={bloque.etiqueta}
+          placeholder="Título"
+          aria-label="Título del bloque"
+          onChange={(e) => editarBloque(b, { etiqueta: e.target.value })}
+        />
+        {MEMO_ETIQUETA_OPCIONES.map((op) => (
+          <button
+            key={op}
+            type="button"
+            onClick={() => editarBloque(b, { etiqueta: op })}
+            className={chip(memoEtiqueta(bloque.etiqueta) === op)}
+          >
+            {op}
+          </button>
+        ))}
+        <span className="ml-auto flex items-center gap-1">
+          <button type="button" className={btnMini} title="Subir" disabled={b === 0} onClick={() => moverBloque(b, -1)}>
+            ↑
+          </button>
           <button
             type="button"
-            className={`text-[11px] font-semibold ${isLight ? "text-teal-700 hover:underline" : "text-teal-300 hover:underline"}`}
-            onClick={() => editar({ [campo]: [...lista, { nombre: "", cargo: "" }] } as Partial<MemoEsdomed>)}
+            className={btnMini}
+            title="Bajar"
+            disabled={b === total - 1}
+            onClick={() => moverBloque(b, 1)}
           >
-            + Agregar
+            ↓
           </button>
-        </div>
-        {lista.length === 0 ? <p className={`text-xs ${sub}`}>{ayuda}</p> : null}
-        <div className="space-y-2">
-          {lista.map((p, i) => (
-            <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
-              <input
-                className={input}
-                value={p.nombre}
-                placeholder="Nombre (p. ej. Dra. …)"
-                onChange={(e) => editarPersona(campo, i, { nombre: e.target.value })}
-              />
-              <input
-                className={input}
-                value={p.cargo}
-                placeholder="Cargo"
-                onChange={(e) => editarPersona(campo, i, { cargo: e.target.value })}
-              />
-              <button
-                type="button"
-                className={btnMini}
-                title="Quitar"
-                onClick={() => editar({ [campo]: lista.filter((_, j) => j !== i) } as Partial<MemoEsdomed>)}
-              >
-                Quitar
-              </button>
-            </div>
-          ))}
-        </div>
+          <button
+            type="button"
+            className={btnMini}
+            title="Quitar este bloque"
+            onClick={() => editarBloques((lista) => lista.filter((_, j) => j !== b))}
+          >
+            Quitar bloque
+          </button>
+        </span>
       </div>
-    );
-  };
+      <div className="mt-2 space-y-2">
+        {bloque.personas.map((p, i) => (
+          <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
+            <input
+              className={input}
+              value={p.nombre}
+              placeholder="Nombre (p. ej. Dra. …)"
+              onChange={(e) => editarPersona(b, i, { nombre: e.target.value })}
+            />
+            <input
+              className={input}
+              value={p.cargo}
+              placeholder="Cargo (sale en negrita)"
+              onChange={(e) => editarPersona(b, i, { cargo: e.target.value })}
+            />
+            <button
+              type="button"
+              className={btnMini}
+              title="Quitar persona"
+              onClick={() => editarBloque(b, { personas: bloque.personas.filter((_, k) => k !== i) })}
+            >
+              Quitar
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className={btnLink}
+          onClick={() => editarBloque(b, { personas: [...bloque.personas, { nombre: "", cargo: "" }] })}
+        >
+          + Agregar persona a {memoEtiqueta(bloque.etiqueta) || "este bloque"}
+        </button>
+      </div>
+    </div>
+  );
 
   // Alto del cuerpo según el texto, para escribir memos largos con comodidad.
   useEffect(() => {
@@ -411,7 +481,7 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
                   <span className={`mt-0.5 block truncate text-[12.5px] ${isLight ? "text-slate-700" : "text-slate-300"}`}>
                     {m.asunto || "(sin asunto)"}
                   </span>
-                  <span className={`block truncate text-[11px] ${sub}`}>Para: {m.para[0]?.nombre || "—"}</span>
+                  <span className={`block truncate text-[11px] ${sub}`}>Para: {m.bloques[0]?.personas[0]?.nombre || "—"}</span>
                 </button>
               );
             })}
@@ -482,59 +552,19 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
               </label>
             </div>
 
-            {bloquePersonas("para", "Para", "Agregá al menos un destinatario.")}
             <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`${etiqueta} mb-0`}>Título del bloque Vía</span>
-                {MEMO_VIA_OPCIONES.map((op) => (
-                  <button
-                    key={op}
-                    type="button"
-                    onClick={() => editar({ viaEtiqueta: op })}
-                    className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
-                      memo.viaEtiqueta.trim().toUpperCase() === op
-                        ? isLight
-                          ? "bg-teal-600 text-white"
-                          : "bg-teal-400/20 text-teal-100 ring-1 ring-inset ring-teal-300/40"
-                        : isLight
-                          ? "border border-slate-200 text-slate-600 hover:bg-slate-100"
-                          : "border border-white/10 text-slate-300 hover:bg-white/[0.06]"
-                    }`}
-                  >
-                    {op}
-                  </button>
-                ))}
-                <input
-                  className={`${input} w-48`}
-                  value={memo.viaEtiqueta}
-                  placeholder="O escribí otro"
-                  aria-label="Título del bloque Vía"
-                  onChange={(e) => editar({ viaEtiqueta: e.target.value })}
-                />
-              </div>
-              {bloquePersonas(
-                "via",
-                `${memo.viaEtiqueta.trim() || "Vía"} (opcional)`,
-                "Sin este bloque. Agregalo solo si el memo pasa por otra jefatura.",
-              )}
-            </div>
-
-            <div>
-              <span className={etiqueta}>De</span>
-              <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr]">
-                <input
-                  className={input}
-                  value={memo.de.nombre}
-                  placeholder="Nombre"
-                  onChange={(e) => editar({ de: { ...memo.de, nombre: e.target.value } })}
-                />
-                <input
-                  className={input}
-                  value={memo.de.cargo}
-                  placeholder="Cargo"
-                  onChange={(e) => editar({ de: { ...memo.de, cargo: e.target.value } })}
-                />
-              </div>
+              <span className={etiqueta}>Encabezado (PARA, CC.:, DE, A TRAVÉS DE…)</span>
+              {memo.bloques.map((bloque, b) => editorBloque(bloque, b, memo.bloques.length))}
+              <button
+                type="button"
+                className={btnLink}
+                onClick={() => editarBloques((lista) => [...lista, { etiqueta: "", personas: [{ nombre: "", cargo: "" }] }])}
+              >
+                + Agregar bloque
+              </button>
+              <p className={`text-[11px] ${sub}`}>
+                Salen en este orden. Con ↑ ↓ se acomodan; un bloque sin personas no se imprime.
+              </p>
             </div>
 
             <label className="block">
@@ -581,7 +611,7 @@ export function MemosEsdomed({ isLight, usuario }: Props) {
 
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={memo.firma} onChange={(e) => editar({ firma: e.target.checked })} />
-              Agregar línea de firma con el nombre y cargo de «De»
+              Agregar línea de firma con el nombre y cargo del bloque «DE:»
             </label>
 
             <div className="flex flex-wrap justify-between gap-2 border-t pt-4 border-slate-500/20">

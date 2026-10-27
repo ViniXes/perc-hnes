@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.467",
+    para: ["admin"],
+    texto:
+      "Memos ESDOMED: el encabezado se arma por bloques (PARA, CC.:, DE, A TRAVES DE o un titulo propio), cada uno con varias personas y en el orden que se quiera.",
+  },
+  {
     version: "1986.466",
     para: ["admin"],
     texto:
