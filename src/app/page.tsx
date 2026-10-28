@@ -19494,14 +19494,14 @@ export default function Home() {
                 title="Ocultar menú"
                 className={`absolute left-0 top-0 hidden h-8 w-8 items-center justify-center rounded-xl border ring-1 transition desk:flex ${
                   isLightPanelTheme
-                    ? "border-amber-300/60 bg-white ring-amber-300/40 hover:bg-amber-50"
+                    ? "border-[#9DB4D3]/70 bg-white ring-[#9DB4D3]/40 hover:bg-[#eef3fa]"
                     : "border-white/20 bg-[#202c41] ring-white/10 hover:bg-[#243049]"
                 }`}
               >
                 <span className="flex flex-col gap-[3px]">
-                  <span className={`block h-0.5 w-4 rounded-full ${isLightPanelTheme ? "bg-amber-400" : "bg-sky-300"}`} />
-                  <span className={`block h-0.5 w-4 rounded-full ${isLightPanelTheme ? "bg-amber-400" : "bg-sky-300"}`} />
-                  <span className={`block h-0.5 w-4 rounded-full ${isLightPanelTheme ? "bg-amber-400" : "bg-sky-300"}`} />
+                  <span className={`block h-0.5 w-4 rounded-full ${isLightPanelTheme ? "bg-[#2F6FB5]" : "bg-sky-300"}`} />
+                  <span className={`block h-0.5 w-4 rounded-full ${isLightPanelTheme ? "bg-[#2F6FB5]" : "bg-sky-300"}`} />
+                  <span className={`block h-0.5 w-4 rounded-full ${isLightPanelTheme ? "bg-[#2F6FB5]" : "bg-sky-300"}`} />
                 </span>
               </button>
               <p className="hospital-shimmer text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
@@ -20667,14 +20667,14 @@ export default function Home() {
           {isAdmin || isSupervisor || viewAnyServiceIds.length > 0 ? (
             <section id="panel-services" data-view="panel-services" className={`relative z-20 rounded-[24px] border p-5 ring-1 ${
               isLightPanelTheme
-                ? "border-amber-400/45 ring-amber-400/10 bg-white text-slate-900 shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_18px_50px_rgba(15,23,42,0.10)]"
+                ? "border-slate-200 ring-slate-900/5 bg-white text-slate-900 shadow-[0_18px_50px_rgba(15,23,42,0.10)]"
                 : "border-white/20 ring-white/5 bg-[#0e1626] text-slate-100 shadow-[0_24px_80px_rgba(3,7,18,0.45)]"
             }`}>
               {/* Encabezado elegante */}
               <div className={`mb-5 flex items-center gap-3.5 border-b pb-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/[0.08]"}`}>
                 <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 ${
                   isLightPanelTheme
-                    ? "bg-amber-400/15 text-amber-600 ring-amber-400/30"
+                    ? "bg-[#2F6FB5]/10 text-[#2F6FB5] ring-[#2F6FB5]/25"
                     : "bg-gradient-to-br from-sky-300/30 to-sky-500/5 text-sky-200 ring-white/15"
                 }`}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -20683,7 +20683,7 @@ export default function Home() {
                   </svg>
                 </span>
                 <div className="min-w-0">
-                  <p className={`hidden text-[11px] font-semibold uppercase tracking-[0.22em] sm:block ${isLightPanelTheme ? "text-amber-600/80" : "text-sky-200/80"}`}>
+                  <p className={`hidden text-[11px] font-semibold uppercase tracking-[0.22em] sm:block ${isLightPanelTheme ? "text-[#2F6FB5]" : "text-sky-200/80"}`}>
                     {isAdmin ? "Panel de administración" : "Panel de supervisión"}
                   </p>
                   <h2 className={`mt-0.5 truncate text-lg font-semibold tracking-tight sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
