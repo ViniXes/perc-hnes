@@ -269,7 +269,7 @@ html.forzar-escritorio body {
 
 .panel-shell.theme-dark {
   /* Paleta azul (oct 2026): #0F1B2D · #1B3A6B · #2F6FB5 · #9DB4D3 · #F5F7FA */
-  --bg: #0f1b2d;            /* azul noche */
+  --bg: #0b1a33;            /* azul marino profundo */
   --surface: #183460;       /* tarjeta principal (base del degradado azul) */
   --surface-2: #142b50;     /* tarjeta interna / sidebar */
   --surface-3: #1e4070;     /* inputs / elevado */
@@ -301,10 +301,11 @@ html.forzar-escritorio body {
   --color-sky-400: #6f97cc;
   --color-sky-500: #2f6fb5;
   --color-sky-600: #285f9c;
+  /* Fondo azul marino profundo, del mismo matiz que las tarjetas azules. */
   background-image:
-    radial-gradient(circle at 12% -2%, rgba(47, 111, 181, 0.20), transparent 40%),
-    radial-gradient(circle at 100% 100%, rgba(157, 180, 211, 0.07), transparent 42%),
-    linear-gradient(160deg, #12213a 0%, #0f1b2d 58%, #101e33 100%);
+    radial-gradient(circle at 12% -2%, rgba(47, 111, 181, 0.28), transparent 42%),
+    radial-gradient(circle at 100% 100%, rgba(47, 111, 181, 0.14), transparent 45%),
+    linear-gradient(160deg, #0b1a33 0%, #0d2040 55%, #102a52 100%);
   background-attachment: fixed;
 }
 
