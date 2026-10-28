@@ -1626,7 +1626,13 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
    bienvenida, un tono mas oscuro (#142B50 -> #22487F). Las internas quedan en azul solido. */
 .panel-shell.theme-dark .bg-\[\#202c41\],
 .panel-shell.theme-dark .bg-\[\#0e1626\] {
-  background-image: linear-gradient(115deg, #142b50 0%, #1b3a6b 60%, #22487f 120%);
+  /* Formas abstractas sutiles (aro arriba a la derecha + disco abajo), eco de
+     los circulos de la tarjeta de bienvenida pero mas tenues. */
+  background-image:
+    radial-gradient(circle at calc(100% + 40px) -60px, transparent 0 130px, rgba(255, 255, 255, 0.035) 131px 158px, transparent 159px),
+    radial-gradient(circle at calc(100% - 220px) calc(100% + 120px), rgba(255, 255, 255, 0.025) 0 150px, transparent 151px),
+    linear-gradient(115deg, #142b50 0%, #1b3a6b 60%, #22487f 120%);
+  background-repeat: no-repeat;
 }
 
 /* =============================================================================
