@@ -268,27 +268,43 @@ html.forzar-escritorio body {
 }
 
 .panel-shell.theme-dark {
-  --bg: #0a0f1c;            /* azul marino profundo (igual que el login) */
-  --surface: #0e1626;       /* tarjeta principal */
-  --surface-2: #101a2e;     /* tarjeta interna / sidebar */
-  --surface-3: #18233a;     /* inputs / elevado */
-  --chip: #1a2740;          /* badges, avatar, chips neutros */
-  --border: rgba(255, 255, 255, 0.10);
-  --border-strong: rgba(34, 211, 238, 0.35);
-  --text: #e7ecf5;
-  --text-muted: #9fb0cc;
-  --text-faint: #6b7a95;
-  --accent: #38d6ee;        /* cian: texto, bordes, detalles */
-  --accent-btn: #22d3ee;    /* cian lleno para botones */
-  --accent-ink: #07131f;    /* texto sobre acento lleno */
-  --shadow-card: 0 24px 70px rgba(0, 0, 0, 0.50);
-  /* Resplandores como en el login, un poco mas presentes: dan profundidad al
-     lienzo para que los paneles opacos parezcan "flotar" (retoque de elegancia). */
+  /* Paleta azul (oct 2026): #0F1B2D · #1B3A6B · #2F6FB5 · #9DB4D3 · #F5F7FA */
+  --bg: #0f1b2d;            /* azul noche */
+  --surface: #14243b;       /* tarjeta principal */
+  --surface-2: #172a45;     /* tarjeta interna / sidebar */
+  --surface-3: #1d3352;     /* inputs / elevado */
+  --chip: #1f3858;          /* badges, avatar, chips neutros */
+  --border: rgba(157, 180, 211, 0.14);
+  --border-strong: rgba(47, 111, 181, 0.55);
+  --text: #f5f7fa;
+  --text-muted: #9db4d3;
+  --text-faint: #7389a8;
+  --accent: #8fb2e0;        /* azul claro: texto, bordes, detalles */
+  --accent-btn: #2f6fb5;    /* azul lleno para botones */
+  --accent-ink: #ffffff;    /* texto sobre acento lleno */
+  --shadow-card: 0 24px 70px rgba(0, 0, 0, 0.45);
+  /* Tailwind v4 pinta las utilidades cian/sky con estas variables: en oscuro
+     se remapean a la escala azul para que todo el panel siga la paleta. */
+  --color-cyan-50: #eef3fa;
+  --color-cyan-100: #dde7f5;
+  --color-cyan-200: #c2d3ea;
+  --color-cyan-300: #9db4d3;
+  --color-cyan-400: #6f97cc;
+  --color-cyan-500: #2f6fb5;
+  --color-cyan-600: #285f9c;
+  --color-cyan-700: #224f85;
+  --color-cyan-800: #1b3a6b;
+  --color-cyan-900: #152d53;
+  --color-cyan-950: #0f1b2d;
+  --color-sky-200: #c2d3ea;
+  --color-sky-300: #9db4d3;
+  --color-sky-400: #6f97cc;
+  --color-sky-500: #2f6fb5;
+  --color-sky-600: #285f9c;
   background-image:
-    radial-gradient(circle at 12% -2%, rgba(34, 211, 238, 0.12), transparent 40%),
-    radial-gradient(circle at 100% 100%, rgba(124, 58, 237, 0.12), transparent 42%),
-    radial-gradient(circle at 60% 122%, rgba(45, 212, 191, 0.07), transparent 52%),
-    linear-gradient(160deg, #0b1526 0%, #0a0f1c 58%, #0b1424 100%);
+    radial-gradient(circle at 12% -2%, rgba(47, 111, 181, 0.20), transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(157, 180, 211, 0.07), transparent 42%),
+    linear-gradient(160deg, #12213a 0%, #0f1b2d 58%, #101e33 100%);
   background-attachment: fixed;
 }
 
@@ -1603,3 +1619,38 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
 .panel-shell.theme-light ::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 /* Barras de progreso: riel visible. */
 .panel-shell.theme-light .bg-white\/10 { background-color: rgba(15, 23, 42, 0.08); }
+
+
+/* =============================================================================
+   Tarjeta de bienvenida (encabezado del panel). Degradado azul en ambos temas;
+   lleva sus propios colores para que los remapeos del tema no la toquen.
+============================================================================= */
+.panel-shell .pulso-hero {
+  background: linear-gradient(115deg, #1b3a6b 0%, #24508f 50%, #2f6fb5 115%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 50px rgba(3, 7, 18, 0.35);
+}
+.panel-shell.theme-light .pulso-hero { box-shadow: 0 14px 34px rgba(15, 40, 80, 0.22); }
+.pulso-hero .hero-tag { color: #c2d3ea; }
+.pulso-hero .hero-greet { color: rgba(255, 255, 255, 0.85); }
+.pulso-hero .hero-name { color: #ffffff; }
+.pulso-hero .hero-sub { color: rgba(255, 255, 255, 0.80); }
+.pulso-hero .hero-chip {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  backdrop-filter: blur(6px);
+}
+.pulso-hero .hero-chip-label { color: rgba(255, 255, 255, 0.80); }
+.pulso-hero .hero-chip-sub { color: rgba(255, 255, 255, 0.80); }
+.pulso-hero .hero-online { color: #dde7f5; }
+.pulso-hero .hero-logout {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+.pulso-hero .hero-logout:hover {
+  background: rgba(244, 63, 94, 0.18);
+  border-color: rgba(253, 164, 175, 0.55);
+}

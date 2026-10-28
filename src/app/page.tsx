@@ -919,6 +919,11 @@ const HEADER_DATE_FORMATTER = new Intl.DateTimeFormat("es-HN", {
   month: "long",
   year: "numeric",
 });
+const HEADER_DAY_FORMATTER = new Intl.DateTimeFormat("es-HN", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+});
 const HEADER_TIME_FORMATTER = new Intl.DateTimeFormat("es-HN", {
   hour: "2-digit",
   minute: "2-digit",
@@ -20312,76 +20317,53 @@ export default function Home() {
 
             <section
               id="panel-overview"
-              className={`relative hidden overflow-hidden rounded-[22px] px-5 py-4 shadow-[0_24px_80px_rgba(3,7,18,0.45)] ${isMinsal ? "" : "desk:block"} ${
-                isLightPanelTheme
-                  ? "border border-slate-200 bg-white text-slate-900"
-                  : "border border-white/10 bg-[#0e1626] text-white"
-              }`}
+              className={`pulso-hero relative hidden overflow-hidden rounded-[22px] px-6 py-6 ${isMinsal ? "" : "desk:block"}`}
             >
-            {/* Adornos: halo suave + linea de acento superior (solo tema oscuro). */}
-            {!isLightPanelTheme ? (
-              <>
-                <span aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-cyan-500/10 blur-3xl" />
-                <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
-              </>
-            ) : null}
+            {/* Adornos: aros translucidos a la derecha, como la tarjeta de referencia. */}
+            <span aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border-[34px] border-solid" style={{ borderColor: "rgba(255,255,255,0.07)" }} />
+            <span aria-hidden className="pointer-events-none absolute -bottom-36 right-32 h-56 w-56 rounded-full" style={{ background: "rgba(255,255,255,0.04)" }} />
             <div className="relative flex flex-col gap-4 desk:flex-row desk:items-center desk:justify-between">
-              <div className="flex min-w-0 items-center gap-3.5">
-                <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 text-white shadow-lg shadow-cyan-500/25 ring-1 ring-white/20">
-                  <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M3 12h4l2-6 4 12 2-6h6" />
-                  </svg>
-                </span>
-                <div className="min-w-0">
-                  <p className={`text-[10px] font-semibold uppercase tracking-[0.24em] ${isLightPanelTheme ? "text-cyan-600/80" : "text-cyan-300/80"}`}>
-                    {currentService ? "Servicio" : isSupervisor ? "Panel de supervisión" : "Panel de administración"}
-                  </p>
-                  <h1 className={`mt-0.5 truncate text-lg font-bold tracking-tight sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                    {currentService
-                      ? currentService.name
-                      : isSupervisor
-                        ? "Panel de Supervisión"
-                        : "Módulo de Administración"}
-                  </h1>
-                  <p className={`mt-0.5 truncate text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
-                    {(() => { const h = now.getHours(); return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches"; })()},{" "}
-                    <span className={isLightPanelTheme ? "font-semibold text-slate-900" : "font-semibold text-cyan-200"}>{toTitleCase(welcomeName)}</span>
-                    {currentService ? <span className="text-slate-400"> · Período de {periodLabel}</span> : null}
-                  </p>
-                </div>
+              <div className="min-w-0">
+                <p className="hero-tag text-[10.5px] font-bold uppercase tracking-[0.16em]">
+                  {currentService ? "Servicio" : isSupervisor ? "Panel de supervisión" : "Panel de administración"}
+                </p>
+                <p className="hero-greet mt-1.5 text-sm">
+                  {(() => { const h = now.getHours(); return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches"; })()},
+                </p>
+                <h1 className="hero-name mt-0.5 truncate text-2xl font-extrabold tracking-tight sm:text-[30px] sm:leading-tight">
+                  {toTitleCase(welcomeName)}
+                </h1>
+                <p className="hero-sub mt-1 truncate text-sm">
+                  {currentService
+                    ? `${currentService.name} · Período de ${periodLabel}`
+                    : isSupervisor
+                      ? "Panel de Supervisión"
+                      : "Módulo de Administración"}
+                </p>
               </div>
 
-              <div className="flex items-center gap-3">
-                {/* Fecha y hora en vivo, en una tarjeta con icono. */}
-                <div
-                  className={`flex items-center gap-2.5 rounded-2xl px-3.5 py-2 ${
-                    isLightPanelTheme ? "bg-slate-100" : "border border-white/10 bg-white/[0.04] backdrop-blur-sm"
-                  }`}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm shadow-cyan-500/30">
-                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <rect x="3" y="4" width="18" height="18" rx="2" />
-                      <path d="M16 2v4M8 2v4M3 10h18" />
-                    </svg>
-                  </span>
-                  <div className="leading-tight">
-                    <p className={`text-sm font-semibold first-letter:uppercase ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
-                      <time suppressHydrationWarning>{HEADER_DATE_FORMATTER.format(now)}</time>
-                    </p>
-                    <p className="text-xs font-medium text-cyan-300">
-                      <time suppressHydrationWarning>{HEADER_TIME_FORMATTER.format(now)}</time>
-                    </p>
+              <div className="flex items-start gap-3">
+                {/* Fecha y hora en vivo, en tarjeta translucida. */}
+                <div className="hero-chip min-w-[240px] rounded-2xl px-4 py-3">
+                  <div className="hero-chip-label flex items-center justify-between gap-4 text-xs">
+                    <span>Hoy</span>
+                    <span className="hero-online inline-flex items-center gap-1.5 font-semibold">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                      En línea
+                    </span>
                   </div>
+                  <p className="mt-1 text-xl font-bold leading-tight first-letter:uppercase">
+                    <time suppressHydrationWarning>{HEADER_DAY_FORMATTER.format(now)}</time>
+                  </p>
+                  <p className="hero-chip-sub mt-0.5 text-xs">
+                    <time suppressHydrationWarning>{now.getFullYear()} · {HEADER_TIME_FORMATTER.format(now)}</time>
+                  </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className={`group inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition ${
-                    isLightPanelTheme
-                      ? "border-slate-200 bg-white text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600"
-                      : "border-white/10 bg-white/5 text-slate-300 hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-200"
-                  }`}
+                  className="hero-logout group inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
