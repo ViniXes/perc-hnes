@@ -19495,13 +19495,13 @@ export default function Home() {
                 className={`absolute left-0 top-0 hidden h-8 w-8 items-center justify-center rounded-xl border ring-1 transition desk:flex ${
                   isLightPanelTheme
                     ? "border-amber-300/60 bg-white ring-amber-300/40 hover:bg-amber-50"
-                    : "border-amber-400/40 bg-[#202c41] ring-amber-400/30 hover:bg-[#243049]"
+                    : "border-white/20 bg-[#202c41] ring-white/10 hover:bg-[#243049]"
                 }`}
               >
                 <span className="flex flex-col gap-[3px]">
-                  <span className="block h-0.5 w-4 rounded-full bg-amber-400" />
-                  <span className="block h-0.5 w-4 rounded-full bg-amber-400" />
-                  <span className="block h-0.5 w-4 rounded-full bg-amber-400" />
+                  <span className={`block h-0.5 w-4 rounded-full ${isLightPanelTheme ? "bg-amber-400" : "bg-sky-300"}`} />
+                  <span className={`block h-0.5 w-4 rounded-full ${isLightPanelTheme ? "bg-amber-400" : "bg-sky-300"}`} />
+                  <span className={`block h-0.5 w-4 rounded-full ${isLightPanelTheme ? "bg-amber-400" : "bg-sky-300"}`} />
                 </span>
               </button>
               <p className="hospital-shimmer text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
@@ -20320,7 +20320,7 @@ export default function Home() {
               className={`pulso-hero relative hidden overflow-hidden rounded-[22px] px-6 py-6 ${isMinsal ? "" : "desk:block"}`}
             >
             {/* Adornos: aros translucidos a la derecha, como la tarjeta de referencia. */}
-            <span aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border-[34px] border-solid" style={{ borderColor: "rgba(255,255,255,0.07)" }} />
+            <span aria-hidden className="pointer-events-none absolute -right-8 -top-16 h-56 w-56 rounded-full border-[28px] border-solid" style={{ borderColor: "rgba(255,255,255,0.07)" }} />
             <span aria-hidden className="pointer-events-none absolute -bottom-36 right-32 h-56 w-56 rounded-full" style={{ background: "rgba(255,255,255,0.04)" }} />
             <div className="relative flex flex-col gap-4 desk:flex-row desk:items-center desk:justify-between">
               <div className="min-w-0">
@@ -20665,17 +20665,17 @@ export default function Home() {
           ) : null}
 
           {isAdmin || isSupervisor || viewAnyServiceIds.length > 0 ? (
-            <section id="panel-services" data-view="panel-services" className={`relative z-20 rounded-[24px] border border-amber-400/45 p-5 ring-1 ring-amber-400/10 ${
+            <section id="panel-services" data-view="panel-services" className={`relative z-20 rounded-[24px] border p-5 ring-1 ${
               isLightPanelTheme
-                ? "bg-white text-slate-900 shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_18px_50px_rgba(15,23,42,0.10)]"
-                : "bg-[#0e1626] text-slate-100 shadow-[0_0_0_1px_rgba(251,191,36,0.15),0_24px_80px_rgba(3,7,18,0.45)]"
+                ? "border-amber-400/45 ring-amber-400/10 bg-white text-slate-900 shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_18px_50px_rgba(15,23,42,0.10)]"
+                : "border-white/20 ring-white/5 bg-[#0e1626] text-slate-100 shadow-[0_24px_80px_rgba(3,7,18,0.45)]"
             }`}>
               {/* Encabezado elegante */}
               <div className={`mb-5 flex items-center gap-3.5 border-b pb-4 ${isLightPanelTheme ? "border-slate-200" : "border-white/[0.08]"}`}>
                 <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 ${
                   isLightPanelTheme
                     ? "bg-amber-400/15 text-amber-600 ring-amber-400/30"
-                    : "bg-gradient-to-br from-amber-400/30 to-amber-500/5 text-amber-200 ring-amber-400/20"
+                    : "bg-gradient-to-br from-sky-300/30 to-sky-500/5 text-sky-200 ring-white/15"
                 }`}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                     <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -20683,7 +20683,7 @@ export default function Home() {
                   </svg>
                 </span>
                 <div className="min-w-0">
-                  <p className={`hidden text-[11px] font-semibold uppercase tracking-[0.22em] sm:block ${isLightPanelTheme ? "text-amber-600/80" : "text-amber-200/70"}`}>
+                  <p className={`hidden text-[11px] font-semibold uppercase tracking-[0.22em] sm:block ${isLightPanelTheme ? "text-amber-600/80" : "text-sky-200/80"}`}>
                     {isAdmin ? "Panel de administración" : "Panel de supervisión"}
                   </p>
                   <h2 className={`mt-0.5 truncate text-lg font-semibold tracking-tight sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>

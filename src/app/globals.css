@@ -274,7 +274,7 @@ html.forzar-escritorio body {
   --surface-2: #142b50;     /* tarjeta interna / sidebar */
   --surface-3: #1e4070;     /* inputs / elevado */
   --chip: #234a80;          /* badges, avatar, chips neutros */
-  --border: rgba(255, 255, 255, 0.12);
+  --border: rgba(255, 255, 255, 0.18);   /* orillas blancas sutiles */
   --border-strong: rgba(157, 180, 211, 0.55);
   --text: #f5f7fa;
   --text-muted: #c9d8ec;
@@ -1629,8 +1629,8 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
   /* Formas abstractas sutiles (aro arriba a la derecha + disco abajo), eco de
      los circulos de la tarjeta de bienvenida pero mas tenues. */
   background-image:
-    radial-gradient(circle at calc(100% + 40px) -60px, transparent 0 130px, rgba(255, 255, 255, 0.035) 131px 158px, transparent 159px),
-    radial-gradient(circle at calc(100% - 220px) calc(100% + 120px), rgba(255, 255, 255, 0.025) 0 150px, transparent 151px),
+    radial-gradient(circle at calc(100% - 70px) 10px, transparent 0 88px, rgba(255, 255, 255, 0.045) 89px 112px, transparent 113px),
+    radial-gradient(circle at calc(100% - 240px) calc(100% + 60px), rgba(255, 255, 255, 0.03) 0 120px, transparent 121px),
     linear-gradient(115deg, #142b50 0%, #1b3a6b 60%, #22487f 120%);
   background-repeat: no-repeat;
 }
@@ -1645,7 +1645,11 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 18px 50px rgba(3, 7, 18, 0.35);
 }
-.panel-shell.theme-light .pulso-hero { box-shadow: 0 14px 34px rgba(15, 40, 80, 0.22); }
+.panel-shell.theme-light .pulso-hero {
+  /* En claro, un tono mas claro que en oscuro. */
+  background: linear-gradient(115deg, #2c5ea3 0%, #3672bd 55%, #4a8ad6 115%);
+  box-shadow: 0 14px 34px rgba(15, 40, 80, 0.20);
+}
 .pulso-hero .hero-tag { color: #c2d3ea; }
 .pulso-hero .hero-greet { color: rgba(255, 255, 255, 0.85); }
 .pulso-hero .hero-name { color: #ffffff; }
@@ -1667,4 +1671,10 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
 .pulso-hero .hero-logout:hover {
   background: rgba(244, 63, 94, 0.18);
   border-color: rgba(253, 164, 175, 0.55);
+}
+
+/* Modo oscuro: las tarjetas grandes con borde dorado pasan a la orilla blanca
+   sutil del tema, para que todas se vean iguales sobre el azul. */
+.panel-shell.theme-dark :is([class*="rounded-[24px]"], [class*="rounded-[22px]"], [class*="rounded-3xl"])[class*="border-amber"] {
+  border-color: var(--border);
 }
