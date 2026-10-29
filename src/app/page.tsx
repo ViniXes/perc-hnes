@@ -2,6 +2,7 @@
 
 import { PoaUnidadPicker, type PoaUnidadGrupo } from "@/components/poa-unidad-picker";
 import { MemosEsdomed } from "@/components/memos-esdomed";
+import { DocumentosPlanificacion } from "@/components/documentos-planificacion";
 import { poaDatosBloque, poaDatosGrafico, poaGraficoPastel3D } from "@/lib/poa-chart";
 import {
   POA_COMPROBANTE_ACCEPT,
@@ -19180,6 +19181,14 @@ export default function Home() {
                   badge: "PL",
                   icon: "memo",
                 },
+                // Archivo de PDF de Planificacion separado por categoria.
+                {
+                  id: "panel-memos-planificacion-docs",
+                  label: "Planificación · Mis documentos",
+                  detail: "PDF de Planificación por categoría",
+                  badge: "MD",
+                  icon: "consolidado",
+                },
               ],
             },
           ]
@@ -20265,7 +20274,9 @@ export default function Home() {
                                   ? "Memorándums · ESDOMED"
                                   : mobileView === "panel-memos-planificacion"
                                     ? "Memorándums · Planificación"
-                                    : ""}
+                                    : mobileView === "panel-memos-planificacion-docs"
+                                      ? "Planificación · Mis documentos"
+                                      : ""}
               </span>
             </div>
 
@@ -24360,6 +24371,13 @@ export default function Home() {
                 ) : null,
               )
             : null}
+          {isAdmin &&
+          (activeSidebarSection === "panel-memos-planificacion-docs" ||
+            mobileView === "panel-memos-planificacion-docs") ? (
+            <div data-view="panel-memos-planificacion-docs">
+              <DocumentosPlanificacion isLight={isLightPanelTheme} usuario={serviceProfile?.email || ""} />
+            </div>
+          ) : null}
 
           {/* Gastos PERC: matriz mensual de distribucion de gasto general (solo admin). */}
           {(isAdmin || hasGrant("panel-gastos-perc")) &&

@@ -305,6 +305,11 @@ service cloud.firestore {
     match /esdomedMemos/{docId} {
       allow read, write: if adminPoa();
     }
+    // Planificacion > Mis documentos: PDF por categoria. "<id>" es la ficha
+    // (tipo "meta") y "<id>__<n>" cada trozo del PDF. Solo administradores.
+    match /planificacionDocumentos/{docId} {
+      allow read, write: if adminPoa();
+    }
     // Censo Diario de Pacientes (id = "<periodo>", p.ej. "2026-06").
     match /censoDiario/{periodId} {
       allow read: if isSignedIn() && noEsMinsal()

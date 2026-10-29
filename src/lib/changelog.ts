@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.476",
+    para: ["admin"],
+    texto:
+      "Memorandums > Planificacion · Mis documentos: se adjuntan PDF y quedan separados por categoria (permisos personales, sin goce de sueldo, mision oficial, incapacidad, otros o una nueva).",
+  },
+  {
     version: "1986.469",
     para: ["admin"],
     texto:
