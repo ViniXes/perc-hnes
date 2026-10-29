@@ -292,9 +292,11 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
       ? "border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"
       : "border border-white/[0.08] bg-white/[0.035] text-white placeholder:text-slate-500"
   }`;
-  // Las opciones del desplegable usan el fondo del sistema (blanco): sin esto, en
-  // modo oscuro heredan el texto blanco y no se leen.
-  const desplegable = `${input} [&_option]:bg-white [&_option]:text-slate-900`;
+  // Opciones del desplegable: en modo oscuro, letra blanca sobre el azul más claro
+  // de las tarjetas (#22487f); sin esto heredan el blanco del sistema y no se leen.
+  const desplegable = `${input} ${
+    isLight ? "[&_option]:bg-white [&_option]:text-slate-900" : "[&_option]:bg-[#22487f] [&_option]:text-white"
+  }`;
   const etiqueta = `mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] ${sub}`;
   const btnSec = `rounded-xl px-3.5 py-2 text-sm font-semibold transition disabled:opacity-50 ${
     isLight
