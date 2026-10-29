@@ -303,6 +303,9 @@ export function DocumentosPlanificacion({ isLight, usuario }: Props) {
       ? "border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400"
       : "border border-white/[0.08] bg-white/[0.035] text-white placeholder:text-slate-500"
   }`;
+  // Las opciones del desplegable usan el fondo del sistema (blanco): sin esto, en
+  // modo oscuro heredan el texto blanco y no se leen.
+  const desplegable = `${input} [&_option]:bg-white [&_option]:text-slate-900`;
   const etiqueta = `mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] ${sub}`;
   const btnSec = `rounded-lg px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50 ${
     isLight
@@ -359,7 +362,7 @@ export function DocumentosPlanificacion({ isLight, usuario }: Props) {
           </label>
           <label className="block">
             <span className={etiqueta}>Categoría</span>
-            <select className={input} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+            <select className={desplegable} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
               {categorias.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -449,7 +452,7 @@ export function DocumentosPlanificacion({ isLight, usuario }: Props) {
                   <select
                     aria-label="Cambiar categoría"
                     title="Cambiar categoría"
-                    className={`${input} w-auto py-1 text-xs`}
+                    className={`${desplegable} w-auto py-1 text-xs`}
                     value={f.categoria}
                     disabled={!!ocupado}
                     onChange={(e) => void mover(f, e.target.value)}

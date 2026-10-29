@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.478",
+    para: ["admin"],
+    texto:
+      "Planificacion · Mis documentos y Memorandums: en modo oscuro ya se leen las opciones de los desplegables (categoria y año).",
+  },
+  {
     version: "1986.477",
     para: ["admin"],
     texto:
