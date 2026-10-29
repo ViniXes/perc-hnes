@@ -3,7 +3,10 @@
    - Navegaciones (paginas): network-first, cae a cache y luego a "/".
    - Estaticos same-origin (/_next, iconos): cache-first.
    - Cualquier peticion cross-origin (Firebase/Firestore/Auth) o no-GET: passthrough. */
-const CACHE = "pulso-1986.476";
+const CACHE = "pulso-1986.477";
+// Bloque de aviso (lo escribe marcar-version). La pagina solo muestra el aviso
+// de version nueva cuando el bloque de este service worker es mayor que el suyo.
+const AVISO = 0;
 const PRECACHE = ["/", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -19,6 +22,9 @@ self.addEventListener("install", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
+  }
+  if (event.data && event.data.type === "GET_AVISO" && event.ports && event.ports[0]) {
+    event.ports[0].postMessage({ aviso: AVISO });
   }
 });
 

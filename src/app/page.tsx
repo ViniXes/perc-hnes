@@ -201,7 +201,7 @@ import {
 import {
   LoginLoadingModal,
 } from "@/components/login-loading-modal";
-import { APP_VERSION } from "@/lib/version";
+import { APP_VERSION, AVISO_BLOQUE } from "@/lib/version";
 import { CHANGELOG, CHANGELOG_LATEST, type ChangelogEntry } from "@/lib/changelog";
 import { AVISOS_DIRIGIDOS, type AvisoDirigido } from "@/lib/avisos";
 import { esperarConfirmacion, estaEnLinea } from "@/lib/offline";
@@ -4145,6 +4145,7 @@ export default function Home() {
     setShowChangelog(false);
     try {
       localStorage.setItem("pulso.changelog.visto", String(CHANGELOG_LATEST));
+      localStorage.setItem("pulso.changelog.bloque", String(AVISO_BLOQUE));
     } catch {}
   };
   // Abre el aviso de novedades a pedido (boton en la etiqueta de version), sin
@@ -13998,9 +13999,21 @@ export default function Home() {
     };
     const clave = "pulso.changelog.visto";
     let visto = 0;
+    // Las novedades salen juntas cada 6 publicaciones (al cambiar AVISO_BLOQUE),
+    // acumulando todo lo que no se vio. En las publicaciones de en medio no se
+    // muestran solas; siguen a mano en el boton de la etiqueta de version.
+    let bloqueVisto: number | null = null;
     try {
       visto = Number.parseInt(localStorage.getItem(clave) || "", 10) || 0;
+      const b = localStorage.getItem("pulso.changelog.bloque");
+      if (b === null) {
+        // Navegador sin registro: arranca en el bloque actual, sin aviso.
+        localStorage.setItem("pulso.changelog.bloque", String(AVISO_BLOQUE));
+      } else {
+        bloqueVisto = Number.parseInt(b, 10) || 0;
+      }
     } catch {}
+    if (bloqueVisto === null || AVISO_BLOQUE <= bloqueVisto) return;
     // Primera vez en este navegador: mostrar solo el ultimo lote del changelog.
     // Se basa en CHANGELOG_LATEST (la version mas nueva definida en el archivo),
     // no en APP_VERSION, para que el aviso no dependa del numero de despliegue.
@@ -14014,6 +14027,10 @@ export default function Home() {
         setChangelogPendiente(pend);
         setShowChangelog(true);
       }, 1500);
+    } else {
+      try {
+        localStorage.setItem("pulso.changelog.bloque", String(AVISO_BLOQUE));
+      } catch {}
     }
     // Ojo: el "visto" se marca SOLO cuando el usuario cierra el modal
     // (cerrarNovedades), no aca, para que no se pierda si hay una recarga.

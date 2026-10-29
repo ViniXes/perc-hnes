@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.477",
+    para: ["admin"],
+    texto:
+      "El aviso de version nueva ya no sale en cada publicacion: aparece cada 6, y las novedades llegan juntas en ese momento. En las de en medio PULSO se actualiza solo al recargar.",
+  },
+  {
     version: "1986.476",
     para: ["admin"],
     texto:

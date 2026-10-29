@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { APP_VERSION } from "@/lib/version";
+import { APP_VERSION, AVISO_BLOQUE } from "@/lib/version";
 
 /**
  * AVISO DE NUEVA VERSION
@@ -9,6 +9,11 @@ import { APP_VERSION } from "@/lib/version";
  * Registra el service worker (solo en produccion) y, cuando hay una version
  * nueva esperando, la ofrece en vez de aplicarla a la fuerza: alguien puede
  * estar a mitad de una captura.
+ *
+ * El aviso NO sale en cada publicacion: solo cuando el service worker nuevo
+ * pertenece a un bloque de aviso mayor que el de la pagina (cada 6
+ * publicaciones, ver scripts/marcar-version.mjs). En las de en medio no se
+ * muestra nada: la version nueva entra sola al recargar o al reabrir PULSO.
  *
  * Al aceptar, la actualizacion se muestra en cuatro pasos reales —preparar,
  * traer la version nueva, limpiar la anterior y reiniciar— repartidos en cinco
@@ -26,6 +31,25 @@ const PASOS = [
 ] as const;
 
 const DURACION_PASO_MS = 1250;
+
+/** Pregunta al service worker nuevo su bloque de aviso. null si no responde. */
+function pedirBloque(worker: ServiceWorker): Promise<number | null> {
+  return new Promise((resolve) => {
+    const canal = new MessageChannel();
+    const reloj = window.setTimeout(() => resolve(null), 3000);
+    canal.port1.onmessage = (ev) => {
+      window.clearTimeout(reloj);
+      const aviso = Number(ev.data?.aviso);
+      resolve(Number.isFinite(aviso) ? aviso : null);
+    };
+    try {
+      worker.postMessage({ type: "GET_AVISO" }, [canal.port2]);
+    } catch {
+      window.clearTimeout(reloj);
+      resolve(null);
+    }
+  });
+}
 const RADIO = 52;
 const PERIMETRO = 2 * Math.PI * RADIO;
 
@@ -49,8 +73,12 @@ export default function ServiceWorkerRegister() {
 
     let registration: ServiceWorkerRegistration | null = null;
 
-    const promptUpdate = (worker: ServiceWorker | null) => {
+    const promptUpdate = async (worker: ServiceWorker | null) => {
       if (!worker) return;
+      const bloque = await pedirBloque(worker);
+      // Mismo bloque: actualizacion silenciosa, sin aviso. Si el service worker
+      // no responde (no deberia pasar) se avisa como antes, por las dudas.
+      if (bloque !== null && bloque <= AVISO_BLOQUE) return;
       waitingRef.current = worker;
       setUpdateReady(true);
     };
@@ -61,7 +89,7 @@ export default function ServiceWorkerRegister() {
 
         // Ya hay una version esperando (update detectado en una visita previa).
         if (registration.waiting && navigator.serviceWorker.controller) {
-          promptUpdate(registration.waiting);
+          void promptUpdate(registration.waiting);
         }
 
         registration.addEventListener("updatefound", () => {
@@ -70,7 +98,7 @@ export default function ServiceWorkerRegister() {
           installing.addEventListener("statechange", () => {
             // "installed" + ya hay controller => es una ACTUALIZACION (no la 1a vez).
             if (installing.state === "installed" && navigator.serviceWorker.controller) {
-              promptUpdate(installing);
+              void promptUpdate(installing);
             }
           });
         });
