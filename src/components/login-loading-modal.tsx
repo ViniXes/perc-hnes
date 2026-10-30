@@ -32,6 +32,7 @@ export function LoginLoadingModal({ show }: { show: boolean }) {
     >
       <div className="modal-fade-in absolute inset-0 bg-slate-950/85 backdrop-blur-md" />
 
+      <div className="relative flex w-full max-w-[25rem] flex-col items-center">
       <div className="pulso-splash modal-pop-in relative w-full max-w-[25rem] overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#070d18] shadow-[0_32px_90px_-24px_rgba(0,0,0,0.95)]">
         {/* Luz ambiental: da profundidad sin pesar. */}
         <div
@@ -153,12 +154,17 @@ export function LoginLoadingModal({ show }: { show: boolean }) {
             <p className="text-[9.5px] font-semibold uppercase tracking-[0.24em] text-[#7389a8]">
               Hospital Nacional El Salvador
             </p>
-            <p className="mt-1.5 text-[11px] text-[#9db4d3]">
-              Desarrollado e implementado por{" "}
-              <span className="font-bold tracking-[0.08em] text-[#dde7f5]">ESDOMED HNES</span>
-            </p>
           </div>
         </div>
+      </div>
+
+      {/* Firma de autoria: sale de la tarjeta hacia abajo, se agranda y la cruza
+          una estrella fugaz. Animaciones en globals.css (clases splash-firma-*). */}
+      <p className="splash-firma relative mt-5 overflow-hidden whitespace-nowrap rounded-full px-5 py-2 text-[12px] text-[#9db4d3]">
+        Desarrollado e implementado por{" "}
+        <span className="font-bold tracking-[0.1em] text-[#f5f7fa]">ESDOMED HNES</span>
+        <span aria-hidden className="splash-estrella" />
+      </p>
       </div>
     </div>
   );

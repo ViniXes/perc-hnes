@@ -209,7 +209,7 @@ html.forzar-escritorio body {
 }
 .login-progress {
   transform-origin: left center;
-  animation: login-progress 2.1s cubic-bezier(0.33, 0.9, 0.3, 1) forwards;
+  animation: login-progress 2.8s cubic-bezier(0.33, 0.9, 0.3, 1) forwards;
 }
 
 /* Un destello recorre el nombre una sola vez, como metal pulido. */
@@ -1760,4 +1760,62 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
 .pulso-login .ekg-pulse-soft { filter: drop-shadow(0 0 2.5px rgba(157, 180, 211, 0.6)); }
 .pulso-splash .login-sheen {
   background-image: linear-gradient(100deg, #c2d3ea 36%, #dde7f5 46%, #ffffff 52%, #dde7f5 58%, #c2d3ea 68%);
+}
+
+/* Firma "Desarrollado e implementado por ESDOMED HNES" del splash (3 s en total):
+   emerge de la tarjeta hacia abajo agrandandose, una estrella fugaz recorre su
+   borde inferior, queda quieta y legible, y se desvanece antes de cerrar. */
+.splash-firma {
+  background: rgba(11, 26, 51, 0.55);
+  border: 1px solid rgba(157, 180, 211, 0.18);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transform-origin: 50% 0;
+  animation:
+    splash-firma-sale 0.8s cubic-bezier(0.2, 0.9, 0.25, 1) 0.4s forwards,
+    splash-firma-va 0.35s ease-in 2.55s forwards;
+}
+@keyframes splash-firma-sale {
+  0%   { opacity: 0; transform: translateY(-40px) scale(0.7); filter: blur(4px); letter-spacing: 0.02em; }
+  100% { opacity: 1; transform: translateY(0) scale(1.1); filter: blur(0); letter-spacing: 0.04em; }
+}
+@keyframes splash-firma-va {
+  from { opacity: 1; transform: translateY(0) scale(1.1); }
+  to   { opacity: 0; transform: translateY(6px) scale(1.1); }
+}
+/* Estrella fugaz: cabeza brillante con estela fina, recorre el borde inferior. */
+.splash-estrella {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 90px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(157, 180, 211, 0.6) 70%, #ffffff);
+  box-shadow: 0 0 8px 1px rgba(157, 180, 211, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  animation: splash-estrella-cruza 1s cubic-bezier(0.45, 0, 0.25, 1) 1.15s forwards;
+}
+.splash-estrella::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 10px 3px rgba(221, 231, 245, 0.9);
+}
+@keyframes splash-estrella-cruza {
+  0%   { opacity: 0; transform: translateX(-90px); }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(360px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash-firma { animation: none; opacity: 1; transform: none; }
+  .splash-estrella { display: none; }
 }

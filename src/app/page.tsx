@@ -10378,9 +10378,10 @@ export default function Home() {
       }
 
       setPassword("");
-      // Modal "Iniciando sesion" con barrita de pulso por ~2 segundos.
+      // Modal "Iniciando sesion" con barrita de pulso por 3 segundos (incluye la
+      // firma ESDOMED HNES, que se desvanece justo antes de cerrar).
       setLoginLoading(true);
-      window.setTimeout(() => setLoginLoading(false), 2000);
+      window.setTimeout(() => setLoginLoading(false), 3000);
     } catch (submitError) {
       if (await handleFirestoreError(submitError)) {
         return;
