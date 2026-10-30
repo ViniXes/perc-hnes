@@ -149,12 +149,15 @@ export function LoginLoadingModal({ show }: { show: boolean }) {
           </div>
 
           {/* Firma institucional. */}
-          <p
-            className="login-rise mt-7 text-[9.5px] font-semibold uppercase tracking-[0.24em] text-slate-600"
-            style={{ animationDelay: "400ms" }}
-          >
-            Hospital Nacional El Salvador · ESDOMED
-          </p>
+          <div className="login-rise mt-7" style={{ animationDelay: "400ms" }}>
+            <p className="text-[9.5px] font-semibold uppercase tracking-[0.24em] text-[#7389a8]">
+              Hospital Nacional El Salvador
+            </p>
+            <p className="mt-1.5 text-[11px] text-[#9db4d3]">
+              Desarrollado e implementado por{" "}
+              <span className="font-bold tracking-[0.08em] text-[#dde7f5]">ESDOMED HNES</span>
+            </p>
+          </div>
         </div>
       </div>
     </div>

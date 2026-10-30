@@ -1694,7 +1694,7 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
 
 /* =============================================================================
    Inicio de sesion + splash de carga: armonizados con el azul del modo oscuro.
-   No es el mismo tono del panel: un azul noche un poco mas profundo, con los
+   No es el mismo tono del panel: un azul noche dos tonos mas profundo, con los
    circulos abstractos sutiles de las tarjetas.
 ============================================================================= */
 .pulso-login,
@@ -1714,17 +1714,17 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
   --color-violet-600: #3a6db0;
   --color-purple-200: #c2d3ea;
 }
-.pulso-login { background-color: #081428; }
+.pulso-login { background-color: #050d1c; }
 .pulso-login > section {
   background-image:
-    radial-gradient(circle at 25% 15%, rgba(47, 111, 181, 0.22), transparent 42%),
-    radial-gradient(circle at 85% 90%, rgba(157, 180, 211, 0.10), transparent 42%),
-    linear-gradient(160deg, #0b1a33 0%, #081428 55%, #0d2040 100%);
+    radial-gradient(circle at 25% 15%, rgba(47, 111, 181, 0.16), transparent 42%),
+    radial-gradient(circle at 85% 90%, rgba(157, 180, 211, 0.07), transparent 42%),
+    linear-gradient(160deg, #07122a 0%, #050d1c 55%, #091832 100%);
 }
 /* Tarjetas del login: azul noche translucido con circulos sutiles. */
 .pulso-login [class*="bg-[#0e1626]"],
 .pulso-login [class*="bg-[#162034]"] {
-  background-color: rgba(20, 43, 80, 0.72);
+  background-color: rgba(11, 26, 51, 0.78);
   background-image:
     radial-gradient(circle at calc(100% - 50px) 20px, transparent 0 70px, rgba(255, 255, 255, 0.04) 71px 90px, transparent 91px),
     radial-gradient(circle at 0% 100%, rgba(255, 255, 255, 0.03) 0 110px, transparent 111px);
@@ -1733,27 +1733,27 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
 @media (width >= 1280px) {
   /* Marco grande del escritorio: degradado azul con aros grandes y tenues. */
   .pulso-login [class*="desk:max-w-[1456px]"] {
-    background-color: #102a52;
+    background-color: #0b1a33;
     background-image:
       radial-gradient(circle at calc(100% - 120px) 60px, transparent 0 170px, rgba(255, 255, 255, 0.04) 171px 205px, transparent 206px),
       radial-gradient(circle at 40% calc(100% + 80px), rgba(255, 255, 255, 0.03) 0 200px, transparent 201px),
-      linear-gradient(125deg, rgba(20, 43, 80, 0.92) 0%, rgba(27, 58, 107, 0.88) 60%, rgba(36, 80, 143, 0.85) 120%);
+      linear-gradient(125deg, rgba(11, 26, 51, 0.94) 0%, rgba(16, 37, 72, 0.92) 60%, rgba(23, 52, 98, 0.90) 120%);
   }
   /* Lo que en escritorio va transparente (encabezado del hospital) queda sin fondo. */
   .pulso-login [class*="desk:bg-transparent"] { background: none; }
   /* La tarjeta del formulario, dentro del marco, queda limpia y un tono mas oscura. */
   .pulso-login section[class*="desk:max-w-[400px]"] {
-    background-color: rgba(11, 26, 51, 0.45);
+    background-color: rgba(6, 15, 32, 0.45);
     background-image: none;
   }
 }
 /* Splash de carga: misma familia azul, con aro y disco sutiles. */
 .pulso-splash {
-  background-color: #0f2342;
+  background-color: #0a1830;
   background-image:
     radial-gradient(circle at calc(100% - 30px) 30px, transparent 0 80px, rgba(255, 255, 255, 0.045) 81px 102px, transparent 103px),
     radial-gradient(circle at 0% 100%, rgba(255, 255, 255, 0.035) 0 120px, transparent 121px),
-    linear-gradient(160deg, #0b1a33 0%, #142b50 60%, #1b3a6b 120%);
+    linear-gradient(160deg, #06112a 0%, #0b1a33 60%, #112650 120%);
   border-color: rgba(255, 255, 255, 0.14);
 }
 .pulso-splash .ekg-pulse { filter: drop-shadow(0 0 5px rgba(111, 151, 204, 0.9)); }
