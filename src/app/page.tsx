@@ -19499,7 +19499,7 @@ export default function Home() {
             } ${
               isLightPanelTheme
                 ? "border border-slate-200 bg-[#eef2fb] text-slate-900"
-                : "border border-white/10 bg-[#1b2537] text-slate-100"
+                : "pulso-sidebar border border-white/10 bg-[#1b2537] text-slate-100"
             }`}
           >
             {/* Asa de arrastre: solo en movil (hoja inferior). */}
