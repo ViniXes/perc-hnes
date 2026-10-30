@@ -1771,17 +1771,28 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   opacity: 0;
   transform-origin: 50% 0;
-  animation:
-    splash-firma-sale 0.8s cubic-bezier(0.2, 0.9, 0.25, 1) 0.4s forwards,
-    splash-firma-va 0.35s ease-in 2.55s forwards;
+  animation: splash-firma-sale 0.8s cubic-bezier(0.2, 0.9, 0.25, 1) 0.4s forwards;
 }
 @keyframes splash-firma-sale {
   0%   { opacity: 0; transform: translateY(-40px) scale(0.7); filter: blur(4px); letter-spacing: 0.02em; }
   100% { opacity: 1; transform: translateY(0) scale(1.1); filter: blur(0); letter-spacing: 0.04em; }
 }
-@keyframes splash-firma-va {
-  from { opacity: 1; transform: translateY(0) scale(1.1); }
-  to   { opacity: 0; transform: translateY(6px) scale(1.1); }
+/* Despedida (2 s, ya sin el splash): la firma crece un 20% mas de forma
+   progresiva mientras la cruza otra estrella fugaz, y al final se desvanece. */
+.splash-firma.splash-firma-despide {
+  opacity: 1;
+  animation: splash-firma-crece 2s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}
+@keyframes splash-firma-crece {
+  0%   { opacity: 1; transform: translateY(0) scale(1.1); filter: blur(0); }
+  80%  { opacity: 1; transform: translateY(0) scale(1.32); filter: blur(0); }
+  100% { opacity: 0; transform: translateY(0) scale(1.34); filter: blur(2px); }
+}
+/* La tarjeta y el fondo oscuro se retiran rapido al empezar la despedida. */
+.splash-retira { animation: splash-retira 0.35s ease-in forwards; }
+@keyframes splash-retira {
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 /* Estrella fugaz: cabeza brillante con estela fina, recorre el borde inferior. */
 .splash-estrella {
@@ -1815,7 +1826,11 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
   85%  { opacity: 1; }
   100% { opacity: 0; transform: translateX(360px); }
 }
+.splash-estrella.splash-estrella-despide {
+  animation: splash-estrella-cruza 1.2s cubic-bezier(0.45, 0, 0.25, 1) 0.2s forwards;
+}
 @media (prefers-reduced-motion: reduce) {
-  .splash-firma { animation: none; opacity: 1; transform: none; }
+  .splash-firma, .splash-firma.splash-firma-despide { animation: none; opacity: 1; transform: none; }
+  .splash-retira { animation: none; opacity: 0; }
   .splash-estrella { display: none; }
 }

@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+
 /**
  * SPLASH DE INICIO DE SESION
  *
@@ -15,7 +19,23 @@
 // hospital. Las animaciones viven en globals.css (clases login-*).
 // =============================================================================
 export function LoginLoadingModal({ show }: { show: boolean }) {
-  if (!show) return null;
+  // Despedida: al cerrarse el splash, la firma ESDOMED HNES se queda 2 s mas
+  // sola (crece un 20% con una estrella fugaz y se desvanece) mientras la
+  // tarjeta y el fondo se retiran. Durante ese tiempo no bloquea clics.
+  const [despidiendo, setDespidiendo] = useState(false);
+  const estabaVisible = useRef(show);
+  useEffect(() => {
+    if (estabaVisible.current && !show) {
+      setDespidiendo(true);
+      const t = window.setTimeout(() => setDespidiendo(false), 2000);
+      estabaVisible.current = show;
+      return () => window.clearTimeout(t);
+    }
+    if (show) setDespidiendo(false);
+    estabaVisible.current = show;
+  }, [show]);
+
+  if (!show && !despidiendo) return null;
   // La linea del electro. Se usa dos veces: el trazo apagado de fondo y el pulso
   // que lo recorre. Se declara una sola vez para que nunca se desincronicen.
   const EKG =
@@ -25,15 +45,15 @@ export function LoginLoadingModal({ show }: { show: boolean }) {
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Iniciando sesion"
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
+      role={despidiendo ? undefined : "dialog"}
+      aria-modal={despidiendo ? undefined : true}
+      aria-label={despidiendo ? undefined : "Iniciando sesion"}
+      className={`fixed inset-0 z-[120] flex items-center justify-center p-4 ${despidiendo ? "pointer-events-none" : ""}`}
     >
-      <div className="modal-fade-in absolute inset-0 bg-slate-950/85 backdrop-blur-md" />
+      <div className={`absolute inset-0 bg-slate-950/85 backdrop-blur-md ${despidiendo ? "splash-retira" : "modal-fade-in"}`} />
 
       <div className="relative flex w-full max-w-[25rem] flex-col items-center">
-      <div className="pulso-splash modal-pop-in relative w-full max-w-[25rem] overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#070d18] shadow-[0_32px_90px_-24px_rgba(0,0,0,0.95)]">
+      <div className={`pulso-splash relative ${despidiendo ? "splash-retira" : "modal-pop-in"} w-full max-w-[25rem] overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#070d18] shadow-[0_32px_90px_-24px_rgba(0,0,0,0.95)]`}>
         {/* Luz ambiental: da profundidad sin pesar. */}
         <div
           aria-hidden
@@ -160,10 +180,11 @@ export function LoginLoadingModal({ show }: { show: boolean }) {
 
       {/* Firma de autoria: sale de la tarjeta hacia abajo, se agranda y la cruza
           una estrella fugaz. Animaciones en globals.css (clases splash-firma-*). */}
-      <p className="splash-firma relative mt-5 overflow-hidden whitespace-nowrap rounded-full px-5 py-2 text-[12px] text-[#9db4d3]">
+      <p className={`splash-firma relative mt-5 overflow-hidden whitespace-nowrap rounded-full px-5 py-2 text-[12px] text-[#9db4d3] ${despidiendo ? "splash-firma-despide" : ""}`}>
         Desarrollado e implementado por{" "}
         <span className="font-bold tracking-[0.1em] text-[#f5f7fa]">ESDOMED HNES</span>
-        <span aria-hidden className="splash-estrella" />
+        {/* La key cambia en la despedida para relanzar la estrella fugaz. */}
+        <span key={despidiendo ? "despedida" : "entrada"} aria-hidden className={despidiendo ? "splash-estrella splash-estrella-despide" : "splash-estrella"} />
       </p>
       </div>
     </div>
