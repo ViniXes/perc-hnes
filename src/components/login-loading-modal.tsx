@@ -32,20 +32,20 @@ export function LoginLoadingModal({ show }: { show: boolean }) {
     >
       <div className="modal-fade-in absolute inset-0 bg-slate-950/85 backdrop-blur-md" />
 
-      <div className="modal-pop-in relative w-full max-w-[25rem] overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#070d18] shadow-[0_32px_90px_-24px_rgba(0,0,0,0.95)]">
+      <div className="pulso-splash modal-pop-in relative w-full max-w-[25rem] overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#070d18] shadow-[0_32px_90px_-24px_rgba(0,0,0,0.95)]">
         {/* Luz ambiental: da profundidad sin pesar. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute -top-32 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-cyan-500/[0.18] blur-[70px]"
+          className="pointer-events-none absolute -top-32 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-sky-500/[0.22] blur-[70px]"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-28 -right-16 h-52 w-52 rounded-full bg-violet-600/[0.14] blur-[70px]"
+          className="pointer-events-none absolute -bottom-28 -right-16 h-52 w-52 rounded-full bg-blue-400/[0.10] blur-[70px]"
         />
         {/* Filo de luz en el borde superior. */}
         <div
           aria-hidden
-          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/70 to-transparent"
+          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-200/70 to-transparent"
         />
 
         <div className="relative px-8 pb-8 pt-10 text-center">
@@ -53,13 +53,13 @@ export function LoginLoadingModal({ show }: { show: boolean }) {
           <span className="relative mx-auto flex h-[92px] w-[92px] items-center justify-center">
             <span
               aria-hidden
-              className="login-halo absolute inset-[18px] rounded-[20px] bg-gradient-to-br from-cyan-400 to-violet-600 blur-xl"
+              className="login-halo absolute inset-[18px] rounded-[20px] bg-gradient-to-br from-sky-400 to-blue-700 blur-xl"
             />
             <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" aria-hidden="true">
               <defs>
                 <linearGradient id="pulsoRingGrad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stopColor="#22d3ee" />
-                  <stop offset="1" stopColor="#8b5cf6" />
+                  <stop offset="0" stopColor="#9db4d3" />
+                  <stop offset="1" stopColor="#2f6fb5" />
                 </linearGradient>
               </defs>
               <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="2" />
@@ -79,8 +79,8 @@ export function LoginLoadingModal({ show }: { show: boolean }) {
             <svg viewBox="0 0 48 48" className="heartbeat relative h-[54px] w-[54px] drop-shadow-lg" aria-hidden="true">
               <defs>
                 <linearGradient id="pulsoGradLogin2" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stopColor="#22d3ee" />
-                  <stop offset="1" stopColor="#7c3aed" />
+                  <stop offset="0" stopColor="#6f97cc" />
+                  <stop offset="1" stopColor="#24508f" />
                 </linearGradient>
               </defs>
               <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoGradLogin2)" />
@@ -131,7 +131,7 @@ export function LoginLoadingModal({ show }: { show: boolean }) {
                 pathLength={100}
                 d={EKG}
                 fill="none"
-                stroke="#22d3ee"
+                stroke="#9db4d3"
                 strokeWidth="2.6"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -144,7 +144,7 @@ export function LoginLoadingModal({ show }: { show: boolean }) {
             <p className="text-[13.5px] font-semibold text-slate-100">Iniciando sesión</p>
             <p className="mt-1 text-[11.5px] text-slate-500">Preparando tu panel…</p>
             <div className="mt-4 h-[3px] w-full overflow-hidden rounded-full bg-white/[0.07]">
-              <div className="login-progress h-full w-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-violet-500" />
+              <div className="login-progress h-full w-full rounded-full bg-gradient-to-r from-sky-300 via-sky-400 to-blue-500" />
             </div>
           </div>
 

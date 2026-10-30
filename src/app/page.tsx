@@ -29292,7 +29292,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f4efe6] text-slate-950">
+    <main className="pulso-login min-h-screen bg-[#f4efe6] text-slate-950">
       <section className="flex min-h-screen items-start justify-center bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.10),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(124,58,237,0.14),transparent_40%),linear-gradient(160deg,#0b1220_0%,#0a0f1c_100%)] px-4 pb-10 pt-8 sm:pt-12 desk:items-center desk:px-10 desk:py-6">
         {/* Panel de monitoreo OCULTO: la pantalla de inicio solo muestra el login. */}
         <div className="hidden">
@@ -29520,8 +29520,8 @@ export default function Home() {
                     <svg viewBox="0 0 48 48" className="relative h-16 w-16 drop-shadow-lg desk:h-12 desk:w-12" aria-hidden="true">
                       <defs>
                         <linearGradient id="pulsoGradLogin" x1="0" y1="0" x2="1" y2="1">
-                          <stop offset="0" stopColor="#22d3ee" />
-                          <stop offset="1" stopColor="#7c3aed" />
+                          <stop offset="0" stopColor="#6f97cc" />
+                          <stop offset="1" stopColor="#24508f" />
                         </linearGradient>
                       </defs>
                       <rect x="2" y="2" width="44" height="44" rx="13" fill="url(#pulsoGradLogin)" />
@@ -29704,7 +29704,7 @@ export default function Home() {
                   className="ekg-pulse-soft"
                   d="M0 17 H140 L156 17 L167 6 L180 28 L191 17 H330 L346 17 L357 8 L370 26 L381 17 H600"
                   fill="none"
-                  stroke="#67e8f9"
+                  stroke="#9db4d3"
                   strokeWidth="1.6"
                   strokeLinecap="round"
                   pathLength={100}
