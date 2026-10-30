@@ -1777,15 +1777,16 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
   0%   { opacity: 0; transform: translateY(-40px) scale(0.7); filter: blur(4px); letter-spacing: 0.02em; }
   100% { opacity: 1; transform: translateY(0) scale(1.1); filter: blur(0); letter-spacing: 0.04em; }
 }
-/* Despedida (2 s, ya sin el splash): la firma crece un 20% mas de forma
-   progresiva mientras la cruza otra estrella fugaz, y al final se desvanece. */
+/* Despedida (3 s, ya sin el splash): el recuadro de la firma crece un 20% mas
+   de forma progresiva (de 1.1 a 1.32), con un brillo que se intensifica, y al
+   final se desvanece. La estrella fugaz lo recorre en bucle mientras tanto. */
 .splash-firma.splash-firma-despide {
   opacity: 1;
-  animation: splash-firma-crece 2s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+  animation: splash-firma-crece 3s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
 }
 @keyframes splash-firma-crece {
-  0%   { opacity: 1; transform: translateY(0) scale(1.1); filter: blur(0); }
-  80%  { opacity: 1; transform: translateY(0) scale(1.32); filter: blur(0); }
+  0%   { opacity: 1; transform: translateY(0) scale(1.1); filter: blur(0); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); }
+  85%  { opacity: 1; transform: translateY(0) scale(1.32); filter: blur(0); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 22px rgba(111, 151, 204, 0.35); border-color: rgba(157, 180, 211, 0.35); }
   100% { opacity: 0; transform: translateY(0) scale(1.34); filter: blur(2px); }
 }
 /* La tarjeta y el fondo oscuro se retiran rapido al empezar la despedida. */
@@ -1827,7 +1828,8 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
   100% { opacity: 0; transform: translateX(360px); }
 }
 .splash-estrella.splash-estrella-despide {
-  animation: splash-estrella-cruza 1.2s cubic-bezier(0.45, 0, 0.25, 1) 0.2s forwards;
+  /* Tres pasadas de ~0.9 s: la luz cruza el recuadro durante toda la despedida. */
+  animation: splash-estrella-cruza 0.9s cubic-bezier(0.45, 0, 0.25, 1) 0.1s 3 forwards;
 }
 @media (prefers-reduced-motion: reduce) {
   .splash-firma, .splash-firma.splash-firma-despide { animation: none; opacity: 1; transform: none; }

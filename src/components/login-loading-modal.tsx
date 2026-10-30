@@ -19,15 +19,16 @@ import { useEffect, useRef, useState } from "react";
 // hospital. Las animaciones viven en globals.css (clases login-*).
 // =============================================================================
 export function LoginLoadingModal({ show }: { show: boolean }) {
-  // Despedida: al cerrarse el splash, la firma ESDOMED HNES se queda 2 s mas
-  // sola (crece un 20% con una estrella fugaz y se desvanece) mientras la
+  // Despedida: al cerrarse el splash, el recuadro de la firma ESDOMED HNES se
+  // queda 3 s mas solo (crece un 20% de forma progresiva mientras una estrella
+  // fugaz lo recorre una y otra vez, y al final se desvanece) mientras la
   // tarjeta y el fondo se retiran. Durante ese tiempo no bloquea clics.
   const [despidiendo, setDespidiendo] = useState(false);
   const estabaVisible = useRef(show);
   useEffect(() => {
     if (estabaVisible.current && !show) {
       setDespidiendo(true);
-      const t = window.setTimeout(() => setDespidiendo(false), 2000);
+      const t = window.setTimeout(() => setDespidiendo(false), 3000);
       estabaVisible.current = show;
       return () => window.clearTimeout(t);
     }
