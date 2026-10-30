@@ -20,9 +20,9 @@ import { useEffect, useRef, useState } from "react";
 // =============================================================================
 export function LoginLoadingModal({ show }: { show: boolean }) {
   // Despedida: al cerrarse el splash, el recuadro de la firma ESDOMED HNES se
-  // queda 3 s mas solo (crece un 20% de forma progresiva mientras una estrella
-  // fugaz lo recorre una y otra vez, y al final se desvanece) mientras la
-  // tarjeta y el fondo se retiran. Durante ese tiempo no bloquea clics.
+  // queda 3 s mas solo sobre fondo opaco (crece un 20% de forma progresiva
+  // mientras una estrella fugaz lo recorre, y al final todo se desvanece y
+  // recien ahi se ve el sistema) 
   const [despidiendo, setDespidiendo] = useState(false);
   const estabaVisible = useRef(show);
   useEffect(() => {
@@ -46,12 +46,14 @@ export function LoginLoadingModal({ show }: { show: boolean }) {
 
   return (
     <div
-      role={despidiendo ? undefined : "dialog"}
-      aria-modal={despidiendo ? undefined : true}
-      aria-label={despidiendo ? undefined : "Iniciando sesion"}
-      className={`fixed inset-0 z-[120] flex items-center justify-center p-4 ${despidiendo ? "pointer-events-none" : ""}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Iniciando sesion"
+      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
     >
-      <div className={`absolute inset-0 bg-slate-950/85 backdrop-blur-md ${despidiendo ? "splash-retira" : "modal-fade-in"}`} />
+      {/* En la despedida el fondo se vuelve opaco: el sistema no se ve hasta que
+          la firma termina, y solo entonces todo se desvanece y entra el panel. */}
+      <div className={`absolute inset-0 bg-slate-950/85 backdrop-blur-md ${despidiendo ? "splash-fondo-despide" : "modal-fade-in"}`} />
 
       <div className="relative flex w-full max-w-[25rem] flex-col items-center">
       <div className={`pulso-splash relative ${despidiendo ? "splash-retira" : "modal-pop-in"} w-full max-w-[25rem] overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#070d18] shadow-[0_32px_90px_-24px_rgba(0,0,0,0.95)]`}>
