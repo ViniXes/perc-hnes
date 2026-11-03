@@ -5357,6 +5357,15 @@ export default function Home() {
   // Censo Diario: lo VEN admin y supervisores (ningun servicio). Lo EDITAN AMONTES
   // y los administradores (por temas de calidad y control).
   const hasGrant = (id: string) => (serviceProfile?.menuGrants ?? []).includes(id);
+  // Encabezado de los jefes: "Jefatura de la División de Apoyo", etc. Sale de la
+  // division (o departamento) asignada en Usuarios; sin ella queda "Panel de supervision".
+  const jefaturaLabel = (() => {
+    const dep = serviceProfile?.department || "";
+    if (dep && DEPARTMENT_LABELS[dep]) return DEPARTMENT_LABELS[dep];
+    const div = serviceProfile?.division || "";
+    const nombre = div ? CEC_DIVISION_LABEL[div] : "";
+    return nombre ? `Jefatura de la ${nombre}` : "";
+  })();
   // Servicios que este usuario puede CONSULTAR (ver tabuladores, solo lectura),
   // elegidos por el admin POR MODULO. Determinan que se le habilita en el visor.
   const viewPerc = serviceProfile?.viewPerc ?? [];
@@ -20656,7 +20665,7 @@ export default function Home() {
             <div className="relative flex flex-col gap-4 desk:flex-row desk:items-center desk:justify-between">
               <div className="min-w-0">
                 <p className="hero-tag text-[10.5px] font-bold uppercase tracking-[0.16em]">
-                  {currentService ? "Servicio" : isSupervisor ? "Panel de supervisión" : "Panel de administración"}
+                  {currentService ? "Servicio" : isSupervisor ? jefaturaLabel || "Panel de supervisión" : "Panel de administración"}
                 </p>
                 <p className="hero-greet mt-1.5 text-sm">
                   {(() => { const h = now.getHours(); return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches"; })()},
@@ -20668,7 +20677,7 @@ export default function Home() {
                   {currentService
                     ? `${currentService.name} · Período de ${periodLabel}`
                     : isSupervisor
-                      ? "Panel de Supervisión"
+                      ? jefaturaLabel || "Panel de Supervisión"
                       : "Módulo de Administración"}
                 </p>
               </div>
@@ -21015,7 +21024,7 @@ export default function Home() {
                 </span>
                 <div className="min-w-0">
                   <p className={`hidden text-[11px] font-semibold uppercase tracking-[0.22em] sm:block ${isLightPanelTheme ? "text-[#2F6FB5]" : "text-sky-200/80"}`}>
-                    {isAdmin ? "Panel de administración" : "Panel de supervisión"}
+                    {isAdmin ? "Panel de administración" : jefaturaLabel || "Panel de supervisión"}
                   </p>
                   <h2 className={`mt-0.5 truncate text-lg font-semibold tracking-tight sm:text-2xl ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
                     {isAdmin ? "Ver tabuladores por servicio" : "Consolidado por servicio"}
