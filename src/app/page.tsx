@@ -30293,8 +30293,8 @@ export default function Home() {
                   </p>
                   <h3 className="mt-1 text-xl font-bold text-white">¿No puede ingresar?</h3>
                   <p className="mt-1 text-xs text-slate-400">
-                    Complete sus datos. Un administrador verificará su identidad y le enviará su
-                    usuario y una contraseña temporal al correo que indique.
+                    Complete sus datos. Un administrador verificará su identidad y restablecerá
+                    su acceso en horario hábil.
                   </p>
                 </div>
                 <button
@@ -30312,8 +30312,9 @@ export default function Home() {
                   <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-4 text-sm text-emerald-100">
                     <p className="font-semibold">Solicitud enviada.</p>
                     <p className="mt-1 text-emerald-200/90">
-                      Cuando un administrador restablezca su acceso, recibirá en su correo su usuario y
-                      una contraseña temporal. Revise también la carpeta de correo no deseado (spam).
+                      Un administrador restablecerá su acceso en horario hábil. Después podrá ingresar
+                      con su usuario y la contraseña temporal <strong>123456</strong>; al entrar, PULSO le
+                      pedirá cambiarla por una personal. Si no puede ingresar, contacte al administrador.
                     </p>
                   </div>
                   <button

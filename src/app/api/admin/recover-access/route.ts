@@ -1,4 +1,3 @@
-import { randomInt } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { APP_URL, enviarCorreo, envolverHtml, esCorreo, escaparHtml } from "@/lib/correo";
@@ -12,7 +11,7 @@ export const runtime = "nodejs";
 // accessRecoveryRequests. Un administrador, desde el menu Solicitudes, elige la
 // cuenta que corresponde y llama a esta ruta, que:
 //   1) verifica que quien llama sea administrador,
-//   2) pone una CLAVE TEMPORAL aleatoria en esa cuenta (Admin SDK) y marca
+//   2) pone la CLAVE TEMPORAL 123456 en esa cuenta (Admin SDK) y marca
 //      mustChangePassword para que la cambie al entrar,
 //   3) envia por correo el USUARIO y la clave temporal al correo de la solicitud,
 //   4) marca la solicitud como resuelta.
@@ -26,15 +25,9 @@ type Body = {
   targetUid?: string;
 };
 
-// Sin caracteres que se confunden (0/O, 1/l/I).
-const ALFABETO = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-
-function claveTemporal(): string {
-  let out = "";
-  for (let i = 0; i < 8; i += 1) out += ALFABETO[randomInt(ALFABETO.length)];
-  // Garantiza al menos un numero.
-  return out.slice(0, 7) + String(randomInt(2, 10));
-}
+// Clave temporal fija (politica del hospital, igual que el reset de Usuarios).
+// La persona la cambia obligatoriamente al entrar (mustChangePassword).
+const CLAVE_TEMPORAL = "123456";
 
 function correoRecuperacion(nombre: string, usuario: string, clave: string) {
   const asunto = "PULSO · Recuperación de acceso";
@@ -161,7 +154,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 4) Clave temporal.
-  const clave = claveTemporal();
+  const clave = CLAVE_TEMPORAL;
   try {
     await adminAuth.updateUser(targetUid, { password: clave });
     await adminDb
