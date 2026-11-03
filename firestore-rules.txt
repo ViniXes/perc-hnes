@@ -135,7 +135,7 @@ service cloud.firestore {
         'serviceId', 'serviceName', 'menuGrants', 'noCapture', 'supervisorModules',
         'captureModules', 'viewPerc', 'viewSeps', 'viewHoras', 'division',
         'department', 'monitorDivision', 'username', 'loginEmail', 'sepsTables',
-        'cec', 'cecServicios', 'cecGestor', 'poaUnidad'
+        'cec', 'cecServicios', 'cecGestor', 'poaUnidad', 'editSeps'
       ];
     }
     function noTocaPrivilegios() {

@@ -305,6 +305,9 @@ type ManagedUser = {
   viewPerc: string[];
   viewSeps: string[];
   viewHoras: string[];
+  // Servicios cuyo SEPS esta cuenta puede DIGITAR (llenar y guardar) ademas del
+  // suyo, p. ej. un enfermero de Hemodialisis que llena el SEPS de Enfermeria.
+  editSeps: string[];
   // Documento de identidad unico (evita registros duplicados): DUI (00000000-0),
   // pasaporte o carne de residencia. docType = "dui" | "pasaporte" | "carne".
   docType: string;
@@ -334,6 +337,7 @@ type AdminDraft = {
   viewPerc: string[];
   viewSeps: string[];
   viewHoras: string[];
+  editSeps: string[];
   email: string;
   username: string;
   name: string;
@@ -2289,6 +2293,9 @@ function normalizeProfile(uid: string, email: string, data: Record<string, unkno
     viewHoras: Array.isArray(data.viewHoras)
       ? (data.viewHoras.filter((x): x is string => typeof x === "string"))
       : [],
+    editSeps: Array.isArray(data.editSeps)
+      ? (data.editSeps.filter((x): x is string => typeof x === "string"))
+      : [],
   };
 }
 
@@ -2317,6 +2324,7 @@ function buildAdminDrafts(users: ManagedUser[]) {
         viewPerc: managedUser.viewPerc,
         viewSeps: managedUser.viewSeps,
         viewHoras: managedUser.viewHoras,
+        editSeps: managedUser.editSeps,
         email: managedUser.email,
         username: managedUser.username,
         name: managedUser.name,
@@ -4345,7 +4353,7 @@ export default function Home() {
   const [adminUserQuery, setAdminUserQuery] = useState("");
   // Filtro rapido de la lista de usuarios por tipo de cuenta.
   const [adminUserFilter, setAdminUserFilter] = useState<"todos" | "servicio" | "jefaturas" | "comite" | "admin" | "inactivos">("todos");
-  const [viewQ, setViewQ] = useState<{ perc: string; seps: string; horas: string }>({ perc: "", seps: "", horas: "" });
+  const [viewQ, setViewQ] = useState<{ perc: string; seps: string; horas: string; sepsEdit: string }>({ perc: "", seps: "", horas: "", sepsEdit: "" });
   const [calendarOverrides, setCalendarOverrides] = useState<Record<string, string[]>>({});
   // El calendario anual se quito de la vista; conservamos el setter por compatibilidad.
   const [, setPublicDashboardMonths] = useState<PublicDashboardMonth[]>([]);
@@ -4980,6 +4988,7 @@ export default function Home() {
     ...(serviceProfile?.viewPerc ?? []),
     ...(serviceProfile?.viewSeps ?? []),
     ...(serviceProfile?.viewHoras ?? []),
+    ...(serviceProfile?.editSeps ?? []),
   ];
   const isViewerLike = !isAdminLike && !isSupervisorLike && viewGrantServiceIds.length > 0;
   // true = la cuenta esta mirando un servicio AJENO por permiso de consulta. Todo
@@ -4989,6 +4998,10 @@ export default function Home() {
     !!adminSelectedServiceId &&
     viewGrantServiceIds.includes(adminSelectedServiceId) &&
     adminSelectedServiceId !== (serviceProfile?.serviceId ?? "");
+  // Excepcion: el SEPS de ese servicio ajeno SI se digita cuando el admin se lo
+  // asigno en "SEPS · digitar" (editSeps). PERC y Horas siguen de solo lectura.
+  const isEditingGrantedSeps =
+    isViewingGrantedService && (serviceProfile?.editSeps ?? []).includes(adminSelectedServiceId);
   // El admin y los supervisores eligen el servicio a ver; las cuentas con permiso de
   // consulta pueden elegir uno de los suyos; el resto usa su servicio asignado.
   const effectiveServiceId =
@@ -5347,7 +5360,9 @@ export default function Home() {
   // Servicios que este usuario puede CONSULTAR (ver tabuladores, solo lectura),
   // elegidos por el admin POR MODULO. Determinan que se le habilita en el visor.
   const viewPerc = serviceProfile?.viewPerc ?? [];
-  const viewSeps = serviceProfile?.viewSeps ?? [];
+  const viewSeps = Array.from(
+    new Set([...(serviceProfile?.viewSeps ?? []), ...(serviceProfile?.editSeps ?? [])]),
+  );
   const viewHoras = serviceProfile?.viewHoras ?? [];
   const viewHasPerc = viewPerc.length > 0;
   const viewHasSeps = viewSeps.length > 0;
@@ -5413,6 +5428,7 @@ export default function Home() {
       const grantView =
         (serviceProfile?.viewPerc ?? []).includes(service.id) ||
         (serviceProfile?.viewSeps ?? []).includes(service.id) ||
+        (serviceProfile?.editSeps ?? []).includes(service.id) ||
         (serviceProfile?.viewHoras ?? []).includes(service.id);
       if (grantView) return true;
       // Jefe de division: SOLO ve los servicios de su division.
@@ -5441,6 +5457,7 @@ export default function Home() {
       const grantView =
         (serviceProfile?.viewPerc ?? []).includes(service.id) ||
         (serviceProfile?.viewSeps ?? []).includes(service.id) ||
+        (serviceProfile?.editSeps ?? []).includes(service.id) ||
         (serviceProfile?.viewHoras ?? []).includes(service.id);
       if (grantView) return true;
       // Jefe de division: SOLO ve los servicios de su division.
@@ -5574,7 +5591,9 @@ export default function Home() {
     const base = applySepsLayout(sepsBaseTemplate, sepsEditingLayout ? sepsLayoutDraft : sepsLayout);
     // Permiso POR TABLA: si a la cuenta le asignaron tablas concretas, solo ve esas
     // (p. ej. Enfermería dentro de Cuidados Paliativos). Vacío = ve todas.
-    const permitidas = serviceProfile?.sepsTables ?? [];
+    // Solo aplica a SU servicio: en un SEPS ajeno asignado se ven todas sus tablas.
+    const permitidas =
+      effectiveServiceId === serviceProfile?.serviceId ? serviceProfile?.sepsTables ?? [] : [];
     if (!base || permitidas.length === 0 || !base.tables) return base;
     const tables = base.tables.filter((tabla) => permitidas.includes(tabla.id));
     return tables.length > 0 ? { ...base, tables } : base;
@@ -5584,6 +5603,8 @@ export default function Home() {
     sepsLayoutDraft,
     sepsEditingLayout,
     serviceProfile?.sepsTables,
+    serviceProfile?.serviceId,
+    effectiveServiceId,
   ]);
   // Keys de las filas creadas por el administrador desde la ESTRUCTURA del SEPS.
   const sepsLayoutExtraKeys = useMemo(() => {
@@ -12708,7 +12729,7 @@ export default function Home() {
   }
 
   async function handleSaveSeps() {
-    if (blockedByGhost() || blockedByViewOnly()) return;
+    if (blockedByGhost() || (!isEditingGrantedSeps && blockedByViewOnly())) return;
     if (!user || !sepsTemplate || !serviceProfile || firestoreUnavailable) {
       return;
     }
@@ -13934,6 +13955,7 @@ export default function Home() {
               viewPerc: draft.viewPerc,
               viewSeps: draft.viewSeps,
               viewHoras: draft.viewHoras,
+              editSeps: draft.editSeps,
               updatedAt: serverTimestamp(),
             }
           : {
@@ -13957,6 +13979,7 @@ export default function Home() {
               viewPerc: draft.viewPerc,
               viewSeps: draft.viewSeps,
               viewHoras: draft.viewHoras,
+              editSeps: draft.editSeps,
               permissions: nextPermissions,
               updatedAt: serverTimestamp(),
             },
@@ -15135,7 +15158,7 @@ export default function Home() {
     const sepsHistReadOnly = isSepsHistory && !isAdmin;
     // Los consolidados YA NO son de solo lectura: traen la suma de sus unidades y
     // se pueden corregir a mano (con el boton "Recalcular" para volver a la suma).
-    const sepsEditingBlocked = ghostUid || isViewingGrantedService
+    const sepsEditingBlocked = ghostUid || (isViewingGrantedService && !isEditingGrantedSeps)
       ? true
       : isAdmin || isSepsStaff
         ? false
@@ -25753,6 +25776,7 @@ export default function Home() {
                           const vp = su.viewPerc ?? [];
                           const vs = su.viewSeps ?? [];
                           const vh = su.viewHoras ?? [];
+                          const es = su.editSeps ?? [];
                           const chip = "inline-flex items-center rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-medium text-slate-200";
                           const chipOn = "inline-flex items-center rounded-md border border-teal-300/20 bg-teal-300/[0.07] px-2 py-0.5 text-[11px] font-medium text-teal-100";
                           const nada = <span className="text-[11px] text-slate-500">Nada</span>;
@@ -25803,6 +25827,9 @@ export default function Home() {
                                       <span className="text-[11px] text-slate-400">{departmentEditorLabel(su.department)}:</span>
                                     ) : null}
                                     {digita}
+                                    {es.map((id) => (
+                                      <span key={"es" + id} className={chipOn}>SEPS · {svcName(id)}</span>
+                                    ))}
                                     {su.role !== "admin" && !su.noCapture && !su.permissions.canEdit ? (
                                       <span className="text-[11px] font-semibold text-amber-200/90">· captura apagada (solo mira)</span>
                                     ) : null}
@@ -26173,8 +26200,8 @@ export default function Home() {
                               </svg>
                             </span>
                             <div>
-                              <p className="text-sm font-semibold text-white">Ver tabuladores de otros servicios</p>
-                              <p className="text-[11px] text-slate-400">Buscá y elegí, por módulo, qué servicios puede consultar (solo lectura).</p>
+                              <p className="text-sm font-semibold text-white">Tabuladores de otros servicios</p>
+                              <p className="text-[11px] text-slate-400">PERC, SEPS y Horas: solo consulta. <strong>SEPS · digitar</strong>: además puede llenar y guardar ese SEPS.</p>
                             </div>
                           </div>
                           <div className="mt-3 space-y-2.5">
@@ -26182,6 +26209,7 @@ export default function Home() {
                               { key: "perc" as const, label: "PERC", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewPerc },
                               { key: "seps" as const, label: "SEPS", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewSeps },
                               { key: "horas" as const, label: "Horas", chip: UM_GRUPO, pill: "border-white/10 bg-white/[0.05] text-slate-200", focus: "focus:border-teal-400/60", arr: draft.viewHoras },
+                              { key: "sepsEdit" as const, label: "SEPS · digitar", chip: UM_GRUPO, pill: "border-teal-300/25 bg-teal-300/[0.08] text-teal-100", focus: "focus:border-teal-400/60", arr: draft.editSeps ?? [] },
                             ]).map((mod) => {
                               const q = viewQ[mod.key].trim().toLowerCase();
                               const selected = SERVICE_DEFINITIONS.filter((svc) => mod.arr.includes(svc.id));
@@ -26190,7 +26218,7 @@ export default function Home() {
                                     const has =
                                       mod.key === "perc"
                                         ? (getAreaById(svc.id)?.modules.includes("perc") ?? false)
-                                        : mod.key === "seps"
+                                        : mod.key === "seps" || mod.key === "sepsEdit"
                                           ? !!getSepsTemplate(svc.id)
                                           : !!getHorasTemplate(svc.id);
                                     return has && svc.name.toLowerCase().includes(q);
@@ -26199,11 +26227,17 @@ export default function Home() {
                               const setArr = (next: string[]) =>
                                 updateAdminDraft(
                                   selectedUser.uid,
-                                  mod.key === "perc" ? { viewPerc: next } : mod.key === "seps" ? { viewSeps: next } : { viewHoras: next },
+                                  mod.key === "perc"
+                                    ? { viewPerc: next }
+                                    : mod.key === "seps"
+                                      ? { viewSeps: next }
+                                      : mod.key === "sepsEdit"
+                                        ? { editSeps: next }
+                                        : { viewHoras: next },
                                 );
                               const setQ = (val: string) =>
                                 setViewQ((p) =>
-                                  mod.key === "perc" ? { ...p, perc: val } : mod.key === "seps" ? { ...p, seps: val } : { ...p, horas: val },
+                                  ({ ...p, [mod.key]: val }),
                                 );
                               return (
                                 <div key={mod.key} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
