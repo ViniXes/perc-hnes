@@ -3977,6 +3977,12 @@ export default function Home() {
     problem: "contrasena" as AccessRecoveryRequest["problem"],
   });
   const [recoveryEmailTouched, setRecoveryEmailTouched] = useState(false);
+  // Al intentar enviar se marcan en rojo los campos obligatorios que faltan.
+  const recoveryNombreLimpio = recoveryForm.fullName.trim().replace(/\s+/g, " ");
+  const recoveryFaltaNombre =
+    recoveryEmailTouched && (recoveryNombreLimpio.length < 5 || !recoveryNombreLimpio.includes(" "));
+  const recoveryFaltaDui = recoveryEmailTouched && !/^\d{8}-\d$/.test(recoveryForm.docNumber.trim());
+  const recoveryFaltaArea = recoveryEmailTouched && recoveryForm.area.trim().length < 2;
   const [recoveryError, setRecoveryError] = useState("");
   const [recoverySent, setRecoverySent] = useState(false);
   const [isSubmittingRecovery, setIsSubmittingRecovery] = useState(false);
@@ -10873,8 +10879,13 @@ export default function Home() {
     const docNumber = recoveryForm.docNumber.trim();
     const area = recoveryForm.area.trim();
     const email = recoveryForm.email.trim();
-    if (fullName.length < 5 || !fullName.includes(" ")) {
-      setRecoveryError("Escriba su nombre completo (nombres y apellidos).");
+    const faltan: string[] = [];
+    if (fullName.length < 5 || !fullName.includes(" ")) faltan.push("nombre completo");
+    if (!isValidDuiFormat(docNumber)) faltan.push("DUI");
+    if (area.length < 2) faltan.push("área");
+    if (!email) faltan.push("correo");
+    if (faltan.length > 0) {
+      setRecoveryError(`Complete los campos obligatorios: ${faltan.join(", ")}.`);
       return;
     }
     if (!isValidDuiFormat(docNumber)) {
@@ -28231,8 +28242,17 @@ export default function Home() {
                               </div>
                               <dl className="mt-1.5 grid grid-cols-1 gap-x-3 gap-y-0.5 text-xs text-slate-400 sm:grid-cols-2">
                                 <div>DUI: <span className="font-mono text-slate-200">{r.docNumber}</span></div>
-                                <div className="min-w-0 truncate">Área: <span className="text-slate-200">{r.area}</span></div>
-                                <div className="min-w-0 truncate sm:col-span-2">Correo: <span className="text-slate-200">{r.email}</span></div>
+                                <div className="min-w-0 break-words">Área: <span className="text-slate-200">{r.area}</span></div>
+                                <div className="min-w-0 break-all sm:col-span-2">
+                                  Correo:{" "}
+                                  {isValidRecoveryEmail(r.email) ? (
+                                    <span className="text-slate-200">{r.email}</span>
+                                  ) : (
+                                    <span className="font-semibold text-rose-300">
+                                      {r.email ? `${r.email} (no válido)` : "sin correo"}: entregue los datos en persona
+                                    </span>
+                                  )}
+                                </div>
                                 {r.createdAtMs ? (
                                   <div className="sm:col-span-2">
                                     {new Date(r.createdAtMs).toLocaleString("es-SV", { dateStyle: "medium", timeStyle: "short" })}
@@ -30306,6 +30326,9 @@ export default function Home() {
                 </div>
               ) : (
                 <form className="mt-5 space-y-3.5" onSubmit={handleRecoverySubmit} noValidate>
+                  <p className="text-[11px] text-slate-400">
+                    Todos los campos marcados con <span className="text-rose-300">*</span> son obligatorios.
+                  </p>
                   <fieldset>
                     <legend className="text-xs font-medium text-slate-300">¿Qué olvidó?</legend>
                     <div className="mt-1.5 grid grid-cols-3 gap-1.5">
@@ -30326,38 +30349,53 @@ export default function Home() {
                     </div>
                   </fieldset>
                   <label className="block">
-                    <span className="text-xs font-medium text-slate-300">Nombre completo</span>
+                    <span className="text-xs font-medium text-slate-300">Nombre completo <span className="text-rose-300">*</span></span>
                     <input
+                      required
+                      aria-required="true"
                       value={recoveryForm.fullName}
                       onChange={(e) => setRecoveryForm((f) => ({ ...f, fullName: e.target.value }))}
                       maxLength={120}
                       autoComplete="name"
                       placeholder="Nombres y apellidos"
-                      className="mt-1.5 w-full rounded-2xl border bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 border-white/10"
+                      className={`mt-1.5 w-full rounded-2xl border bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 ${recoveryFaltaNombre ? "border-rose-400/70" : "border-white/10"}`}
                     />
+                    {recoveryFaltaNombre ? (
+                      <span className="mt-1 block text-[11px] text-rose-300">Obligatorio: escriba nombres y apellidos.</span>
+                    ) : null}
                   </label>
                   <label className="block">
-                    <span className="text-xs font-medium text-slate-300">Número de DUI</span>
+                    <span className="text-xs font-medium text-slate-300">Número de DUI <span className="text-rose-300">*</span></span>
                     <input
+                      required
+                      aria-required="true"
                       value={recoveryForm.docNumber}
                       onChange={(e) =>
                         setRecoveryForm((f) => ({ ...f, docNumber: formatDuiInput(e.target.value) }))
                       }
                       inputMode="numeric"
                       placeholder="00000000-0"
-                      className="mt-1.5 w-full rounded-2xl border bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 border-white/10 font-mono tracking-wider"
+                      className={`mt-1.5 w-full rounded-2xl border bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 font-mono tracking-wider ${recoveryFaltaDui ? "border-rose-400/70" : "border-white/10"}`}
                     />
+                    {recoveryFaltaDui ? (
+                      <span className="mt-1 block text-[11px] text-rose-300">Obligatorio: DUI completo (00000000-0).</span>
+                    ) : null}
                   </label>
                   <label className="block">
-                    <span className="text-xs font-medium text-slate-300">Área o servicio en el que labora</span>
+                    <span className="text-xs font-medium text-slate-300">Área o servicio en el que labora <span className="text-rose-300">*</span></span>
                     <input
+                      required
+                      aria-required="true"
                       value={recoveryForm.area}
                       onChange={(e) => setRecoveryForm((f) => ({ ...f, area: e.target.value }))}
                       maxLength={120}
                       list="recovery-areas"
                       placeholder="Ej.: ESDOMED, Farmacia, Laboratorio..."
-                      className="mt-1.5 w-full rounded-2xl border bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 border-white/10"
+                      className={`mt-1.5 w-full rounded-2xl border bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 ${recoveryFaltaArea ? "border-rose-400/70" : "border-white/10"}`}
                     />
+                    {recoveryFaltaArea ? (
+                      <span className="mt-1 block text-[11px] text-rose-300">Obligatorio: indique su área o servicio.</span>
+                    ) : null}
                     <datalist id="recovery-areas">
                       {SERVICE_DEFINITIONS.map((svc) => (
                         <option key={svc.id} value={svc.name} />
@@ -30368,15 +30406,17 @@ export default function Home() {
                     const correo = recoveryForm.email.trim();
                     const valido = isValidRecoveryEmail(correo);
                     const sugerencia = recoveryEmailHint(correo);
-                    const mostrarError = recoveryEmailTouched && correo !== "" && !valido;
+                    const mostrarError = recoveryEmailTouched && !valido;
                     return (
                       <label className="block">
                         <span className="text-xs font-medium text-slate-300">
-                          Correo institucional o personal
+                          Correo institucional o personal <span className="text-rose-300">*</span>
                         </span>
                         <div className="relative">
                           <input
                             type="email"
+                            required
+                            aria-required="true"
                             value={recoveryForm.email}
                             onChange={(e) =>
                               setRecoveryForm((f) => ({ ...f, email: e.target.value.replace(/\s/g, "") }))
@@ -30406,7 +30446,9 @@ export default function Home() {
                         </div>
                         {mostrarError ? (
                           <span className="mt-1 block text-[11px] text-rose-300">
-                            Correo no válido: debe tener @ y una terminación como .com, .sv o .gob.sv.
+                            {correo === ""
+                              ? "Obligatorio: sin correo no podemos enviarle su usuario y contraseña."
+                              : "Correo no válido: debe tener @ y una terminación como .com, .sv o .gob.sv."}
                           </span>
                         ) : null}
                         {sugerencia ? (
