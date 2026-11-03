@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.489",
+    para: ["todos"],
+    texto:
+      "Inicio de sesion: nuevo enlace \"¿Olvido su usuario o contraseña?\". Quien no pueda entrar envia su nombre, DUI, area y correo, y recibe por correo su usuario y una clave temporal cuando un administrador la restablece.",
+  },
+  {
     version: "1986.479",
     para: ["admin"],
     texto:

@@ -43,6 +43,26 @@ rules_version = '2';
 //     7): captureWindows/{mes}.horasCierre (2:30 p. m. del 5to dia habil).
 //     Despues de esa hora solo el administrador guarda, salvo reapertura vigente
 //     (24 h) o, en el Comite, lista desbloqueada por el gestor.
+// 10) DOCS-POA/MOF: los PDF adjuntos (documentControl/<año>__pdf__...) solo los
+//     leen los administradores. El estado de entregas lo siguen viendo todos
+//     menos MINSAL.
+// 11) ESDOMED: los memorandums (esdomedMemos) solo los leen y escriben los
+//     administradores.
+// 12) Planificacion > Mis documentos (planificacionDocumentos): los PDF por
+//     categoria solo los leen y escriben los administradores.
+// 13) Recuperacion de acceso (accessRecoveryRequests): el boton "¿Olvido su
+//     usuario o contraseña?" del login. CUALQUIERA puede crear una solicitud
+//     (todavia no tiene sesion), pero solo con los campos del formulario, DUI con
+//     formato 00000000-0, correo valido y en estado 'pending'. Nadie sin sesion
+//     puede leerlas: solo los administradores las ven, atienden y borran.
+// 14) Solicitudes de registro (signupRequests): el formulario publico ya no
+//     acepta campos de mas (p. ej. alguien no puede mandar 'status: approved',
+//     'createdUsername' ni textos gigantes); se validan tipos y tamaños.
+// 15) Registro de documentos (documentRegistry): antes cualquiera, SIN sesion,
+//     podia consultar un DUI y ver el nombre y correo de su dueño, y crear
+//     documentos con cualquier contenido. Ahora el documento solo lo lee su
+//     dueño o un administrador, y al crearlo solo se aceptan sus 6 campos. El
+//     dueño puede volver a guardar su propio documento (antes le fallaba).
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -352,15 +372,59 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     // Solicitudes de registro (jefes de servicio, direccion, MINSAL y comite).
+    function textoCorto(v, max) {
+      return v is string && v.size() <= max;
+    }
+    function correoValido(v) {
+      return v is string && v.size() <= 120
+        && v.matches('^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+([.][A-Za-z0-9-]+)*[.][A-Za-z]{2,}$');
+    }
     match /signupRequests/{id} {
       allow read: if isAdmin();
-      allow create: if request.resource.data.status == 'pending'
-        && request.resource.data.firstName is string
-        && request.resource.data.lastName is string
+      allow create: if request.resource.data.keys().hasOnly([
+            'firstName', 'lastName', 'email', 'serviceId', 'serviceName',
+            'requestType', 'cecServicios', 'isChief', 'captureModules',
+            'division', 'department', 'docType', 'docNumber', 'status',
+            'acceptedPrivacy', 'createdAt'])
+        && request.resource.data.status == 'pending'
+        && textoCorto(request.resource.data.firstName, 80)
+        && request.resource.data.firstName.size() > 0
+        && textoCorto(request.resource.data.lastName, 80)
+        && request.resource.data.lastName.size() > 0
         && request.resource.data.email is string
-        && request.resource.data.serviceId is string
-        && request.resource.data.serviceName is string;
+        && request.resource.data.email.size() <= 120
+        && textoCorto(request.resource.data.serviceId, 80)
+        && textoCorto(request.resource.data.serviceName, 160)
+        && textoCorto(request.resource.data.get('requestType', 'service'), 30)
+        && textoCorto(request.resource.data.get('division', ''), 40)
+        && textoCorto(request.resource.data.get('department', ''), 60)
+        && textoCorto(request.resource.data.get('docType', ''), 20)
+        && textoCorto(request.resource.data.get('docNumber', ''), 30)
+        && request.resource.data.get('cecServicios', []) is list
+        && request.resource.data.get('cecServicios', []).size() <= 5
+        && request.resource.data.get('captureModules', []) is list
+        && request.resource.data.get('captureModules', []).size() <= 5;
       allow update, delete: if isAdmin();
+    }
+    // Recuperacion de acceso ("¿Olvido su usuario o contraseña?" del login).
+    // Crear: cualquiera (no tiene sesion), solo con los campos del formulario.
+    // Leer, atender y borrar: solo administradores. La clave la restablece el
+    // servidor (/api/admin/recover-access), que no pasa por estas reglas.
+    match /accessRecoveryRequests/{id} {
+      allow read: if adminPoa();
+      allow create: if request.resource.data.keys().hasOnly([
+            'fullName', 'docNumber', 'area', 'email', 'problem', 'status', 'createdAt'])
+        && request.resource.data.status == 'pending'
+        && textoCorto(request.resource.data.fullName, 120)
+        && request.resource.data.fullName.size() >= 5
+        && request.resource.data.docNumber is string
+        && request.resource.data.docNumber.matches('^[0-9]{8}-[0-9]$')
+        && textoCorto(request.resource.data.area, 120)
+        && request.resource.data.area.size() >= 2
+        && correoValido(request.resource.data.email)
+        && request.resource.data.problem in ['usuario', 'contrasena', 'ambos']
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if adminPoa();
     }
     // Centro de Soporte. Una cuenta MINSAL SI puede abrir un ticket (tiene el
     // boton de Soporte en su menu), pero no puede leer los de nadie.
@@ -375,11 +439,30 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     // Registro global de documentos de identidad (DUI/pasaporte/carne).
+    function registroDocValido() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['docType', 'docNumber', 'name', 'email', 'uid', 'createdAt'])
+        && d.get('docType', '') in ['dui', 'pasaporte', 'carne']
+        && textoCorto(d.get('docNumber', ''), 30)
+        && textoCorto(d.get('name', ''), 160)
+        && textoCorto(d.get('email', ''), 160)
+        && textoCorto(d.get('uid', ''), 128);
+    }
     match /documentRegistry/{docId} {
-      allow get: if true;
+      // El nombre y correo del dueño ya no quedan a la vista de cualquiera.
+      allow get: if adminPoa()
+        || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid);
       allow list: if isAdmin();
-      allow create: if true;
-      allow update, delete: if isAdmin();
+      // Registro publico (sin sesion, uid vacio) o la propia cuenta (uid = el suyo).
+      allow create: if adminPoa()
+        || (docId.matches('^[A-Z0-9]{4,30}$') && registroDocValido()
+            && (request.resource.data.get('uid', '') == ''
+                || (isSignedIn() && request.resource.data.uid == request.auth.uid)));
+      allow update: if adminPoa()
+        || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid
+            && request.resource.data.get('uid', '') == request.auth.uid
+            && registroDocValido());
+      allow delete: if adminPoa();
     }
   }
 }

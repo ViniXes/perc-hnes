@@ -1103,6 +1103,56 @@ function validateDocument(docType: string, docNumber: string): string {
   if (normalizeDocKey(n).length < 4) return "El documento no es valido.";
   return "";
 }
+// --- Recuperacion de acceso ("¿Olvidaste tu usuario o contraseña?") ----------
+type AccessRecoveryRequest = {
+  id: string;
+  fullName: string;
+  docNumber: string;
+  area: string;
+  email: string;
+  problem: "usuario" | "contrasena" | "ambos";
+  status: "pending" | "resolved" | "rejected";
+  createdAtMs: number;
+  resolvedUsername?: string;
+  resolvedByName?: string;
+  mailSent?: boolean;
+};
+const RECOVERY_PROBLEM_LABELS: Record<AccessRecoveryRequest["problem"], string> = {
+  usuario: "Olvidó su usuario",
+  contrasena: "Olvidó su contraseña",
+  ambos: "Olvidó usuario y contraseña",
+};
+// Correo con dominio y terminacion valida (.com, .sv, .gob.sv, .edu.sv, .org...).
+// La misma expresion vive en las reglas de Firestore (accessRecoveryRequests).
+const RECOVERY_EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/;
+function isValidRecoveryEmail(v: string): boolean {
+  const s = (v || "").trim();
+  return s.length <= 120 && RECOVERY_EMAIL_RE.test(s) && !s.includes("..");
+}
+// Errores de dedo frecuentes: sugiere la correccion ("¿Quiso decir ...?").
+function recoveryEmailHint(v: string): string {
+  const s = (v || "").trim().toLowerCase();
+  const at = s.lastIndexOf("@");
+  if (at < 1) return "";
+  const dominio = s.slice(at + 1);
+  const arreglos: Record<string, string> = {
+    "gmial.com": "gmail.com", "gmal.com": "gmail.com", "gamil.com": "gmail.com",
+    "gmail.con": "gmail.com", "gmail.co": "gmail.com", "gmai.com": "gmail.com",
+    "hotmial.com": "hotmail.com", "hotmal.com": "hotmail.com", "hotmail.con": "hotmail.com",
+    "outlok.com": "outlook.com", "outlook.con": "outlook.com",
+    "yaho.com": "yahoo.com", "yahoo.con": "yahoo.com",
+    "salud.gob.com": "salud.gob.sv", "salud.gov.sv": "salud.gob.sv",
+  };
+  const base = dominio.endsWith(".con") ? `${dominio.slice(0, -4)}.com` : dominio;
+  const corregido = arreglos[base] || base;
+  return corregido !== dominio ? `${s.slice(0, at)}@${corregido}` : "";
+}
+// Da formato 00000000-0 mientras se escribe.
+function formatDuiInput(v: string): string {
+  const d = (v || "").replace(/\D/g, "").slice(0, 9);
+  return d.length > 8 ? `${d.slice(0, 8)}-${d.slice(8)}` : d;
+}
+
 // Reserva el documento en el registro global para impedir duplicados. Lanza
 // Error("doc-duplicado") si ese documento ya esta registrado por alguien mas.
 async function reserveDocument(
@@ -3909,6 +3959,23 @@ export default function Home() {
   const [signupDivView, setSignupDivView] = useState("");
   // Bandeja de solicitudes de REGISTRO (para los 3 admins).
   const [signupRequests, setSignupRequests] = useState<SignupRequest[]>([]);
+  // Recuperacion de acceso: formulario del login y bandeja de admins (Solicitudes).
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [recoveryForm, setRecoveryForm] = useState({
+    fullName: "",
+    docNumber: "",
+    area: "",
+    email: "",
+    problem: "contrasena" as AccessRecoveryRequest["problem"],
+  });
+  const [recoveryEmailTouched, setRecoveryEmailTouched] = useState(false);
+  const [recoveryError, setRecoveryError] = useState("");
+  const [recoverySent, setRecoverySent] = useState(false);
+  const [isSubmittingRecovery, setIsSubmittingRecovery] = useState(false);
+  const [recoveryRequests, setRecoveryRequests] = useState<AccessRecoveryRequest[]>([]);
+  const [recoveryTargets, setRecoveryTargets] = useState<Record<string, string>>({});
+  const [recoveryBusyId, setRecoveryBusyId] = useState("");
+  const [recoveryShowHistory, setRecoveryShowHistory] = useState(false);
   const [showSignupRequestsModal, setShowSignupRequestsModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetService, setResetService] = useState<string>("ALL");
@@ -6665,6 +6732,66 @@ export default function Home() {
             id: `signup-${change.doc.id}-${Date.now()}`,
             title: "Nueva solicitud de registro",
             body: `${String(d.firstName ?? "")} ${String(d.lastName ?? "")} quiere registrarse en ${String(d.serviceName ?? "")}`,
+          };
+          setToastNotifs((prev) => [notif, ...prev].slice(0, 3));
+          setCasitaAlert(true);
+          window.setTimeout(() => {
+            setToastNotifs((prev) => prev.filter((n) => n.id !== notif.id));
+          }, 6000);
+        }
+      },
+      () => {
+        // Si faltan reglas, no romper la app.
+      },
+    );
+    return () => unsubscribe();
+  }, [user, isAdmin, firestoreUnavailable, firestoreStatusReady]);
+
+  // Solicitudes de RECUPERACION DE ACCESO (solo admins, segun reglas).
+  const recoveryReadyRef = useRef(false);
+  useEffect(() => {
+    if (firestoreUnavailable || !user || !firestoreStatusReady || !isAdmin) {
+      setRecoveryRequests([]);
+      return;
+    }
+    recoveryReadyRef.current = false;
+    const unsubscribe = onSnapshot(
+      collection(db, "accessRecoveryRequests"),
+      (snap) => {
+        const list: AccessRecoveryRequest[] = [];
+        snap.forEach((item) => {
+          const d = item.data() as Record<string, unknown>;
+          const created = d.createdAt as { toMillis?: () => number } | undefined;
+          list.push({
+            id: item.id,
+            fullName: String(d.fullName ?? ""),
+            docNumber: String(d.docNumber ?? ""),
+            area: String(d.area ?? ""),
+            email: String(d.email ?? ""),
+            problem:
+              d.problem === "usuario" || d.problem === "ambos" ? d.problem : "contrasena",
+            status: d.status === "resolved" || d.status === "rejected" ? d.status : "pending",
+            createdAtMs: typeof created?.toMillis === "function" ? created.toMillis() : 0,
+            resolvedUsername: typeof d.resolvedUsername === "string" ? d.resolvedUsername : undefined,
+            resolvedByName: typeof d.resolvedByName === "string" ? d.resolvedByName : undefined,
+            mailSent: d.mailSent === true,
+          });
+        });
+        list.sort((x, y) => y.createdAtMs - x.createdAtMs);
+        setRecoveryRequests(list);
+
+        if (!recoveryReadyRef.current) {
+          recoveryReadyRef.current = true;
+          return;
+        }
+        for (const change of snap.docChanges()) {
+          if (change.type !== "added") continue;
+          const d = change.doc.data() as Record<string, unknown>;
+          if (String(d.status ?? "pending") !== "pending") continue;
+          const notif = {
+            id: `recovery-${change.doc.id}-${Date.now()}`,
+            title: "Recuperación de acceso",
+            body: `${String(d.fullName ?? "")} no puede ingresar a PULSO`,
           };
           setToastNotifs((prev) => [notif, ...prev].slice(0, 3));
           setCasitaAlert(true);
@@ -10707,6 +10834,141 @@ export default function Home() {
     return `No se pudo enviar el correo a ${to} (${detail}): entregue los datos personalmente.`;
   }
 
+  // Formulario publico "¿Olvidaste tu usuario o contraseña?" del login.
+  async function handleRecoverySubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setRecoveryError("");
+    setRecoveryEmailTouched(true);
+    const fullName = recoveryForm.fullName.trim().replace(/\s+/g, " ");
+    const docNumber = recoveryForm.docNumber.trim();
+    const area = recoveryForm.area.trim();
+    const email = recoveryForm.email.trim();
+    if (fullName.length < 5 || !fullName.includes(" ")) {
+      setRecoveryError("Escriba su nombre completo (nombres y apellidos).");
+      return;
+    }
+    if (!isValidDuiFormat(docNumber)) {
+      setRecoveryError("El DUI debe tener el formato 00000000-0.");
+      return;
+    }
+    if (area.length < 2) {
+      setRecoveryError("Indique el área o servicio en el que labora.");
+      return;
+    }
+    if (!isValidRecoveryEmail(email)) {
+      setRecoveryError("El correo no es válido. Revise que tenga @ y una terminación como .com o .sv.");
+      return;
+    }
+    setIsSubmittingRecovery(true);
+    try {
+      await addDoc(collection(db, "accessRecoveryRequests"), {
+        fullName: fullName.slice(0, 120),
+        docNumber,
+        area: area.slice(0, 120),
+        email: email.slice(0, 120),
+        problem: recoveryForm.problem,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+      setRecoverySent(true);
+      setRecoveryForm({ fullName: "", docNumber: "", area: "", email: "", problem: "contrasena" });
+      setRecoveryEmailTouched(false);
+    } catch {
+      setRecoveryError("No pudimos enviar su solicitud. Revise su conexión e intente de nuevo.");
+    } finally {
+      setIsSubmittingRecovery(false);
+    }
+  }
+
+  // Cuentas que probablemente correspondan a la solicitud: primero por DUI y, si
+  // no hay, por coincidencia de nombre.
+  function recoveryMatches(req: AccessRecoveryRequest): ManagedUser[] {
+    const key = normalizeDocKey(req.docNumber);
+    const porDui = adminUsers.filter(
+      (u) => !!key && (normalizeDocKey(u.dui) === key || normalizeDocKey(u.docNumber) === key),
+    );
+    if (porDui.length > 0) return porDui;
+    const sinTildes = (v: string) => normalizeKey(v).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const palabras = sinTildes(req.fullName).split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+    if (palabras.length === 0) return [];
+    return adminUsers
+      .map((u) => {
+        const nombre = sinTildes(`${u.name} ${u.firstName} ${u.lastName}`);
+        return { u, hits: palabras.filter((w) => nombre.includes(w)).length };
+      })
+      .filter((x) => x.hits >= Math.min(2, palabras.length))
+      .sort((x, y) => y.hits - x.hits)
+      .slice(0, 5)
+      .map((x) => x.u);
+  }
+
+  // Admin: restablece la clave (temporal aleatoria) y la manda por correo.
+  async function handleResolveRecovery(req: AccessRecoveryRequest, targetUid: string) {
+    if (blockedByGhost()) return;
+    if (!targetUid) {
+      setError("Elija la cuenta de la persona antes de restablecer.");
+      return;
+    }
+    setRecoveryBusyId(req.id);
+    setError("");
+    setMessage("");
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setError("Vuelva a iniciar sesión para restablecer claves.");
+        return;
+      }
+      const res = await fetch("/api/admin/recover-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, requestId: req.id, targetUid }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        username?: string;
+        password?: string;
+        sent?: boolean;
+        reason?: string;
+      };
+      if (!res.ok || !data.ok) {
+        setError(data.error || "No se pudo restablecer el acceso.");
+        return;
+      }
+      void registrarBitacora("Acceso recuperado", `${req.fullName} (${data.username || ""})`);
+      lastMailReasonRef.current = data.reason || "";
+      setMessage(
+        `Acceso de ${req.fullName} restablecido. Usuario "${data.username}", contraseña temporal "${data.password}". ${mailSuffix(data.sent === true, req.email)}`,
+      );
+    } catch (recoverError) {
+      setError(getAuthErrorMessage(recoverError));
+    } finally {
+      setRecoveryBusyId("");
+    }
+  }
+
+  async function handleRejectRecovery(req: AccessRecoveryRequest) {
+    if (blockedByGhost()) return;
+    setRecoveryBusyId(req.id);
+    setError("");
+    try {
+      await setDoc(
+        doc(db, "accessRecoveryRequests", req.id),
+        {
+          status: "rejected",
+          resolvedByName: serviceProfile?.name || "",
+          resolvedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      setMessage(`Solicitud de ${req.fullName} descartada.`);
+    } catch (rejectError) {
+      setError(getAuthErrorMessage(rejectError));
+    } finally {
+      setRecoveryBusyId("");
+    }
+  }
+
   async function handleApproveSignup(req: SignupRequest) {
     if (blockedByGhost()) return;
     setSignupBusyId(req.id);
@@ -13935,6 +14197,10 @@ export default function Home() {
       setShowBoardModal(true);
     } else if (itemId === "panel-requests") {
       setShowRequestsModal(true);
+      // Para sugerir la cuenta en las recuperaciones de acceso hace falta la lista.
+      if (isAdmin && adminUsers.length === 0 && !firestoreUnavailable) {
+        void fetchManagedUsers().then(applyAdminUsers).catch(() => {});
+      }
     } else if (itemId === "panel-request-form") {
       setRequestModuleId(requestable[0] ?? "perc");
       setShowRequestForm(true);
@@ -18248,6 +18514,11 @@ export default function Home() {
             )
           : [];
     const pendingRequestCount = visibleRequests.filter((req) => req.status === "pending").length;
+    // Recuperaciones de acceso pendientes (solo admins): suman al contador de Solicitudes.
+    const pendingRecoveryCount = isAdmin
+      ? recoveryRequests.filter((r) => r.status === "pending").length
+      : 0;
+    const solicitudesBadgeCount = pendingRequestCount + pendingRecoveryCount;
     // Solicitudes agrupadas por MES (mas reciente primero) para no dejar una lista larga.
     const requestGroups = (() => {
       const byPeriod = new Map<string, CaptureRequest[]>();
@@ -19285,7 +19556,7 @@ export default function Home() {
               id: "panel-requests",
               label: "Solicitudes",
               detail: "Pedidos de habilitacion",
-              badge: pendingRequestCount > 0 ? String(pendingRequestCount) : "SO",
+              badge: solicitudesBadgeCount > 0 ? String(solicitudesBadgeCount) : "SO",
             },
           ]
         : []),
@@ -19578,12 +19849,12 @@ export default function Home() {
                 const sepsCommentAlert = item.id === "panel-seps" && serviceSepsCommentCount > 0;
                 const signupAlert = item.id === "panel-signups" && pendingSignupCount > 0;
                 const hasAlert =
-                  (item.id === "panel-requests" && pendingRequestCount > 0) || sepsCommentAlert || signupAlert;
+                  (item.id === "panel-requests" && solicitudesBadgeCount > 0) || sepsCommentAlert || signupAlert;
                 const alertCount = sepsCommentAlert
                   ? serviceSepsCommentCount
                   : signupAlert
                     ? pendingSignupCount
-                    : pendingRequestCount;
+                    : solicitudesBadgeCount;
                 const tileGradient =
                   SIDEBAR_TILE_GRADIENT[item.id] ?? "from-cyan-500 to-blue-600";
                 const itemChildren = (item as { children?: { id: string; label: string; detail: string; badge: string; icon?: string }[] }).children;
@@ -27862,6 +28133,170 @@ export default function Home() {
                   </button>
                 </div>
 
+                {/* RECUPERACION DE ACCESO: personas que no pueden entrar (solo admins). */}
+                {isAdmin ? (() => {
+                  const pendientes = recoveryRequests.filter((r) => r.status === "pending");
+                  const historial = recoveryRequests.filter((r) => r.status !== "pending").slice(0, 20);
+                  if (pendientes.length === 0 && historial.length === 0) return null;
+                  return (
+                    <div className="mb-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/[0.04] p-3">
+                      <div className="flex items-center justify-between gap-2 px-1">
+                        <p className="text-sm font-bold text-white">
+                          Recuperación de acceso
+                          {pendientes.length > 0 ? (
+                            <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-200">
+                              {pendientes.length} pendiente{pendientes.length === 1 ? "" : "s"}
+                            </span>
+                          ) : null}
+                        </p>
+                        {historial.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setRecoveryShowHistory((v) => !v)}
+                            className="text-[11px] font-semibold text-slate-400 hover:text-white"
+                          >
+                            {recoveryShowHistory ? "Ocultar historial" : `Historial (${historial.length})`}
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {(message || error) && recoveryRequests.length > 0 ? (
+                        <p
+                          className={`mt-2 rounded-xl px-3 py-2 text-xs ${
+                            error
+                              ? "border border-rose-400/30 bg-rose-500/10 text-rose-200"
+                              : "border border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                          }`}
+                        >
+                          {error || message}
+                        </p>
+                      ) : null}
+
+                      <div className="mt-2 space-y-2">
+                        {pendientes.map((r) => {
+                          const coincidencias = recoveryMatches(r);
+                          const elegido = recoveryTargets[r.id] ?? coincidencias[0]?.uid ?? "";
+                          const cuenta = adminUsers.find((u) => u.uid === elegido);
+                          const resto = adminUsers.filter((u) => !coincidencias.some((c) => c.uid === u.uid));
+                          return (
+                            <div key={r.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="min-w-0 flex-1 text-sm font-bold text-white">{r.fullName}</p>
+                                <span className="shrink-0 rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-200">
+                                  {RECOVERY_PROBLEM_LABELS[r.problem]}
+                                </span>
+                              </div>
+                              <dl className="mt-1.5 grid grid-cols-1 gap-x-3 gap-y-0.5 text-xs text-slate-400 sm:grid-cols-2">
+                                <div>DUI: <span className="font-mono text-slate-200">{r.docNumber}</span></div>
+                                <div className="min-w-0 truncate">Área: <span className="text-slate-200">{r.area}</span></div>
+                                <div className="min-w-0 truncate sm:col-span-2">Correo: <span className="text-slate-200">{r.email}</span></div>
+                                {r.createdAtMs ? (
+                                  <div className="sm:col-span-2">
+                                    {new Date(r.createdAtMs).toLocaleString("es-SV", { dateStyle: "medium", timeStyle: "short" })}
+                                  </div>
+                                ) : null}
+                              </dl>
+
+                              <label className="mt-2.5 block">
+                                <span className="text-[11px] font-medium text-slate-400">
+                                  Cuenta a restablecer{" "}
+                                  {coincidencias.length > 0 ? (
+                                    <span className="text-emerald-300">· {coincidencias.length} coincidencia{coincidencias.length === 1 ? "" : "s"}</span>
+                                  ) : (
+                                    <span className="text-amber-300">· sin coincidencia por DUI ni nombre: elíjala a mano</span>
+                                  )}
+                                </span>
+                                <select
+                                  value={elegido}
+                                  onChange={(e) => setRecoveryTargets((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                                  className="mt-1 w-full rounded-xl border border-white/10 bg-[#1b2537] px-2.5 py-2 text-xs text-white outline-none focus:border-cyan-400"
+                                >
+                                  <option value="">— Elegir cuenta —</option>
+                                  {coincidencias.length > 0 ? (
+                                    <optgroup label="Coincidencias">
+                                      {coincidencias.map((u) => (
+                                        <option key={u.uid} value={u.uid}>
+                                          {u.name || u.username} · {u.username}{u.serviceName ? ` · ${u.serviceName}` : ""}
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                  ) : null}
+                                  <optgroup label="Todas las cuentas">
+                                    {resto.map((u) => (
+                                      <option key={u.uid} value={u.uid}>
+                                        {u.name || u.username} · {u.username}{u.serviceName ? ` · ${u.serviceName}` : ""}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                </select>
+                              </label>
+                              {cuenta ? (
+                                <p className="mt-1 text-[11px] text-slate-400">
+                                  Usuario <span className="font-mono text-slate-200">{cuenta.username}</span>
+                                  {cuenta.dui || cuenta.docNumber ? (
+                                    <>
+                                      {" "}· DUI en perfil{" "}
+                                      <span
+                                        className={`font-mono ${
+                                          normalizeDocKey(cuenta.dui || cuenta.docNumber) === normalizeDocKey(r.docNumber)
+                                            ? "text-emerald-300"
+                                            : "text-rose-300"
+                                        }`}
+                                      >
+                                        {cuenta.dui || cuenta.docNumber}
+                                      </span>
+                                    </>
+                                  ) : null}
+                                  {cuenta.isActive === false ? (
+                                    <span className="text-rose-300"> · cuenta DESACTIVADA (actívela en Usuarios)</span>
+                                  ) : null}
+                                </p>
+                              ) : null}
+
+                              <div className="mt-2.5 flex gap-2">
+                                <button
+                                  type="button"
+                                  disabled={recoveryBusyId === r.id || !elegido}
+                                  onClick={() => void handleResolveRecovery(r, elegido)}
+                                  className="flex-1 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
+                                >
+                                  {recoveryBusyId === r.id ? "..." : "Restablecer y enviar por correo"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={recoveryBusyId === r.id}
+                                  onClick={() => void handleRejectRecovery(r)}
+                                  className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
+                                >
+                                  Descartar
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {recoveryShowHistory
+                          ? historial.map((r) => (
+                              <div key={r.id} className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
+                                <span className="font-semibold text-slate-200">{r.fullName}</span>
+                                {" · "}
+                                {r.status === "resolved" ? (
+                                  <span className="text-emerald-300">
+                                    Restablecido{r.resolvedUsername ? ` (${r.resolvedUsername})` : ""}
+                                    {r.mailSent ? " · correo enviado" : " · sin correo"}
+                                  </span>
+                                ) : (
+                                  <span className="text-rose-300">Descartada</span>
+                                )}
+                                {r.resolvedByName ? ` · ${r.resolvedByName}` : ""}
+                              </div>
+                            ))
+                          : null}
+                      </div>
+                    </div>
+                  );
+                })() : null}
+
                 {visibleRequests.length === 0 ? (
                   <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-slate-300">
                     No hay solicitudes por ahora.
@@ -29646,6 +30081,22 @@ export default function Home() {
                   >
                     {isSubmitting ? "Procesando..." : "Entrar al sistema"}
                   </button>
+
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError("");
+                        setMessage("");
+                        setRecoveryError("");
+                        setRecoverySent(false);
+                        setShowRecoveryModal(true);
+                      }}
+                      className="text-xs font-semibold text-slate-400 underline-offset-4 transition hover:text-cyan-200 hover:underline"
+                    >
+                      ¿Olvidó su usuario o contraseña?
+                    </button>
+                  </div>
                 </form>
 
                 {/* Registro publico para jefes de servicio. */}
@@ -29757,6 +30208,199 @@ export default function Home() {
           </aside>
         </div>
       </section>
+
+      {/* Modal publico de RECUPERACION DE ACCESO (olvido usuario o contraseña). */}
+      {showRecoveryModal ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto p-4"
+        >
+          <div
+            className="modal-fade-in fixed inset-0 bg-slate-950/75 backdrop-blur-sm"
+            onClick={() => setShowRecoveryModal(false)}
+          />
+          <div className="modal-pop-in relative my-6 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
+            <div className="h-1 w-full bg-gradient-to-r from-cyan-400 to-blue-500" />
+            <div className="px-5 pb-6 pt-5 sm:px-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-cyan-300/80">
+                    Recuperar acceso
+                  </p>
+                  <h3 className="mt-1 text-xl font-bold text-white">¿No puede ingresar?</h3>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Complete sus datos. Un administrador verificará su identidad y le enviará su
+                    usuario y una contraseña temporal al correo que indique.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRecoveryModal(false)}
+                  aria-label="Cerrar"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {recoverySent ? (
+                <div className="mt-5 space-y-4">
+                  <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-4 text-sm text-emerald-100">
+                    <p className="font-semibold">Solicitud enviada.</p>
+                    <p className="mt-1 text-emerald-200/90">
+                      Cuando un administrador restablezca su acceso, recibirá en su correo su usuario y
+                      una contraseña temporal. Revise también la carpeta de correo no deseado (spam).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRecoveryModal(false)}
+                    className="w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+                  >
+                    Volver al inicio de sesión
+                  </button>
+                </div>
+              ) : (
+                <form className="mt-5 space-y-3.5" onSubmit={handleRecoverySubmit} noValidate>
+                  <fieldset>
+                    <legend className="text-xs font-medium text-slate-300">¿Qué olvidó?</legend>
+                    <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                      {(["contrasena", "usuario", "ambos"] as const).map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setRecoveryForm((f) => ({ ...f, problem: opt }))}
+                          className={`rounded-xl border px-2 py-2 text-xs font-semibold transition ${
+                            recoveryForm.problem === opt
+                              ? "border-cyan-400 bg-cyan-500/15 text-cyan-100"
+                              : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                          }`}
+                        >
+                          {opt === "contrasena" ? "Contraseña" : opt === "usuario" ? "Usuario" : "Ambos"}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-300">Nombre completo</span>
+                    <input
+                      value={recoveryForm.fullName}
+                      onChange={(e) => setRecoveryForm((f) => ({ ...f, fullName: e.target.value }))}
+                      maxLength={120}
+                      autoComplete="name"
+                      placeholder="Nombres y apellidos"
+                      className="mt-1.5 w-full rounded-2xl border bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 border-white/10"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-300">Número de DUI</span>
+                    <input
+                      value={recoveryForm.docNumber}
+                      onChange={(e) =>
+                        setRecoveryForm((f) => ({ ...f, docNumber: formatDuiInput(e.target.value) }))
+                      }
+                      inputMode="numeric"
+                      placeholder="00000000-0"
+                      className="mt-1.5 w-full rounded-2xl border bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 border-white/10 font-mono tracking-wider"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-300">Área o servicio en el que labora</span>
+                    <input
+                      value={recoveryForm.area}
+                      onChange={(e) => setRecoveryForm((f) => ({ ...f, area: e.target.value }))}
+                      maxLength={120}
+                      list="recovery-areas"
+                      placeholder="Ej.: ESDOMED, Farmacia, Laboratorio..."
+                      className="mt-1.5 w-full rounded-2xl border bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 border-white/10"
+                    />
+                    <datalist id="recovery-areas">
+                      {SERVICE_DEFINITIONS.map((svc) => (
+                        <option key={svc.id} value={svc.name} />
+                      ))}
+                    </datalist>
+                  </label>
+                  {(() => {
+                    const correo = recoveryForm.email.trim();
+                    const valido = isValidRecoveryEmail(correo);
+                    const sugerencia = recoveryEmailHint(correo);
+                    const mostrarError = recoveryEmailTouched && correo !== "" && !valido;
+                    return (
+                      <label className="block">
+                        <span className="text-xs font-medium text-slate-300">
+                          Correo institucional o personal
+                        </span>
+                        <div className="relative">
+                          <input
+                            type="email"
+                            value={recoveryForm.email}
+                            onChange={(e) =>
+                              setRecoveryForm((f) => ({ ...f, email: e.target.value.replace(/\s/g, "") }))
+                            }
+                            onBlur={() => setRecoveryEmailTouched(true)}
+                            maxLength={120}
+                            autoComplete="email"
+                            placeholder="nombre@salud.gob.sv"
+                            className={`mt-1.5 w-full rounded-2xl border bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 pr-10 ${
+                              mostrarError
+                                ? "border-rose-400/70"
+                                : valido
+                                  ? "border-emerald-400/60"
+                                  : "border-white/10"
+                            }`}
+                          />
+                          {correo !== "" ? (
+                            <span
+                              aria-hidden
+                              className={`absolute right-3 top-1/2 mt-[3px] -translate-y-1/2 text-sm font-bold ${
+                                valido ? "text-emerald-300" : "text-rose-300"
+                              }`}
+                            >
+                              {valido ? "✓" : "✕"}
+                            </span>
+                          ) : null}
+                        </div>
+                        {mostrarError ? (
+                          <span className="mt-1 block text-[11px] text-rose-300">
+                            Correo no válido: debe tener @ y una terminación como .com, .sv o .gob.sv.
+                          </span>
+                        ) : null}
+                        {sugerencia ? (
+                          <button
+                            type="button"
+                            onClick={() => setRecoveryForm((f) => ({ ...f, email: sugerencia }))}
+                            className="mt-1 block text-left text-[11px] text-amber-200 hover:underline"
+                          >
+                            ¿Quiso decir <strong>{sugerencia}</strong>? Toque para corregir.
+                          </button>
+                        ) : null}
+                      </label>
+                    );
+                  })()}
+
+                  {recoveryError ? (
+                    <p className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                      {recoveryError}
+                    </p>
+                  ) : null}
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingRecovery}
+                    className="w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-900/30 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSubmittingRecovery ? "Enviando..." : "Enviar solicitud"}
+                  </button>
+                  <p className="text-center text-[11px] text-slate-500">
+                    Sus datos solo los ven los administradores de PULSO para verificar su identidad.
+                  </p>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Modal de REGISTRO publico (jefes de servicio). */}
       {showSignupModal ? (
