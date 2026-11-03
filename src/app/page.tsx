@@ -975,6 +975,14 @@ function getAuthErrorMessage(error: unknown) {
       return "Por seguridad, vuelve a iniciar sesion antes de cambiar la contrasena.";
     case "auth/configuration-not-found":
       return "Firebase Auth no esta habilitado para este proyecto.";
+    // Antes estos tres caian en el mensaje generico y no se sabia por que no
+    // podia entrar la persona.
+    case "auth/user-disabled":
+      return "Tu cuenta esta desactivada. Contacta al administrador de PULSO.";
+    case "auth/too-many-requests":
+      return "Demasiados intentos fallidos. Por seguridad la cuenta quedo bloqueada unos minutos: espera 15 minutos y vuelve a intentar con la clave correcta.";
+    case "auth/network-request-failed":
+      return "Sin conexion con el servidor. Revisa el internet e intentalo de nuevo.";
     default:
       return "No pudimos completar la accion. Intentalo de nuevo.";
   }
