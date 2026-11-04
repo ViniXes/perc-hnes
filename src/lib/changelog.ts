@@ -30,7 +30,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: "1986.497",
     para: ["admin"],
     texto:
-      "Nuevo menu Recursos Humanos > Personal desvinculado: RRHH envia cada mes (3 primeros dias habiles) el personal que dejo de laborar o \"sin movimientos\", y ESDOMED marca cada acceso al SIS deshabilitado. Solo lo ven los administradores de ESDOMED y la cuenta de RRHH con ese acceso.",
+      "Nuevo menu RRHH (debajo de C.E. Clinico) > Personal desvinculado: RRHH envia cada mes (3 primeros dias habiles) el personal que dejo de laborar o \"sin movimientos\", y ESDOMED marca cada acceso al SIS deshabilitado. Solo lo ven los administradores de ESDOMED y la cuenta de RRHH con ese acceso.",
   },
   {
     version: "1986.496",

@@ -19541,7 +19541,7 @@ export default function Home() {
         ? [
             {
               id: "panel-rrhh",
-              label: "Recursos Humanos",
+              label: "RRHH",
               detail: "Reportes de RRHH para ESDOMED",
               badge: "RH",
               children: [
