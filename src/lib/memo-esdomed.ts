@@ -362,7 +362,31 @@ export async function buildMemoDocx(memo: MemoEsdomed): Promise<Blob> {
   const archivo = zip.file("word/document.xml");
   if (!archivo) throw new Error("La plantilla del memo está dañada.");
   const xml = await archivo.async("string");
-  zip.file("word/document.xml", xml.replace("<!--CUERPO-->", memoDocxCuerpoXml(memo)));
+  // Desde la hoja 2 el texto quedaba pegado al membrete. Se activa "primera página
+  // diferente": la hoja 1 usa el membrete tal cual y las demás uno con un renglón
+  // extra de aire al final (~1 cm más que la hoja 1) (el cuerpo de Word empieza debajo del encabezado).
+  const copiar = async (de: string, a: string) => {
+    const f = zip.file(de);
+    if (f) zip.file(a, await f.async("string"));
+  };
+  const hdr = zip.file("word/header2.xml");
+  if (hdr) {
+    const hdrXml = await hdr.async("string");
+    await copiar("word/header2.xml", "word/header3.xml");
+    await copiar("word/_rels/header2.xml.rels", "word/_rels/header3.xml.rels");
+    await copiar("word/footer2.xml", "word/footer3.xml");
+    await copiar("word/_rels/footer2.xml.rels", "word/_rels/footer3.xml.rels");
+    zip.file(
+      "word/header2.xml",
+      hdrXml.replace(
+        "</w:hdr>",
+        '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="1600" w:lineRule="exact"/></w:pPr></w:p></w:hdr>',
+      ),
+    );
+  }
+  let doc = xml.replace("<!--CUERPO-->", memoDocxCuerpoXml(memo));
+  if (hdr && !doc.includes("<w:titlePg")) doc = doc.replace(/(<w:cols[^>]*\/>)(?![\s\S]*<w:cols)/, "$1<w:titlePg/>");
+  zip.file("word/document.xml", doc);
   return zip.generateAsync({
     type: "blob",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -398,7 +422,9 @@ const PW = 215.9;
 const ML = 30;
 const MR = 23.4;
 const X_VALOR = ML + TAB_VALOR / 56.7; // misma sangría que en Word
-const Y_INICIO = 31; // debajo del encabezado
+const Y_INICIO = 31; // debajo del encabezado (hoja 1)
+// Desde la hoja 2 el cuerpo arranca directo bajo el membrete: se deja 1 cm más de aire.
+const Y_INICIO_SIGUIENTES = Y_INICIO + 10;
 const Y_LIMITE = 244; // encima del pie
 const PT = 0.3528; // 1 pt en mm
 
@@ -454,12 +480,13 @@ export async function buildMemoPdf(memo: MemoEsdomed, img: MemoImagenes): Promis
 export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes): Blob {
   const ancho = PW - ML - MR;
   let y = Y_INICIO;
+  let inicioHoja = Y_INICIO;
   dibujarMembrete(pdf, img);
 
   const nuevaHoja = () => {
     pdf.addPage();
     dibujarMembrete(pdf, img);
-    y = Y_INICIO;
+    y = inicioHoja = Y_INICIO_SIGUIENTES;
   };
   /** Asegura `alto` mm libres; si no caben, pasa a la hoja siguiente. */
   const espacio = (alto: number) => {
@@ -581,7 +608,7 @@ export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes)
   for (const par of parrafosDelCuerpo(memo.cuerpo)) {
     if (par.tipo === "vacio") {
       // Un renglón vacío al inicio de hoja no se dibuja (igual que en Word se ve).
-      if (y > Y_INICIO) y += L_TIMES;
+      if (y > inicioHoja) y += L_TIMES;
       if (y > Y_LIMITE) nuevaHoja();
     } else if (par.tipo === "vineta") {
       parrafo(par.texto, ML + 12.7, ancho - 12.7, true);
