@@ -63,6 +63,11 @@ rules_version = '2';
 //     documentos con cualquier contenido. Ahora el documento solo lo lee su
 //     dueño o un administrador, y al crearlo solo se aceptan sus 6 campos. El
 //     dueño puede volver a guardar su propio documento (antes le fallaba).
+// 16) Recursos Humanos > Personal desvinculado (personalDesvinculado/<periodo>):
+//     el reporte mensual de RRHH para deshabilitar accesos al SIS. Lo leen y
+//     escriben SOLO los administradores de ESDOMED (lista fija de correos) y la
+//     cuenta con el acceso 'panel-desvinculados'. Ningun otro admin, supervisor
+//     ni servicio. Borrar: solo los administradores de ESDOMED.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -324,6 +329,25 @@ service cloud.firestore {
     // "2026__0021". Solo los administradores los ven, crean, editan y borran.
     match /esdomedMemos/{docId} {
       allow read, write: if adminPoa();
+    }
+    // Recursos Humanos > Personal desvinculado ("<periodo>", p. ej. "2026-10").
+    function adminEsdomed() {
+      return isSignedIn()
+        && (request.auth.token.email == 'hcardoza.admin@perc-hnes.app'
+            || request.auth.token.email == 'amontes@perc-hnes.app'
+            || request.auth.token.email == 'dalvarez@perc-hnes.app'
+            || request.auth.token.email == 'jhernandez@perc-hnes.app'
+            || request.auth.token.email == 'vhernandez@perc-hnes.app');
+    }
+    function rrhhDesvinculados() {
+      return tienePerfil() && noEsMinsal()
+        && userProfile().get('menuGrants', []).hasAny(['panel-desvinculados']);
+    }
+    match /personalDesvinculado/{periodId} {
+      allow read: if adminEsdomed() || rrhhDesvinculados();
+      allow create, update: if adminEsdomed()
+        || (rrhhDesvinculados() && request.resource.data.periodId == periodId);
+      allow delete: if adminEsdomed();
     }
     // Planificacion > Mis documentos: PDF por categoria. "<id>" es la ficha
     // (tipo "meta") y "<id>__<n>" cada trozo del PDF. Solo administradores.

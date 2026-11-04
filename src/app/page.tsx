@@ -3,6 +3,7 @@
 import { PoaUnidadPicker, type PoaUnidadGrupo } from "@/components/poa-unidad-picker";
 import { MemosEsdomed } from "@/components/memos-esdomed";
 import { DocumentosPlanificacion } from "@/components/documentos-planificacion";
+import { PersonalDesvinculado } from "@/components/personal-desvinculado";
 import { poaDatosBloque, poaDatosGrafico, poaGraficoPastel3D } from "@/lib/poa-chart";
 import {
   POA_COMPROBANTE_ACCEPT,
@@ -400,6 +401,17 @@ const DEFAULT_TEMP_PASSWORD = process.env.NEXT_PUBLIC_DEFAULT_TEMP_PASSWORD || "
 const ADMIN_USERNAME = process.env.NEXT_PUBLIC_ADMIN_USERNAME || "Hcardoza";
 const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "Cardoza1986";
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "hcardoza.admin@perc-hnes.app";
+// Administradores de ESDOMED: los UNICOS admins que entran a Recursos Humanos >
+// Personal desvinculado (ademas de la cuenta de RRHH con el acceso otorgado).
+// Las reglas de Firestore (personalDesvinculado) repiten esta misma lista.
+const ESDOMED_ADMIN_EMAILS = [
+  ADMIN_EMAIL,
+  "hcardoza.admin@perc-hnes.app",
+  "amontes@perc-hnes.app",
+  "dalvarez@perc-hnes.app",
+  "jhernandez@perc-hnes.app",
+  "vhernandez@perc-hnes.app",
+].map((e) => e.toLowerCase());
 
 // Cuentas de supervisor fijas en codigo (mismo modelo que el admin). Su unica
 // potestad es habilitar/deshabilitar tableros de los modulos indicados. La cuenta
@@ -479,6 +491,9 @@ const GRANTABLE_MENUS: { id: string; label: string; group: "PERC" | "SEPS" | "Ho
   // "Monitoreo general" con SOLO dos tarjetas: Distribucion de Horas (todo el
   // hospital) y C.E. Clinico (las 13 listas). Solo ver: no abre ni llena nada.
   { id: "panel-monitor-cec", label: "Monitoreo general: Horas + C.E. Clínico", group: "General" },
+  // Recursos Humanos reporta cada mes el personal desvinculado para que ESDOMED
+  // deshabilite sus accesos al SIS (memo del 04/11/2026). Los admins ya lo ven.
+  { id: "panel-desvinculados", label: "Personal desvinculado (reporte de RRHH)", group: "General" },
 ];
 type CensoRow = { key: string; label: string };
 const CENSO_BASE_ROWS: CensoRow[] = [
@@ -5404,6 +5419,21 @@ export default function Home() {
   // su propio servicio (las reglas de Firestore usan la misma regla).
   const poaUnidadPropia = serviceProfile?.poaUnidad || poaUnidadDeServicio(serviceProfile?.serviceId) || "";
   const canViewPoa = isAdmin || (hasGrant("panel-poa") && !!poaUnidadPropia);
+  // Recursos Humanos > Personal desvinculado: SOLO los administradores de ESDOMED
+  // (marcan los accesos del SIS) y la cuenta de RRHH con el acceso otorgado. Ningun
+  // otro administrador, supervisor ni servicio lo ve.
+  const esAdminEsdomed = isAdmin && ESDOMED_ADMIN_EMAILS.includes((user?.email || "").toLowerCase());
+  const esRrhhDesvinculados = hasGrant("panel-desvinculados");
+  const puedeVerDesvinculados = !isMinsal && (esAdminEsdomed || esRrhhDesvinculados);
+  // Cuenta "solo accesos otorgados" cuyo UNICO acceso es este reporte (la cuenta de
+  // RRHH creada para el memo): esa pantalla es su inicio.
+  const soloDesvinculados =
+    !isAdmin &&
+    !isSupervisor &&
+    !esComiteCec &&
+    serviceProfile?.noCapture === true &&
+    (serviceProfile?.menuGrants ?? []).length === 1 &&
+    hasGrant("panel-desvinculados");
   const canEditPoa = canViewPoa;
   const canEditCenso =
     isAdmin || normalizeKey(serviceProfile?.username || "") === CENSO_EDITOR_USERNAME;
@@ -14500,6 +14530,14 @@ export default function Home() {
     setMobileView("panel-hospitales");
   }, [isMinsal]);
 
+  // La cuenta de RRHH que SOLO tiene el reporte de personal desvinculado entra
+  // directo a esa pantalla.
+  useEffect(() => {
+    if (!soloDesvinculados) return;
+    setActiveSidebarSection("panel-desvinculados");
+    setMobileView("panel-desvinculados");
+  }, [soloDesvinculados]);
+
   // Lo mismo para quien solo pertenece al Comite de Expediente Clinico.
   useEffect(() => {
     if (!esSoloComite) return;
@@ -19497,6 +19535,26 @@ export default function Home() {
             },
           ]
         : []),
+      // RECURSOS HUMANOS > PERSONAL DESVINCULADO: RRHH lo envia cada mes; los
+      // administradores de ESDOMED lo revisan y marcan los accesos del SIS.
+      ...(puedeVerDesvinculados
+        ? [
+            {
+              id: "panel-rrhh",
+              label: "Recursos Humanos",
+              detail: "Reportes de RRHH para ESDOMED",
+              badge: "RH",
+              children: [
+                {
+                  id: "panel-desvinculados",
+                  label: "Personal desvinculado",
+                  detail: "Reporte mensual · accesos SIS",
+                  badge: "PD",
+                },
+              ],
+            },
+          ]
+        : []),
       {
         id: "panel-docs",
         label: "DOCS-POA/MOF",
@@ -20632,7 +20690,9 @@ export default function Home() {
                                     ? "Memorándums · Planificación"
                                     : mobileView === "panel-memos-planificacion-docs"
                                       ? "Planificación · Mis documentos"
-                                      : ""}
+                                      : mobileView === "panel-desvinculados"
+                                        ? "Personal desvinculado"
+                                        : ""}
               </span>
             </div>
 
@@ -24727,6 +24787,19 @@ export default function Home() {
                 ) : null,
               )
             : null}
+          {puedeVerDesvinculados &&
+          (activeSidebarSection === "panel-desvinculados" || mobileView === "panel-desvinculados") ? (
+            <div data-view={soloDesvinculados ? "panel-desvinculados home" : "panel-desvinculados"}>
+              <PersonalDesvinculado
+                isLight={isLightPanelTheme}
+                usuario={serviceProfile?.email || ""}
+                nombreUsuario={serviceProfile?.name || ""}
+                esEsdomed={esAdminEsdomed}
+                puedeEnviar={esAdminEsdomed || esRrhhDesvinculados}
+                blockedDates={currentBlockedDates}
+              />
+            </div>
+          ) : null}
           {isAdmin &&
           (activeSidebarSection === "panel-memos-planificacion-docs" ||
             mobileView === "panel-memos-planificacion-docs") ? (
