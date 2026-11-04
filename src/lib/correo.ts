@@ -10,6 +10,9 @@
  *   MAIL_FROM       -> remitente YA verificado en el proveedor (obligatorio).
  *   MAIL_FROM_NAME  -> nombre visible del remitente.
  *
+ * Configurado el 2026-11-04: Brevo (plan gratis, 300 correos/dia) con remitente
+ * pulsoperchnes@gmail.com. La API key de Brevo vence el 4 nov 2027 (renovarla).
+ *
  * Si no hay proveedor configurado NO se rompe nada: devuelve { enviado:false }
  * con el motivo, y quien llama decide. Ninguna accion del hospital debe fallar
  * porque el correo no este configurado.
