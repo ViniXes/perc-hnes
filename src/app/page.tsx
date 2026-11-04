@@ -19525,36 +19525,48 @@ export default function Home() {
         : []),
       // COMITE DE EXPEDIENTE CLINICO: va debajo de Hospitales. Lo llena el comite;
       // cada jefe de division ve los servicios que le tocan.
-      ...(puedeVerCec && !isMinsal
-        ? [
-            {
-              id: "panel-cec",
-              label: "C.E. Clínico",
-              detail: "Comité de Expediente Clínico",
-              badge: "CE",
-            },
-          ]
-        : []),
-      // RECURSOS HUMANOS > PERSONAL DESVINCULADO: RRHH lo envia cada mes; los
-      // administradores de ESDOMED lo revisan y marcan los accesos del SIS.
+      // Quien ademas ve PERSONAL DESVINCULADO (solo admins de ESDOMED y la cuenta
+      // de RRHH) lo encuentra como submenu de C.E. Clinico: "Listas del comité"
+      // (las 13 listas, si las ve) y debajo "Personal desvinculado".
       ...(puedeVerDesvinculados
         ? [
             {
-              id: "panel-rrhh",
-              label: "RRHH",
-              detail: "Reportes de RRHH para ESDOMED",
-              badge: "RH",
+              id: "panel-cec-grupo",
+              label: "C.E. Clínico",
+              detail: "Comité de Expediente Clínico",
+              badge: "CE",
               children: [
+                ...(puedeVerCec
+                  ? [
+                      {
+                        id: "panel-cec",
+                        label: "Listas del comité",
+                        detail: "Comité de Expediente Clínico",
+                        badge: "CE",
+                        icon: "monitor",
+                      },
+                    ]
+                  : []),
                 {
                   id: "panel-desvinculados",
                   label: "Personal desvinculado",
-                  detail: "Reporte mensual · accesos SIS",
+                  detail: "Reporte mensual de RRHH · accesos SIS",
                   badge: "PD",
+                  icon: "consolidado",
                 },
               ],
             },
           ]
-        : []),
+        : puedeVerCec && !isMinsal
+          ? [
+              {
+                id: "panel-cec",
+                label: "C.E. Clínico",
+                detail: "Comité de Expediente Clínico",
+                badge: "CE",
+              },
+            ]
+          : []),
       {
         id: "panel-docs",
         label: "DOCS-POA/MOF",

@@ -14,7 +14,7 @@
  * acceso "panel-desvinculados" (Recursos Humanos). Solo ESDOMED marca el SIS.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firestore";
 import {
@@ -23,7 +23,8 @@ import {
   getFirstBusinessDays,
   getShortPeriodLabel,
 } from "@/lib/periodos";
-import { BTN_GUARDAR } from "@/components/ui-basicos";
+import { BTN_EXCEL, BTN_GUARDAR } from "@/components/ui-basicos";
+import { descargarExcelDesvinculados, leerExcelDesvinculados } from "@/lib/desvinculados-excel";
 
 const COLECCION = "personalDesvinculado";
 // Plazo del memo: RRHH envía en los 3 primeros días hábiles; ESDOMED deshabilita
@@ -152,6 +153,7 @@ export function PersonalDesvinculado({ isLight, usuario, nombreUsuario, esEsdome
   const [personas, setPersonas] = useState<PersonaDesvinculada[]>([nuevaPersona()]);
   const [responsable, setResponsable] = useState(nombreUsuario);
   const [editando, setEditando] = useState(false);
+  const inputExcel = useRef<HTMLInputElement | null>(null);
 
   // Pone en pantalla el borrador del mes elegido (lo guardado o uno vacío).
   const aplicarBorrador = useCallback(
@@ -317,6 +319,78 @@ export function PersonalDesvinculado({ isLight, usuario, nombreUsuario, esEsdome
     }
   };
 
+  // --- Excel ---------------------------------------------------------------
+  const descargarExcel = async () => {
+    setError("");
+    setOcupado("excel");
+    try {
+      const enPantalla = puedeEnviar && editando;
+      const fuente = enPantalla
+        ? personas.filter((p) => p.nombre.trim() || p.carne.trim() || p.cargo.trim() || p.area.trim() || p.fechaFin)
+        : (reporte?.personas ?? []);
+      const sinMov = enPantalla ? sinMovimientos : !!reporte?.sinMovimientos;
+      const conSis = !enPantalla && reporte?.estado === "enviado" && !reporte.sinMovimientos;
+      await descargarExcelDesvinculados({
+        periodoTexto: getShortPeriodLabel(periodId).replace(" - ", " "),
+        archivo: `Personal desvinculado ${periodId}.xlsx`,
+        filas: sinMov
+          ? []
+          : fuente.map((p) => ({ ...p, sis: p.sisDeshabilitado ? "Deshabilitado" : "Pendiente" })),
+        conSis,
+        sinMovimientos: sinMov,
+        responsable: (enPantalla ? responsable : reporte?.responsable) || "",
+      });
+    } catch {
+      setError("No se pudo generar el Excel. Intente de nuevo.");
+    } finally {
+      setOcupado("");
+    }
+  };
+
+  const subirExcel = async (archivo: File) => {
+    setError("");
+    setAviso("");
+    setOcupado("excel");
+    try {
+      const { filas, fechasMalas } = await leerExcelDesvinculados(archivo);
+      if (filas.length === 0) {
+        setError("El Excel no trae personas. Use la plantilla («Descargar Excel») y llene desde la fila 7.");
+        return;
+      }
+      // Conserva lo que ESDOMED ya marcó en el SIS si la persona ya estaba (mismo carné).
+      const previas = new Map((reporte?.personas ?? []).map((p) => [p.carne.trim().toLowerCase(), p]));
+      setPersonas(
+        filas.map((f) => {
+          const previa = f.carne ? previas.get(f.carne.trim().toLowerCase()) : undefined;
+          return {
+            ...(previa ?? nuevaPersona()),
+            nombre: f.nombre,
+            carne: f.carne,
+            cargo: f.cargo,
+            area: f.area,
+            fechaFin: f.fechaFin,
+          };
+        }),
+      );
+      setSinMovimientos(false);
+      setEditando(true);
+      setAviso(
+        `Se cargaron ${filas.length} persona${filas.length === 1 ? "" : "s"} del Excel. Revise los datos y presione «${
+          reporte?.estado === "enviado" ? "Guardar corrección" : "Enviar a ESDOMED"
+        }».${fechasMalas ? ` ${fechasMalas} fecha${fechasMalas === 1 ? "" : "s"} no se ${fechasMalas === 1 ? "pudo" : "pudieron"} leer: escríbala${fechasMalas === 1 ? "" : "s"} en pantalla.` : ""}`,
+      );
+    } catch (e) {
+      setError(
+        (e as Error)?.message === "encabezados"
+          ? "No se encontró la fila de encabezados (NOMBRE COMPLETO, CARNÉ / ID, CARGO, ÁREA, FECHA). Use la plantilla de PULSO."
+          : "No se pudo leer el archivo. Debe ser un Excel (.xlsx).",
+      );
+    } finally {
+      setOcupado("");
+      if (inputExcel.current) inputExcel.current.value = "";
+    }
+  };
+
   const setPersona = (id: string, campo: keyof PersonaDesvinculada, valor: string) =>
     setPersonas((lista) => lista.map((p) => (p.id === id ? { ...p, [campo]: valor } : p)));
 
@@ -401,6 +475,43 @@ export function PersonalDesvinculado({ isLight, usuario, nombreUsuario, esEsdome
       {aviso ? (
         <p className="mt-4 rounded-xl border border-teal-400/40 bg-teal-500/10 px-3 py-2 text-sm text-teal-600">{aviso}</p>
       ) : null}
+
+      {/* ---- Excel: descargar la plantilla o el reporte, y subirlo lleno ---- */}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={!!ocupado}
+          onClick={() => void descargarExcel()}
+          className={`${BTN_EXCEL} rounded-xl px-3 py-2 text-sm font-semibold transition disabled:opacity-50`}
+        >
+          {ocupado === "excel" ? "Procesando…" : "Descargar Excel"}
+        </button>
+        {puedeEnviar ? (
+          <>
+            <button
+              type="button"
+              disabled={!!ocupado}
+              onClick={() => inputExcel.current?.click()}
+              className={`${btnSec} disabled:opacity-50`}
+            >
+              Subir Excel
+            </button>
+            <input
+              ref={inputExcel}
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void subirExcel(f);
+              }}
+            />
+            <span className={`text-[11px] ${sub}`}>
+              Descargue la plantilla, llénela y súbala: los datos se cargan aquí para revisarlos antes de enviar.
+            </span>
+          </>
+        ) : null}
+      </div>
 
       {/* ---- Estado y plazos ---- */}
       <div className={`mt-5 grid gap-3 rounded-2xl border p-4 sm:grid-cols-3 ${caja}`}>
