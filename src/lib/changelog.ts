@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.496",
+    para: ["todos"],
+    texto:
+      "Al entrar con la clave temporal (123456), PULSO pide primero crear una contraseña personal y no deja continuar sin hacerlo. Despues aparece la politica (antisoborno) con una barra de desplazamiento visible y botones para bajar.",
+  },
+  {
     version: "1986.489",
     para: ["todos"],
     texto:

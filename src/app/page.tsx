@@ -4124,6 +4124,10 @@ export default function Home() {
   const [docGateSaving, setDocGateSaving] = useState(false);
   const [docGateError, setDocGateError] = useState("");
   const [policyScrolledEnd, setPolicyScrolledEnd] = useState(false);
+  // Despues de cambiar la clave temporal, se muestra la politica (antisoborno).
+  const [policyGateForce, setPolicyGateForce] = useState(false);
+  const policyScrollRef = useRef<HTMLDivElement | null>(null);
+  const [forcedPwdError, setForcedPwdError] = useState("");
   const [showPasswordText, setShowPasswordText] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [usersModalTab, setUsersModalTab] = useState<"usuarios" | "servicios">("usuarios");
@@ -13425,6 +13429,12 @@ export default function Home() {
     setIsChangingPassword(true);
 
     try {
+      if (newPassword === DEFAULT_TEMP_PASSWORD) {
+        setForcedPwdError("La nueva contraseña no puede ser la temporal 123456.");
+        setError("La nueva contraseña no puede ser la temporal 123456.");
+        return;
+      }
+      const eraObligatorio = serviceProfile.mustChangePassword;
       await updatePassword(auth.currentUser, newPassword);
       await setDoc(
         doc(db, "serviceUsers", serviceProfile.uid),
@@ -13443,9 +13453,15 @@ export default function Home() {
       setNewPassword("");
       setConfirmPassword("");
       setShowPasswordModal(false);
+      setForcedPwdError("");
+      if (eraObligatorio) {
+        setPolicyScrolledEnd(false);
+        setPolicyGateForce(true);
+      }
       setMessage("Contrasena actualizada correctamente.");
     } catch (passwordError) {
       setError(getAuthErrorMessage(passwordError));
+      setForcedPwdError(getAuthErrorMessage(passwordError));
     } finally {
       setIsChangingPassword(false);
     }
@@ -25029,7 +25045,8 @@ export default function Home() {
 
           {serviceProfile && !isAdmin && !serviceProfile.docNumber
             && !findSupervisorAccountByLoginEmail(user?.email)
-            && !(serviceProfile.mustChangePassword && !policyGateAcceptedSession) ? (
+            && !serviceProfile.mustChangePassword
+            && !(policyGateForce && !policyGateAcceptedSession) ? (
             <div
               role="dialog"
               aria-modal="true"
@@ -25085,7 +25102,86 @@ export default function Home() {
             </div>
           ) : null}
 
-          {serviceProfile && serviceProfile.mustChangePassword && !isAdmin && !policyGateAcceptedSession ? (
+          {/* CAMBIO DE CLAVE OBLIGATORIO: quien entra con la clave temporal no puede
+              hacer nada hasta poner una contraseña personal. No se puede cerrar. */}
+          {serviceProfile && serviceProfile.mustChangePassword && !isAdmin && !ghostUid ? (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="forced-password-title"
+              className="fixed inset-0 z-[150] flex items-start justify-center overflow-y-auto p-4"
+            >
+              <div className="modal-fade-in fixed inset-0 bg-slate-950/90 backdrop-blur-sm" />
+              <div className="modal-pop-in relative my-10 w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60">
+                <div className="h-1 w-full bg-gradient-to-r from-amber-400 to-rose-500" />
+                <form className="space-y-4 px-5 pb-6 pt-5 sm:px-6" onSubmit={handleChangePassword}>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-300/90">Paso obligatorio</p>
+                    <h3 id="forced-password-title" className="mt-1 text-lg font-bold text-white">
+                      Cree su contraseña personal
+                    </h3>
+                    <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
+                      Ingresó con una contraseña temporal. Para continuar en PULSO debe cambiarla por una
+                      que solo usted conozca (mínimo 6 caracteres, distinta de 123456).
+                    </p>
+                  </div>
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-300">Nueva contraseña</span>
+                    <input
+                      value={newPassword}
+                      onChange={(event) => { setNewPassword(event.target.value); setForcedPwdError(""); }}
+                      className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                      minLength={6}
+                      autoComplete="new-password"
+                      placeholder="Mínimo 6 caracteres"
+                      type={showPasswordText ? "text" : "password"}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-300">Confirmar contraseña</span>
+                    <input
+                      value={confirmPassword}
+                      onChange={(event) => { setConfirmPassword(event.target.value); setForcedPwdError(""); }}
+                      className="mt-1.5 w-full rounded-2xl border border-white/10 bg-[#1b2537] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                      minLength={6}
+                      autoComplete="new-password"
+                      placeholder="Repita la nueva contraseña"
+                      type={showPasswordText ? "text" : "password"}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={showPasswordText}
+                      onChange={(event) => setShowPasswordText(event.target.checked)}
+                    />
+                    Mostrar contraseña
+                  </label>
+                  {forcedPwdError ? (
+                    <p className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                      {forcedPwdError}
+                    </p>
+                  ) : null}
+                  <button
+                    type="submit"
+                    disabled={isChangingPassword}
+                    className="w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isChangingPassword ? "Guardando…" : "Guardar contraseña y continuar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSignOut()}
+                    className="w-full text-center text-xs font-semibold text-slate-500 transition hover:text-slate-300"
+                  >
+                    Salir de PULSO
+                  </button>
+                </form>
+              </div>
+            </div>
+          ) : null}
+
+          {serviceProfile && !serviceProfile.mustChangePassword && policyGateForce && !isAdmin && !policyGateAcceptedSession ? (
             <div
               role="dialog"
               aria-modal="true"
@@ -25106,10 +25202,35 @@ export default function Home() {
                         setPolicyScrolledEnd(true);
                       }
                     }}
-                    className="mt-4 max-h-[52vh] space-y-3 overflow-y-auto pr-1 text-xs leading-relaxed text-slate-300"
+                    ref={policyScrollRef}
+                    className="policy-scroll mt-4 max-h-[52vh] space-y-3 overflow-y-scroll pr-3 text-xs leading-relaxed text-slate-300"
                   >
                     <PrivacyPolicyBody />
                   </div>
+                  {!policyScrolledEnd ? (
+                    <div className="mt-2 flex justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const el = policyScrollRef.current;
+                          if (el) el.scrollBy({ top: el.clientHeight * 0.85, behavior: "smooth" });
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/20"
+                      >
+                        ↓ Bajar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const el = policyScrollRef.current;
+                          if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10"
+                      >
+                        ⤓ Ir al final
+                      </button>
+                    </div>
+                  ) : null}
                   {!policyScrolledEnd ? (
                     <p className="mt-3 text-center text-[11px] text-amber-300/90">Desliza hasta el final para habilitar el botón.</p>
                   ) : null}

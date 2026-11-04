@@ -59,6 +59,32 @@ body {
   background: rgba(255, 255, 255, 0.35);
 }
 
+/* Barra de desplazamiento grande y visible para leer la politica (antisoborno)
+   con el touchpad o el raton de una laptop. */
+.policy-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: rgba(34, 211, 238, 0.7) rgba(255, 255, 255, 0.08);
+}
+.policy-scroll::-webkit-scrollbar {
+  display: block;
+  width: 14px;
+}
+.policy-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+}
+.policy-scroll::-webkit-scrollbar-thumb {
+  background: rgba(34, 211, 238, 0.7);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  min-height: 40px;
+}
+.policy-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(34, 211, 238, 0.95);
+  background-clip: padding-box;
+}
+
 /* ===========================================================================
    Navegacion movil "una pantalla a la vez".
    En pantallas < xl (1280px), dentro del contenedor [data-mview], se oculta
