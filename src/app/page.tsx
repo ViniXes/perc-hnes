@@ -90,6 +90,7 @@ import {
 import { downloadSepsTemplate } from "@/lib/seps-download";
 import { descargarCecExcel, mostrarCecReporte, type CecEntrada } from "@/lib/cec-export";
 import { mostrarActa, type ActaDatos } from "@/lib/acta-cierre";
+import { downloadDistribuidaXlsx, downloadServicioXlsx } from "@/lib/consolidados-excel";
 import { importSepsWorkbookByLabels } from "@/lib/seps-import";
 import {
   applySepsLayout,
@@ -1806,85 +1807,20 @@ function computeDistribuidaMatrix(overview: AdminOverviewEntry[]) {
   });
 }
 
-function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: string) {
-  // El consolidado debe respetar la plantilla oficial TAL CUAL: una sola columna
-  // de etiqueta (encabezado vacio) seguida de los centros de costo, y las filas en
-  // el orden de CONSOLIDADO_ROW_ORDER (donde Nutricion va SEPARADA: las filas 652-*
-  // quedan despues de Almacen, no junto a las 750/760 como en el tablero).
-  // Sumamos por (fila, centro de costo) acumulando TODOS los servicios. La mayoria
-  // de filas pertenece a un solo servicio (la suma es ese mismo valor), pero las
-  // filas de Hemodialisis (268_*) las capturan DOS servicios distintos (UCI y
-  // Medicina interna) y en la plantilla oficial van en un unico bloque sumado:
-  // UCI 55 + Medicina interna 50 => 105; 0 + 88 => 88; 10 + 10 => 20.
-  const sumsByRow = new Map<string, Map<string, number>>();
-  for (const entry of overview) {
-    for (const row of entry.service.rows) {
-      const rowValues = entry.values[row];
-
-      if (!rowValues) {
-        continue;
-      }
-
-      let headerSums = sumsByRow.get(row);
-
-      if (!headerSums) {
-        headerSums = new Map<string, number>();
-        sumsByRow.set(row, headerSums);
-      }
-
-      for (const header of TABULATOR_HEADERS) {
-        const parsed = Number.parseFloat(rowValues[header] ?? "");
-
-        if (!Number.isFinite(parsed) || parsed === 0) {
-          continue;
-        }
-
-        headerSums.set(header, (headerSums.get(header) ?? 0) + parsed);
-      }
-    }
-  }
-
-  const headerCells = ["", ...TABULATOR_HEADERS]
-    .map(
-      (header) =>
-        `<th style="background:#dbe7ff;border:1px solid #cbd5e1;padding:8px;font-weight:700;">${escapeHtml(header)}</th>`,
-    )
-    .join("");
-  const bodyRows = CONSOLIDADO_ROW_ORDER.map((row) => {
-    const headerSums = sumsByRow.get(row);
-    // Ningun servicio se apoya a si mismo: la diagonal (codigo de la fila ==
-    // codigo del centro) SIEMPRE se descarga en 0.
-    const codigoFila = row.match(/^\s*(\d+)/)?.[1] ?? "";
-    const cells = TABULATOR_HEADERS.map((header) => {
-      const esPropio =
-        !!codigoFila && header.match(/^\s*(\d+)/)?.[1] === codigoFila;
-      const sum = esPropio ? 0 : headerSums?.get(header);
-      const text = sum === undefined ? "0" : formatConsolidatedNumber(sum);
-
-      return `<td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${escapeHtml(
-        text,
-      )}</td>`;
-    }).join("");
-
-    return `<tr><td style="border:1px solid #cbd5e1;padding:6px;font-weight:700;">${escapeHtml(row)}</td>${cells}</tr>`;
-  }).join("");
-
-  const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Produccion Distribuida ${periodId}</title></head><body><table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
-  const blob = new Blob(["\ufeff", documentHtml], {
-    type: "application/vnd.ms-excel;charset=utf-8;",
-  });
-  const url = window.URL.createObjectURL(blob);
-  const link = window.document.createElement("a");
-
-  link.href = url;
-  link.download = `produccion-distribuida-${periodId}.xls`;
-  window.document.body.appendChild(link);
-  link.click();
-  window.document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
+// Descarga el consolidado "Produccion Distribuida" como .xlsx real. Usa el MISMO
+// calculo que la vista previa (computeDistribuidaMatrix): suma todos los servicios
+// por (fila, centro de costo), en el orden de CONSOLIDADO_ROW_ORDER y con la
+// diagonal (el servicio apoyandose a si mismo) siempre en 0.
+async function downloadAdminExcelReport(overview: AdminOverviewEntry[], periodId: string) {
+  const matrix = computeDistribuidaMatrix(overview);
+  await downloadDistribuidaXlsx(
+    [...TABULATOR_HEADERS],
+    matrix.map((m) => ({ row: m.row, cells: m.cells })),
+    periodId,
+  );
 }
 
-// Descarga el consolidado "Produccion de Servicio" (plantilla COMPLETA) en un .xls
+// Descarga el consolidado "Produccion de Servicio" (plantilla COMPLETA) en un .xlsx
 // aparte: Centro de Produccion | Unidades de Produccion | Cantidad. Las 3 areas con
 // captura traen su numero del mes; el resto queda en blanco hasta cargar sus datos.
 // Calcula el consolidado COMPLETO "Produccion de Servicio": por cada centro, cada
@@ -2141,56 +2077,17 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
   window.document.body.removeChild(link);
   window.URL.revokeObjectURL(url);
 }
-function downloadServiceProductionReport(
+async function downloadServiceProductionReport(
   overview: AdminOverviewEntry[],
   periodId: string,
   censoInfo: Record<string, CensoRowInfo> = {},
   camas: Record<string, number> = {},
   servicesTotals: Record<string, number> = {},
 ) {
-  const headerCells = ["Centro de Producción", "Unidades de Producción", "Cantidad"]
-    .map(
-      (header) =>
-        `<th style="background:#dbe7ff;border:1px solid #cbd5e1;padding:8px;font-weight:700;">${escapeHtml(header)}</th>`,
-    )
-    .join("");
-
-  const bodyRows = computeConsolidado(overview, censoInfo, camas, servicesTotals)
-    .map((svc) =>
-      svc.units
-        .map((unit, index) => {
-          const centroCell =
-            index === 0
-              ? `<td rowspan="${svc.units.length}" style="border:1px solid #cbd5e1;padding:6px;font-weight:700;vertical-align:middle;">${escapeHtml(svc.centro)}</td>`
-              : "";
-          // Celdas del Censo: verde = mes completo, amarillo = aun incompleto.
-          const qtyStyle =
-            unit.source === "camas"
-              ? "background:#ffff00;color:#111827;font-weight:700;"
-              : unit.source === "censo" || unit.source === "services"
-                ? unit.complete
-                  ? "background:#dcfce7;color:#166534;font-weight:700;"
-                  : "background:#fef9c3;color:#854d0e;font-weight:700;"
-                : "";
-          return `<tr>${centroCell}<td style="border:1px solid #cbd5e1;padding:6px;">${escapeHtml(unit.label)}</td><td style="border:1px solid #cbd5e1;padding:6px;text-align:center;${qtyStyle}">${escapeHtml(unit.qty)}</td></tr>`;
-        })
-        .join(""),
-    )
-    .join("");
-
-  const documentHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><title>Produccion de Servicio ${periodId}</title></head><body><table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
-  const blob = new Blob([documentHtml], {
-    type: "application/vnd.ms-excel;charset=utf-8;",
-  });
-  const url = window.URL.createObjectURL(blob);
-  const link = window.document.createElement("a");
-
-  link.href = url;
-  link.download = `produccion-de-servicio-${periodId}.xls`;
-  window.document.body.appendChild(link);
-  link.click();
-  window.document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
+  await downloadServicioXlsx(
+    computeConsolidado(overview, censoInfo, camas, servicesTotals),
+    periodId,
+  );
 }
 
 function getServiceUsername(serviceId: string | null | undefined) {
@@ -7598,7 +7495,7 @@ export default function Home() {
 
     try {
       const overview = await fetchAdminOverviewForPeriod(destino);
-      downloadAdminExcelReport(overview, destino);
+      await downloadAdminExcelReport(overview, destino);
       setMessage(`Excel generado correctamente para el periodo ${getPeriodLabel(destino)}.`);
     } catch (exportError) {
       if (await handleFirestoreError(exportError)) {
@@ -8768,7 +8665,7 @@ export default function Home() {
         loadCamasFijas(),
         fetchServicesTotals(period),
       ]);
-      downloadServiceProductionReport(overview, period, censoInfo, camas, servicesTotals);
+      await downloadServiceProductionReport(overview, period, censoInfo, camas, servicesTotals);
       setMessage(`Producción de Servicio generada para ${getPeriodLabel(period)}.`);
     } catch (exportError) {
       if (await handleFirestoreError(exportError)) {
@@ -8798,7 +8695,7 @@ export default function Home() {
         loadCamasFijas(),
         fetchServicesTotals(consolidadoPeriod),
       ]);
-      downloadServiceProductionReport(
+      await downloadServiceProductionReport(
         overview,
         consolidadoPeriod,
         censoInfo,
