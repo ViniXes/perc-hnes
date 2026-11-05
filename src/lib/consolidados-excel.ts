@@ -108,7 +108,7 @@ export type ServicioRow = { centro: string; units: ServicioUnit[] };
  */
 export async function downloadServicioXlsx(rows: ServicioRow[], periodId: string) {
   const wb = await newWorkbook();
-  const ws = wb.addWorksheet("Sheet1");
+  const ws = wb.addWorksheet("Produccion por Servicio");
   ws.addRow(["Centro de Producción", "Unidades de Producción", "Cantidad"]);
   for (const svc of rows) {
     for (const unit of svc.units) {
@@ -120,5 +120,5 @@ export async function downloadServicioXlsx(rows: ServicioRow[], periodId: string
   ws.getColumn(2).width = 28;
   ws.getColumn(3).width = 10;
 
-  await saveWorkbook(wb, `produccion-de-servicio-${periodId}.xlsx`);
+  await saveWorkbook(wb, `produccion-por-servicio-${periodId}.xlsx`);
 }
