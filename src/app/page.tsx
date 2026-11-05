@@ -3940,7 +3940,7 @@ function resolveLoginEmail(loginIdentifier: string) {
 // pocos segundos de dejar de escribir, con las mismas validaciones y permisos
 // del boton. Sin red, Firestore lo deja escrito en el dispositivo (cache
 // persistente) y lo envia al volver la conexion, aunque se cierre PULSO.
-type ModAuto = "perc" | "seps" | "horas";
+type ModAuto = "perc" | "seps" | "horas" | "cec";
 type EstadoAuto = {
   clave: string;
   estado: "pendiente" | "guardando" | "guardado" | "local" | "bloqueado" | "error";
@@ -3948,7 +3948,7 @@ type EstadoAuto = {
   hora?: string;
 };
 const AUTOGUARDADO_MS = 3000;
-const MODS_AUTO: ModAuto[] = ["perc", "seps", "horas"];
+const MODS_AUTO: ModAuto[] = ["perc", "seps", "horas", "cec"];
 
 export default function Home() {
   const [adminCreateForm, setAdminCreateForm] = useState<AdminCreateForm>({
@@ -4438,8 +4438,8 @@ export default function Home() {
   const autoPendienteRef = useRef<Partial<Record<ModAuto, string>>>({});
   const autoEnCursoRef = useRef(0);
   const autoGuardarRef = useRef<Record<ModAuto, () => Promise<void>> | null>(null);
-  const autoClavesRef = useRef<Record<ModAuto, string>>({ perc: "", seps: "", horas: "" });
-  const autoClavesPreviasRef = useRef<Record<ModAuto, string>>({ perc: "", seps: "", horas: "" });
+  const autoClavesRef = useRef<Record<ModAuto, string>>({ perc: "", seps: "", horas: "", cec: "" });
+  const autoClavesPreviasRef = useRef<Record<ModAuto, string>>({ perc: "", seps: "", horas: "", cec: "" });
   // BITACORA: registro de quien hizo que (desbloqueos, cierres, permisos, claves).
   type BitacoraFila = {
     id: string;
@@ -6017,6 +6017,8 @@ export default function Home() {
     perc: currentService ? `${percViewPeriod ?? periodId}__${currentService.id}` : "",
     seps: sepsTemplate ? `${sepsViewPeriod ?? sepsPeriodId}__${sepsTemplate.serviceId}` : "",
     horas: horasTemplate ? `${horasViewPeriod ?? periodId}__${horasTemplate.serviceId}` : "",
+    // Listas del Comite: solo el mes en curso (el historial no se edita).
+    cec: cecServicio && cecDoc && !cecViewPeriod ? `${periodId}__${cecServicio}` : "",
   };
 
   function horaCorta() {
@@ -6120,7 +6122,7 @@ export default function Home() {
   // Cambio de tablero (otro servicio u otro mes) con cambios sin guardar: se
   // guardan con los datos del tablero anterior. Este efecto va ANTES del que
   // actualiza autoGuardarRef, asi que todavia ve las funciones del render previo.
-  const clavesAutoTexto = `${autoClaves.perc}|${autoClaves.seps}|${autoClaves.horas}`;
+  const clavesAutoTexto = `${autoClaves.perc}|${autoClaves.seps}|${autoClaves.horas}|${autoClaves.cec}`;
   useEffect(() => {
     const previas = autoClavesPreviasRef.current;
     for (const mod of MODS_AUTO) {
@@ -6140,6 +6142,7 @@ export default function Home() {
       perc: () => handleSave(false, true),
       seps: () => handleSaveSeps(true),
       horas: () => handleSaveHoras(true),
+      cec: () => handleSaveCec(true),
     };
   });
 
@@ -8355,6 +8358,7 @@ export default function Home() {
   }
 
   function setCecValor(bloqueId: string, filaKey: string, col: number, valor: string) {
+    marcarCambio("cec");
     setCecDoc((previo) => {
       if (!previo) return previo;
       const filas = { ...previo.valores[bloqueId] };
@@ -8366,6 +8370,7 @@ export default function Home() {
   }
 
   function setCecExpediente(bloqueId: string, col: number, valor: string) {
+    marcarCambio("cec");
     setCecDoc((previo) => {
       if (!previo) return previo;
       const lista = [...(previo.expedientes[bloqueId] ?? [])];
@@ -8375,6 +8380,7 @@ export default function Home() {
   }
 
   function setCecFecha(bloqueId: string, col: number, valor: string) {
+    marcarCambio("cec");
     setCecDoc((previo) => {
       if (!previo) return previo;
       const lista = [...(previo.fechas[bloqueId] ?? [])];
@@ -8385,6 +8391,7 @@ export default function Home() {
 
   /** Unifica (o separa) la columna Responsable de un bloque, como combinar celdas. */
   function toggleCecUnificado(bloque: CecBloque) {
+    marcarCambio("cec");
     setCecDoc((previo) => {
       if (!previo) return previo;
       const activo = !previo.unificados[bloque.id];
@@ -8404,6 +8411,7 @@ export default function Home() {
 
   /** Escribe el responsable unificado en todas las filas del bloque. */
   function setCecResponsableUnico(bloque: CecBloque, valor: string) {
+    marcarCambio("cec");
     setCecDoc((previo) => {
       if (!previo) return previo;
       const todas: Record<string, string> = {};
@@ -8464,6 +8472,7 @@ export default function Home() {
   }
 
   function setCecTexto(campo: "acciones" | "responsables", bloqueId: string, filaKey: string, valor: string) {
+    marcarCambio("cec");
     setCecDoc((previo) => {
       if (!previo) return previo;
       const bloque = { ...previo[campo][bloqueId], [filaKey]: valor };
@@ -8505,27 +8514,30 @@ export default function Home() {
   }
 
   /** Guarda la lista del servicio abierto. */
-  async function handleSaveCec() {
+  async function handleSaveCec(auto = false) {
     const plantilla = CEC_TEMPLATES.find((t) => t.serviceId === cecServicio);
     if (!plantilla || !cecDoc) return;
+    if (auto && (!!ghostUid || firestoreUnavailable)) return;
+    const claveAuto = autoClaves.cec;
+    const avisar = (texto: string) => {
+      if (auto) {
+        soltarPendiente("cec", claveAuto);
+        ponerEstadoAuto("cec", { clave: claveAuto, estado: "bloqueado", texto: "Sin guardar: captura no habilitada" });
+        return;
+      }
+      setError(texto);
+    };
     if (!puedeEditarCecServicio(plantilla.serviceId)) {
-      setError("Esta lista no le corresponde: solo puede llenar la de su servicio.");
+      avisar("Esta lista no le corresponde: solo puede llenar la de su servicio.");
       return;
     }
     if (!cecAbiertoPara(plantilla.serviceId)) {
-      setError("La captura del Comité de Expediente Clínico está cerrada este mes.");
+      avisar("La captura del Comité de Expediente Clínico está cerrada este mes.");
       return;
     }
-    setCecGuardando(true);
-    setError("");
-    setMessage("");
     const queSeGuardo = `La lista de ${plantilla.nombre} (${periodLabel})`;
-
-    try {
-      const estadoEnvio = await confirmarGuardado(
-        setDoc(
-        doc(db, "cecTabulators", `${periodId}__${plantilla.serviceId}`),
-        {
+    const refCec = doc(db, "cecTabulators", `${periodId}__${plantilla.serviceId}`);
+    const datosCec = {
           periodId,
           periodLabel,
           serviceId: plantilla.serviceId,
@@ -8540,7 +8552,29 @@ export default function Home() {
           responsables: cecDoc.responsables,
           unificados: cecDoc.unificados,
           updatedAt: serverTimestamp(),
-        },
+    };
+    const marcarEntregado = () =>
+      setCecEstados((previo) => ({
+        ...previo,
+        [plantilla.serviceId]: { usuario: serviceProfile?.username || "", fecha: "" },
+      }));
+
+    if (auto) {
+      await ejecutarAutoguardado("cec", claveAuto, () => setDoc(refCec, datosCec, { merge: true }), queSeGuardo);
+      marcarEntregado();
+      return;
+    }
+
+    soltarPendiente("cec", claveAuto);
+    setCecGuardando(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const estadoEnvio = await confirmarGuardado(
+        setDoc(
+        refCec,
+        datosCec,
         { merge: true },
         ),
         queSeGuardo,
@@ -8550,10 +8584,8 @@ export default function Home() {
           ? avisoSinConexion(queSeGuardo)
           : `Lista de ${plantilla.nombre} guardada.`,
       );
-      setCecEstados((previo) => ({
-        ...previo,
-        [plantilla.serviceId]: { usuario: serviceProfile?.username || "", fecha: "" },
-      }));
+      marcarGuardadoManual("cec", claveAuto, estadoEnvio);
+      marcarEntregado();
     } catch (error) {
       if (await handleFirestoreError(error)) return;
       const textoError = (error instanceof Error ? error.message : String(error)).toLowerCase();
@@ -23258,6 +23290,7 @@ export default function Home() {
                                 {cecListaDesbloqueada ? "Bloquear de nuevo" : "Desbloquear para el comité"}
                               </button>
                             ) : null}
+                            {cecEditable ? indicadorAutoguardado("cec") : null}
                             {cecEditable ? (
                               <button
                                 type="button"
@@ -23616,7 +23649,8 @@ export default function Home() {
                         })() : null}
 
                         {cecEditable ? (
-                          <div className="mt-6 flex justify-end">
+                          <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+                            {indicadorAutoguardado("cec")}
                             <button
                               type="button"
                               onClick={() => void handleSaveCec()}
