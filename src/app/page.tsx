@@ -20764,7 +20764,7 @@ export default function Home() {
             <div className="relative flex flex-col gap-4 desk:flex-row desk:items-center desk:justify-between">
               <div className="min-w-0">
                 <p className="hero-tag text-[10.5px] font-bold uppercase tracking-[0.16em]">
-                  {currentService ? "Servicio" : isSupervisor ? jefaturaLabel || "Panel de supervisión" : "Panel de administración"}
+                  {currentService ? "Servicio" : isSupervisor ? jefaturaLabel || "Panel de supervisión" : isAdmin ? "Panel de administración" : "Panel de supervisión"}
                 </p>
                 <p className="hero-greet mt-1.5 text-sm">
                   {(() => { const h = now.getHours(); return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches"; })()},
@@ -20777,7 +20777,9 @@ export default function Home() {
                     ? `${currentService.name} · Período de ${periodLabel}`
                     : isSupervisor
                       ? jefaturaLabel || "Panel de Supervisión"
-                      : "Módulo de Administración"}
+                      : isAdmin
+                        ? "Módulo de Administración"
+                        : "Módulo de Supervisión"}
                 </p>
               </div>
 
@@ -22863,12 +22865,12 @@ export default function Home() {
                         </h2>
                         <p className={`mt-1 text-sm ${suave}`}>
                           {isAdmin
-                            ? "Elegí el servicio y llená su lista. Es la misma del Excel del comité: 1 si cumple, 0 si no, N/A si no aplica."
+                            ? "Elija el servicio y llene su lista. Es la misma del Excel del comité: 1 si cumple, 0 si no, N/A si no aplica."
                             : esComiteCec
                               ? cecServiciosPropios.length > 0
-                                ? "Podés ver las listas de todos los servicios, pero solo llenar la que te asignaron. 1 si cumple, 0 si no, N/A si no aplica."
-                                : "Todavía no te han asignado ningún servicio del comité: por ahora solo podés mirar las listas."
-                              : "Solo lectura: acá ves cómo va el llenado de los servicios de tu división."}
+                                ? "Puede ver las listas de todos los servicios, pero solo llenar la que se le asignó. 1 si cumple, 0 si no, N/A si no aplica."
+                                : "Todavía no se le ha asignado ningún servicio del comité: por ahora solo puede ver las listas."
+                              : "Solo lectura: aquí puede ver cómo va el llenado de los servicios de su división."}
                         </p>
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-2.5">
