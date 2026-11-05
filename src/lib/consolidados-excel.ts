@@ -99,51 +99,26 @@ export type ServicioUnit = {
 };
 export type ServicioRow = { centro: string; units: ServicioUnit[] };
 
-/** Produccion de Servicio: Centro | Unidad | Cantidad, con el centro combinado. */
+/**
+ * Produccion de Servicio: IGUAL a la plantilla que exporta el sistema PERC real,
+ * para que se pueda cargar alli. Una sola hoja, 3 columnas planas
+ * (Centro de Producción | Unidades de Producción | Cantidad), una fila por unidad
+ * con el centro REPETIDO en cada fila, sin celdas combinadas, sin colores, sin
+ * paneles fijos ni filas de titulo. Cantidad va como numero.
+ */
 export async function downloadServicioXlsx(rows: ServicioRow[], periodId: string) {
   const wb = await newWorkbook();
-  const ws = wb.addWorksheet("Produccion de Servicio", {
-    views: [{ state: "frozen", ySplit: 1 }],
-  });
+  const ws = wb.addWorksheet("Sheet1");
   ws.addRow(["Centro de Producción", "Unidades de Producción", "Cantidad"]);
-  styleHeaderRow(ws, 1);
-
   for (const svc of rows) {
-    if (svc.units.length === 0) continue;
-    const first = ws.rowCount + 1;
-    svc.units.forEach((unit, index) => {
-      const added = ws.addRow([index === 0 ? svc.centro : "", unit.label, num(unit.qty)]);
-      added.eachCell({ includeEmpty: true }, (cell) => {
-        cell.border = THIN_BORDER;
-      });
-      const qty = added.getCell(3);
-      qty.alignment = { horizontal: "center" };
-      // Camas = amarillo; Censo / ESDOMED Services: verde si completo, amarillo si no.
-      let fill: string | null = null;
-      let color: string | null = null;
-      if (unit.source === "camas") {
-        fill = "FFFFFF00";
-        color = "FF111827";
-      } else if (unit.source === "censo" || unit.source === "services") {
-        fill = unit.complete ? "FFDCFCE7" : "FFFEF9C3";
-        color = unit.complete ? "FF166534" : "FF854D0E";
-      }
-      if (fill && color) {
-        qty.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
-        qty.font = { bold: true, color: { argb: color } };
-      }
-    });
-    const last = ws.rowCount;
-    if (last > first) ws.mergeCells(first, 1, last, 1);
-    const centro = ws.getCell(first, 1);
-    centro.font = { bold: true };
-    centro.alignment = { vertical: "middle", wrapText: true };
-    centro.border = THIN_BORDER;
+    for (const unit of svc.units) {
+      const q = num(unit.qty);
+      ws.addRow([svc.centro, unit.label, typeof q === "number" ? q : 0]);
+    }
   }
-
   ws.getColumn(1).width = 45;
-  ws.getColumn(2).width = 50;
-  ws.getColumn(3).width = 14;
+  ws.getColumn(2).width = 28;
+  ws.getColumn(3).width = 10;
 
   await saveWorkbook(wb, `produccion-de-servicio-${periodId}.xlsx`);
 }
