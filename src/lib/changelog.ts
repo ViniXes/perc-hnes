@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.501",
+    para: ["todos"],
+    texto:
+      "Guardado automatico en PERC, SEPS y Distribucion de Horas: lo que digita se guarda solo a los pocos segundos. Junto al boton Guardar vera \"Guardado\", \"Guardando…\" o \"Sin guardar\". Si no hay internet queda guardado en el equipo y se envia solo cuando vuelva la conexion. El boton Guardar sigue funcionando igual.",
+  },
+  {
     version: "1986.497",
     para: ["admin"],
     texto:

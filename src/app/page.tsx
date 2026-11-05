@@ -3935,6 +3935,21 @@ function resolveLoginEmail(loginIdentifier: string) {
 }
 
 
+// GUARDADO AUTOMATICO: la gente digita y no presiona Guardar (se olvida, se va
+// la luz, se cae la red). Cada cambio en PERC, SEPS u Horas se guarda solo a los
+// pocos segundos de dejar de escribir, con las mismas validaciones y permisos
+// del boton. Sin red, Firestore lo deja escrito en el dispositivo (cache
+// persistente) y lo envia al volver la conexion, aunque se cierre PULSO.
+type ModAuto = "perc" | "seps" | "horas";
+type EstadoAuto = {
+  clave: string;
+  estado: "pendiente" | "guardando" | "guardado" | "local" | "bloqueado" | "error";
+  texto?: string;
+  hora?: string;
+};
+const AUTOGUARDADO_MS = 3000;
+const MODS_AUTO: ModAuto[] = ["perc", "seps", "horas"];
+
 export default function Home() {
   const [adminCreateForm, setAdminCreateForm] = useState<AdminCreateForm>({
     firstName: "",
@@ -4416,6 +4431,15 @@ export default function Home() {
   // quedaron esperando que vuelva para viajar al servidor.
   const [sinConexion, setSinConexion] = useState(false);
   const [porEnviar, setPorEnviar] = useState(0);
+  // GUARDADO AUTOMATICO de PERC, SEPS y Horas: estado que se ve junto al boton
+  // Guardar (por tablero, ligado a su clave periodo__servicio).
+  const [autoGuardado, setAutoGuardado] = useState<Partial<Record<ModAuto, EstadoAuto>>>({});
+  const autoTimersRef = useRef<Partial<Record<ModAuto, ReturnType<typeof setTimeout>>>>({});
+  const autoPendienteRef = useRef<Partial<Record<ModAuto, string>>>({});
+  const autoEnCursoRef = useRef(0);
+  const autoGuardarRef = useRef<Record<ModAuto, () => Promise<void>> | null>(null);
+  const autoClavesRef = useRef<Record<ModAuto, string>>({ perc: "", seps: "", horas: "" });
+  const autoClavesPreviasRef = useRef<Record<ModAuto, string>>({ perc: "", seps: "", horas: "" });
   // BITACORA: registro de quien hizo que (desbloqueos, cierres, permisos, claves).
   type BitacoraFila = {
     id: string;
@@ -5984,6 +6008,190 @@ export default function Home() {
   /** El mismo aviso para los cuatro tabuladores cuando se guardo sin conexion. */
   function avisoSinConexion(queSeGuardo: string) {
     return `${queSeGuardo} quedó guardado en este dispositivo. No hay conexión: se enviará solo cuando vuelva, aunque cierres PULSO.`;
+  }
+
+  // ---- GUARDADO AUTOMATICO ---------------------------------------------------
+  // Clave del tablero que se esta editando (mes destino + servicio). Si cambia
+  // (otro servicio u otro mes) lo pendiente del anterior se guarda al instante.
+  const autoClaves: Record<ModAuto, string> = {
+    perc: currentService ? `${percViewPeriod ?? periodId}__${currentService.id}` : "",
+    seps: sepsTemplate ? `${sepsViewPeriod ?? sepsPeriodId}__${sepsTemplate.serviceId}` : "",
+    horas: horasTemplate ? `${horasViewPeriod ?? periodId}__${horasTemplate.serviceId}` : "",
+  };
+
+  function horaCorta() {
+    return new Date().toLocaleTimeString("es-SV", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function ponerEstadoAuto(mod: ModAuto, info: EstadoAuto) {
+    setAutoGuardado((actual) => {
+      const previo = actual[mod];
+      if (previo && previo.clave === info.clave && previo.estado === info.estado && previo.texto === info.texto && previo.hora === info.hora) {
+        return actual;
+      }
+      return { ...actual, [mod]: info };
+    });
+  }
+
+  /** La persona cambio una celda: se programa el guardado automatico. */
+  function marcarCambio(mod: ModAuto) {
+    const clave = autoClaves[mod];
+    if (!clave) return;
+    autoPendienteRef.current[mod] = clave;
+    ponerEstadoAuto(mod, { clave, estado: "pendiente" });
+    const previo = autoTimersRef.current[mod];
+    if (previo) clearTimeout(previo);
+    autoTimersRef.current[mod] = setTimeout(() => {
+      autoTimersRef.current[mod] = undefined;
+      // Si ya se cambio de tablero, el cambio de clave se encargo de guardarlo.
+      if (autoPendienteRef.current[mod] !== clave || autoClavesRef.current[mod] !== clave) return;
+      void autoGuardarRef.current?.[mod]();
+    }, AUTOGUARDADO_MS);
+  }
+
+  /** Se va a escribir el tablero: lo pendiente de esa clave queda cubierto. */
+  function soltarPendiente(mod: ModAuto, clave: string) {
+    if (autoPendienteRef.current[mod] !== clave) return;
+    autoPendienteRef.current[mod] = undefined;
+    const reloj = autoTimersRef.current[mod];
+    if (reloj) clearTimeout(reloj);
+    autoTimersRef.current[mod] = undefined;
+  }
+
+  /** Despues de un guardado con el boton: el indicador queda en "Guardado". */
+  function marcarGuardadoManual(mod: ModAuto, clave: string, estadoEnvio: "ok" | "pendiente") {
+    ponerEstadoAuto(mod, { clave, estado: estadoEnvio === "ok" ? "guardado" : "local", hora: horaCorta() });
+  }
+
+  /**
+   * Escribe en silencio (sin mensajes ni modales). El mismo setDoc del boton,
+   * asi que las reglas de Firestore validan igual que siempre.
+   */
+  async function ejecutarAutoguardado(
+    mod: ModAuto,
+    clave: string,
+    escritura: () => Promise<unknown>,
+    queSeGuardo: string,
+  ) {
+    soltarPendiente(mod, clave);
+    ponerEstadoAuto(mod, { clave, estado: "guardando" });
+    autoEnCursoRef.current += 1;
+    const rechazo = (error: unknown) => {
+      const texto = (error instanceof Error ? error.message : String(error)).toLowerCase();
+      ponerEstadoAuto(mod, {
+        clave,
+        estado: "error",
+        texto:
+          texto.includes("permission") || texto.includes("permiso")
+            ? "No se pudo guardar: la captura de este tablero está cerrada."
+            : "No se pudo guardar automáticamente. Presioná Guardar.",
+      });
+    };
+    try {
+      const estado = await esperarConfirmacion(escritura(), {
+        alConfirmarTarde: () => ponerEstadoAuto(mod, { clave, estado: "guardado", hora: horaCorta() }),
+        alFallarTarde: rechazo,
+      });
+      ponerEstadoAuto(mod, { clave, estado: estado === "ok" ? "guardado" : "local", hora: horaCorta() });
+      if (!bitacoraGuardadoRef.current.has(queSeGuardo)) {
+        bitacoraGuardadoRef.current.add(queSeGuardo);
+        void registrarBitacora("Tablero guardado (automático)", queSeGuardo);
+      }
+    } catch (error) {
+      if (await handleFirestoreError(error)) return;
+      rechazo(error);
+    } finally {
+      autoEnCursoRef.current = Math.max(0, autoEnCursoRef.current - 1);
+    }
+  }
+
+  /** Guarda ya todo lo pendiente (al salir, ocultar la app o cerrar sesion). */
+  async function guardarPendientesYa() {
+    const tareas: Promise<void>[] = [];
+    for (const mod of MODS_AUTO) {
+      if (autoPendienteRef.current[mod] && autoPendienteRef.current[mod] === autoClavesRef.current[mod]) {
+        const tarea = autoGuardarRef.current?.[mod]();
+        if (tarea) tareas.push(tarea);
+      }
+    }
+    await Promise.all(tareas);
+  }
+
+  // Cambio de tablero (otro servicio u otro mes) con cambios sin guardar: se
+  // guardan con los datos del tablero anterior. Este efecto va ANTES del que
+  // actualiza autoGuardarRef, asi que todavia ve las funciones del render previo.
+  const clavesAutoTexto = `${autoClaves.perc}|${autoClaves.seps}|${autoClaves.horas}`;
+  useEffect(() => {
+    const previas = autoClavesPreviasRef.current;
+    for (const mod of MODS_AUTO) {
+      const anterior = previas[mod];
+      if (anterior && anterior !== autoClaves[mod] && autoPendienteRef.current[mod] === anterior) {
+        void autoGuardarRef.current?.[mod]();
+      }
+    }
+    autoClavesPreviasRef.current = { ...autoClaves };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clavesAutoTexto]);
+
+  // Siempre las funciones de guardado del ultimo render (con los datos al dia).
+  useEffect(() => {
+    autoClavesRef.current = { ...autoClaves };
+    autoGuardarRef.current = {
+      perc: () => handleSave(false, true),
+      seps: () => handleSaveSeps(true),
+      horas: () => handleSaveHoras(true),
+    };
+  });
+
+  // Ocultar la app (cambiar de app en el celular, minimizar) guarda al instante;
+  // cerrar la pestana con cambios aun sin escribir pide confirmacion.
+  useEffect(() => {
+    const alOcultar = () => {
+      if (document.visibilityState === "hidden") void guardarPendientesYa();
+    };
+    const alSalir = () => void guardarPendientesYa();
+    const antesDeCerrar = (evento: BeforeUnloadEvent) => {
+      const hayPendiente = MODS_AUTO.some((mod) => !!autoPendienteRef.current[mod]);
+      if (!hayPendiente && autoEnCursoRef.current === 0) return;
+      void guardarPendientesYa();
+      evento.preventDefault();
+      evento.returnValue = "";
+    };
+    document.addEventListener("visibilitychange", alOcultar);
+    window.addEventListener("pagehide", alSalir);
+    window.addEventListener("beforeunload", antesDeCerrar);
+    return () => {
+      document.removeEventListener("visibilitychange", alOcultar);
+      window.removeEventListener("pagehide", alSalir);
+      window.removeEventListener("beforeunload", antesDeCerrar);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Indicador junto al boton Guardar: Guardado / Guardando / Sin guardar. */
+  function indicadorAutoguardado(mod: ModAuto) {
+    const info = autoGuardado[mod];
+    if (!info || info.clave !== autoClaves[mod]) return null;
+    const estilos: Record<EstadoAuto["estado"], { punto: string; texto: string; etiqueta: string }> = {
+      pendiente: { punto: "bg-amber-400", texto: "text-amber-200", etiqueta: "Sin guardar · se guarda solo" },
+      guardando: { punto: "bg-sky-400 animate-pulse", texto: "text-sky-200", etiqueta: "Guardando…" },
+      guardado: { punto: "bg-emerald-400", texto: "text-emerald-200", etiqueta: `Guardado ${info.hora ?? ""}`.trim() },
+      local: { punto: "bg-amber-400", texto: "text-amber-200", etiqueta: "Guardado en este equipo · se envía al volver la red" },
+      bloqueado: { punto: "bg-slate-400", texto: "text-slate-300", etiqueta: info.texto ?? "Sin guardar" },
+      error: { punto: "bg-rose-400", texto: "text-rose-200", etiqueta: info.texto ?? "No se pudo guardar" },
+    };
+    const e = estilos[info.estado];
+    return (
+      <span
+        role="status"
+        aria-live="polite"
+        title={e.etiqueta}
+        className={`inline-flex min-w-0 max-w-[16rem] items-center gap-1.5 text-[11px] font-medium ${e.texto}`}
+      >
+        <span className={`h-2 w-2 shrink-0 rounded-full ${e.punto}`} />
+        <span className="truncate">{e.etiqueta}</span>
+      </span>
+    );
   }
 
   /**
@@ -11497,6 +11705,8 @@ export default function Home() {
   }
 
   async function handleSignOut() {
+    // Lo digitado y aun sin guardar se guarda antes de cerrar la sesion.
+    await guardarPendientesYa();
     setError("");
     setMessage("");
     setActiveSidebarSection("panel-overview");
@@ -11514,6 +11724,7 @@ export default function Home() {
     }
 
     const value = sanitizeNumericValue(rawValue);
+    marcarCambio("perc");
 
     setTableValues((currentValues) => ({
       ...currentValues,
@@ -11624,11 +11835,23 @@ export default function Home() {
     return avisos.slice(0, 8);
   }
 
-  async function handleSave(forzar = false) {
-    if (blockedByGhost() || blockedByViewOnly()) return;
+  async function handleSave(forzar = false, auto = false) {
+    if (auto ? !!ghostUid || isViewingGrantedService : blockedByGhost() || blockedByViewOnly()) return;
     if (!user || !currentService || !serviceProfile || firestoreUnavailable) {
       return;
     }
+    const claveAuto = autoClaves.perc;
+    // En el guardado automatico las validaciones no muestran errores: el
+    // indicador junto al boton dice por que no se guardo.
+    const avisar = (texto: string) => {
+      if (auto) {
+        soltarPendiente("perc", claveAuto);
+        ponerEstadoAuto("perc", { clave: claveAuto, estado: "bloqueado", texto: "Sin guardar: captura no habilitada" });
+        return;
+      }
+      setError(texto);
+      setMessage("");
+    };
 
     // Mes destino: el que se este viendo (historial) o el de captura actual.
     const targetPeriod = percViewPeriod ?? periodId;
@@ -11637,28 +11860,22 @@ export default function Home() {
 
     // Calidad: no se puede capturar un mes ADELANTE del mes en cierre.
     if (targetPeriod > periodId) {
-      setError(
-        "Ese mes todavía no está habilitado. Solo se captura el mes en cierre o meses anteriores.",
-      );
-      setMessage("");
+      avisar("Ese mes todavía no está habilitado. Solo se captura el mes en cierre o meses anteriores.");
       return;
     }
 
     if (editingHistory && !isAdmin) {
-      setError("Solo el administrador puede editar meses anteriores.");
-      setMessage("");
+      avisar("Solo el administrador puede editar meses anteriores.");
       return;
     }
 
     if (!serviceProfile.permissions.canEdit && !isAdmin) {
-      setError("Tu cuenta no tiene permiso de captura en este momento.");
-      setMessage("");
+      avisar("Tu cuenta no tiene permiso de captura en este momento.");
       return;
     }
 
     if (!editingHistory && !percCaptureOpen && !isAdmin) {
-      setError("La captura de PERC está cerrada: se registra los primeros 3 días hábiles del mes (hasta las 2:30 p. m. del 3ro).");
-      setMessage("");
+      avisar("La captura de PERC está cerrada: se registra los primeros 3 días hábiles del mes (hasta las 2:30 p. m. del 3ro).");
       return;
     }
 
@@ -11669,7 +11886,7 @@ export default function Home() {
     );
 
     // Aviso de cifras atipicas: se muestra UNA vez; si la persona confirma, guarda.
-    if (!forzar) {
+    if (!forzar && !auto) {
       const avisos = await detectarAtipicosPerc(normalizedValues, targetPeriod);
       if (avisos.length > 0) {
         setPercAtipicos(avisos);
@@ -11677,34 +11894,39 @@ export default function Home() {
       }
     }
 
+    const queSeGuardo = `El PERC de ${currentService.name} (${targetPeriodLabel})`;
+    const refPerc = doc(db, "serviceTabulators", `${targetPeriod}__${currentService.id}`);
+    const datosPerc = {
+      periodId: targetPeriod,
+      periodLabel: targetPeriodLabel,
+      serviceId: currentService.id,
+      serviceName: currentService.name,
+      headers: TABULATOR_HEADERS,
+      rows: currentService.rows,
+      extraRows: percExtraRows,
+      hiddenKeys: percHiddenKeys,
+      userId: user.uid,
+      userEmail: user.email || "",
+      values: normalizedValues,
+      updatedAt: serverTimestamp(),
+    };
+
+    if (auto) {
+      await ejecutarAutoguardado("perc", claveAuto, () => setDoc(refPerc, datosPerc, { merge: true }), queSeGuardo);
+      return;
+    }
+
+    soltarPendiente("perc", claveAuto);
     setIsSaving(true);
     setError("");
     setMessage("");
 
-    const queSeGuardo = `El PERC de ${currentService.name} (${targetPeriodLabel})`;
-
     try {
       const estadoEnvio = await confirmarGuardado(
-        setDoc(
-          doc(db, "serviceTabulators", `${targetPeriod}__${currentService.id}`),
-          {
-            periodId: targetPeriod,
-            periodLabel: targetPeriodLabel,
-            serviceId: currentService.id,
-            serviceName: currentService.name,
-            headers: TABULATOR_HEADERS,
-            rows: currentService.rows,
-            extraRows: percExtraRows,
-            hiddenKeys: percHiddenKeys,
-            userId: user.uid,
-            userEmail: user.email || "",
-            values: normalizedValues,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true },
-        ),
+        setDoc(refPerc, datosPerc, { merge: true }),
         queSeGuardo,
       );
+      marcarGuardadoManual("perc", claveAuto, estadoEnvio);
 
       setTableValues(normalizedValues);
       setPercAutoria({
@@ -11744,6 +11966,7 @@ export default function Home() {
 
   function handleSepsCellChange(rowKey: string, day: string, rawValue: string) {
     const value = sanitizeNumericValue(rawValue);
+    marcarCambio("seps");
 
     setSepsValues((current) => ({
       ...current,
@@ -12782,11 +13005,21 @@ export default function Home() {
     }
   }
 
-  async function handleSaveSeps() {
-    if (blockedByGhost() || (!isEditingGrantedSeps && blockedByViewOnly())) return;
+  async function handleSaveSeps(auto = false) {
+    if (auto ? !!ghostUid || (!isEditingGrantedSeps && isViewingGrantedService) : blockedByGhost() || (!isEditingGrantedSeps && blockedByViewOnly())) return;
     if (!user || !sepsTemplate || !serviceProfile || firestoreUnavailable) {
       return;
     }
+    const claveAuto = autoClaves.seps;
+    const avisar = (texto: string) => {
+      if (auto) {
+        soltarPendiente("seps", claveAuto);
+        ponerEstadoAuto("seps", { clave: claveAuto, estado: "bloqueado", texto: "Sin guardar: captura no habilitada" });
+        return;
+      }
+      setError(texto);
+      setMessage("");
+    };
 
     const targetPeriod = sepsViewPeriod ?? sepsPeriodId;
     const targetPeriodLabel = getPeriodLabel(targetPeriod);
@@ -12794,34 +13027,24 @@ export default function Home() {
 
     // Calidad: no se puede capturar un mes ADELANTE del mes en cierre.
     if (targetPeriod > sepsPeriodId) {
-      setError(
-        "Ese mes todavía no está habilitado. Solo se captura el mes en cierre o meses anteriores.",
-      );
-      setMessage("");
+      avisar("Ese mes todavía no está habilitado. Solo se captura el mes en cierre o meses anteriores.");
       return;
     }
 
     if (editingHistory && !isAdmin && !isSepsStaff) {
-      setError("Solo el administrador puede editar meses anteriores.");
-      setMessage("");
+      avisar("Solo el administrador puede editar meses anteriores.");
       return;
     }
 
     if (!serviceProfile.permissions.canEdit && !isAdmin && !isSepsStaff) {
-      setError("Tu cuenta no tiene permiso de captura en este momento.");
-      setMessage("");
+      avisar("Tu cuenta no tiene permiso de captura en este momento.");
       return;
     }
 
     if (!editingHistory && !sepsCaptureOpen && !isAdmin && !isSepsStaff) {
-      setError("La captura SEPS esta cerrada en este momento.");
-      setMessage("");
+      avisar("La captura SEPS esta cerrada en este momento.");
       return;
     }
-
-    setIsSavingSeps(true);
-    setError("");
-    setMessage("");
 
     const normalizedValues = mergeSepsWithTemplate(
       sepsTemplate,
@@ -12832,28 +13055,39 @@ export default function Home() {
 
     const queSeGuardo = `El SEPS de ${sepsTemplate.displayName ?? currentService?.name ?? sepsTemplate.serviceId} (${targetPeriodLabel})`;
 
+    const refSeps = doc(db, "sepsTabulators", `${targetPeriod}__${sepsTemplate.serviceId}`);
+    const datosSeps = {
+      periodId: targetPeriod,
+      periodLabel: targetPeriodLabel,
+      module: "sesps",
+      serviceId: sepsTemplate.serviceId,
+      serviceName: sepsTemplate.displayName ?? currentService?.name ?? sepsTemplate.serviceId,
+      userId: user.uid,
+      userEmail: user.email || "",
+      values: normalizedValues,
+      extraRows: sepsExtraRows,
+      hiddenKeys: sepsHiddenKeys,
+      comments: sepsComments,
+      updatedAt: serverTimestamp(),
+    };
+
+    if (auto) {
+      await ejecutarAutoguardado("seps", claveAuto, () => setDoc(refSeps, datosSeps, { merge: true }), queSeGuardo);
+      setSepsDataPeriods((prev) => (prev.has(targetPeriod) ? prev : new Set(prev).add(targetPeriod)));
+      return;
+    }
+
+    soltarPendiente("seps", claveAuto);
+    setIsSavingSeps(true);
+    setError("");
+    setMessage("");
+
     try {
       const estadoEnvio = await confirmarGuardado(
-        setDoc(
-        doc(db, "sepsTabulators", `${targetPeriod}__${sepsTemplate.serviceId}`),
-        {
-          periodId: targetPeriod,
-          periodLabel: targetPeriodLabel,
-          module: "sesps",
-          serviceId: sepsTemplate.serviceId,
-          serviceName: sepsTemplate.displayName ?? currentService?.name ?? sepsTemplate.serviceId,
-          userId: user.uid,
-          userEmail: user.email || "",
-          values: normalizedValues,
-          extraRows: sepsExtraRows,
-          hiddenKeys: sepsHiddenKeys,
-          comments: sepsComments,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-        ),
+        setDoc(refSeps, datosSeps, { merge: true }),
         queSeGuardo,
       );
+      marcarGuardadoManual("seps", claveAuto, estadoEnvio);
 
       setSepsValues(normalizedValues);
       setSepsDataPeriods((prev) => new Set(prev).add(targetPeriod));
@@ -13095,6 +13329,7 @@ export default function Home() {
 
   // --- Distribucion de Horas (empleados) ---
   function updateHorasEmployee(index: number, patch: Partial<HorasEmployee>) {
+    marcarCambio("horas");
     setHorasEmployees((current) =>
       current.map((emp, i) => (i === index ? { ...emp, ...patch } : emp)),
     );
@@ -13114,6 +13349,7 @@ export default function Home() {
 
   function handleHorasHour(index: number, column: string, rawValue: string) {
     const value = sanitizeNumericValue(rawValue);
+    marcarCambio("horas");
     setHorasEmployees((current) =>
       current.map((emp, i) =>
         i === index ? { ...emp, hours: { ...emp.hours, [column]: value } } : emp,
@@ -13148,6 +13384,7 @@ export default function Home() {
     }
     const index = horasEmployeeToRemove;
     setHorasEmployees((current) => current.filter((_, i) => i !== index));
+    marcarCambio("horas");
     setHorasEmployeeToRemove(null);
   }
 
@@ -13264,11 +13501,21 @@ export default function Home() {
     }
   }
 
-  async function handleSaveHoras() {
-    if (blockedByGhost() || blockedByViewOnly()) return;
+  async function handleSaveHoras(auto = false) {
+    if (auto ? !!ghostUid || isViewingGrantedService : blockedByGhost() || blockedByViewOnly()) return;
     if (!user || !horasTemplate || !serviceProfile || firestoreUnavailable) {
       return;
     }
+    const claveAuto = autoClaves.horas;
+    const avisar = (texto: string) => {
+      if (auto) {
+        soltarPendiente("horas", claveAuto);
+        ponerEstadoAuto("horas", { clave: claveAuto, estado: "bloqueado", texto: "Sin guardar: captura no habilitada" });
+        return;
+      }
+      setError(texto);
+      setMessage("");
+    };
 
     const targetPeriod = horasViewPeriod ?? periodId;
     const targetPeriodLabel = getPeriodLabel(targetPeriod);
@@ -13276,28 +13523,22 @@ export default function Home() {
 
     // Calidad: no se puede capturar un mes ADELANTE del mes en cierre.
     if (targetPeriod > periodId) {
-      setError(
-        "Ese mes todavía no está habilitado. Solo se captura el mes en cierre o meses anteriores.",
-      );
-      setMessage("");
+      avisar("Ese mes todavía no está habilitado. Solo se captura el mes en cierre o meses anteriores.");
       return;
     }
 
     if (editingHistory && !isAdmin) {
-      setError("Solo el administrador puede editar meses anteriores.");
-      setMessage("");
+      avisar("Solo el administrador puede editar meses anteriores.");
       return;
     }
 
     if (!serviceProfile.permissions.canEdit && !isAdmin) {
-      setError("Tu cuenta no tiene permiso de captura en este momento.");
-      setMessage("");
+      avisar("Tu cuenta no tiene permiso de captura en este momento.");
       return;
     }
 
     if (!editingHistory && !currentServiceCaptureOpen && !isAdmin) {
-      setError("La captura de Distribucion de Horas esta cerrada en este momento.");
-      setMessage("");
+      avisar("La captura de Distribucion de Horas esta cerrada en este momento.");
       return;
     }
 
@@ -13306,14 +13547,14 @@ export default function Home() {
       Object.values(emp.hours).some((h) => String(h).trim() !== ""),
     );
     if (!hasAnyHours) {
-      setError("Cargá las horas de al menos un recurso antes de guardar (no se puede guardar vacío).");
-      setMessage("");
+      if (auto) {
+        soltarPendiente("horas", claveAuto);
+        setAutoGuardado((actual) => ({ ...actual, horas: undefined }));
+        return;
+      }
+      avisar("Cargá las horas de al menos un recurso antes de guardar (no se puede guardar vacío).");
       return;
     }
-
-    setIsSavingHoras(true);
-    setError("");
-    setMessage("");
 
     // Solo guardamos empleados con nombre o algun dato (evita filas vacias).
     const cleaned = horasEmployees.filter(
@@ -13322,26 +13563,37 @@ export default function Home() {
 
     const queSeGuardo = `La Distribución de Horas de ${horasTemplate.displayName ?? currentService?.name ?? horasTemplate.serviceId} (${targetPeriodLabel})`;
 
+    const refHoras = doc(db, "horasTabulators", `${targetPeriod}__${horasTemplate.serviceId}`);
+    const datosHoras = {
+      periodId: targetPeriod,
+      periodLabel: targetPeriodLabel,
+      module: "distribucion",
+      serviceId: horasTemplate.serviceId,
+      serviceName: horasTemplate.displayName ?? currentService?.name ?? horasTemplate.serviceId,
+      columns: horasTemplate.columns,
+      employees: cleaned,
+      userId: user.uid,
+      userEmail: user.email || "",
+      updatedAt: serverTimestamp(),
+    };
+
+    if (auto) {
+      await ejecutarAutoguardado("horas", claveAuto, () => setDoc(refHoras, datosHoras, { merge: true }), queSeGuardo);
+      setHorasDataPeriods((prev) => (prev.has(targetPeriod) ? prev : new Set(prev).add(targetPeriod)));
+      return;
+    }
+
+    soltarPendiente("horas", claveAuto);
+    setIsSavingHoras(true);
+    setError("");
+    setMessage("");
+
     try {
       const estadoEnvio = await confirmarGuardado(
-        setDoc(
-        doc(db, "horasTabulators", `${targetPeriod}__${horasTemplate.serviceId}`),
-        {
-          periodId: targetPeriod,
-          periodLabel: targetPeriodLabel,
-          module: "distribucion",
-          serviceId: horasTemplate.serviceId,
-          serviceName: horasTemplate.displayName ?? currentService?.name ?? horasTemplate.serviceId,
-          columns: horasTemplate.columns,
-          employees: cleaned,
-          userId: user.uid,
-          userEmail: user.email || "",
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-        ),
+        setDoc(refHoras, datosHoras, { merge: true }),
         queSeGuardo,
       );
+      marcarGuardadoManual("horas", claveAuto, estadoEnvio);
 
       setHorasSaved(true);
       setHorasDataPeriods((prev) => new Set(prev).add(targetPeriod));
@@ -16606,6 +16858,7 @@ export default function Home() {
                   {isLoadingSeps ? "Recuperando..." : "Recuperar datos"}
                 </button>
               ) : null}
+              {indicadorAutoguardado("seps")}
               <button
                 type="button"
                 onClick={() => void handleSaveSeps()}
@@ -18477,6 +18730,7 @@ export default function Home() {
                   </span>
                 </button>
               ) : null}
+              {indicadorAutoguardado("horas")}
               <button
                 type="button"
                 onClick={() => void handleSaveHoras()}
@@ -24412,6 +24666,7 @@ export default function Home() {
                         </span>
                       </button>
                     ) : null}
+                    {indicadorAutoguardado("perc")}
                     <button
                       type="button"
                       onClick={() => void handleSave()}
