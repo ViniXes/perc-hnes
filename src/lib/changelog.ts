@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.503",
+    para: ["admin"],
+    texto:
+      "Usuarios > boton Permisos: abre el mismo menu lateral (Monitoreo general por division, PERC, SEPS, Dis/horas, C.E. Clinico, POA...) y en cada parte se activa o quita el acceso con un interruptor. Guarda lo mismo que la ficha de siempre, que sigue disponible.",
+  },
+  {
     version: "1986.501",
     para: ["todos"],
     texto:

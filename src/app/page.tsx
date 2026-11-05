@@ -4238,6 +4238,9 @@ export default function Home() {
   const [freeDocBusy, setFreeDocBusy] = useState(false);
   /** Visor de accesos (solo lectura): que tiene habilitado una cuenta. */
   const [accessViewUid, setAccessViewUid] = useState("");
+  // Ventana "Permisos" con la forma del menu lateral (uid abierto) y que menus estan desplegados.
+  const [permisosUid, setPermisosUid] = useState("");
+  const [permisosAbiertos, setPermisosAbiertos] = useState<string[]>(["monitor"]);
   /** MODO VERIFICACION ("fantasma"): el admin ve la app tal cual la ve otra cuenta.
       Es 100% de solo lectura: se guarda su perfil real y se bloquea todo guardado. */
   const [ghostUid, setGhostUid] = useState("");
@@ -26259,6 +26262,14 @@ export default function Home() {
                             <div className="flex gap-1.5">
                               <button
                                 type="button"
+                                onClick={() => setPermisosUid(selectedUser.uid)}
+                                title="Dar o quitar accesos con la misma forma del menú"
+                                className="rounded-lg bg-teal-500 px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-teal-400"
+                              >
+                                Permisos
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => setAccessViewUid(selectedUser.uid)}
                                 title="Ver, sin poder modificar, todo lo que esta cuenta tiene habilitado"
                                 className={UM_SECUNDARIO}
@@ -26280,6 +26291,595 @@ export default function Home() {
                             </div>
                           </div>
                         </div>
+
+                        {/* PERMISOS CON LA FORMA DEL MENU: la misma ficha, pero ordenada igual que
+                            el menu lateral. Cada interruptor cambia el MISMO dato que los cuadros
+                            de abajo (monitorDivision, menuGrants, viewPerc, etc.), asi que no hay
+                            datos nuevos ni cambian las reglas de Firestore. Se guarda con el
+                            mismo "Guardar cambios" de la ficha. */}
+                        {permisosUid === selectedUser.uid
+                          ? (() => {
+                              const d = draft;
+                              const uid = selectedUser.uid;
+                              const patch = (p: Partial<AdminDraft>) => updateAdminDraft(uid, p);
+                              const esAdminCuenta = d.role === "admin";
+                              const esSupervisorCuenta = d.role === "supervisor" || selectedUser.isDirector;
+                              const abierto = (k: string) => permisosAbiertos.includes(k);
+                              const alternar = (k: string) =>
+                                setPermisosAbiertos((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
+                              const tieneGrant = (id: string) => d.menuGrants.includes(id);
+                              const ponerGrant = (id: string, on: boolean) =>
+                                patch({
+                                  menuGrants: on
+                                    ? Array.from(new Set([...d.menuGrants, id]))
+                                    : d.menuGrants.filter((x) => x !== id),
+                                });
+                              const nombreServicio = getServiceById(d.serviceId)?.name || "su servicio";
+                              // Tableros de SU servicio. Lista vacia en captureModules = TODOS.
+                              const modsServicio: ModuleId[] =
+                                d.role === "service" && d.serviceId && !d.department
+                                  ? getAreaById(d.serviceId)?.modules ?? []
+                                  : [];
+                              const digita = (m: ModuleId) =>
+                                d.isChief || (!d.noCapture && (d.captureModules.length === 0 || d.captureModules.includes(m)));
+                              const ponerDigita = (m: ModuleId, on: boolean) => {
+                                if (on) {
+                                  if (d.noCapture) {
+                                    patch({ noCapture: false, captureModules: [m] });
+                                    return;
+                                  }
+                                  const next = Array.from(new Set([...d.captureModules, m]));
+                                  patch({ captureModules: modsServicio.every((x) => next.includes(x)) ? [] : next });
+                                } else {
+                                  const actuales = d.captureModules.length === 0 ? modsServicio : d.captureModules;
+                                  const next = actuales.filter((x) => x !== m);
+                                  patch(next.length === 0 ? { noCapture: true, captureModules: [] } : { captureModules: next });
+                                }
+                              };
+
+                              const interruptor = (on: boolean, onClick: () => void, etiqueta: string) => (
+                                <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={on}
+                                  aria-label={etiqueta}
+                                  onClick={onClick}
+                                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${
+                                    on ? "bg-teal-500" : "bg-white/15 hover:bg-white/25"
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                                      on ? "translate-x-[22px]" : "translate-x-0.5"
+                                    }`}
+                                  />
+                                </button>
+                              );
+                              const candado = (texto: string, on = false) => (
+                                <span
+                                  className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                                    on
+                                      ? "border-teal-300/25 bg-teal-300/[0.08] text-teal-100"
+                                      : "border-white/10 bg-white/[0.04] text-slate-400"
+                                  }`}
+                                >
+                                  <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                                    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                                  </svg>
+                                  {texto}
+                                </span>
+                              );
+                              // Una opcion dentro de un menu (sangria como el submenu lateral).
+                              const opcion = (
+                                key: string,
+                                etiqueta: string,
+                                detalle: string,
+                                derecha: ReactNode,
+                              ) => (
+                                <div
+                                  key={key}
+                                  className="flex items-center justify-between gap-3 border-l border-white/10 py-2 pl-4"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="text-[13px] font-medium text-white">{etiqueta}</p>
+                                    {detalle ? (
+                                      <p className="mt-0.5 text-[11px] leading-4 text-slate-400">{detalle}</p>
+                                    ) : null}
+                                  </div>
+                                  {derecha}
+                                </div>
+                              );
+                              // Un item del menu lateral. Con hijos se despliega como el menu.
+                              const item = (
+                                key: string,
+                                badge: string,
+                                etiqueta: string,
+                                activos: number,
+                                hijos: ReactNode,
+                                fijo?: ReactNode,
+                              ) => {
+                                const abre = !!hijos && abierto(key);
+                                return (
+                                  <div key={key} className="rounded-xl border border-white/[0.08] bg-white/[0.03]">
+                                    <button
+                                      type="button"
+                                      onClick={() => (hijos ? alternar(key) : undefined)}
+                                      className={`flex w-full items-center gap-3 px-3 py-2.5 text-left ${hijos ? "hover:bg-white/[0.04]" : "cursor-default"}`}
+                                    >
+                                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.07] text-[10px] font-bold text-slate-200">
+                                        {badge}
+                                      </span>
+                                      <span className="min-w-0 flex-1 text-sm font-semibold text-white">{etiqueta}</span>
+                                      {fijo ? (
+                                        fijo
+                                      ) : activos > 0 ? (
+                                        <span className="rounded-full bg-teal-400/15 px-2 py-0.5 text-[10px] font-bold text-teal-100">
+                                          {activos} activo{activos === 1 ? "" : "s"}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] font-semibold text-slate-500">Sin permiso</span>
+                                      )}
+                                      {hijos ? (
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`shrink-0 text-slate-400 transition ${abre ? "rotate-180" : ""}`}>
+                                          <path d="m6 9 6 6 6-6" />
+                                        </svg>
+                                      ) : null}
+                                    </button>
+                                    {abre ? <div className="space-y-0.5 px-3 pb-3 pl-7">{hijos}</div> : null}
+                                  </div>
+                                );
+                              };
+                              // Lista de servicios por division, para "consultar" / "digitar SEPS".
+                              const listaServicios = (
+                                clave: "viewPerc" | "viewSeps" | "viewHoras" | "editSeps",
+                                tiene: (id: string) => boolean,
+                              ) => {
+                                const arr = d[clave] ?? [];
+                                const ponerArr = (next: string[]) => patch({ [clave]: next } as Partial<AdminDraft>);
+                                const svcs = SERVICE_DEFINITIONS.filter((s) => tiene(s.id));
+                                const grupos = [
+                                  ...Object.entries(SERVICE_GROUP_LABELS).map(([k, label]) => ({
+                                    k,
+                                    label,
+                                    items: svcs.filter((s) => SERVICE_GROUP_BY_ID[s.id] === k),
+                                  })),
+                                  { k: "otros", label: "Otros servicios", items: svcs.filter((s) => !SERVICE_GROUP_BY_ID[s.id]) },
+                                ].filter((g) => g.items.length > 0);
+                                return (
+                                  <div className="mt-1 space-y-2 pb-1 pl-4">
+                                    {grupos.map((g) => {
+                                      const ids = g.items.map((s) => s.id);
+                                      const todos = ids.every((id) => arr.includes(id));
+                                      const kGrupo = `${clave}-${g.k}`;
+                                      const marcados = ids.filter((id) => arr.includes(id)).length;
+                                      return (
+                                        <div key={g.k} className="rounded-lg border border-white/[0.06] bg-black/15">
+                                          <div className="flex items-center gap-2 px-2.5 py-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => alternar(kGrupo)}
+                                              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                            >
+                                              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`shrink-0 text-slate-400 transition ${abierto(kGrupo) ? "rotate-90" : ""}`}>
+                                                <path d="m9 6 6 6-6 6" />
+                                              </svg>
+                                              <span className="truncate text-xs font-semibold text-slate-200">{g.label}</span>
+                                              <span className="text-[10px] text-slate-500">
+                                                {marcados}/{ids.length}
+                                              </span>
+                                            </button>
+                                            <span className="text-[10px] text-slate-400">Toda la división</span>
+                                            {interruptor(
+                                              todos,
+                                              () =>
+                                                ponerArr(
+                                                  todos
+                                                    ? arr.filter((x) => !ids.includes(x))
+                                                    : Array.from(new Set([...arr, ...ids])),
+                                                ),
+                                              `Toda la ${g.label}`,
+                                            )}
+                                          </div>
+                                          {abierto(kGrupo) ? (
+                                            <div className="space-y-1 border-t border-white/[0.06] px-2.5 py-2">
+                                              {g.items.map((s) => {
+                                                const on = arr.includes(s.id);
+                                                return (
+                                                  <div key={s.id} className="flex items-center justify-between gap-2 py-0.5">
+                                                    <span className={`min-w-0 truncate text-xs ${on ? "text-white" : "text-slate-400"}`}>
+                                                      {s.name}
+                                                    </span>
+                                                    {interruptor(
+                                                      on,
+                                                      () => ponerArr(on ? arr.filter((x) => x !== s.id) : [...arr, s.id]),
+                                                      s.name,
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              };
+                              // Opcion que despliega una lista de servicios.
+                              const opcionLista = (
+                                key: string,
+                                etiqueta: string,
+                                detalle: string,
+                                clave: "viewPerc" | "viewSeps" | "viewHoras" | "editSeps",
+                                tiene: (id: string) => boolean,
+                              ) => {
+                                const n = (d[clave] ?? []).length;
+                                return (
+                                  <div key={key} className="border-l border-white/10 py-2 pl-4">
+                                    <button
+                                      type="button"
+                                      onClick={() => alternar(key)}
+                                      className="flex w-full items-center justify-between gap-3 text-left"
+                                    >
+                                      <span className="min-w-0">
+                                        <span className="block text-[13px] font-medium text-white">{etiqueta}</span>
+                                        <span className="mt-0.5 block text-[11px] leading-4 text-slate-400">{detalle}</span>
+                                      </span>
+                                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${n > 0 ? "bg-teal-400/15 text-teal-100" : "bg-white/[0.06] text-slate-400"}`}>
+                                        {n > 0 ? `${n} servicio${n === 1 ? "" : "s"}` : "Elegir"}
+                                      </span>
+                                    </button>
+                                    {abierto(key) ? listaServicios(clave, tiene) : null}
+                                  </div>
+                                );
+                              };
+                              const grantsDe = (grp: "PERC" | "SEPS" | "Horas") =>
+                                GRANTABLE_MENUS.filter((m) => m.group === grp).map((m) =>
+                                  opcion(`g-${m.id}`, m.label, "", interruptor(tieneGrant(m.id), () => ponerGrant(m.id, !tieneGrant(m.id)), m.label)),
+                                );
+                              const contarGrants = (grp: string) =>
+                                GRANTABLE_MENUS.filter((m) => m.group === grp && tieneGrant(m.id)).length;
+                              const filaDigita = (m: ModuleId, etiqueta: string) =>
+                                modsServicio.includes(m)
+                                  ? opcion(
+                                      `dig-${m}`,
+                                      `Digita ${etiqueta} de ${nombreServicio}`,
+                                      d.isChief ? "Es jefe del servicio: llena todos sus tableros." : "Su propio tablero.",
+                                      d.isChief ? candado("Jefe", true) : interruptor(digita(m), () => ponerDigita(m, !digita(m)), `Digita ${etiqueta}`),
+                                    )
+                                  : null;
+                              const soloAdmin = candado("Solo administradores");
+
+                              const divisiones = Object.entries(SERVICE_GROUP_LABELS);
+                              const monitorActivos =
+                                (d.monitorDivision ? 1 : 0) + (tieneGrant("panel-monitor-cec") ? 1 : 0);
+                              const percActivos =
+                                (modsServicio.includes("perc") && digita("perc") ? 1 : 0) +
+                                (d.viewPerc.length ? 1 : 0) +
+                                contarGrants("PERC");
+                              const sepsActivos =
+                                (modsServicio.includes("sesps") && digita("sesps") ? 1 : 0) +
+                                (d.viewSeps.length ? 1 : 0) +
+                                ((d.editSeps ?? []).length ? 1 : 0) +
+                                contarGrants("SEPS");
+                              const horasActivos =
+                                (modsServicio.includes("distribucion") && digita("distribucion") ? 1 : 0) +
+                                (d.viewHoras.length ? 1 : 0) +
+                                contarGrants("Horas");
+                              const cecActivos =
+                                (d.cec ? 1 : 0) + (d.cecGestor ? 1 : 0) + (tieneGrant("panel-desvinculados") ? 1 : 0);
+                              const unidadPoaDefecto =
+                                poaUnidadDeDivision(selectedUser.division) || poaUnidadDeServicio(d.serviceId) || "";
+
+                              return (
+                                <div
+                                  role="dialog"
+                                  aria-modal="true"
+                                  className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-5"
+                                  onClick={() => setPermisosUid("")}
+                                >
+                                  <div className="modal-fade-in fixed inset-0 bg-slate-950/80 backdrop-blur-sm" />
+                                  <div
+                                    onClick={(event) => event.stopPropagation()}
+                                    className="modal-pop-in relative flex max-h-[92dvh] w-full min-w-0 max-w-xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0e1626] shadow-2xl shadow-black/60"
+                                  >
+                                    <div className="h-1 w-full shrink-0 bg-gradient-to-r from-teal-400 to-cyan-400" />
+                                    <div className="flex shrink-0 items-start justify-between gap-3 px-5 pb-3 pt-5">
+                                      <div className="min-w-0">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-300/90">
+                                          Permisos por menú
+                                        </p>
+                                        <h3 className="mt-1 truncate text-lg font-bold text-white">{d.name || selectedUser.name}</h3>
+                                        <p className="mt-0.5 text-[11px] text-slate-400">
+                                          Abra cada menú y active solo lo que esta persona debe ver.
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPermisosUid("")}
+                                        aria-label="Cerrar"
+                                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+
+                                    <div className="show-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto px-5 pb-4">
+                                      {esAdminCuenta ? (
+                                        <p className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-3 text-xs leading-5 text-amber-100">
+                                          Esta cuenta es <strong>administrador</strong>: ve todo el menú. Para limitarla,
+                                          primero cambie su rol en la ficha (sección 4 · Cuenta).
+                                        </p>
+                                      ) : (
+                                        <>
+                                          {item("inicio", "IN", "Inicio", 0, null, candado("Todos", true))}
+
+                                          {item(
+                                            "monitor",
+                                            "MG",
+                                            "Monitoreo general",
+                                            esSupervisorCuenta ? 1 : monitorActivos,
+                                            esSupervisorCuenta ? (
+                                              <p className="py-2 text-[11px] text-slate-400">
+                                                Ya lo ve completo por ser supervisor o Dirección.
+                                              </p>
+                                            ) : (
+                                              <>
+                                                <p className="pb-1 pt-1 text-[11px] text-slate-500">
+                                                  PERC, SEPS, Horas y C.E. Clínico de los servicios de la división. Solo mirar.
+                                                  Una división a la vez.
+                                                </p>
+                                                {divisiones.map(([k, label]) =>
+                                                  opcion(
+                                                    `div-${k}`,
+                                                    label,
+                                                    "",
+                                                    interruptor(
+                                                      d.monitorDivision === k,
+                                                      () => patch({ monitorDivision: d.monitorDivision === k ? "" : k }),
+                                                      label,
+                                                    ),
+                                                  ),
+                                                )}
+                                                {opcion(
+                                                  "mon-cec",
+                                                  "Solo Horas + C.E. Clínico (todo el hospital)",
+                                                  "Quién entregó Distribución de Horas y las listas del comité.",
+                                                  interruptor(
+                                                    tieneGrant("panel-monitor-cec"),
+                                                    () => ponerGrant("panel-monitor-cec", !tieneGrant("panel-monitor-cec")),
+                                                    "Horas + C.E. Clínico",
+                                                  ),
+                                                )}
+                                              </>
+                                            ),
+                                            esSupervisorCuenta ? candado("Por su rol", true) : undefined,
+                                          )}
+
+                                          {item(
+                                            "tendencias",
+                                            "TE",
+                                            "Tendencias",
+                                            0,
+                                            null,
+                                            esSupervisorCuenta || d.monitorDivision
+                                              ? candado("Activo con su monitoreo", true)
+                                              : candado("Se activa con Monitoreo por división"),
+                                          )}
+
+                                          {item(
+                                            "perc",
+                                            "PE",
+                                            "PERC",
+                                            percActivos,
+                                            <>
+                                              {filaDigita("perc", "el PERC")}
+                                              {opcionLista(
+                                                "perc-ver",
+                                                "Consultar PERC de otros servicios",
+                                                "Solo lectura.",
+                                                "viewPerc",
+                                                (id) => getAreaById(id)?.modules.includes("perc") ?? false,
+                                              )}
+                                              {grantsDe("PERC")}
+                                            </>,
+                                          )}
+
+                                          {item(
+                                            "seps",
+                                            "SE",
+                                            "SEPS",
+                                            sepsActivos,
+                                            <>
+                                              {filaDigita("sesps", "el SEPS")}
+                                              {opcionLista(
+                                                "seps-ver",
+                                                "Consultar SEPS de otros servicios",
+                                                "Solo lectura.",
+                                                "viewSeps",
+                                                (id) => !!getSepsTemplate(id),
+                                              )}
+                                              {opcionLista(
+                                                "seps-dig",
+                                                "Digitar el SEPS de otro servicio",
+                                                "Lo llena y lo guarda además del suyo.",
+                                                "editSeps",
+                                                (id) => !!getSepsTemplate(id),
+                                              )}
+                                              {grantsDe("SEPS")}
+                                            </>,
+                                          )}
+
+                                          {item(
+                                            "horas",
+                                            "DH",
+                                            "Dis/horas",
+                                            horasActivos,
+                                            <>
+                                              {filaDigita("distribucion", "las Horas")}
+                                              {opcionLista(
+                                                "horas-ver",
+                                                "Consultar Horas de otros servicios",
+                                                "Solo lectura.",
+                                                "viewHoras",
+                                                (id) => !!getHorasTemplate(id),
+                                              )}
+                                              {grantsDe("Horas")}
+                                            </>,
+                                          )}
+
+                                          {item(
+                                            "cec",
+                                            "CE",
+                                            "C.E. Clínico",
+                                            cecActivos,
+                                            <>
+                                              {d.monitorDivision ? (
+                                                <p className="pb-1 pt-1 text-[11px] text-slate-500">
+                                                  Por monitorear {SERVICE_GROUP_LABELS[d.monitorDivision] || "una división"} ya ve
+                                                  las listas de esa división.
+                                                </p>
+                                              ) : null}
+                                              {opcion(
+                                                "cec-miembro",
+                                                "Miembro del comité",
+                                                `Ve las ${CEC_TEMPLATES.length} listas del comité.`,
+                                                interruptor(
+                                                  d.cec,
+                                                  () =>
+                                                    patch({
+                                                      cec: !d.cec,
+                                                      ...(d.cec ? { cecServicios: [], cecGestor: false } : {}),
+                                                    }),
+                                                  "Miembro del comité",
+                                                ),
+                                              )}
+                                              {d.cec ? (
+                                                <div className="border-l border-white/10 py-2 pl-4">
+                                                  <p className="text-[13px] font-medium text-white">Listas que puede llenar</p>
+                                                  <p className="mt-0.5 text-[11px] text-slate-400">Las demás las ve sin poder escribir.</p>
+                                                  <div className="mt-1.5 space-y-1">
+                                                    {CEC_TEMPLATES.map((t) => {
+                                                      const on = (d.cecServicios ?? []).includes(t.serviceId);
+                                                      return (
+                                                        <div key={t.serviceId} className="flex items-center justify-between gap-2 py-0.5">
+                                                          <span className={`min-w-0 truncate text-xs ${on ? "text-white" : "text-slate-400"}`}>
+                                                            {t.nombre}
+                                                          </span>
+                                                          {interruptor(
+                                                            on,
+                                                            () =>
+                                                              patch({
+                                                                cecServicios: on
+                                                                  ? (d.cecServicios ?? []).filter((x) => x !== t.serviceId)
+                                                                  : [...(d.cecServicios ?? []), t.serviceId],
+                                                              }),
+                                                            t.nombre,
+                                                          )}
+                                                        </div>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                </div>
+                                              ) : null}
+                                              {d.cec
+                                                ? opcion(
+                                                    "cec-gestor",
+                                                    "Gestor del comité",
+                                                    "Desbloquea y bloquea las listas fuera de fecha.",
+                                                    interruptor(d.cecGestor, () => patch({ cecGestor: !d.cecGestor }), "Gestor del comité"),
+                                                  )
+                                                : null}
+                                              {opcion(
+                                                "cec-desv",
+                                                "Personal desvinculado",
+                                                "Reporte mensual de RRHH.",
+                                                interruptor(
+                                                  tieneGrant("panel-desvinculados"),
+                                                  () => ponerGrant("panel-desvinculados", !tieneGrant("panel-desvinculados")),
+                                                  "Personal desvinculado",
+                                                ),
+                                              )}
+                                            </>,
+                                          )}
+
+                                          {item("docs", "DO", "DOCS-POA/MOF", 0, null, candado("Todos", true))}
+
+                                          {item(
+                                            "poa",
+                                            "PO",
+                                            "POA",
+                                            tieneGrant("panel-poa") ? 1 : 0,
+                                            <>
+                                              {opcion(
+                                                "poa-on",
+                                                "Elabora el PAO de una unidad",
+                                                "Solo ve y edita el PAO de la unidad elegida.",
+                                                interruptor(tieneGrant("panel-poa"), () => ponerGrant("panel-poa", !tieneGrant("panel-poa")), "POA"),
+                                              )}
+                                              {tieneGrant("panel-poa") ? (
+                                                <div className="flex flex-wrap items-center gap-2 border-l border-white/10 py-2 pl-4 text-xs text-slate-300">
+                                                  <span className="font-semibold text-white">Unidad:</span>
+                                                  <PoaUnidadPicker
+                                                    value={d.poaUnidad || unidadPoaDefecto}
+                                                    grupos={poaGruposUnidades}
+                                                    permitirVacio
+                                                    placeholder="— Elegir —"
+                                                    ariaLabel="PAO que elabora"
+                                                    onChange={(id) => patch({ poaUnidad: id })}
+                                                  />
+                                                </div>
+                                              ) : null}
+                                            </>,
+                                          )}
+
+                                          {item("memos", "ME", "Memorándums", 0, null, soloAdmin)}
+                                          {item("config", "CF", "Configuración", 0, null, candado("Todos", true))}
+                                          {item("calendar", "CM", "Config/días-hábiles", 0, null, soloAdmin)}
+                                          {item("users", "US", "Usuarios", 0, null, soloAdmin)}
+                                          {item("signups", "RG", "Registros", 0, null, soloAdmin)}
+                                          {item("reset", "RE", "Reiniciar tablero", 0, null, soloAdmin)}
+                                          {item(
+                                            "toggle",
+                                            "HT",
+                                            "Habilitar tableros",
+                                            0,
+                                            null,
+                                            esSupervisorCuenta ? candado("Por su rol", true) : candado("Solo supervisores y Dirección"),
+                                          )}
+                                          {item("bitacora", "BT", "Bitácora", 0, null, soloAdmin)}
+                                        </>
+                                      )}
+                                    </div>
+
+                                    <div className="shrink-0 border-t border-white/10 bg-[#121c2e] px-5 py-3">
+                                      <p className={`mb-2 text-[11px] font-semibold ${hayCambios ? "text-amber-200" : "text-slate-500"}`}>
+                                        {hayCambios ? "● Hay cambios sin guardar" : "Todo guardado"}
+                                      </p>
+                                      <div className="flex gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleAdminSave(uid)}
+                                          disabled={busy || !hayCambios}
+                                          className={`${BTN_GUARDAR} inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-50`}
+                                        >
+                                          {busy ? "Guardando..." : "Guardar permisos"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setPermisosUid("")}
+                                          className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.08]"
+                                        >
+                                          Cerrar
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          : null}
 
                         {(() => {
                           const su = selectedUser;
