@@ -5162,7 +5162,12 @@ export default function Home() {
     const completos = items.filter((item) => item.done).length;
 
     return {
-      items: [...items].sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" })),
+      // Pendientes (punto amarillo) arriba y completos abajo; alfabetico dentro de cada grupo.
+      items: [...items].sort(
+        (a, b) =>
+          Number(a.done) - Number(b.done) ||
+          a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+      ),
       total,
       completos,
       pendientes: total - completos,
@@ -5294,8 +5299,10 @@ export default function Home() {
     const total = items.length;
     const completos = items.filter((item) => item.done).length;
     return {
-      items: [...items].sort((a, b) =>
-        a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+      items: [...items].sort(
+        (a, b) =>
+          Number(a.done) - Number(b.done) ||
+          a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
       ),
       total,
       completos,
@@ -28672,8 +28679,11 @@ export default function Home() {
                 const completosCount = statsItems.filter((it) => it.done).length;
                 const incompletosCount = total - completosCount;
                 const pct = total > 0 ? Math.round((completosCount / total) * 100) : 0;
-                const ordered = [...statsItems].sort((a, b) =>
-                  a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+                // Pendientes arriba, completos abajo (alfabetico dentro de cada grupo).
+                const ordered = [...statsItems].sort(
+                  (a, b) =>
+                    Number(a.done) - Number(b.done) ||
+                    a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
                 );
                 // Ya paso la hora de cierre del mes: los estados dejan de ser
                 // "completo / pendiente" y pasan a "Cerrado completo / Cerrado sin completar".
