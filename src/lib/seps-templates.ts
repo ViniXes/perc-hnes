@@ -276,7 +276,19 @@ export function getMonthDays(periodId: string): number {
   return new Date(year, month, 0).getDate();
 }
 
-/** Lista de dias [1..N] como strings, para usar como claves de columna. */
-export function getDayColumns(periodId: string): string[] {
-  return Array.from({ length: getMonthDays(periodId) }, (_, index) => String(index + 1));
+/** Limites del ajuste manual de dias (ver diasMes en sepsTabulators). */
+export const SEPS_DIAS_MIN = 1;
+export const SEPS_DIAS_MAX = 31;
+
+/**
+ * Lista de dias [1..N] como strings, para usar como claves de columna.
+ * `manual` (opcional) reemplaza el calculo automatico cuando el usuario ajusta a
+ * mano cuantos dias tiene el mes (respaldo por si el calculo fallara).
+ */
+export function getDayColumns(periodId: string, manual?: number | null): string[] {
+  const total =
+    typeof manual === "number" && Number.isFinite(manual)
+      ? Math.min(SEPS_DIAS_MAX, Math.max(SEPS_DIAS_MIN, Math.round(manual)))
+      : getMonthDays(periodId);
+  return Array.from({ length: total }, (_, index) => String(index + 1));
 }

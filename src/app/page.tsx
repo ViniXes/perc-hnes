@@ -79,6 +79,9 @@ import {
 import { calcularMatriz, indiceALetra } from "@/lib/seps-formula";
 import {
   getDayColumns,
+  getMonthDays,
+  SEPS_DIAS_MAX,
+  SEPS_DIAS_MIN,
   getSepsRows,
   getSepsTemplate,
   SEPS_LAB_PROC_COLS,
@@ -2435,7 +2438,11 @@ function buildSepsEffectiveRows(
   return list;
 }
 
-function buildEmptySeps(template: SepsTemplate, periodId: string): SepsValues {
+function buildEmptySeps(
+  template: SepsTemplate,
+  periodId: string,
+  diasManual?: number | null,
+): SepsValues {
   const values: SepsValues = {};
 
   // Formato matricial (Laboratorio): filas = examenes; columnas = RESULTADOS + PROCEDENCIA.
@@ -2449,7 +2456,7 @@ function buildEmptySeps(template: SepsTemplate, periodId: string): SepsValues {
     return values;
   }
 
-  const days = getDayColumns(periodId);
+  const days = getDayColumns(periodId, diasManual);
   for (const row of getSepsRows(template)) {
     if (row.readOnly) {
       continue;
@@ -2465,13 +2472,14 @@ function mergeSepsWithTemplate(
   periodId: string,
   saved?: Record<string, Record<string, unknown>>,
   extraKeys: string[] = [],
+  diasManual?: number | null,
 ): SepsValues {
-  const values = buildEmptySeps(template, periodId);
+  const values = buildEmptySeps(template, periodId, diasManual);
 
   // Filas agregadas a mano: se les crea su fila de dias vacia para que sus
   // valores se conserven al guardar/cargar (no estan en la plantilla oficial).
   if (template.kind !== "matrix") {
-    const days = getDayColumns(periodId);
+    const days = getDayColumns(periodId, diasManual);
     for (const key of extraKeys) {
       if (!values[key]) {
         values[key] = Object.fromEntries(days.map((day) => [day, ""]));
@@ -2490,6 +2498,15 @@ function mergeSepsWithTemplate(
         values[rowKey][day] = String(cell);
       }
     }
+    // Dias guardados que hoy no se muestran (p. ej. se quito un dia a mano): se
+    // conservan tal cual para no perder datos si se vuelve a agregar el dia.
+    if (template.kind !== "matrix") {
+      for (const [day, cell] of Object.entries(saved[rowKey] ?? {})) {
+        if (/^([1-9]|[12][0-9]|3[01])$/.test(day) && values[rowKey][day] === undefined && cell !== undefined && cell !== null && String(cell) !== "") {
+          values[rowKey][day] = String(cell);
+        }
+      }
+    }
   }
 
   return values;
@@ -2503,6 +2520,8 @@ type SepsData = {
   extraRows: SepsExtraRow[];
   hiddenKeys: string[];
   comments: SepsComment[];
+  /** Dias del mes ajustados a mano (null = calculo automatico). */
+  diasMes?: number | null;
 };
 
 /**
@@ -2586,9 +2605,12 @@ async function fetchSepsDataForPeriod(
         extraRows?: SepsExtraRow[];
         hiddenKeys?: string[];
         comments?: SepsComment[];
+        diasMes?: number | null;
       })
     : {};
   const extraRows = Array.isArray(data.extraRows) ? data.extraRows : [];
+  const diasMes =
+    typeof data.diasMes === "number" && Number.isFinite(data.diasMes) ? data.diasMes : null;
 
   // Datos capturados ANTES de unificar el servicio (cuando cada disciplina era un
   // servicio aparte). Se leen y se mezclan para no perder lo ya digitado; como las
@@ -2613,10 +2635,11 @@ async function fetchSepsDataForPeriod(
   }
 
   return {
-    values: mergeSepsWithTemplate(template, periodId, valoresBase, extraRows.map((e) => e.key)),
+    values: mergeSepsWithTemplate(template, periodId, valoresBase, extraRows.map((e) => e.key), diasMes),
     extraRows,
     hiddenKeys: Array.isArray(data.hiddenKeys) ? data.hiddenKeys : [],
     comments: Array.isArray(data.comments) ? data.comments : [],
+    diasMes,
   };
 }
 
@@ -3944,6 +3967,8 @@ export default function Home() {
   // Mes que se esta viendo en cada tabulador. null = mes de captura actual.
   const [percViewPeriod, setPercViewPeriod] = useState<string | null>(null);
   const [sepsViewPeriod, setSepsViewPeriod] = useState<string | null>(null);
+  // Dias del mes ajustados a mano en el SEPS (null = automatico por calendario).
+  const [sepsDiasManual, setSepsDiasManual] = useState<number | null>(null);
   const [horasViewPeriod, setHorasViewPeriod] = useState<string | null>(null);
   // Arrastre tipo Excel en Horas: copia un valor hacia abajo por columna.
   const [fillDrag, setFillDrag] = useState<{
@@ -5636,7 +5661,15 @@ export default function Home() {
     );
     return now.getTime() >= cierre.getTime();
   }
-  const sepsDayColumns = useMemo(() => getDayColumns(sepsPeriodId), [sepsPeriodId]);
+  // Columnas de dia del mes que se esta MOSTRANDO (historial o mes de captura).
+  // Antes usaba siempre el mes de captura: al abrir octubre desde el historial en
+  // noviembre salian 30 dias en vez de 31.
+  const sepsActivePeriod = sepsViewPeriod ?? sepsPeriodId;
+  const sepsDayColumns = useMemo(
+    () => getDayColumns(sepsActivePeriod, sepsDiasManual),
+    [sepsActivePeriod, sepsDiasManual],
+  );
+  const sepsDiasAuto = useMemo(() => getMonthDays(sepsActivePeriod), [sepsActivePeriod]);
   const sepsCaptureOpen = useMemo(() => {
     const override = sepsTemplate
       ? captureOverrides[getCaptureOverrideId(sepsPeriodId, sepsTemplate.serviceId, "sesps")]
@@ -6450,6 +6483,7 @@ export default function Home() {
           setSepsExtraRows([]);
           setSepsHiddenKeys([]);
           setSepsComments([]);
+          setSepsDiasManual(null);
         }
         return;
       }
@@ -6461,6 +6495,7 @@ export default function Home() {
           setSepsExtraRows(data.extraRows);
           setSepsHiddenKeys(data.hiddenKeys);
           setSepsComments(data.comments);
+          setSepsDiasManual(data.diasMes ?? null);
         }
       } catch (sepsError) {
         if (await handleFirestoreError(sepsError)) {
@@ -6471,6 +6506,7 @@ export default function Home() {
           setSepsExtraRows([]);
           setSepsHiddenKeys([]);
           setSepsComments([]);
+          setSepsDiasManual(null);
         }
       }
     })();
@@ -11903,6 +11939,18 @@ export default function Home() {
     }
   }
 
+  // Ajuste manual de los dias del mes en el SEPS (respaldo del calculo automatico).
+  // Quitar un dia solo lo oculta: lo digitado en ese dia se conserva y vuelve a
+  // aparecer si se agrega de nuevo. null = volver al calculo por calendario.
+  function handleSepsDiasChange(siguiente: number | null) {
+    const valor =
+      siguiente === null
+        ? null
+        : Math.min(SEPS_DIAS_MAX, Math.max(SEPS_DIAS_MIN, Math.round(siguiente)));
+    setSepsDiasManual(valor === sepsDiasAuto ? null : valor);
+    marcarCambio("seps");
+  }
+
   function handleSepsCellChange(rowKey: string, day: string, rawValue: string) {
     const value = sanitizeNumericValue(rawValue);
     marcarCambio("seps");
@@ -12990,6 +13038,7 @@ export default function Home() {
       targetPeriod,
       sepsValues,
       sepsExtraRows.map((e) => e.key),
+      sepsDiasManual,
     );
 
     const queSeGuardo = `El SEPS de ${sepsTemplate.displayName ?? currentService?.name ?? sepsTemplate.serviceId} (${targetPeriodLabel})`;
@@ -13007,6 +13056,7 @@ export default function Home() {
       extraRows: sepsExtraRows,
       hiddenKeys: sepsHiddenKeys,
       comments: sepsComments,
+      diasMes: sepsDiasManual,
       updatedAt: serverTimestamp(),
     };
 
@@ -13065,6 +13115,7 @@ export default function Home() {
       setSepsExtraRows(data.extraRows);
       setSepsHiddenKeys(data.hiddenKeys);
       setSepsComments(data.comments);
+      setSepsDiasManual(data.diasMes ?? null);
       setMessage(`Datos SEPS recuperados (${sepsPeriodLabel}).`);
     } catch (loadError) {
       if (await handleFirestoreError(loadError)) {
@@ -13092,6 +13143,7 @@ export default function Home() {
       setSepsExtraRows(data.extraRows);
       setSepsHiddenKeys(data.hiddenKeys);
       setSepsComments(data.comments);
+      setSepsDiasManual(data.diasMes ?? null);
       setSepsViewPeriod(period === sepsPeriodId ? null : period);
 
       if (period !== sepsPeriodId) {
@@ -13114,7 +13166,7 @@ export default function Home() {
     if (!sepsTemplate) {
       return;
     }
-    setSepsValues(buildEmptySeps(sepsTemplate, sepsPeriodId));
+    setSepsValues(buildEmptySeps(sepsTemplate, sepsActivePeriod, sepsDiasManual));
     setMessage("Tabla SEPS limpiada localmente. Puedes volver a cargar o guardar nuevos datos.");
     setError("");
   }
@@ -13154,15 +13206,16 @@ export default function Home() {
         const result = importSepsWorkbookByLabels(
           sepsTemplate,
           sheets,
-          getDayColumns(sepsPeriodId),
+          sepsDayColumns,
         );
         if (result.filled > 0) {
           setSepsValues(
             mergeSepsWithTemplate(
               sepsTemplate,
-              sepsPeriodId,
+              sepsActivePeriod,
               result.values,
               sepsExtraRows.map((extra) => extra.key),
+              sepsDiasManual,
             ),
           );
           const aviso =
@@ -13185,7 +13238,7 @@ export default function Home() {
           .replace(/[\u0300-\u036f]/g, "")
           .trim()
           .toUpperCase();
-      const monthSheet = getShortPeriodLabel(sepsPeriodId)
+      const monthSheet = getShortPeriodLabel(sepsActivePeriod)
         .replace(" - ", " ")
         .toUpperCase();
       const names = wb.SheetNames;
@@ -13214,8 +13267,8 @@ export default function Home() {
         }
       }
 
-      const next = buildEmptySeps(sepsTemplate, sepsPeriodId);
-      const dayCols = getDayColumns(sepsPeriodId);
+      const next = buildEmptySeps(sepsTemplate, sepsActivePeriod, sepsDiasManual);
+      const dayCols = sepsDayColumns;
       let filledCells = 0;
 
       sepsTemplate.tables.forEach((table, ti) => {
@@ -16702,7 +16755,7 @@ export default function Home() {
 
         {/* Acciones del tabulador SEPS. En historial cambia segun el rol. */}
         <div className={`mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
-          <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             {isSepsHistory ? (
               <button
                 type="button"
@@ -16712,6 +16765,47 @@ export default function Home() {
               >
                 ← Volver al mes actual
               </button>
+            ) : null}
+            {sepsTemplate?.tables && sepsTemplate.kind !== "matrix" ? (
+              <div
+                className={`inline-flex w-fit flex-wrap items-center gap-2 rounded-2xl border px-3 py-1.5 text-xs ${isLightPanelTheme ? "border-slate-200 bg-slate-50 text-slate-700" : "border-white/10 bg-white/[0.04] text-slate-200"}`}
+                title="Días (columnas) del mes. Se calculan solos; si algo falla, agréguelos o quítelos aquí. Quitar un día no borra lo digitado."
+              >
+                <span className="font-semibold">
+                  Días del mes: {sepsDayColumns.length}
+                  {sepsDiasManual !== null ? ` (manual, calendario: ${sepsDiasAuto})` : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleSepsDiasChange(sepsDayColumns.length - 1)}
+                  disabled={sepsEditingBlocked || sepsDayColumns.length <= SEPS_DIAS_MIN}
+                  aria-label="Quitar un día"
+                  title="Quitar el último día"
+                  className={`rounded-lg px-2 py-0.5 font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${isLightPanelTheme ? "bg-slate-200 hover:bg-slate-300" : "bg-white/10 hover:bg-white/20"}`}
+                >
+                  − día
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSepsDiasChange(sepsDayColumns.length + 1)}
+                  disabled={sepsEditingBlocked || sepsDayColumns.length >= SEPS_DIAS_MAX}
+                  aria-label="Agregar un día"
+                  title="Agregar un día al final"
+                  className={`rounded-lg px-2 py-0.5 font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${isLightPanelTheme ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" : "bg-emerald-400/15 text-emerald-100 hover:bg-emerald-400/25"}`}
+                >
+                  + día
+                </button>
+                {sepsDiasManual !== null ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSepsDiasChange(null)}
+                    disabled={sepsEditingBlocked}
+                    className="rounded-lg px-2 py-0.5 font-semibold underline-offset-2 hover:underline disabled:opacity-40"
+                  >
+                    Automático
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
 
@@ -16735,7 +16829,7 @@ export default function Home() {
                 <>
                   <button
                     type="button"
-                    onClick={() => void downloadSepsTemplate(sepsTemplate, sepsDayColumns, sepsPeriodId)}
+                    onClick={() => void downloadSepsTemplate(sepsTemplate, sepsDayColumns, sepsActivePeriod)}
                     title="Descargar plantilla Excel"
                     className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >

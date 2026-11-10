@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.508",
+    para: ["todos"],
+    texto:
+      "SEPS: al abrir un mes anterior desde el historial ahora salen los dias correctos de ese mes (octubre con 31). Ademas, junto a los botones del tabulador hay \"Dias del mes\" con + dia / - dia por si el calculo fallara; quitar un dia no borra lo digitado.",
+  },
+  {
     version: "1986.503",
     para: ["admin"],
     texto:
