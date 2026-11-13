@@ -1868,3 +1868,35 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
   .splash-retira { animation: none; opacity: 0; }
   .splash-estrella { display: none; }
 }
+
+/* Menu lateral: barra de scroll visible en escritorio para recorrerlo con el
+   mouse en laptops (en celulares el navegador la muestra solo al deslizar). */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(157, 180, 211, 0.75) transparent;
+  scrollbar-gutter: stable;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  display: block;
+  width: 8px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 18px 0;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(157, 180, 211, 0.75);
+  border-radius: 9999px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: #2f6fb5;
+}
+.panel-shell.theme-dark .sidebar-scroll {
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+}
+.panel-shell.theme-dark .sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+}
+.panel-shell.theme-dark .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(157, 180, 211, 0.85);
+}

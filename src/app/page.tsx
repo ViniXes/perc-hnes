@@ -568,6 +568,59 @@ const BACKGROUND_OPTIONS: { id: string; label: string; css: string | null }[] = 
   { id: "grafito", label: "Grafito", css: "linear-gradient(160deg, #0e1013, #1b1f25)" },
 ];
 
+// Botones flotantes de subir/bajar para el menu lateral (solo escritorio).
+// Buscan su <aside> contenedor y solo aparecen cuando hay contenido oculto
+// arriba o abajo. Pensado para laptops donde cuesta usar el trackpad.
+function SidebarScrollButtons({ light }: { light: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [canUp, setCanUp] = useState(false);
+  const [canDown, setCanDown] = useState(false);
+  useEffect(() => {
+    const el = ref.current?.closest("aside");
+    if (!el) return;
+    const update = () => {
+      setCanUp(el.scrollTop > 4);
+      setCanDown(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    Array.from(el.children).forEach((c) => ro.observe(c));
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+  const go = (dir: 1 | -1) => {
+    const el = ref.current?.closest("aside");
+    if (el) el.scrollBy({ top: dir * Math.max(160, el.clientHeight * 0.6), behavior: "smooth" });
+  };
+  const btn = `pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border shadow-md backdrop-blur transition ${
+    light
+      ? "border-[#9DB4D3]/70 bg-white/90 text-[#2F6FB5] hover:bg-[#eef3fa]"
+      : "border-white/20 bg-[#1b3a6b]/90 text-sky-200 hover:bg-[#24508f]"
+  }`;
+  return (
+    <div ref={ref} className="pointer-events-none sticky bottom-0 z-10 hidden h-0 desk:block">
+      <div className="absolute bottom-1 right-0 flex flex-col gap-1.5">
+        {canUp ? (
+          <button type="button" onClick={() => go(-1)} aria-label="Subir en el menú" title="Subir" className={btn}>
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2.2} className="h-4 w-4"><path d="M5 12l5-5 5 5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
+        ) : null}
+        {canDown ? (
+          <button type="button" onClick={() => go(1)} aria-label="Bajar en el menú" title="Bajar" className={btn}>
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={2.2} className="h-4 w-4"><path d="M5 8l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 // Divisor de seccion (solo escritorio): marca el inicio de cada tabulador en la
 // pagina principal con un color propio, para que al hacer scroll se perciba el
 // cambio de PERC -> SEPS -> Horas y no se sienta un solo tabulador continuo.
@@ -20190,7 +20243,7 @@ export default function Home() {
             />
           ) : null}
           <aside
-            className={`self-start overflow-y-auto px-4 pt-4 pb-28 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] desk:inset-x-auto desk:bottom-auto desk:z-auto desk:w-auto desk:max-h-[calc(100vh-2rem)] desk:rounded-[24px] desk:p-4 desk:pb-4 desk:shadow-[0_24px_80px_rgba(3,7,18,0.22)] desk:transition-none desk:sticky desk:top-4 ${
+            className={`sidebar-scroll self-start overflow-y-auto px-4 pt-4 pb-28 shadow-[0_-24px_80px_rgba(3,7,18,0.45)] transition-transform duration-300 fixed inset-x-0 bottom-0 z-50 w-full max-h-[82vh] rounded-t-[28px] desk:inset-x-auto desk:bottom-auto desk:z-auto desk:w-auto desk:max-h-[calc(100vh-2rem)] desk:rounded-[24px] desk:p-4 desk:pb-4 desk:shadow-[0_24px_80px_rgba(3,7,18,0.22)] desk:transition-none desk:sticky desk:top-4 ${
               menuOpen ? "translate-y-0" : "translate-y-full desk:hidden"
             } ${
               isLightPanelTheme
@@ -20561,6 +20614,7 @@ export default function Home() {
                 </button>
               </div>
             </div>
+            <SidebarScrollButtons light={isLightPanelTheme} />
           </aside>
 
           {/* Barra inferior: SOLO movil. Solo la casita, centrada (abre el menu).
