@@ -21160,31 +21160,6 @@ export default function Home() {
             </div>
             </section>
 
-            {/* ============ ACCESOS DIRECTOS (admin/supervisor) ============ */}
-            {(isAdmin || isSupervisor) && !isMinsal ? (
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { id: "panel-monitor-general", label: "Monitoreo general" },
-                  { id: "panel-tendencias", label: "Tendencias" },
-                  ...(puedeVerHospitales ? [{ id: "panel-hospitales", label: "Hospitales" }] : []),
-                  { id: "panel-admin-export", label: "Consolidados" },
-                ].map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => runSidebarItem(a.id)}
-                    className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
-                      isLightPanelTheme
-                        ? "border-slate-200 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700"
-                        : "border-white/10 bg-white/[0.04] text-slate-200 hover:border-cyan-400/30 hover:bg-cyan-500/10 hover:text-cyan-200"
-                    }`}
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
             {/* ================== TU MES ==================
                 Para la cuenta de un servicio: en una sola tarjeta, que le falta
                 entregar este mes, cuanto tiempo queda y un acceso directo a cada
