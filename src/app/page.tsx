@@ -162,6 +162,7 @@ import {
   getCaptureWindow,
   getFeriadoNacional,
   getModuleCloseMillis,
+  getCloseMillis,
   getClosingPeriodId,
   getDateKey,
   getPeriodId,
@@ -5692,9 +5693,12 @@ export default function Home() {
   // empezar en "pendiente", sin nada que reiniciar a mano.
   function isMonitorPeriodClosed(statsLabel: "PERC" | "SEPS" | "Horas"): boolean {
     if (statsLabel === "SEPS") {
-      // SEPS: cerrado durante la transicion (entre el cierre y la reapertura del dia 6).
-      // En fase "captura" el monitoreo ya mira el mes en curso, que esta abierto.
-      return sepsWindow.phase === "transicion";
+      // SEPS: el tablero del monitoreo se arma con el mes EN CIERRE (periodId), igual
+      // que PERC y Horas. Ese mes cierra el 5to dia habil a las 2:30 p. m.; desde ahi
+      // queda "Cerrado" aunque la captura SEPS ya este en el mes en curso.
+      // (Antes solo marcaba cerrado en la transicion, unas horas, y el encabezado
+      // decia el mes en curso aunque las cifras eran del mes anterior.)
+      return now.getTime() >= getCloseMillis(sepsWindow.lastCloseDay);
     }
     const win = getCaptureWindow(
       now,
@@ -28563,7 +28567,7 @@ export default function Home() {
             ? (() => {
                 const columnasBase = [
                   { key: "PERC" as const, titulo: "PERC", periodo: periodId, color: "#38bdf8" },
-                  { key: "SEPS" as const, titulo: "SEPS", periodo: sepsPeriodId, color: "#a78bfa" },
+                  { key: "SEPS" as const, titulo: "SEPS", periodo: periodId, color: "#a78bfa" },
                   { key: "Horas" as const, titulo: "Distribución de Horas", periodo: periodId, color: "#34d399" },
                 ].map((col) => ({
                   ...col,
@@ -28854,7 +28858,7 @@ export default function Home() {
                             Avance · {statsLabel}
                           </p>
                           <h3 className="mt-1 flex flex-wrap items-center gap-2 text-xl font-semibold text-white">
-                            {getPeriodLabel(statsModule === "sesps" ? sepsPeriodId : periodId)}
+                            {getPeriodLabel(periodId)}
                             {cerrado ? (
                               <span className="rounded-full bg-rose-500/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-rose-300">
                                 Cerrado

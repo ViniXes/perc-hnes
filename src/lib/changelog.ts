@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.510",
+    para: ["admin"],
+    texto:
+      "Monitoreo SEPS: ahora muestra el mes en cierre (el mismo de las cifras, igual que PERC y Horas) y marca \"Cerrado\" desde el 5.º día hábil a las 2:30 p. m.",
+  },
+  {
     version: "1986.508",
     para: ["todos"],
     texto:
