@@ -39,7 +39,8 @@ Resumen de cambios recientes (noviembre 2026):
 
 _(Anotar aquí tareas abiertas, quién las tomó y su estado. Borrar o marcar ✓ al terminar.)_
 
-- [ ] Ninguno registrado por ahora.
+- [ ] Responsable de Firebase: rotar las antiguas claves administrativas y de supervisión que se distribuyeron en el navegador, revocar sus sesiones y verificar que todas las identidades privilegiadas reservadas estén aprovisionadas en Auth. No poner claves en Git ni en variables `NEXT_PUBLIC_*`.
+- [ ] Claude / ESDOMED: validar en entorno de pruebas con cuentas de servicio, RR. HH. y administración los pasos de la entrada del 17/11. No aplicar cambios de reglas sin autorización.
 
 ## Bitácora
 
@@ -51,6 +52,16 @@ Entradas nuevas **arriba**. Formato:
 - Archivos: rutas principales tocadas.
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
+
+### 2026-11-17 — ChatGPT
+- Nómina: las plantillas iniciales con personal y DUI ahora se sirven por `/api/horas/plantillas` tras validar Firebase Auth y el alcance del perfil. El catálogo público solo contiene metadatos. RR. HH. conserva el consolidado; no se le habilita la captura de otros servicios. La ruta necesita la misma configuración de Admin SDK que las rutas administrativas.
+- Cuentas: ambos flujos de restablecimiento requieren gestión de usuarios, excluyen destinos administrativos y revocan sesiones al resetear. El login del administrador y de los supervisores predefinidos ahora usa únicamente la contraseña ingresada; ya no crea esas cuentas desde el navegador. Si falta una, aprovisionarla por el canal administrativo.
+- Horas: guarda borradores locales por usuario, mes y servicio. Una transacción combina cambios independientes por empleado y celda; ante cambios incompatibles conserva el borrador y pide conciliar. Para hacerlo, descargar la copia Excel (incluye notas), recuperar la versión vigente y aplicar los cambios revisados. Las estaciones deben actualizar PULSO antes de trabajar simultáneamente.
+- Calendario: se calcula con hora de El Salvador tanto en pantalla como en recordatorios y publicación del cierre. No cambian los plazos vigentes: PERC cierra a las 14:30 del tercer día hábil; Horas conserva el quinto. La corrección horaria no reescribe por sí sola cierres históricos.
+- PERC: autoguardar ya no entrega. Con datos capturados, elegir **Confirmar entrega**; corregir y autoguardar vuelve a dejar en borrador hasta confirmar de nuevo. Monitoreo y recordatorios usan el mismo criterio. Los meses previos sin estado explícito conservan el criterio histórico.
+- Verificación reproducible: `npm run build` y `npm run test:captura -- --bundle`. Las pruebas cubren permisos, compatibilidad del historial, conflictos por celda, el cierre agostino en cuatro zonas y ausencia de DUI de plantilla en el JavaScript público. No usan datos de producción para autenticarse ni escribir.
+- Prueba operativa pendiente: con cuentas de ensayo, abrir dos navegadores en el mismo tablero, editar celdas iguales y distintas, desconectar y reconectar, confirmar el PERC y verificar el monitoreo; validar el consolidado de RR. HH. y el rechazo del reset de un administrador. No modificar registros hospitalarios para hacer estas pruebas.
+- Alcance de privacidad: no se modificaron ni publicaron reglas de Firestore. Los registros históricos de Horas mantienen sus permisos actuales; revisar ese acceso en una tarea separada. Las versiones previas, el historial de Git y las copias locales autorizadas no se borran con esta actualización.
 
 ### 2026-11-17 — Claude
 - Cambio: se crea este archivo como canal compartido entre Claude y ChatGPT.

@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:captura": "node scripts/verificar-captura.mjs",
     "marcar-version": "node scripts/marcar-version.mjs"
   },
   "dependencies": {

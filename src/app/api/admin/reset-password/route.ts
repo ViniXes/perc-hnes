@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { gestionaUsuarios, permiteReset } from "@/lib/permisos-cuentas";
 
 export const runtime = "nodejs";
 
@@ -34,31 +35,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Falta autenticación." }, { status: 401 });
   }
 
-  // 1) Verificar que QUIEN llama sea admin o supervisor.
   let callerUid = "";
   try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
+    const decoded = await adminAuth.verifyIdToken(idToken, true);
     callerUid = decoded.uid;
   } catch {
     return NextResponse.json({ ok: false, error: "Sesión inválida." }, { status: 401 });
   }
 
   const callerSnap = await adminDb.collection("serviceUsers").doc(callerUid).get();
-  const callerRole = callerSnap.exists ? (callerSnap.data()?.role as string) : "";
-  if (callerRole !== "admin" && callerRole !== "supervisor") {
+  const caller = callerSnap.data();
+  if (!gestionaUsuarios(caller)) {
     return NextResponse.json(
-      { ok: false, error: "Solo administradores o supervisores pueden resetear claves." },
+      { ok: false, error: "Se requiere el permiso de gestión de usuarios." },
       { status: 403 },
     );
   }
 
   async function resetOne(uid: string): Promise<boolean> {
     try {
-      await adminAuth!.updateUser(uid, { password: RESET_PASSWORD });
       await adminDb!
         .collection("serviceUsers")
         .doc(uid)
         .set({ mustChangePassword: true, updatedAt: new Date() }, { merge: true });
+      await adminAuth!.updateUser(uid, { password: RESET_PASSWORD });
+      await adminAuth!.revokeRefreshTokens(uid);
       return true;
     } catch {
       return false;
@@ -70,7 +71,8 @@ export async function POST(req: NextRequest) {
     const snap = await adminDb.collection("serviceUsers").where("role", "==", "service").get();
     let done = 0;
     for (const d of snap.docs) {
-      if (await resetOne(d.id)) done += 1;
+      const destino = await adminAuth.getUser(d.id).catch(() => null);
+      if (permiteReset(caller, d.data(), destino?.email) && await resetOne(d.id)) done += 1;
     }
     return NextResponse.json({ ok: true, count: done, total: snap.size, password: RESET_PASSWORD });
   }
@@ -79,6 +81,11 @@ export async function POST(req: NextRequest) {
   const targetUid = typeof body.targetUid === "string" ? body.targetUid : "";
   if (!targetUid) {
     return NextResponse.json({ ok: false, error: "Falta el usuario a resetear." }, { status: 400 });
+  }
+  const target = await adminDb.collection("serviceUsers").doc(targetUid).get();
+  const cuenta = await adminAuth.getUser(targetUid).catch(() => null);
+  if (!permiteReset(caller, target.data(), cuenta?.email)) {
+    return NextResponse.json({ ok: false, error: "Esta cuenta no admite un reinicio ordinario." }, { status: 403 });
   }
   const ok = await resetOne(targetUid);
   return ok

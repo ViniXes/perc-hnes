@@ -4,6 +4,7 @@ import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { APP_URL, enviarCorreo, envolverHtml, esCorreo, escaparHtml } from "@/lib/correo";
 import {
   getCaptureWindow,
+  fechaHospital,
   getClosingPeriodId,
   getModuleCloseMillis,
   getPeriodId,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/periodos";
 import { SERVICE_DEFINITIONS } from "@/lib/tabulator-template";
 import { getAreaById, type ModuleId } from "@/lib/modules";
+import { percEntregado } from "@/lib/perc-entrega";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -65,26 +67,7 @@ const COLECCION_POR_MODULO: Record<ModuleId, string> = {
 
 /** La hora de El Salvador, no la del servidor (que corre en UTC). */
 function ahoraEnElSalvador(): Date {
-  const partes = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/El_Salvador",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date());
-  const buscar = (tipo: string) =>
-    Number.parseInt(partes.find((p) => p.type === tipo)?.value ?? "0", 10);
-  return new Date(
-    buscar("year"),
-    buscar("month") - 1,
-    buscar("day"),
-    buscar("hour"),
-    buscar("minute"),
-    0,
-    0,
-  );
+  return fechaHospital();
 }
 
 /** Días bloqueados del año (feriados y asuetos que carga el administrador). */
@@ -123,12 +106,7 @@ async function entregados(
     if (typeof d.serviceId !== "string") return;
     // En PERC un documento guardado pero VACIO no cuenta como entregado: es el
     // mismo criterio del monitoreo, para no dejar sin aviso a quien solo abrió.
-    if (moduleId === "perc") {
-      const hayAlgo = Object.values(d.values ?? {}).some((fila) =>
-        Object.values(fila ?? {}).some((celda) => String(celda ?? "").trim() !== ""),
-      );
-      if (!hayAlgo) return;
-    }
+    if (moduleId === "perc" && !percEntregado(d)) return;
     ids.add(d.serviceId);
   });
   return ids;
@@ -280,9 +258,6 @@ async function calcularEnvios(db: FirebaseFirestore.Firestore) {
  */
 async function publicarCierres(db: FirebaseFirestore.Firestore) {
   const hoy = ahoraEnElSalvador();
-  // `hoy` es la hora de pared de El Salvador leida en la zona del servidor (UTC):
-  // esta diferencia convierte "2:30 p. m. en El Salvador" al instante real.
-  const desfase = Math.round((Date.now() - hoy.getTime()) / 900_000) * 900_000;
   const bloqueados = await diasBloqueados(db, hoy.getFullYear());
   const cierres = getModuleCloseMillis(hoy, bloqueados);
   await db
@@ -291,8 +266,8 @@ async function publicarCierres(db: FirebaseFirestore.Firestore) {
     .set(
       {
         periodId: getClosingPeriodId(hoy),
-        percCierre: Timestamp.fromMillis(cierres.perc + desfase),
-        horasCierre: Timestamp.fromMillis(cierres.horas + desfase),
+        percCierre: Timestamp.fromMillis(cierres.perc),
+        horasCierre: Timestamp.fromMillis(cierres.horas),
       },
       { merge: true },
     );

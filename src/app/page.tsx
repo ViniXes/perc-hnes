@@ -39,6 +39,7 @@ import {
   deleteField,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   limit,
   onSnapshot,
@@ -138,7 +139,13 @@ import {
   type PoaDoc,
   type PoaSemaforo,
 } from "@/lib/poa-template";
-import { getHorasTemplate, HORAS_TEMPLATES, type HorasTemplate } from "@/lib/horas-templates";
+import { getHorasTemplate, type HorasTemplate } from "@/lib/horas-templates";
+import { asignarIds, ConflictoHoras, type HorasFila } from "@/lib/horas-mezcla";
+import { puedeLeerNomina } from "@/lib/horas-permisos";
+import { permiteReset } from "@/lib/permisos-cuentas";
+import { borrarEdicion, guardarBorrador, pendientesHoras, plantillaLocal, recordarPlantilla, sincronizarHoras } from "@/lib/horas-pendientes";
+import { percEntregado, tieneDatosPerc as hasAnyCapturedValue } from "@/lib/perc-entrega";
+import { SERVICE_GROUP_BY_ID, DEPARTMENT_SERVICES, isServiceInChiefScope } from "@/lib/alcance-servicios";
 import { INSUMOS_ALMACEN_TEMPLATE, INSUMOS_CONSOLIDADO_ORDER, type InsumoRow } from "@/lib/insumos-almacen";
 import { GASTOS_EXPENSES, GASTOS_COST_CENTERS, GASTOS_FIXED } from "@/lib/gastos-perc";
 import { DEPRECIACION_ROWS } from "@/lib/depreciacion-perc";
@@ -159,6 +166,7 @@ import {
   CAPTURE_CLOSE_MINUTE,
   PERIOD_FORMATTER,
   buildRecentPeriods,
+  fechaHospital,
   getCaptureWindow,
   getFeriadoNacional,
   getModuleCloseMillis,
@@ -386,7 +394,7 @@ type ServiceGroup = {
 };
 
 // Estado por modulo (PERC / SEPS / Horas) de un servicio en el periodo activo.
-type PublicModuleStatus = { label: string; completed: boolean };
+type PublicModuleStatus = { label: string; completed: boolean; enDigitacion?: boolean };
 type PublicDashboardService = ServiceDefinition & {
   completed: boolean; // PERC (para el conteo del mes)
   modules: PublicModuleStatus[];
@@ -404,7 +412,6 @@ type PublicDashboardGroup = {
 // las claves (sobreescribiendolas con las env en Vercel) y poner el repo PRIVADO.
 const DEFAULT_TEMP_PASSWORD = process.env.NEXT_PUBLIC_DEFAULT_TEMP_PASSWORD || "123456";
 const ADMIN_USERNAME = process.env.NEXT_PUBLIC_ADMIN_USERNAME || "Hcardoza";
-const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "Cardoza1986";
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "hcardoza.admin@perc-hnes.app";
 // Administradores de ESDOMED: los UNICOS admins que entran a Recursos Humanos >
 // Personal desvinculado (ademas de la cuenta de RRHH con el acceso otorgado).
@@ -423,7 +430,6 @@ const ESDOMED_ADMIN_EMAILS = [
 // Firebase se auto-crea en el primer login con la clave temporal (la cambian luego).
 type SupervisorAccount = {
   username: string;
-  password: string;
   firstName: string;
   lastName: string;
   modules: ModuleId[];
@@ -438,7 +444,6 @@ type SupervisorAccount = {
 const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
   {
     username: "ffuentes",
-    password: DEFAULT_TEMP_PASSWORD,
     firstName: "Flor de Maria",
     lastName: "Fuentes Urbina",
     modules: ["perc", "sesps", "distribucion"],
@@ -446,7 +451,6 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
   },
   {
     username: "Amontes",
-    password: DEFAULT_TEMP_PASSWORD,
     firstName: "Alfonso",
     lastName: "Montes Gutierrez",
     modules: ["perc", "sesps", "distribucion"],
@@ -454,7 +458,6 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
   },
   {
     username: "rcenteno",
-    password: DEFAULT_TEMP_PASSWORD,
     firstName: "Dr. Roberto",
     lastName: "Cenento Zambrano",
     modules: ["perc", "sesps", "distribucion"],
@@ -462,7 +465,6 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
   },
   {
     username: "jcmiranda",
-    password: DEFAULT_TEMP_PASSWORD,
     firstName: "Juan Carlos",
     lastName: "Miranda Marroquin",
     modules: ["perc", "sesps", "distribucion"],
@@ -473,7 +475,6 @@ const SUPERVISOR_ACCOUNTS: SupervisorAccount[] = [
     // el consolidado mensual de horas en Excel y ADEMAS digita las Horas de su propio
     // servicio, Recursos Humanos.
     username: "aamaya",
-    password: DEFAULT_TEMP_PASSWORD,
     firstName: "Andrea Michelle",
     lastName: "Amaya Majano",
     modules: ["distribucion"],
@@ -798,96 +799,6 @@ const SERVICE_FAMILY_BY_ID: Record<string, string> = Object.fromEntries(
   SERVICE_FAMILIES.flatMap((f) => f.members.map((m) => [m, f.id] as const)),
 );
 
-const SERVICE_GROUP_BY_ID: Record<string, keyof typeof SERVICE_GROUP_LABELS> = {
-  // --- DIRECCION (unidades staff + almacen medicamentos/farmacia/asesores) ---
-  direccion: "direccion",
-  esdomed: "direccion",
-  "almacen-medicamentos": "direccion",
-  "asesores-de-medicamentos": "direccion",
-  "servicio-farmaceutico": "direccion",
-  planificacion: "direccion",
-  calidad: "direccion",
-  epidemiologia: "direccion",
-  cumplimiento: "direccion",
-  "auditoria-interna": "direccion",
-  "unidad-financiera": "direccion",
-  "unidad-juridica": "direccion",
-  comunicaciones: "direccion",
-  "unidad-de-convenios": "direccion",
-  "jefaturas-division-medica": "direccion",
-  "jefatura-division-apoyo": "direccion",
-  udp: "direccion",
-  ucp: "direccion",
-  "gestion-documental": "direccion",
-  "trabajo-social": "apoyo",
-  "laboratorio-clinico": "apoyo",
-  "banco-de-sangre": "apoyo",
-  "alimentacion-y-dieta": "apoyo",
-  radiologia: "apoyo",
-  "terapia-fisica": "apoyo",
-  "rehablitacion-psicosocial": "apoyo",
-  "biologia-molecular": "apoyo",
-  "estudios-gastroclinicos": "medica",
-  "unidad-de-hemodinamia": "medica",
-  cardiologia: "medica",
-  hemodialisis: "medica",
-  "hemodialisis-medicina-interna": "medica",
-  "terapia-respiratoria": "medica",
-  vacunacion: "medica",
-  "maxima-emergencia": "medica",
-  "centro-quirurgico": "medica",
-  "clinica-de-empleados": "apoyo",
-  "central-de-esterilizacion": "enfermeria",
-  enfermeria: "enfermeria",
-  "cuidados-paliativos": "medica",
-  "medicina-preventiva": "medica",
-  "medicina-interna": "medica",
-  "ucin-aislados": "medica",
-  "ucin-cronicos": "medica",
-  "ucin": "medica",
-  "ucin-consolidado": "medica",
-  "uci-aislados": "medica",
-  "uci-cardiovascular": "medica",
-  "uci-extracorporea": "medica",
-  "uci-general-1": "medica",
-  "uci-general-2": "medica",
-  "uci-neurocriticos": "medica",
-  "uci-quirurgica": "medica",
-  "uci-consolidado": "medica",
-  nefrologia: "medica",
-  anestesiologia: "medica",
-  "medicina-critica": "medica",
-  // --- SUBDIRECCION ADMINISTRATIVA ---
-  almacen: "administrativa",
-  aseo: "administrativa",
-  lavanderia: "administrativa",
-  "transporte-general": "administrativa",
-  mantenimiento: "administrativa",
-  "saneamiento-ambiental": "administrativa",
-  rrhh: "administrativa",
-  "servicios-varios": "administrativa",
-  tecnologia: "administrativa",
-};
-
-// --- DEPARTAMENTOS (jefaturas que agrupan un set fijo de servicios) --------------
-// Una jefa de departamento es un supervisor cuyo alcance son SOLO estos servicios
-// (no una división entera). Hoy: Laboratorios = Clínico + Banco de Sangre + Biología
-// Molecular, colgando de la División de Apoyo.
-const DEPARTMENT_SERVICES: Record<string, string[]> = {
-  laboratorios: ["laboratorio-clinico", "banco-de-sangre", "biologia-molecular"],
-  "uci-ucin": [
-    "ucin-aislados", "ucin-cronicos", "ucin", "ucin-consolidado",
-    "uci-aislados", "uci-cardiovascular", "uci-extracorporea", "uci-general-1",
-    "uci-general-2", "uci-neurocriticos", "uci-quirurgica", "uci-consolidado",
-    // Las Horas de los medicos de UCI/UCIN se digitan en Medicina Critica
-    // (su tabulador de Horas tiene columnas UCI y UCIN).
-    "medicina-critica",
-  ],
-  // Ana Julia (jefa que llena varias areas): Saneamiento + Servicios Varios + Transporte.
-  "saneamiento-varios": ["saneamiento-ambiental", "servicios-varios", "transporte-general"],
-  // Enfermeria que ademas llena el SEPS de Cuidados Paliativos (Karina Hernandez).
-  "enfermeria-paliativos": ["enfermeria", "cuidados-paliativos"],
-};
 const DEPARTMENT_LABELS: Record<string, string> = {
   laboratorios: "Jefa de Departamento de Laboratorios",
   "uci-ucin": "Jefe General UCI/UCIN",
@@ -906,16 +817,6 @@ function departmentEditorLabel(dep: string) {
 
 // ¿El servicio entra en el alcance del jefe/supervisor? Departamento manda sobre
 // división; sin ninguno de los dos (admin o supervisor sin alcance) ve todo.
-function isServiceInChiefScope(
-  profile: { division?: string | null; department?: string | null } | null,
-  serviceId: string,
-): boolean {
-  const dept = profile?.department || null;
-  if (dept) return (DEPARTMENT_SERVICES[dept] || []).includes(serviceId);
-  const div = profile?.division || null;
-  if (div) return (SERVICE_GROUP_BY_ID[serviceId] || "apoyo") === div;
-  return true;
-}
 
 /** Como se llama cada division en la pantalla del comite. */
 const CEC_DIVISION_LABEL: Record<string, string> = {
@@ -1553,15 +1454,6 @@ function mergeWithTemplate(
 }
 
 
-function hasAnyCapturedValue(values: Record<string, Record<string, unknown>> | undefined) {
-  if (!values) {
-    return false;
-  }
-
-  return Object.values(values).some((row) =>
-    Object.values(row || {}).some((cell) => String(cell ?? "").trim() !== ""),
-  );
-}
 
 function buildServiceGroups(): ServiceGroup[] {
   const groups = new Map<string, ServiceDefinition[]>();
@@ -2033,17 +1925,28 @@ function mapAppColToTemplate(appCol: string): string | null {
   return HORAS_CC_BY_NORM[n] || null;
 }
 
+async function pedirPlantillasHoras(body: { serviceId: string } | { consolidado: true }): Promise<HorasTemplate[]> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("Inicie sesión para consultar la nómina.");
+  const res = await fetch("/api/horas/plantillas", { method: "POST", cache: "no-store",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body) });
+  if (!res.ok) throw new Error("No se pudo consultar la nómina autorizada.");
+  return res.json();
+}
+
 async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
+  const templates = await pedirPlantillasHoras({ consolidado: true });
   // Lo YA guardado del mes (para superponer las horas reales cuando existan).
   const savedByService: Record<
     string,
     { employees?: Array<{ name?: string; dui?: string; hours?: Record<string, string> }> }
   > = {};
   try {
-    const snapshot = await getDocs(
-      query(collection(db, "horasTabulators"), where("periodId", "==", periodId)),
-    );
-    for (const d of snapshot.docs) {
+    const docs = await Promise.all(templates.map(t =>
+      getDoc(doc(db, "horasTabulators", `${periodId}__${t.serviceId}`))));
+    for (const d of docs) {
+      if (!d.exists()) continue;
       const data = d.data() as {
         serviceId?: string;
         employees?: Array<{ name?: string; dui?: string; hours?: Record<string, string> }>;
@@ -2051,13 +1954,13 @@ async function downloadHorasConsolidado(periodId: string, periodLabel: string) {
       if (data.serviceId) savedByService[data.serviceId] = data;
     }
   } catch {
-    // Sin conexion: se arma con la nomina de las plantillas.
+    throw new Error("No se pudo recuperar el consolidado completo. Vuelva a intentar.");
   }
 
   type EmpRow = { division: string; servicio: string; empleado: string; dui: string; total: number; cc: Record<string, number> };
   const rows: EmpRow[] = [];
-  for (const sid of Object.keys(HORAS_TEMPLATES)) {
-    const template = HORAS_TEMPLATES[sid];
+  for (const template of templates) {
+    const sid = template.serviceId;
     const division = SERVICE_GROUP_LABELS[SERVICE_GROUP_BY_ID[sid] || "apoyo"] || "Otros";
     const servicio = template.displayName || getServiceById(sid)?.name || sid;
     const saved = savedByService[sid];
@@ -2713,10 +2616,11 @@ function hasAnySepsValue(values: SepsValues | undefined) {
 // Cuantas filas de Horas se renderizan por "pagina" (ver paginacion del tabulador).
 const HORAS_PAGE_SIZE = 60;
 
-type HorasEmployee = { name: string; dui: string; docType: "dui" | "nit"; comment: string; hours: Record<string, string> };
+type HorasEmployee = HorasFila;
 
 function buildEmptyHorasEmployee(template: HorasTemplate, name = "", dui = "", docType: "dui" | "nit" = "dui"): HorasEmployee {
   return {
+    id: "",
     name,
     dui,
     docType,
@@ -2726,12 +2630,12 @@ function buildEmptyHorasEmployee(template: HorasTemplate, name = "", dui = "", d
 }
 
 function seedHorasEmployees(template: HorasTemplate): HorasEmployee[] {
-  return template.seedEmployees.map((seed) => {
+  return asignarIds(template.seedEmployees.map((seed) => {
     // El seed puede ser solo nombre (string) o { name, dui }.
     const name = typeof seed === "string" ? seed : seed.name;
     const dui = typeof seed === "string" ? "" : seed.dui ?? "";
     return buildEmptyHorasEmployee(template, name.trim(), dui.trim());
-  });
+  }));
 }
 
 function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEmployee[] {
@@ -2756,6 +2660,7 @@ function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEm
       const savedDui = typeof row.dui === "string" ? row.dui : "";
       const dui = savedDui.trim() || seedDuiByName.get(name.trim().toLowerCase()) || "";
       return {
+        id: typeof row.id === "string" ? row.id : "",
         name,
         dui,
         docType: row.docType === "nit" ? "nit" as const : "dui" as const,
@@ -2774,7 +2679,8 @@ function normalizeHorasEmployees(template: HorasTemplate, raw: unknown): HorasEm
     );
 
   if (list.length === 0) return seedHorasEmployees(template);
-  return template.ordenFijo ? ordenarHorasSegunPlantilla(template, list) : list;
+  const filas = asignarIds(list);
+  return template.ordenFijo ? ordenarHorasSegunPlantilla(template, filas) : filas;
 }
 
 // Clave para comparar nombres sin importar tildes, mayusculas ni espacios dobles.
@@ -2862,6 +2768,7 @@ async function fetchHorasRosterFromPreviousPeriod(
       const roster = normalizeHorasEmployees(template, data.employees)
         .filter((emp) => emp.name.trim() !== "" || emp.dui.trim() !== "")
         .map((emp) => ({
+          id: emp.id,
           name: emp.name,
           dui: emp.dui,
           docType: emp.docType,
@@ -2883,8 +2790,15 @@ async function fetchHorasRosterFromPreviousPeriod(
 async function fetchHorasForPeriod(
   template: HorasTemplate,
   periodId: string,
+  servidor = false,
 ): Promise<{ employees: HorasEmployee[]; saved: boolean }> {
-  const snapshot = await getDoc(doc(db, "horasTabulators", `${periodId}__${template.serviceId}`));
+  const ref = doc(db, "horasTabulators", `${periodId}__${template.serviceId}`);
+  if (!servidor && auth.currentUser) {
+    const pendientes = await pendientesHoras(auth.currentUser.uid);
+    const ultimo = pendientes.filter(p => p.periodId === periodId && p.serviceId === template.serviceId).at(-1);
+    if (ultimo) return { employees: ultimo.local, saved: ultimo.existia };
+  }
+  const snapshot = servidor ? await getDocFromServer(ref) : await getDoc(ref);
 
   if (!snapshot.exists()) {
     // Mes sin datos: se arrastra el personal del ultimo mes guardado (con su
@@ -2938,6 +2852,7 @@ async function fetchAdminOverviewForPeriod(periodId: string): Promise<AdminOverv
     query(collection(db, "serviceTabulators"), where("periodId", "==", periodId)),
   );
   const savedByService = new Map<string, Record<string, Record<string, unknown>>>();
+  const entregados = new Set<string>();
 
   for (const item of snapshot.docs) {
     const data = item.data() as {
@@ -2947,13 +2862,14 @@ async function fetchAdminOverviewForPeriod(periodId: string): Promise<AdminOverv
 
     if (typeof data.serviceId === "string") {
       savedByService.set(data.serviceId, data.values || {});
+      if (percEntregado(data)) entregados.add(data.serviceId);
     }
   }
 
   return SERVICE_DEFINITIONS.map((service) => ({
     service,
     values: mergeWithTemplate(service, savedByService.get(service.id)),
-    hasSavedData: savedByService.has(service.id),
+    hasSavedData: entregados.has(service.id),
   }));
 }
 
@@ -3141,6 +3057,7 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
     safeServiceIds("horasTabulators", (data) => horasAvance(data.employees).completo),
   ]);
   const completedByPeriod = new Map<string, Set<string>>();
+  const enDigitacion = new Set<string>();
 
   for (const item of tabulatorsSnapshot.docs) {
     const data = item.data() as {
@@ -3149,11 +3066,14 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
       values?: Record<string, Record<string, unknown>>;
     };
 
+    if (data.periodId === currentPeriodId && data.serviceId && item.data().estadoEntrega === "borrador") {
+      enDigitacion.add(data.serviceId);
+    }
     if (
       typeof data.periodId !== "string" ||
       typeof data.serviceId !== "string" ||
       !data.periodId.startsWith(`${year}-`) ||
-      !hasAnyCapturedValue(data.values)
+      !percEntregado(data)
     ) {
       continue;
     }
@@ -3189,7 +3109,7 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
       const hasPerc = getAreaById(service.id)?.modules.includes("perc") ?? false;
       const modules: PublicModuleStatus[] = [];
       if (hasPerc) {
-        modules.push({ label: "PERC", completed: percDone });
+        modules.push({ label: "PERC", completed: percDone, enDigitacion: enDigitacion.has(service.id) });
       }
       if (getSepsTemplate(service.id)) {
         modules.push({ label: "SEPS", completed: sepsDone.has(service.id) });
@@ -4101,6 +4021,10 @@ export default function Home() {
   // Grupos de "Habilitar tableros" abiertos (colapsables). Por defecto solo el primero.
   // Todos los bloques arrancan contraidos (incluido el de Direccion).
   const [horasEmployees, setHorasEmployees] = useState<HorasEmployee[]>([]);
+  const horasBases = useRef(new Map<string, { employees: HorasEmployee[]; saved: boolean }>());
+  const [horasCargadas, setHorasCargadas] = useState("");
+  const horasLectura = useRef(0);
+  const colaLocalHoras = useRef<Promise<void>>(Promise.resolve());
   const [horasEmployeeToRemove, setHorasEmployeeToRemove] = useState<number | null>(null);
   const [isSavingHoras, setIsSavingHoras] = useState(false);
   const [isLoadingHoras, setIsLoadingHoras] = useState(false);
@@ -4117,7 +4041,8 @@ export default function Home() {
   const [horasSaved, setHorasSaved] = useState(false);
   // El tabulador de Horas arranca colapsado para una pagina principal mas limpia.
   const [horasCollapsed, setHorasCollapsed] = useState(true);
-  const [now, setNow] = useState(() => new Date());
+  const [instante, setInstante] = useState(() => new Date());
+  const now = useMemo(() => fechaHospital(instante), [instante]);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -4383,7 +4308,7 @@ export default function Home() {
   const [avanceGroups, setAvanceGroups] = useState<PublicDashboardGroup[] | null>(null);
   const [avanceLoading, setAvanceLoading] = useState(false);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
-  const [calendarEditorPeriodId, setCalendarEditorPeriodId] = useState(() => getPeriodId(new Date()));
+  const [calendarEditorPeriodId, setCalendarEditorPeriodId] = useState(() => getPeriodId(fechaHospital()));
   // Rango de fechas no habiles a agregar de una sola vez (Desde / Hasta).
   const [calendarRangeStart, setCalendarRangeStart] = useState("");
   const [calendarRangeEnd, setCalendarRangeEnd] = useState("");
@@ -4392,7 +4317,7 @@ export default function Home() {
   const [captureOverrides, setCaptureOverrides] = useState<CaptureOverridesMap>({});
   // Default = periodo que se esta cerrando (mes anterior), que es el ciclo activo.
   const [overridePanelPeriodId, setOverridePanelPeriodId] = useState(() =>
-    getClosingPeriodId(new Date()),
+    getClosingPeriodId(fechaHospital()),
   );
   const [overrideBusyKey, setOverrideBusyKey] = useState("");
   // Modal para elegir mes/año al "Abrir" un tablero en Habilitar tableros.
@@ -4560,7 +4485,7 @@ export default function Home() {
         runSidebarItem("panel-request-form");
         break;
       case "save_perc":
-        void handleSave();
+        void handleSave(false, true);
         break;
       case "save_seps":
         void handleSaveSeps();
@@ -4901,7 +4826,7 @@ export default function Home() {
   // Arranca en el mismo mes que el PERC/consolidado (el que se esta cerrando), para
   // que lo que se llena en el censo alimente el consolidado sin desajuste de mes.
   // AMONTES puede cambiar de mes libremente con el selector.
-  const [censoPeriod, setCensoPeriod] = useState(() => getClosingPeriodId(new Date()));
+  const [censoPeriod, setCensoPeriod] = useState(() => getClosingPeriodId(fechaHospital()));
   const [censoValues, setCensoValues] = useState<CensoValues>({});
   const [censoExtraRows, setCensoExtraRows] = useState<CensoRow[]>([]);
   const [isLoadingCenso, setIsLoadingCenso] = useState(false);
@@ -4916,15 +4841,15 @@ export default function Home() {
   >([]);
   // Insumos de Almacen (matriz de costos por mes). Editan admin + servicio "almacen".
   // Se guarda por MES en Firestore (coleccion "insumosAlmacen"). Sin cierre.
-  const [insumosPeriod, setInsumosPeriod] = useState(() => getClosingPeriodId(new Date()));
+  const [insumosPeriod, setInsumosPeriod] = useState(() => getClosingPeriodId(fechaHospital()));
   const [insumosValues, setInsumosValues] = useState<InsumosValues>({});
   // Gastos PERC (matriz mensual: 34 categorias x 39 centros de costo + fila Valor General).
-  const [gastosPeriod, setGastosPeriod] = useState(() => getClosingPeriodId(new Date()));
+  const [gastosPeriod, setGastosPeriod] = useState(() => getClosingPeriodId(fechaHospital()));
   const [gastosValues, setGastosValues] = useState<Record<string, string>>({});
   const [gastosSaving, setGastosSaving] = useState(false);
   const [gastosOpen, setGastosOpen] = useState(false); // matriz colapsada al entrar
   // Depreciacion Mensual PERC (una fila por centro de produccion; valor mensual).
-  const [deprePeriod, setDeprePeriod] = useState(() => getClosingPeriodId(new Date()));
+  const [deprePeriod, setDeprePeriod] = useState(() => getClosingPeriodId(fechaHospital()));
   const [depreValues, setDepreValues] = useState<Record<string, string>>({});
   const [depreSaving, setDepreSaving] = useState(false);
   const [depreOpen, setDepreOpen] = useState(false);
@@ -5092,6 +5017,15 @@ export default function Home() {
   // windowPeriodId = mes calendario actual, donde ocurre la ventana de captura y al
   // que pertenecen las fechas no habiles del calendario.
   const periodId = useMemo(() => getClosingPeriodId(now), [now]);
+  const claveEntrega = currentService ? `${percViewPeriod ?? periodId}__${currentService.id}` : "";
+  const [ultimaEntrega, setUltimaEntrega] = useState({ clave: "", entregado: false });
+  useEffect(() => {
+    if (!user || !claveEntrega || firestoreUnavailable) return;
+    return onSnapshot(doc(db, "serviceTabulators", claveEntrega), { includeMetadataChanges: true }, snap => {
+      setUltimaEntrega({ clave: claveEntrega, entregado: !snap.metadata.hasPendingWrites && percEntregado(snap.data()) });
+    }, () => setUltimaEntrega({ clave: claveEntrega, entregado: false }));
+  }, [user, claveEntrega, firestoreUnavailable]);
+  const entregaConfirmada = ultimaEntrega.clave === claveEntrega && ultimaEntrega.entregado;
   const windowPeriodId = useMemo(() => getPeriodId(now), [now]);
   const currentBlockedDates = useMemo(
     () => calendarOverrides[windowPeriodId] || [],
@@ -5675,10 +5609,28 @@ export default function Home() {
     }
     return keys;
   }, [sepsLayout, sepsLayoutDraft, sepsEditingLayout]);
-  const horasTemplate = useMemo(
-    () => getHorasTemplate(effectiveServiceId),
-    [effectiveServiceId],
-  );
+  const [nomina, setNomina] = useState<{ uid: string; template: HorasTemplate } | null>(null);
+  const permisoHoras = !!effectiveServiceId && puedeLeerNomina(serviceProfile ?? undefined, effectiveServiceId);
+  const horasTemplate = permisoHoras && user && nomina?.uid === user.uid && nomina.template.serviceId === effectiveServiceId
+    ? nomina.template : null;
+  useEffect(() => {
+    let vigente = true;
+    if (!user || !effectiveServiceId || !getHorasTemplate(effectiveServiceId) || !permisoHoras) return;
+    void (async () => {
+      try {
+        const [template] = await pedirPlantillasHoras({ serviceId: effectiveServiceId });
+        if (vigente) setNomina({ uid: user.uid, template });
+        await recordarPlantilla(user.uid, template).catch(() => {});
+      } catch {
+        const local = !estaEnLinea() ? await plantillaLocal(user.uid, effectiveServiceId).catch(() => undefined) : undefined;
+        if (vigente) {
+          setNomina(local ? { uid: user.uid, template: local } : null);
+          if (!local) setError("No se pudo cargar la nómina autorizada. Revise la conexión y vuelva a abrir el servicio.");
+        }
+      }
+    })();
+    return () => { vigente = false; };
+  }, [effectiveServiceId, user, permisoHoras]);
   const sepsWindow = useMemo(
     () => getSepsWindow(now, currentBlockedDates),
     [now, currentBlockedDates],
@@ -5698,7 +5650,7 @@ export default function Home() {
       // queda "Cerrado" aunque la captura SEPS ya este en el mes en curso.
       // (Antes solo marcaba cerrado en la transicion, unas horas, y el encabezado
       // decia el mes en curso aunque las cifras eran del mes anterior.)
-      return now.getTime() >= getCloseMillis(sepsWindow.lastCloseDay);
+      return instante.getTime() >= getCloseMillis(sepsWindow.lastCloseDay);
     }
     const win = getCaptureWindow(
       now,
@@ -5707,16 +5659,7 @@ export default function Home() {
     );
     const last = win.lastOpenDay;
     if (!last) return false;
-    const cierre = new Date(
-      last.getFullYear(),
-      last.getMonth(),
-      last.getDate(),
-      CAPTURE_CLOSE_HOUR,
-      CAPTURE_CLOSE_MINUTE,
-      0,
-      0,
-    );
-    return now.getTime() >= cierre.getTime();
+    return instante.getTime() >= getCloseMillis(last);
   }
   // Columnas de dia del mes que se esta MOSTRANDO (historial o mes de captura).
   // Antes usaba siempre el mes de captura: al abrir octubre desde el historial en
@@ -5855,7 +5798,7 @@ export default function Home() {
     const cierres = getModuleCloseMillis(calendarPreviewDate, calendarEditorBlockedDates);
     const result = new Map<string, string>();
     const agregar = (millis: number, texto: string) => {
-      const key = getDateKey(new Date(millis));
+      const key = getDateKey(fechaHospital(new Date(millis)));
       result.set(key, result.has(key) ? `${result.get(key)} · ${texto}` : texto);
     };
     agregar(cierres.perc, "cierra PERC");
@@ -6342,7 +6285,7 @@ export default function Home() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setNow(new Date());
+      setInstante(new Date());
     }, 60_000);
 
     return () => window.clearInterval(timer);
@@ -6594,7 +6537,13 @@ export default function Home() {
   }, [sepsTemplate, labPeriodId, firestoreUnavailable, user]);
 
   // Carga el tabulador de Horas (empleados) del periodo de cierre del servicio.
+  const periodoHoras = horasViewPeriod ?? periodId;
+  const claveHorasVista = horasTemplate && user ? `${user.uid}/${periodoHoras}__${horasTemplate.serviceId}` : "";
   useEffect(() => {
+    const lectura = ++horasLectura.current;
+    setHorasCargadas("");
+    setHorasEmployees([]);
+    setIsLoadingHoras(false);
     if (firestoreUnavailable || !user) {
       return;
     }
@@ -6611,8 +6560,10 @@ export default function Home() {
       }
 
       try {
-        const result = await fetchHorasForPeriod(horasTemplate, periodId);
-        if (!cancelled) {
+        const result = await fetchHorasForPeriod(horasTemplate, periodoHoras);
+        if (!cancelled && horasLectura.current === lectura) {
+          horasBases.current.set(claveHorasVista, result);
+          setHorasCargadas(claveHorasVista);
           setHorasEmployees(result.employees);
           setHorasSaved(result.saved);
         }
@@ -6621,7 +6572,7 @@ export default function Home() {
           return;
         }
         if (!cancelled) {
-          setHorasEmployees(seedHorasEmployees(horasTemplate));
+          setError("No se pudo cargar el tablero de Horas. Recupere los datos antes de editar.");
           setHorasSaved(false);
         }
       }
@@ -6630,7 +6581,33 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [horasTemplate, periodId, firestoreUnavailable, user]);
+  }, [horasTemplate, periodoHoras, claveHorasVista, firestoreUnavailable, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    let vigente = true;
+    async function reintentar() {
+      if (!user || !estaEnLinea()) return;
+      try {
+        const pendientes = await pendientesHoras(user.uid);
+        const vistos = new Set<string>();
+        for (const p of pendientes) {
+          const clave = `${p.periodId}__${p.serviceId}`;
+          if (!vigente || vistos.has(clave)) continue;
+          vistos.add(clave);
+          try {
+            await sincronizarHoras(user.uid, p.serviceId, p.periodId);
+            if (vigente) ponerEstadoAuto("horas", { clave, estado: "guardado", hora: horaCorta() });
+          } catch (err) {
+            if (vigente) setError(err instanceof ConflictoHoras ? err.message : `Borrador pendiente en ${p.serviceName}, ${p.periodId}.`);
+          }
+        }
+      } catch { /* El guardado muestra el error de almacenamiento si se edita. */ }
+    }
+    void reintentar();
+    window.addEventListener("online", reintentar);
+    return () => { vigente = false; window.removeEventListener("online", reintentar); };
+  }, [user]);
 
   // Al cambiar de servicio o periodo, reinicia la ventana de filas visibles de Horas.
   useEffect(() => {
@@ -7804,7 +7781,7 @@ export default function Home() {
               values?: Record<string, Record<string, unknown>>;
             };
             if (typeof d.periodId !== "string" || typeof d.serviceId !== "string") return;
-            if (exigirValores && !hasAnyCapturedValue(d.values)) return;
+            if (exigirValores && !percEntregado(d)) return;
             if (coleccion === "horasTabulators" && !horasAvance((d as { employees?: unknown }).employees).completo) return;
             const actual = mapa.get(d.periodId) ?? new Set<string>();
             actual.add(d.serviceId);
@@ -10760,63 +10737,11 @@ export default function Home() {
       await setPersistence(auth, browserLocalPersistence);
 
       const loginIdentifier = email.trim();
-
-      if (
-        normalizeKey(loginIdentifier) === normalizeKey(ADMIN_USERNAME) &&
-        password === ADMIN_PASSWORD
-      ) {
-        try {
-          await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
-        } catch (loginError) {
-          const authCode = (loginError as AuthError).code;
-
-          if (authCode !== "auth/invalid-credential" && authCode !== "auth/user-not-found") {
-            throw loginError;
-          }
-
-          try {
-            const credential = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
-            void ensureDefaultAdminProfile(credential.user).catch(() => {
-              // Ignore background admin profile sync failures during account bootstrap.
-            });
-          } catch (createAdminError) {
-            const createAdminCode = (createAdminError as AuthError).code;
-
-            if (createAdminCode === "auth/email-already-in-use") {
-              throw new Error("admin-access-failed");
-            }
-
-            throw createAdminError;
-          }
-        }
+      if (normalizeKey(loginIdentifier) === normalizeKey(ADMIN_USERNAME)) {
+        await signInWithEmailAndPassword(auth, ADMIN_EMAIL, password);
       } else if (findSupervisorAccountByUsername(loginIdentifier)) {
-        // Supervisores: cuentas fijas en codigo. Se firma con su correo de acceso
-        // determinista; en el primer ingreso (clave temporal sembrada) se crea la
-        // cuenta Firebase y su perfil. Tras cambiar la clave, entran normalmente.
-        const supervisorAccount = findSupervisorAccountByUsername(loginIdentifier)!;
-        const supervisorEmail = getSupervisorLoginEmail(supervisorAccount.username);
-
-        try {
-          await signInWithEmailAndPassword(auth, supervisorEmail, password);
-        } catch (loginError) {
-          const authCode = (loginError as AuthError).code;
-
-          if (
-            (authCode !== "auth/invalid-credential" && authCode !== "auth/user-not-found") ||
-            password !== supervisorAccount.password
-          ) {
-            throw loginError;
-          }
-
-          const credential = await createUserWithEmailAndPassword(
-            auth,
-            supervisorEmail,
-            supervisorAccount.password,
-          );
-          void ensureSupervisorProfile(credential.user, supervisorAccount).catch(() => {
-            // Ignore background supervisor profile sync failures during bootstrap.
-          });
-        }
+        const cuenta = findSupervisorAccountByUsername(loginIdentifier)!;
+        await signInWithEmailAndPassword(auth, getSupervisorLoginEmail(cuenta.username), password);
       } else {
         const resolvedEmail = resolveLoginEmail(loginIdentifier);
         await signInWithEmailAndPassword(auth, resolvedEmail, password);
@@ -11917,6 +11842,11 @@ export default function Home() {
       percExtraRows.map((e) => e.key),
     );
 
+    if (!auto && !hasAnyCapturedValue(normalizedValues)) {
+      avisar("Ingrese al menos un dato para confirmar la entrega.");
+      return;
+    }
+
     // Aviso de cifras atipicas: se muestra UNA vez; si la persona confirma, guarda.
     if (!forzar && !auto) {
       const avisos = await detectarAtipicosPerc(normalizedValues, targetPeriod);
@@ -11929,6 +11859,7 @@ export default function Home() {
     const queSeGuardo = `El PERC de ${currentService.name} (${targetPeriodLabel})`;
     const refPerc = doc(db, "serviceTabulators", `${targetPeriod}__${currentService.id}`);
     const datosPerc = {
+      estadoEntrega: auto ? "borrador" : "entregado",
       periodId: targetPeriod,
       periodLabel: targetPeriodLabel,
       serviceId: currentService.id,
@@ -11976,7 +11907,7 @@ export default function Home() {
       setMessage(
         estadoEnvio === "pendiente"
           ? avisoSinConexion(queSeGuardo)
-          : `Datos guardados correctamente para ${currentService.name} (${targetPeriodLabel}).`,
+          : `Entrega confirmada para ${currentService.name} (${targetPeriodLabel}).`,
       );
     } catch (saveError) {
       if (await handleFirestoreError(saveError)) {
@@ -13411,7 +13342,7 @@ export default function Home() {
       return;
     }
     setHorasEmployees((current) => {
-      const next = [...current, buildEmptyHorasEmployee(horasTemplate)];
+      const next = [...current, { ...buildEmptyHorasEmployee(horasTemplate), id: crypto.randomUUID() }];
       // Asegura que la nueva fila quede visible aunque la tabla este paginada.
       setHorasVisibleCount((c) => Math.max(c, next.length));
       return next;
@@ -13440,16 +13371,17 @@ export default function Home() {
   // Descarga una plantilla .xlsx del servicio actual con los nombres/DUI ya puestos
   // y una columna por cada centro de costo, para llenar las horas y volver a subirla.
   async function handleDownloadHorasTemplate() {
-    if (!horasTemplate) {
+    if (!horasTemplate || horasCargadas !== claveHorasVista) {
       return;
     }
     try {
       const XLSX = await import("xlsx");
-      const header = ["NOMBRE DEL EMPLEADO", "DUI", ...horasTemplate.columns];
+      const header = ["NOMBRE DEL EMPLEADO", "DUI", ...horasTemplate.columns, "TIPO DE DOCUMENTO", "COMENTARIO"];
       const rows = horasEmployees.map((emp) => [
         emp.name,
         emp.dui,
         ...horasTemplate.columns.map((col) => emp.hours[col] ?? ""),
+        emp.docType.toUpperCase(), emp.comment,
       ]);
       const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
       ws["!cols"] = [
@@ -13501,6 +13433,8 @@ export default function Home() {
       const headerRow = (aoa[0] as unknown[]).map(norm);
       const nameIdx = headerRow.findIndex((h) => h.includes("NOMBRE"));
       const duiIdx = headerRow.findIndex((h) => h === "DUI");
+      const tipoIdx = headerRow.indexOf("TIPO DE DOCUMENTO");
+      const comentarioIdx = headerRow.indexOf("COMENTARIO");
       const colIdx = horasTemplate.columns.map((col) => headerRow.indexOf(norm(col)));
 
       const imported: HorasEmployee[] = [];
@@ -13526,17 +13460,26 @@ export default function Home() {
         // cantidad de digitos para no marcar todo como DUI.
         const digits = dui.replace(/\D/g, "");
         imported.push({
+          id: "",
           name,
           dui,
-          docType: digits.length === 14 ? "nit" : "dui",
-          comment: "",
+          docType: norm(row[tipoIdx]) === "NIT" || (tipoIdx < 0 && digits.length === 14) ? "nit" : "dui",
+          comment: String(row[comentarioIdx] ?? "").trim(),
           hours,
         });
       }
       if (imported.length === 0) {
         throw new Error("No se encontraron empleados en el archivo");
       }
-      setHorasEmployees(imported);
+      const porDocumento = new Map(horasEmployees.filter(e => e.dui).map(e => [e.dui, e.id]));
+      const porNombre = new Map(horasEmployees.map(e => [e.name.trim().toLowerCase(), e.id]));
+      const usados = new Set<string>();
+      setHorasEmployees(imported.map(fila => {
+        const previo = porDocumento.get(fila.dui) || porNombre.get(fila.name.trim().toLowerCase());
+        const id = previo && !usados.has(previo) ? previo : crypto.randomUUID();
+        usados.add(id);
+        return { ...fila, id };
+      }));
       setMessage(
         `Se importaron ${imported.length} empleados desde el Excel. Revise los datos y presione Guardar para confirmar.`,
       );
@@ -13610,121 +13553,85 @@ export default function Home() {
       (emp) => emp.name.trim() !== "" || Object.values(emp.hours).some((h) => h.trim() !== ""),
     );
 
-    const queSeGuardo = `La Distribución de Horas de ${horasTemplate.displayName ?? currentService?.name ?? horasTemplate.serviceId} (${targetPeriodLabel})`;
-
-    const refHoras = doc(db, "horasTabulators", `${targetPeriod}__${horasTemplate.serviceId}`);
-    const datosHoras = {
-      periodId: targetPeriod,
-      periodLabel: targetPeriodLabel,
-      module: "distribucion",
-      serviceId: horasTemplate.serviceId,
-      serviceName: horasTemplate.displayName ?? currentService?.name ?? horasTemplate.serviceId,
-      columns: horasTemplate.columns,
-      employees: cleaned,
-      userId: user.uid,
-      userEmail: user.email || "",
-      updatedAt: serverTimestamp(),
-    };
-
-    if (auto) {
-      await ejecutarAutoguardado("horas", claveAuto, () => setDoc(refHoras, datosHoras, { merge: true }), queSeGuardo);
-      setHorasDataPeriods((prev) => (prev.has(targetPeriod) ? prev : new Set(prev).add(targetPeriod)));
+    const baseKey = `${user.uid}/${claveAuto}`;
+    if (horasCargadas !== baseKey || !horasBases.current.has(baseKey)) {
+      avisar("Espere a que termine la carga de este tablero.");
       return;
     }
-
     soltarPendiente("horas", claveAuto);
-    setIsSavingHoras(true);
-    setError("");
-    setMessage("");
-
+    if (!auto) setIsSavingHoras(true);
+    autoEnCursoRef.current += 1;
+    let durable = false;
     try {
-      const estadoEnvio = await confirmarGuardado(
-        setDoc(refHoras, datosHoras, { merge: true }),
-        queSeGuardo,
-      );
-      marcarGuardadoManual("horas", claveAuto, estadoEnvio);
-
-      setHorasSaved(true);
-      setHorasDataPeriods((prev) => new Set(prev).add(targetPeriod));
-      // Refresca el tablero general para que el Monitoreo marque el servicio como
-      // completado al instante, sin tener que recargar la pagina.
-      await refreshPublicDashboard(false);
-      setMessage(
-        estadoEnvio === "pendiente"
-          ? avisoSinConexion(queSeGuardo)
-          : `Distribucion de Horas guardada correctamente (${targetPeriodLabel}).`,
-      );
-    } catch (saveError) {
-      if (await handleFirestoreError(saveError)) {
-        return;
+      const persistir = colaLocalHoras.current.catch(() => {}).then(async () => {
+        const base = horasBases.current.get(baseKey)!;
+        await guardarBorrador({
+          uid: user.uid, userEmail: user.email ?? "", serviceId: horasTemplate.serviceId,
+          serviceName: horasTemplate.displayName ?? currentService?.name ?? horasTemplate.serviceId,
+          periodId: targetPeriod, periodLabel: targetPeriodLabel, columns: horasTemplate.columns,
+          base: base.employees, local: cleaned, existia: base.saved,
+        });
+        horasBases.current.set(baseKey, { employees: cleaned, saved: base.saved });
+      });
+      colaLocalHoras.current = persistir;
+      await persistir;
+      durable = true;
+      ponerEstadoAuto("horas", { clave: claveAuto, estado: "local", hora: horaCorta() });
+      if (!estaEnLinea()) return;
+      await sincronizarHoras(user.uid, horasTemplate.serviceId, targetPeriod);
+      if (auth.currentUser?.uid !== user.uid) return;
+      ponerEstadoAuto("horas", { clave: claveAuto, estado: "guardado", hora: horaCorta() });
+      const base = horasBases.current.get(baseKey);
+      if (base) base.saved = true;
+      if (autoClavesRef.current.horas === claveAuto) setHorasSaved(true);
+      setHorasDataPeriods(prev => new Set(prev).add(targetPeriod));
+      const detalle = `Distribución de Horas de ${currentService?.name ?? horasTemplate.serviceId} (${targetPeriodLabel})`;
+      if (!bitacoraGuardadoRef.current.has(detalle)) {
+        bitacoraGuardadoRef.current.add(detalle);
+        void registrarBitacora("Tablero guardado", detalle);
       }
-      const textoError = (saveError instanceof Error ? saveError.message : String(saveError)).toLowerCase();
-      if (textoError.includes("permission") || textoError.includes("permiso")) {
-        setError(
-          "El servidor rechazó el guardado: la captura de Distribución de Horas de este mes ya cerró. Si necesitás registrar, pedí la reapertura del tablero.",
-        );
-        return;
-      }
-      setError("No pudimos guardar Distribucion de Horas. Revisa Firestore e intentalo de nuevo.");
+      if (!auto) { setMessage(`${detalle} guardada.`); void refreshPublicDashboard(false); }
+    } catch (err) {
+      const texto = err instanceof ConflictoHoras ? err.message : durable
+        ? "Su borrador de Horas está en este equipo. No se ha confirmado en el servidor."
+        : "No se pudo conservar el borrador en este equipo. Mantenga abierta la tabla y descargue una copia.";
+      ponerEstadoAuto("horas", { clave: claveAuto, estado: "error", texto });
+      setError(texto);
     } finally {
-      setIsSavingHoras(false);
+      autoEnCursoRef.current -= 1;
+      if (!auto) setIsSavingHoras(false);
     }
   }
 
-  // Recupera los empleados guardados de Horas para el periodo actual.
   async function loadSavedHoras() {
-    if (!horasTemplate || firestoreUnavailable) {
-      return;
-    }
-
-    setError("");
-    setMessage("");
+    if (!horasTemplate || !user || firestoreUnavailable) return;
+    const periodo = horasViewPeriod ?? periodId;
+    const clave = `${user.uid}/${periodo}__${horasTemplate.serviceId}`;
+    const lectura = ++horasLectura.current;
     setIsLoadingHoras(true);
-
     try {
-      const result = await fetchHorasForPeriod(horasTemplate, periodId);
+      await colaLocalHoras.current.catch(() => {});
+      const pendientes = (await pendientesHoras(user.uid)).filter(p => p.serviceId === horasTemplate.serviceId && p.periodId === periodo);
+      if (pendientes.length && !window.confirm("¿Descartará los borradores locales pendientes de este tablero y recuperará la copia del servidor? Puede descargar su copia antes de continuar.")) return;
+      const result = await fetchHorasForPeriod(horasTemplate, periodo, true);
+      if (horasLectura.current !== lectura) return;
+      for (const p of pendientes) await borrarEdicion(p.seq);
+      if (horasLectura.current !== lectura) return;
+      horasBases.current.set(clave, result);
+      setHorasCargadas(clave);
       setHorasEmployees(result.employees);
       setHorasSaved(result.saved);
-      setMessage(`Distribucion de Horas recuperada (${periodLabel}).`);
-    } catch (loadError) {
-      if (await handleFirestoreError(loadError)) {
-        return;
-      }
-      setError("No pudimos recuperar la Distribucion de Horas guardada.");
+      setAutoGuardado(prev => ({ ...prev, horas: undefined }));
+      setMessage(`Distribución de Horas recuperada (${getPeriodLabel(periodo)}).`);
+    } catch {
+      setError("No se pudo recuperar la versión del servidor.");
     } finally {
-      setIsLoadingHoras(false);
+      if (horasLectura.current === lectura) setIsLoadingHoras(false);
     }
   }
 
-  // Carga las Horas de un mes especifico para el historial (solo lectura salvo admin).
-  async function loadHorasHistory(period: string) {
-    if (!horasTemplate || firestoreUnavailable) {
-      return;
-    }
-
-    setError("");
-    setMessage("");
-    setIsLoadingHoras(true);
-
-    try {
-      const result = await fetchHorasForPeriod(horasTemplate, period);
-      setHorasEmployees(result.employees);
-      setHorasSaved(result.saved);
-      setHorasViewPeriod(period === periodId ? null : period);
-
-      if (period !== periodId) {
-        setMessage(`Mostrando historial de Horas de ${getPeriodLabel(period)}.`);
-      } else {
-        setMessage(`Volviste al mes de captura de Horas (${periodLabel}).`);
-      }
-    } catch (loadError) {
-      if (await handleFirestoreError(loadError)) {
-        return;
-      }
-      setError("No pudimos cargar el historial de Horas de ese mes.");
-    } finally {
-      setIsLoadingHoras(false);
-    }
+  function loadHorasHistory(period: string) {
+    setHorasViewPeriod(period === periodId ? null : period);
   }
 
   // Limpia la tabla de Horas localmente (no borra lo guardado en Firestore).
@@ -18294,7 +18201,7 @@ export default function Home() {
       // El grid de centros de costo (tableValues) es el tabulador PERC.
       if (mod.id === "perc") {
         if (!currentService || !capturesModule("perc")) return "n/a";
-        return hasAnyCapturedValue(tableValues) ? "completo" : "incompleto";
+        return entregaConfirmada ? "completo" : "incompleto";
       }
 
       if (mod.id === "sesps") {
@@ -18417,7 +18324,7 @@ export default function Home() {
     const activeHorasPeriod = horasViewPeriod ?? periodId;
     const isHorasHistory = horasViewPeriod !== null;
     const horasHistReadOnly = isHorasHistory && !isAdmin;
-    const horasEditingBlocked = ghostUid || isViewingGrantedService
+    const horasEditingBlocked = horasCargadas !== claveHorasVista || isLoadingHoras || ghostUid || isViewingGrantedService
       ? true
       : isAdmin
         ? false
@@ -18599,7 +18506,7 @@ export default function Home() {
               </tr>
             </thead>
             <tbody>
-              {horasEmployees.slice(0, horasVisibleCount).map((emp, index) => (
+              {(horasCargadas === claveHorasVista ? horasEmployees.slice(0, horasVisibleCount) : []).map((emp, index) => (
                 <tr key={index} className={`border-t ${isLightPanelTheme ? "border-slate-200" : "border-white/5"}`}>
                   <td className={`sticky left-0 z-10 min-w-[12rem] border-r px-2 py-1 ${isLightPanelTheme ? "border-slate-200 bg-white" : "border-white/10 bg-[#202c41]"}`}>
                     <div className="flex items-center gap-1.5">
@@ -18803,7 +18710,7 @@ export default function Home() {
                 </svg>
                 <span className="hidden desk:inline">Limpiar tabla</span>
               </button>
-              {!isHorasHistory ? (
+              {(
                 <button
                   type="button"
                   onClick={() => void loadSavedHoras()}
@@ -18819,7 +18726,8 @@ export default function Home() {
                     {isLoadingHoras ? "Recuperando..." : "Recuperar datos"}
                   </span>
                 </button>
-              ) : null}
+              )}
+              {horasTemplate.serviceId !== "enfermeria" && <button type="button" onClick={() => void handleDownloadHorasTemplate()} className="px-3 text-xs">Descargar copia Excel</button>}
               {indicadorAutoguardado("horas")}
               <button
                 type="button"
@@ -20103,7 +20011,7 @@ export default function Home() {
                               : "text-amber-400"
                         }`}
                       >
-                        {noAplica ? "No le corresponde" : isComplete ? "Completo" : "Incompleto"}
+                        {noAplica ? "No le corresponde" : mod.id === "perc" ? (isComplete ? "Entregado" : hasAnyCapturedValue(tableValues) ? "En digitación" : "Pendiente") : isComplete ? "Completo" : "Incompleto"}
                       </span>
                     </div>
                   </div>
@@ -24735,12 +24643,13 @@ export default function Home() {
                       </button>
                     ) : null}
                     {indicadorAutoguardado("perc")}
+                    <span className="text-xs">{entregaConfirmada ? "Entregado" : "En digitación"}</span>
                     <button
                       type="button"
                       onClick={() => void handleSave()}
                       disabled={isSaving || percEditingBlocked}
-                      title="Guardar datos"
-                      aria-label="Guardar datos"
+                      title="Confirmar entrega PERC"
+                      aria-label="Confirmar entrega PERC"
                       className={`${BTN_GUARDAR} inline-flex items-center gap-2 rounded-2xl px-2.5 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-60 desk:px-4`}
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 desk:h-3.5 desk:w-3.5" aria-hidden="true">
@@ -24750,9 +24659,7 @@ export default function Home() {
                       <span className="hidden desk:inline">
                         {isSaving
                           ? "Guardando..."
-                          : isPercHistory
-                            ? "Guardar cambios del mes"
-                            : "Guardar datos"}
+                          : "Confirmar entrega"}
                       </span>
                     </button>
                   </div>
@@ -27823,7 +27730,7 @@ export default function Home() {
                           <button
                             type="button"
                             onClick={() => void handleAdminSendReset(selectedUser.uid, selectedUser)}
-                            disabled={busy}
+                            disabled={busy || !permiteReset(serviceProfile ?? undefined, selectedUser, selectedUser.email)}
                             title="Reset de clave a la temporal"
                             className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
                           >
@@ -28799,7 +28706,8 @@ export default function Home() {
                       pendientes: members.filter((x) => !isStatsDone(x)).map((x) => x.name),
                     });
                   } else {
-                    statsItems.push({ id: s.id, name: s.name, done: isStatsDone(s) });
+                    const borrador = !isStatsDone(s) && s.modules.some(m => m.label === statsLabel && m.enDigitacion);
+                    statsItems.push({ id: s.id, name: borrador ? `${s.name} · En digitación` : s.name, done: isStatsDone(s) });
                   }
                 }
                 const total = statsItems.length;
@@ -28877,7 +28785,7 @@ export default function Home() {
                       {statsModule === "distribucion" ? (
                         <button
                           type="button"
-                          onClick={() => void downloadHorasConsolidado(periodId, getPeriodLabel(periodId))}
+                          onClick={() => void downloadHorasConsolidado(periodId, getPeriodLabel(periodId)).catch(err => setError(err.message))}
                           className="mt-4 shrink-0 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25"
                         >
                           Descargar consolidado de horas (Excel)

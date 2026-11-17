@@ -106,6 +106,17 @@ export function isSameCalendarDay(left: Date, right: Date) {
 // Hora de cierre diario de la captura: 2:30 PM (14:30) del ultimo dia habil de la ventana.
 export const CAPTURE_CLOSE_HOUR = 14;
 export const CAPTURE_CLOSE_MINUTE = 30;
+
+const relojHospital = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/El_Salvador", year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+});
+
+// Fecha civil del hospital para las funciones de calendario que usan getDate/getHours.
+export function fechaHospital(instante = new Date()) {
+  const p = Object.fromEntries(relojHospital.formatToParts(instante).map(x => [x.type, Number(x.value)]));
+  return new Date(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+}
 export function isBeforeDailyCutoff(date: Date) {
   return (
     date.getHours() < CAPTURE_CLOSE_HOUR ||
@@ -222,17 +233,12 @@ export function getSepsWindow(referenceDate: Date, blockedDates: string[]) {
   };
 }
 
-/** 2:30 p. m. del dia indicado, en milisegundos (hora local). */
+/** Convierte la hora civil de cierre del hospital a un instante UTC. */
 export function getCloseMillis(day: Date) {
-  return new Date(
-    day.getFullYear(),
-    day.getMonth(),
-    day.getDate(),
-    CAPTURE_CLOSE_HOUR,
-    CAPTURE_CLOSE_MINUTE,
-    0,
-    0,
-  ).getTime();
+  const nominal = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate(), CAPTURE_CLOSE_HOUR, CAPTURE_CLOSE_MINUTE);
+  const pared = fechaHospital(new Date(nominal));
+  const civil = Date.UTC(pared.getFullYear(), pared.getMonth(), pared.getDate(), pared.getHours(), pared.getMinutes());
+  return nominal + (nominal - civil);
 }
 
 /**

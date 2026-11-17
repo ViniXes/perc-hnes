@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { gestionaUsuarios, permiteReset } from "@/lib/permisos-cuentas";
 import { APP_URL, enviarCorreo, envolverHtml, esCorreo, escaparHtml } from "@/lib/correo";
 
 export const runtime = "nodejs";
@@ -110,14 +111,13 @@ export async function POST(req: NextRequest) {
   // 1) Solo administradores.
   let callerUid = "";
   try {
-    callerUid = (await adminAuth.verifyIdToken(idToken)).uid;
+    callerUid = (await adminAuth.verifyIdToken(idToken, true)).uid;
   } catch {
     return NextResponse.json({ ok: false, error: "Sesión inválida." }, { status: 401 });
   }
   const callerSnap = await adminDb.collection("serviceUsers").doc(callerUid).get();
   const caller = callerSnap.exists ? (callerSnap.data() as Record<string, unknown>) : {};
-  const callerPerms = (caller.permissions || {}) as Record<string, unknown>;
-  if (caller.role !== "admin" && callerPerms.canManageUsers !== true) {
+  if (!gestionaUsuarios(caller)) {
     return NextResponse.json(
       { ok: false, error: "Solo un administrador puede restablecer el acceso." },
       { status: 403 },
@@ -141,9 +141,10 @@ export async function POST(req: NextRequest) {
 
   // 3) La cuenta: usuario = parte local del correo de acceso (lo que se escribe en el login).
   let usuario = "";
+  let correoAcceso = "";
   try {
     const authUser = await adminAuth.getUser(targetUid);
-    const correoAcceso = (authUser.email || "").toLowerCase();
+    correoAcceso = (authUser.email || "").toLowerCase();
     usuario = correoAcceso.endsWith("@perc-hnes.app") ? correoAcceso.split("@")[0] : correoAcceso;
   } catch {
     return NextResponse.json({ ok: false, error: "Esa cuenta no existe en el sistema de acceso." }, { status: 404 });
@@ -154,13 +155,18 @@ export async function POST(req: NextRequest) {
   }
 
   // 4) Clave temporal.
+  const destino = await adminDb.collection("serviceUsers").doc(targetUid).get();
+  if (!permiteReset(caller, destino.data(), correoAcceso)) {
+    return NextResponse.json({ ok: false, error: "Esta cuenta no admite un reinicio ordinario." }, { status: 403 });
+  }
   const clave = CLAVE_TEMPORAL;
   try {
-    await adminAuth.updateUser(targetUid, { password: clave });
     await adminDb
       .collection("serviceUsers")
       .doc(targetUid)
       .set({ mustChangePassword: true, updatedAt: new Date() }, { merge: true });
+    await adminAuth.updateUser(targetUid, { password: clave });
+    await adminAuth.revokeRefreshTokens(targetUid);
   } catch {
     return NextResponse.json({ ok: false, error: "No se pudo restablecer la clave de esa cuenta." }, { status: 500 });
   }
