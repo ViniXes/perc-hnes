@@ -246,12 +246,38 @@ import {
   BTN_EXCEL,
   BTN_GUARDAR,
   BTN_PDF,
+  EstadoChip,
   SeccionUm,
   UM_GRUPO,
   UM_OFF,
   UM_ON,
   UM_SECUNDARIO,
 } from "@/components/ui-basicos";
+// Grupo de cada opcion del menu lateral (rotulos solo en escritorio).
+function grupoMenuLateral(id: string): string {
+  if (id === "panel-overview") return "";
+  if (["panel-monitor-general", "panel-tendencias", "panel-monitor-horas", "panel-hospitales"].includes(id)) {
+    return "Monitoreo";
+  }
+  if (["panel-docs", "panel-poa", "panel-memos"].includes(id)) return "Documentos";
+  if (
+    [
+      "panel-config",
+      "panel-calendar",
+      "panel-users",
+      "panel-signups",
+      "panel-reset",
+      "panel-capture-toggle",
+      "panel-bitacora",
+      "panel-requests",
+      "panel-request-form",
+    ].includes(id)
+  ) {
+    return "Gestión";
+  }
+  return "Captura";
+}
+
 type UserRole = "service" | "admin" | "supervisor";
 type TableValues = Record<string, Record<string, string>>;
 type ServicePermissions = {
@@ -15940,7 +15966,7 @@ export default function Home() {
                       </span>
                     </button>
                     <div className={`show-scrollbar overflow-x-auto ${sectionOpen ? "" : "hidden"}`}>
-                      <table className={`border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+                      <table className={`tabulador border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                         <thead>
                           <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
                             <th className={`sticky left-0 z-10 min-w-[260px] px-3 py-2 text-left font-medium ${isLightPanelTheme ? "bg-slate-100" : "bg-[#243049]"}`}>
@@ -16212,7 +16238,7 @@ export default function Home() {
                     const td = `border px-1 py-1 text-center ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`;
                     return (
                       <div className={`show-scrollbar overflow-x-auto ${tableOpen ? "" : "hidden"}`}>
-                        <table className={`border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+                        <table className={`tabulador border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                           <thead>
                             {sepsEditingLayout ? (
                               <tr className={isLightPanelTheme ? "bg-slate-50 text-slate-500" : "bg-white/[0.03] text-slate-400"}>
@@ -16426,7 +16452,7 @@ export default function Home() {
                 ) : null}
 
                 <div className={`show-scrollbar overflow-x-auto ${tableOpen && !table.monthly ? "" : "hidden"}`}>
-                  <table className={`border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+                  <table className={`tabulador border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                     <thead>
                       <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
                         {Array.from({ length: maxDepth }).map((_, L) => (
@@ -16862,7 +16888,19 @@ export default function Home() {
                 </button>
               ) : null}
               {indicadorAutoguardado("seps")}
-              {estadoSeps ? <span className="text-xs">{estadoSeps}</span> : null}
+              {estadoSeps ? (
+                <EstadoChip
+                  tono={
+                    estadoSeps === "Entregado"
+                      ? "entregado"
+                      : estadoSeps === "En digitación" || estadoSeps.startsWith("Confirmación")
+                        ? "borrador"
+                        : "pendiente"
+                  }
+                >
+                  {estadoSeps}
+                </EstadoChip>
+              ) : null}
               <button
                 type="button"
                 onClick={() => void handleSaveSeps()}
@@ -18363,16 +18401,9 @@ export default function Home() {
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {renderExitServiceButton()}
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                horasLocked ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-200"
-              }`}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${horasLocked ? "bg-rose-400" : "bg-emerald-400"}`}
-              />
+            <EstadoChip tono={horasLocked ? "bloqueado" : "reabierto"}>
               {horasLocked ? "Bloqueado" : "Habilitado"}
-            </span>
+            </EstadoChip>
             <button
               type="button"
               onClick={() => setHorasCollapsed((v) => !v)}
@@ -18496,8 +18527,8 @@ export default function Home() {
           ) : null;
         })()}
 
-        <div className={`show-scrollbar mt-4 overflow-x-auto rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
-          <table className={`w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+        <div className={`show-scrollbar tabulador-scroll mt-4 overflow-auto rounded-2xl border ${isLightPanelTheme ? "border-slate-200" : "border-white/10"}`}>
+          <table className={`tabulador tabulador-fijo w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
             <thead>
               <tr className={`${isLightPanelTheme ? "bg-slate-100 text-slate-600" : "bg-white/5 text-slate-300"}`}>
                 <th className={`sticky left-0 z-20 min-w-[12rem] border-r px-2 py-2 text-left font-medium ${isLightPanelTheme ? "border-slate-200 bg-slate-100" : "border-white/10 bg-[#1a2334]"}`}>
@@ -19830,7 +19861,7 @@ export default function Home() {
           : []),
       {
         id: "panel-docs",
-        label: "DOCS-POA/MOF",
+        label: "Documentos POA/MOF",
         detail: "Control de entregas a Calidad",
         badge: "DO",
       },
@@ -19890,7 +19921,7 @@ export default function Home() {
         ? [
             {
               id: "panel-calendar",
-              label: "Config/días-hábiles",
+              label: "Días hábiles",
               detail: "Dias habiles",
               badge: "CM",
             },
@@ -20009,19 +20040,20 @@ export default function Home() {
                       <h3 className={`truncate text-sm font-semibold ${isLightPanelTheme ? "text-slate-900" : "text-white"}`}>
                         {mod.name}
                       </h3>
-                      <span
-                        className={`mt-0.5 block text-[11px] font-semibold ${
+                      <EstadoChip
+                        className="mt-1"
+                        tono={
                           noAplica
-                            ? isLightPanelTheme
-                              ? "text-slate-500"
-                              : "text-slate-400"
+                            ? "neutro"
                             : isComplete
-                              ? "text-emerald-400"
-                              : "text-amber-400"
-                        }`}
+                              ? "entregado"
+                              : mod.id === "perc" && hasAnyCapturedValue(tableValues)
+                                ? "borrador"
+                                : "pendiente"
+                        }
                       >
                         {noAplica ? "No le corresponde" : mod.id === "perc" ? (isComplete ? "Entregado" : hasAnyCapturedValue(tableValues) ? "En digitación" : "Pendiente") : isComplete ? "Completo" : "Incompleto"}
-                      </span>
+                      </EstadoChip>
                     </div>
                   </div>
 
@@ -20232,8 +20264,14 @@ export default function Home() {
               {(isMinsal
                 ? sidebarItems.filter((item) => item.id === "panel-hospitales")
                 : sidebarItems
-              ).map((item) => {
+              ).map((item, itemIndex, lista) => {
                 const isActive = activeSidebarSection === item.id;
+                // GRUPOS DEL MENU (solo escritorio): un rotulo pequeño cuando cambia
+                // el grupo (Monitoreo, Captura, Documentos, Gestión). Mismas
+                // opciones y permisos; solo se ordena la lectura.
+                const grupo = grupoMenuLateral(item.id);
+                const grupoPrevio = itemIndex > 0 ? grupoMenuLateral(lista[itemIndex - 1].id) : "";
+                const rotuloGrupo = grupo && grupo !== grupoPrevio ? grupo : "";
                 // Alerta roja cuando hay solicitudes pendientes, o cuando el SERVICIO
                 // tiene comentarios de revision sin leer en su SEPS.
                 const sepsCommentAlert = item.id === "panel-seps" && serviceSepsCommentCount > 0;
@@ -20253,6 +20291,15 @@ export default function Home() {
 
                 return (
                   <Fragment key={item.id}>
+                  {rotuloGrupo ? (
+                    <p
+                      className={`menu-grupo hidden px-2.5 pb-1 pt-3 text-[9.5px] font-bold uppercase tracking-[0.2em] desk:block ${
+                        isLightPanelTheme ? "text-slate-500" : "text-[#dde7f5]/60"
+                      }`}
+                    >
+                      {rotuloGrupo}
+                    </p>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => {
@@ -20293,7 +20340,7 @@ export default function Home() {
                     }}
                     title={item.detail}
                     aria-current={isActive ? "page" : undefined}
-                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-2.5 text-center transition desk:w-full desk:flex-row desk:justify-start desk:gap-2.5 desk:px-2.5 desk:py-1.5 desk:text-left ${
+                    className={`menu-item-lateral relative flex flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-2.5 text-center transition desk:w-full desk:flex-row desk:justify-start desk:gap-2.5 desk:px-2.5 desk:py-1.5 desk:text-left ${
                       hasAlert
                         ? "border-rose-400/60 bg-rose-500/15 hover:bg-rose-500/25"
                         : isActive
@@ -21043,6 +21090,81 @@ export default function Home() {
                         ? "Módulo de Administración"
                         : "Módulo de Supervisión"}
                 </p>
+                {/* AVANCE DEL MES: barra fina con lo entregado y el cierre. Para un
+                    servicio cuenta sus tableros; para admin/supervision, cuantos
+                    servicios ya entregaron todo. El ultimo dia avisa la hora de cierre. */}
+                {(() => {
+                  const servicios = dashboardGroups.flatMap((g) => g.services);
+                  const propio = currentService
+                    ? servicios.find((svc) => svc.id === currentService.id)
+                    : undefined;
+                  let hechos = 0;
+                  let total = 0;
+                  let pasos: { label: string; ok: boolean }[] = [];
+                  if (currentService && !isAdmin) {
+                    pasos = (propio?.modules ?? []).map((mod) => ({
+                      label: mod.label === "Horas" ? "Horas" : mod.label,
+                      ok: !!mod.completed,
+                    }));
+                    total = pasos.length;
+                    hechos = pasos.filter((p) => p.ok).length;
+                  } else {
+                    const conModulos = servicios.filter((svc) => (svc.modules ?? []).length > 0);
+                    total = conModulos.length;
+                    hechos = conModulos.filter((svc) => svc.modules.every((mod) => mod.completed)).length;
+                  }
+                  if (total === 0) return null;
+                  const pct = Math.round((hechos / total) * 100);
+                  const ultimo = captureWindow.lastOpenDay;
+                  const cierraHoy =
+                    captureWindow.isOpen &&
+                    !!ultimo &&
+                    ultimo.getFullYear() === now.getFullYear() &&
+                    ultimo.getMonth() === now.getMonth() &&
+                    ultimo.getDate() === now.getDate();
+                  const textoCierre = !captureWindow.isOpen
+                    ? "Captura cerrada"
+                    : cierraHoy
+                      ? "Cierra hoy a las 2:30 p. m."
+                      : ultimo
+                        ? `Cierra el ${SHORT_DATE_FORMATTER.format(ultimo)} a las 2:30 p. m.`
+                        : "";
+                  const resumen =
+                    currentService && !isAdmin
+                      ? `${hechos} de ${total} ${total === 1 ? "tablero entregado" : "tableros entregados"}`
+                      : `${hechos} de ${total} servicios entregaron todo`;
+                  return (
+                    <div className="hero-progreso mt-4 max-w-[520px]">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px]">
+                        <span className="hero-greet font-medium">{resumen}</span>
+                        {textoCierre ? (
+                          <span className={cierraHoy && hechos < total ? "hero-cierre-hoy" : "hero-cierre"}>
+                            {textoCierre}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div
+                        className="hero-barra mt-2"
+                        role="progressbar"
+                        aria-label="Avance del mes"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={pct}
+                      >
+                        <span style={{ width: `${pct}%` }} />
+                      </div>
+                      {pasos.length > 1 ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {pasos.map((paso) => (
+                            <span key={paso.label} className={`hero-paso ${paso.ok ? "hero-paso-ok" : ""}`}>
+                              {paso.label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="flex items-start gap-3">
@@ -21190,7 +21312,7 @@ export default function Home() {
                         >
                           <span
                             className={`h-2 w-2 shrink-0 rounded-full ${
-                              mod.completo ? "bg-teal-300" : "bg-amber-300"
+                              mod.completo ? "bg-emerald-400" : "bg-amber-300"
                             }`}
                           />
                           <span className="min-w-0 flex-1">
@@ -24198,20 +24320,9 @@ export default function Home() {
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {renderExitServiceButton()}
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                      isFormLocked
-                        ? "bg-rose-500/15 text-rose-200"
-                        : "bg-emerald-500/15 text-emerald-200"
-                    }`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        isFormLocked ? "bg-rose-400" : "bg-emerald-400"
-                      }`}
-                    />
+                  <EstadoChip tono={isFormLocked ? "bloqueado" : "reabierto"}>
                     {isFormLocked ? "Bloqueado" : "Habilitado"}
-                  </span>
+                  </EstadoChip>
                   <span className={`text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>
                     {!serviceProfile.permissions.canEdit
                       ? "El administrador desactivo temporalmente tu permiso de captura."
@@ -24260,8 +24371,8 @@ export default function Home() {
                 </div>
               ) : (
               <>
-              <div className="show-scrollbar hidden overflow-x-auto desk:block">
-                <table className={`min-w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
+              <div className="show-scrollbar tabulador-scroll hidden overflow-auto desk:block">
+                <table className={`tabulador tabulador-fijo min-w-full border-collapse text-xs ${isLightPanelTheme ? "text-slate-800" : "text-slate-100"}`}>
                   <thead>
                     <tr className={`text-left ${isLightPanelTheme ? "bg-slate-100" : "bg-[#1a2334]"}`}>
                       <th className={`sticky left-0 z-20 min-w-[210px] border-b px-3 py-3 font-semibold uppercase tracking-wide ${isLightPanelTheme ? "border-slate-200 bg-slate-100" : "border-white/10 bg-[#1a2334]"}`}>
@@ -24652,7 +24763,9 @@ export default function Home() {
                       </button>
                     ) : null}
                     {indicadorAutoguardado("perc")}
-                    <span className="text-xs">{entregaConfirmada ? "Entregado" : "En digitación"}</span>
+                    <EstadoChip tono={entregaConfirmada ? "entregado" : "borrador"}>
+                      {entregaConfirmada ? "Entregado" : "En digitación"}
+                    </EstadoChip>
                     <button
                       type="button"
                       onClick={() => void handleSave()}
@@ -26751,7 +26864,7 @@ export default function Home() {
                                             </>,
                                           )}
 
-                                          {item("docs", "DO", "DOCS-POA/MOF", 0, null, candado("Todos", true))}
+                                          {item("docs", "DO", "Documentos POA/MOF", 0, null, candado("Todos", true))}
 
                                           {item(
                                             "poa",
@@ -26783,7 +26896,7 @@ export default function Home() {
 
                                           {item("memos", "ME", "Memorándums", 0, null, soloAdmin)}
                                           {item("config", "CF", "Configuración", 0, null, candado("Todos", true))}
-                                          {item("calendar", "CM", "Config/días-hábiles", 0, null, soloAdmin)}
+                                          {item("calendar", "CM", "Días hábiles", 0, null, soloAdmin)}
                                           {item("users", "US", "Usuarios", 0, null, soloAdmin)}
                                           {item("signups", "RG", "Registros", 0, null, soloAdmin)}
                                           {item("reset", "RE", "Reiniciar tablero", 0, null, soloAdmin)}
@@ -30270,7 +30383,7 @@ export default function Home() {
                     </span>
                     <div className="min-w-0">
                       <h3 className="text-[17px] font-semibold tracking-tight" style={{ color: "var(--text)" }}>
-                        DOCS-POA/MOF
+                        Documentos POA/MOF
                       </h3>
                       <p className="mt-0.5 text-[11.5px]" style={{ color: "var(--text-muted)" }}>
                         Control de entregas a Calidad

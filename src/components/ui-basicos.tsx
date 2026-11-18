@@ -69,3 +69,38 @@ export const BTN_EXCEL = "border border-emerald-400/25 bg-emerald-400/[0.08] tex
 export const BTN_PDF = "border border-sky-300/25 bg-sky-300/[0.08] text-sky-100 hover:bg-sky-300/[0.15]";
 export const BTN_DESBLOQUEAR = "border border-indigo-300/25 bg-indigo-300/[0.08] text-indigo-100 hover:bg-indigo-300/[0.15]";
 export const BTN_BLOQUEAR = "border border-amber-300/25 bg-amber-300/[0.08] text-amber-100 hover:bg-amber-300/[0.15]";
+
+/**
+ * ESTADO DE ENTREGA: una sola pastilla (punto + palabra) para todos los
+ * estados de la app, igual en Inicio, PERC, SEPS, Horas y Monitoreo. El color
+ * nunca va solo: siempre lleva el texto. Los colores viven en globals.css
+ * (.estado-chip) y se adaptan solos al modo claro y al oscuro.
+ */
+export type EstadoTono =
+  | "entregado"
+  | "borrador"
+  | "pendiente"
+  | "fuera"
+  | "cerrado"
+  | "reabierto"
+  | "bloqueado"
+  | "neutro";
+
+export function EstadoChip({
+  tono,
+  children,
+  className = "",
+  title,
+}: {
+  tono: EstadoTono;
+  children: ReactNode;
+  className?: string;
+  title?: string;
+}) {
+  return (
+    <span className={`estado-chip estado-${tono} ${className}`} title={title}>
+      <span className="estado-dot" aria-hidden="true" />
+      {children}
+    </span>
+  );
+}

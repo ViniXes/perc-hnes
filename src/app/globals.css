@@ -1900,3 +1900,301 @@ body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
 .panel-shell.theme-dark .sidebar-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(157, 180, 211, 0.85);
 }
+
+/* =============================================================================
+   MODO CLARO · AZUL PULSO (18/11/2026)
+   -----------------------------------------------------------------------------
+   El modo claro adopta la misma familia azul del modo oscuro y del encabezado
+   (#1B3A6B · #2F6FB5 · #9DB4D3). Se retiran del claro el teal/cian, el brillo
+   violeta y los rotulos dorados. Se conservan los colores con significado:
+   verde (entregado/ok), ambar (pendiente/aviso) y rosa (error).
+   Va AL FINAL para ganar por cascada; el modo oscuro no cambia.
+   ============================================================================= */
+.panel-shell.theme-light {
+  --accent: #24508f;          /* azul profundo: texto, enlaces, bordes activos */
+  --accent-btn: #1b3a6b;      /* azul marino: botones principales */
+  --accent-ink: #ffffff;
+  --border-strong: rgba(47, 111, 181, 0.45);
+  --color-cyan-50: #eef3fa;
+  --color-cyan-100: #dde7f5;
+  --color-cyan-200: #c2d3ea;
+  --color-cyan-300: #9db4d3;
+  --color-cyan-400: #6f97cc;
+  --color-cyan-500: #2f6fb5;
+  --color-cyan-600: #285f9c;
+  --color-cyan-700: #224f85;
+  --color-cyan-800: #1b3a6b;
+  --color-cyan-900: #152d53;
+  --color-cyan-950: #0f1b2d;
+  /* Celeste tambien a la escala azul (el teal se deja: marca "listo/ok"). */
+  --color-sky-300: #9db4d3;
+  --color-sky-400: #6f97cc;
+  --color-sky-500: #2f6fb5;
+  --color-sky-600: #285f9c;
+  --color-sky-700: #224f85;
+  background-image:
+    radial-gradient(circle at 10% 0%, rgba(47, 111, 181, 0.09), transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(27, 58, 107, 0.06), transparent 45%),
+    linear-gradient(180deg, #e9edf3 0%, #e3e8ef 100%);
+}
+
+/* Botones llenos (teal, cian, violeta) -> azul marino PULSO. */
+.panel-shell.theme-light :is(.bg-\[\#1f6f68\], .bg-teal-500, .bg-teal-600, .bg-teal-700,
+  .bg-cyan-500, .bg-cyan-400, .bg-cyan-600, .bg-violet-500, .bg-violet-500\/80, .bg-violet-600) {
+  background-color: #1b3a6b;
+  color: #ffffff;
+}
+.panel-shell.theme-light :is(.hover\:bg-\[\#25807a\], .hover\:bg-teal-400, .hover\:bg-teal-500,
+  .hover\:bg-cyan-400, .hover\:bg-cyan-300, .hover\:bg-violet-400):hover {
+  background-color: #24508f;
+}
+
+/* Secundarios con tinte teal/indigo -> tinte azul. */
+.panel-shell.theme-light :is([class*="bg-teal-300/[0.08]"], [class*="bg-teal-400/[0.08]"], [class*="bg-teal-400/[0.12]"], [class*="bg-teal-500/10"],
+  [class*="bg-sky-300/[0.08]"], [class*="bg-sky-400/[0.08]"], [class*="bg-sky-500/10"],
+  [class*="bg-indigo-300/[0.08]"], [class*="bg-indigo-400/[0.08]"], [class*="bg-indigo-500/10"]) {
+  background-color: #e7eef8;
+  border-color: rgba(47, 111, 181, 0.32);
+  color: #1b3a6b;
+}
+
+/* Selecciones con tinte teal (p. ej. Usuarios): su texto va en azul. */
+body[data-panel-theme="light"] :is([class*="bg-teal-300/[0.08]"], [class*="bg-teal-400/[0.08]"], [class*="bg-teal-400/[0.12]"], [class*="bg-teal-500/10"]):is([class*="text-teal-"], :has(> [class*="text-teal-"])),
+body[data-panel-theme="light"] :is([class*="bg-teal-300/[0.08]"], [class*="bg-teal-400/[0.08]"], [class*="bg-teal-400/[0.12]"], [class*="bg-teal-500/10"]) > [class*="text-teal-"] {
+  color: #1b3a6b !important;
+}
+
+/* Textos cian/violeta/indigo -> azul. */
+body[data-panel-theme="light"] :is([class*="text-cyan-"], [class*="text-sky-"],
+  [class*="text-violet-"], [class*="text-indigo-"]) {
+  color: #24508f !important;
+}
+/* ...salvo sobre un relleno solido o degradado, donde va en blanco. */
+body[data-panel-theme="light"] :is(.bg-\[\#1f6f68\], .bg-teal-500, .bg-teal-600, .bg-teal-700,
+  .bg-cyan-500, .bg-cyan-600, .bg-violet-500, .bg-emerald-600, .pulso-hero, [class*="bg-gradient-to-"], [class*="bg-linear-to-"])
+  :is([class*="text-cyan-"], [class*="text-sky-"], [class*="text-violet-"], [class*="text-indigo-"]) {
+  color: #ffffff !important;
+}
+.panel-shell.theme-light .pulso-hero :is([class*="text-cyan-"], [class*="text-sky-"]) {
+  color: #dde7f5 !important;
+}
+
+/* Rotulos de seccion (antes dorado/bronce) -> azul PULSO. */
+body[data-panel-theme="light"] [class*="text-amber-"][class*="uppercase"],
+body[data-panel-theme="light"] [class*="text-amber-"][class*="tracking-"] {
+  color: #2f6fb5 !important;
+  font-weight: 700;
+}
+
+/* Bordes de acento teal/cian/violeta -> azul suave. */
+.panel-shell.theme-light :is([class*="border-cyan-"], [class*="border-violet-"], [class*="border-indigo-"]) {
+  border-color: rgba(47, 111, 181, 0.35);
+}
+
+/* Detalles: foco, casillas, filas y seleccion en azul. */
+.panel-shell.theme-light input[type="checkbox"],
+.panel-shell.theme-light input[type="radio"] { accent-color: #2f6fb5; }
+.panel-shell.theme-light tbody tr:hover { background-color: rgba(47, 111, 181, 0.07); }
+.panel-shell.theme-light :is(button, a[href], input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline-color: #2f6fb5;
+}
+
+/* Circulos abstractos tambien en las tarjetas claras, muy tenues. */
+body[data-panel-theme="light"] .panel-shell [class*="bg-[#202c41]"]:not(aside):not(nav) {
+  background-image:
+    radial-gradient(circle at calc(100% - 70px) 10px, transparent 0 88px, rgba(27, 58, 107, 0.045) 89px 112px, transparent 113px),
+    radial-gradient(circle at calc(100% - 240px) calc(100% + 60px), rgba(27, 58, 107, 0.035) 0 120px, transparent 121px);
+  background-repeat: no-repeat;
+}
+
+/* =============================================================================
+   ESTADOS (18/11/2026): una sola pastilla para toda la app (EstadoChip en
+   src/components/ui-basicos.tsx). Punto + palabra, borde fino, tinte suave.
+   ============================================================================= */
+.estado-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--chip-border, rgba(201, 216, 236, 0.35));
+  background: var(--chip-bg, rgba(201, 216, 236, 0.06));
+  color: var(--chip-ink, #c9d8ec);
+  border-radius: 9999px;
+  padding: 2px 10px 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.estado-chip .estado-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 9999px;
+  background: var(--chip-dot, #9db4d3);
+  box-shadow: 0 0 6px var(--chip-glow, transparent);
+}
+.estado-entregado { --chip-ink: #6ee7b7; --chip-border: rgba(52, 211, 153, 0.35); --chip-bg: rgba(52, 211, 153, 0.08); --chip-dot: #34d399; --chip-glow: rgba(52, 211, 153, 0.6); }
+.estado-borrador  { --chip-ink: #c9d8ec; --chip-border: rgba(201, 216, 236, 0.35); --chip-bg: rgba(201, 216, 236, 0.06); --chip-dot: #9db4d3; }
+.estado-pendiente { --chip-ink: #fcd34d; --chip-border: rgba(251, 191, 36, 0.35); --chip-bg: rgba(251, 191, 36, 0.08); --chip-dot: #fbbf24; --chip-glow: rgba(251, 191, 36, 0.6); }
+.estado-fuera     { --chip-ink: #fda4af; --chip-border: rgba(251, 113, 133, 0.35); --chip-bg: rgba(251, 113, 133, 0.08); --chip-dot: #fb7185; }
+.estado-cerrado   { --chip-ink: #b9d0f0; --chip-border: rgba(185, 208, 240, 0.35); --chip-bg: rgba(47, 111, 181, 0.18); --chip-dot: #6f97cc; }
+.estado-reabierto { --chip-ink: #c4d7f2; --chip-border: rgba(111, 151, 204, 0.5); --chip-bg: transparent; --chip-dot: transparent; border-style: dashed; }
+.estado-reabierto .estado-dot { border: 1.5px solid #9db4d3; }
+.estado-bloqueado { --chip-ink: #fda4af; --chip-border: rgba(251, 113, 133, 0.35); --chip-bg: rgba(251, 113, 133, 0.08); --chip-dot: #fb7185; }
+.estado-neutro    { --chip-ink: #a3b9d8; --chip-border: rgba(163, 185, 216, 0.3); --chip-bg: transparent; --chip-dot: #64748b; }
+
+/* Modo claro: mismos estados en tonos ~700 sobre tinte claro (contraste AA). */
+.panel-shell.theme-light .estado-entregado { --chip-ink: #047857; --chip-border: rgba(4, 120, 87, 0.30); --chip-bg: #e6f4ee; --chip-dot: #10b981; --chip-glow: transparent; }
+.panel-shell.theme-light .estado-borrador  { --chip-ink: #334155; --chip-border: rgba(51, 65, 85, 0.22); --chip-bg: #eef1f5; --chip-dot: #64748b; }
+.panel-shell.theme-light .estado-pendiente { --chip-ink: #92400e; --chip-border: rgba(180, 83, 9, 0.30); --chip-bg: #fbf2df; --chip-dot: #f59e0b; --chip-glow: transparent; }
+.panel-shell.theme-light :is(.estado-fuera, .estado-bloqueado) { --chip-ink: #9f1239; --chip-border: rgba(190, 18, 60, 0.28); --chip-bg: #fbeaec; --chip-dot: #e11d48; }
+.panel-shell.theme-light .estado-cerrado   { --chip-ink: #1b3a6b; --chip-border: rgba(47, 111, 181, 0.32); --chip-bg: #e7eef8; --chip-dot: #2f6fb5; }
+.panel-shell.theme-light .estado-reabierto { --chip-ink: #24508f; --chip-border: rgba(47, 111, 181, 0.45); }
+.panel-shell.theme-light .estado-reabierto .estado-dot { border-color: #2f6fb5; }
+.panel-shell.theme-light .estado-neutro    { --chip-ink: #5f6b7d; --chip-border: rgba(15, 23, 42, 0.16); --chip-dot: #94a3b8; }
+
+/* =============================================================================
+   MENU LATERAL (18/11/2026): rotulos de grupo y linea de luz en la opcion
+   activa (solo escritorio).
+   ============================================================================= */
+.menu-grupo:first-child { padding-top: 0.25rem; }
+@media (width >= 1280px) {
+  .menu-item-lateral[aria-current="page"]::before {
+    content: "";
+    position: absolute;
+    left: 1px;
+    top: 50%;
+    width: 3px;
+    height: 18px;
+    margin-top: -9px;
+    border-radius: 9999px;
+    background: #b9d0f0;
+    box-shadow: 0 0 8px rgba(185, 208, 240, 0.7);
+  }
+  .panel-shell.theme-light .menu-item-lateral[aria-current="page"]::before {
+    background: #2f6fb5;
+    box-shadow: none;
+  }
+}
+:where(.forzar-escritorio) .menu-item-lateral[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 50%;
+  width: 3px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 9999px;
+  background: #b9d0f0;
+}
+
+/* =============================================================================
+   TABULADORES (18/11/2026): PERC, SEPS y Distribución de Horas.
+   - .tabulador: encabezado azul, celda activa con borde azul, ceros tenues y
+     la fila bajo el mouse marca su rotulo.
+   - .tabulador-fijo (PERC y Horas): el encabezado queda fijo al bajar dentro
+     de la tabla (.tabulador-scroll limita el alto en escritorio).
+   ============================================================================= */
+.panel-shell .tabulador thead th {
+  background-image: linear-gradient(180deg, #1b3a6b 0%, #173361 100%);
+  background-color: #1b3a6b;
+  color: #dde7f5;
+  border-color: rgba(255, 255, 255, 0.10);
+}
+.panel-shell.theme-light .tabulador thead th {
+  background-image: none;
+  background-color: #dde7f5;
+  color: #1b3a6b;
+  border-color: rgba(27, 58, 107, 0.14);
+}
+@media (width >= 1280px) {
+  .tabulador-scroll { max-height: calc(100vh - 230px); }
+}
+:where(.forzar-escritorio) .tabulador-scroll { max-height: calc(100vh - 230px); }
+.tabulador-fijo thead th {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.tabulador-fijo thead th:first-child { left: 0; z-index: 30; }
+
+/* Celdas: la activa con borde y halo azul; las vacias o en cero, tenues. */
+.panel-shell .tabulador td input:not(:disabled):focus {
+  border-color: #6f97cc;
+  box-shadow: 0 0 0 2px rgba(111, 151, 204, 0.45);
+  background-color: rgba(47, 111, 181, 0.22);
+}
+.panel-shell.theme-light .tabulador td input:not(:disabled):focus {
+  border-color: #2f6fb5;
+  box-shadow: 0 0 0 2px rgba(47, 111, 181, 0.22);
+  background-color: #f3f7fd;
+}
+.panel-shell .tabulador td input[value="0"]:not(:focus) { color: rgba(201, 216, 236, 0.45); }
+.panel-shell.theme-light .tabulador td input[value="0"]:not(:focus) { color: #94a3b8; }
+
+/* Fila bajo el mouse: su rotulo se ilumina para no perder la fila. */
+.panel-shell .tabulador tbody tr:hover > :first-child {
+  box-shadow: inset 3px 0 0 #6f97cc;
+}
+.panel-shell.theme-light .tabulador tbody tr:hover > :first-child {
+  box-shadow: inset 3px 0 0 #2f6fb5;
+}
+
+/* =============================================================================
+   ENCABEZADO · AVANCE DEL MES (18/11/2026). Va sobre el degradado azul de
+   .pulso-hero en ambos temas, por eso usa blancos translucidos fijos.
+   ============================================================================= */
+.pulso-hero .hero-barra {
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+.pulso-hero .hero-barra > span {
+  display: block;
+  height: 100%;
+  min-width: 6px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #b9d0f0, #ffffff);
+  transition: width 0.6s ease;
+}
+.pulso-hero .hero-cierre {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+.pulso-hero .hero-cierre-hoy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 9999px;
+  padding: 2px 10px;
+  background: rgba(251, 191, 36, 0.16);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fde68a;
+}
+.pulso-hero .hero-cierre-hoy::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #fbbf24;
+}
+.pulso-hero .hero-paso {
+  font-size: 11.5px;
+  border-radius: 9999px;
+  padding: 1px 9px;
+  background: rgba(11, 26, 51, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.85);
+}
+.pulso-hero .hero-paso-ok::before {
+  content: "✓ ";
+  color: #6ee7b7;
+  font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulso-hero .hero-barra > span { transition: none; }
+}

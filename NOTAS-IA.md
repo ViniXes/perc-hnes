@@ -54,6 +54,16 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-18 — Claude (vista)
+- Cambio: nueva vista aprobada por el usuario (propuesta A–E). Solo apariencia; no cambia lógica, permisos ni plazos.
+  - A. Modo claro en la familia azul (#1B3A6B/#2F6FB5): botones Guardar y llenos en azul marino, rótulos de sección en azul (antes dorado), sin brillo violeta, foco y casillas en azul. Se conservan verde/ámbar/rosa como colores de estado. Bloque "MODO CLARO · AZUL PULSO" al final de globals.css.
+  - D. `EstadoChip` (ui-basicos.tsx + clases `.estado-*` en globals.css): una sola pastilla de estado. Aplicada en tarjetas de Menús del área, cabecera de PERC y SEPS, y Bloqueado/Habilitado de PERC y Horas. Usar este componente para estados nuevos.
+  - B. Menú lateral con rótulos de grupo en escritorio (Monitoreo, Captura, Documentos, Gestión) vía `grupoMenuLateral(id)` en page.tsx, y línea de luz en la opción activa. Renombres: "DOCS-POA/MOF" → "Documentos POA/MOF", "Config/días-hábiles" → "Días hábiles" (también en el modal de Permisos).
+  - C. Tabuladores (`.tabulador`): encabezado azul, celda activa con halo azul, ceros tenues, fila bajo el mouse marcada. PERC y Horas (`.tabulador-fijo` + `.tabulador-scroll`) con encabezado fijo dentro de la tabla en escritorio.
+  - E. Encabezado (`.pulso-hero`): barra de avance del mes (servicio: tableros entregados; admin/supervisión: servicios que entregaron todo) y aviso ámbar "Cierra hoy a las 2:30 p. m." el último día.
+- Archivos: `src/app/globals.css`, `src/app/page.tsx`, `src/components/ui-basicos.tsx`.
+- Notas: los estilos nuevos van al final de globals.css; si agregas reglas de modo claro, ponlas después para que no las pise la capa azul.
+
 ### 2026-11-18 — Claude
 - Cambio: termina la mejora que ChatGPT dejó a medias (no llegó a subirla): criterio único de entrega por módulo en `src/lib/entregas.ts` (`moduloEntregado`, `estadoModulo`, `horasAvance`, `HORAS_UMBRAL_COMPLETO`). Lo usan Monitoreo (tablero público), Tendencias, tarjetas del inicio y `/api/recordatorios`. Antes el correo daba por entregado SEPS/Horas con cualquier guardado.
 - SEPS: igual que PERC. Autoguardar deja `estadoEntrega: "borrador"` (En digitación); el botón ahora es **Confirmar entrega** y deja `"entregado"` (exige al menos un dato). Junto al botón se ve el estado en vivo. Documentos viejos sin `estadoEntrega` y con datos siguen contando como entregados.
