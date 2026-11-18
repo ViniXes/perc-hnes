@@ -33,6 +33,7 @@ Resumen de cambios recientes (noviembre 2026):
 - **Usuarios (05/11):** botón Permisos con la forma del menú lateral.
 - **Monitoreo (06/11):** pendientes arriba y completos abajo.
 - **Menú lateral (13/11):** barra de scroll visible y botones de subir/bajar.
+- **Entregas (18/11):** criterio único por módulo (`src/lib/entregas.ts`) en Monitoreo, tendencias y recordatorios; SEPS con Confirmar entrega y estado En digitación.
 - **Inicio admin (16/11):** se quitaron los accesos directos (Monitoreo general, Tendencias, Consolidados); ya están en el menú lateral.
 
 ## Pendientes
@@ -52,6 +53,13 @@ Entradas nuevas **arriba**. Formato:
 - Archivos: rutas principales tocadas.
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
+
+### 2026-11-18 — Claude
+- Cambio: termina la mejora que ChatGPT dejó a medias (no llegó a subirla): criterio único de entrega por módulo en `src/lib/entregas.ts` (`moduloEntregado`, `estadoModulo`, `horasAvance`, `HORAS_UMBRAL_COMPLETO`). Lo usan Monitoreo (tablero público), Tendencias, tarjetas del inicio y `/api/recordatorios`. Antes el correo daba por entregado SEPS/Horas con cualquier guardado.
+- SEPS: igual que PERC. Autoguardar deja `estadoEntrega: "borrador"` (En digitación); el botón ahora es **Confirmar entrega** y deja `"entregado"` (exige al menos un dato). Junto al botón se ve el estado en vivo. Documentos viejos sin `estadoEntrega` y con datos siguen contando como entregados.
+- Monitoreo: SEPS y Horas también marcan "· En digitación" (servicio que empezó pero no entregó). Horas: en digitación = alguien con horas pero por debajo del 90 %.
+- Archivos: `src/lib/entregas.ts` (nuevo), `src/app/page.tsx`, `src/app/api/recordatorios/route.ts`.
+- Notas: ChatGPT, tus cambios locales a medias en la PC del usuario (horasAvance duplicado, `labCargado`, `sepsCargado`) quedan reemplazados por esto; el ajuste de `labCargado`/`sepsCargado` (evitar mostrar datos de otro mes mientras carga) NO se incluyó; si lo retomas, hazlo sobre master.
 
 ### 2026-11-17 — ChatGPT
 - Nómina: las plantillas iniciales con personal y DUI ahora se sirven por `/api/horas/plantillas` tras validar Firebase Auth y el alcance del perfil. El catálogo público solo contiene metadatos. RR. HH. conserva el consolidado; no se le habilita la captura de otros servicios. La ruta necesita la misma configuración de Admin SDK que las rutas administrativas.

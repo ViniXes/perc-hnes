@@ -145,6 +145,7 @@ import { puedeLeerNomina } from "@/lib/horas-permisos";
 import { permiteReset } from "@/lib/permisos-cuentas";
 import { borrarEdicion, guardarBorrador, pendientesHoras, plantillaLocal, recordarPlantilla, sincronizarHoras } from "@/lib/horas-pendientes";
 import { percEntregado, tieneDatosPerc as hasAnyCapturedValue } from "@/lib/perc-entrega";
+import { moduloEntregado, estadoModulo, horasAvance, HORAS_UMBRAL_COMPLETO, type ModuloEntrega } from "@/lib/entregas";
 import { SERVICE_GROUP_BY_ID, DEPARTMENT_SERVICES, isServiceInChiefScope } from "@/lib/alcance-servicios";
 import { INSUMOS_ALMACEN_TEMPLATE, INSUMOS_CONSOLIDADO_ORDER, type InsumoRow } from "@/lib/insumos-almacen";
 import { GASTOS_EXPENSES, GASTOS_COST_CENTERS, GASTOS_FIXED } from "@/lib/gastos-perc";
@@ -2710,30 +2711,7 @@ function ordenarHorasSegunPlantilla<T extends { name: string }>(template: HorasT
     .map((x) => x.emp);
 }
 
-// DISTRIBUCION DE HORAS COMPLETA: no basta con guardar. Cuenta como entregada
-// cuando al menos el 90% de las personas de la lista tiene horas registradas.
-const HORAS_UMBRAL_COMPLETO = 0.9;
-function horasAvance(employees: unknown): { conHoras: number; total: number; pct: number; completo: boolean } {
-  const lista = Array.isArray(employees) ? employees : [];
-  let total = 0;
-  let conHoras = 0;
-  for (const item of lista) {
-    const row = (item ?? {}) as { name?: unknown; dui?: unknown; comment?: unknown; hours?: Record<string, unknown> };
-    const nombre = typeof row.name === "string" ? row.name.trim() : "";
-    const dui = typeof row.dui === "string" ? row.dui.trim() : "";
-    if (!nombre && !dui) continue;
-    total += 1;
-    // Cuenta como REGISTRADA si tiene horas, si se le puso 0 a proposito o si
-    // tiene un comentario (licencia, vacaciones, incapacidad...). Asi una persona
-    // que no trabajo el mes no deja al servicio en amarillo para siempre.
-    const valores = Object.values(row.hours ?? {}).map((valor) => String(valor ?? "").trim());
-    const conValor = valores.some((v) => v !== "" && Number.isFinite(Number(v)));
-    const comentario = typeof row.comment === "string" && row.comment.trim() !== "";
-    if (conValor || comentario) conHoras += 1;
-  }
-  const pct = total > 0 ? conHoras / total : 0;
-  return { conHoras, total, pct, completo: total > 0 && pct >= HORAS_UMBRAL_COMPLETO };
-}
+// horasAvance / HORAS_UMBRAL_COMPLETO viven en @/lib/entregas (criterio unico de entrega).
 
 // Trae el PERSONAL del ultimo mes guardado de ese servicio (nombres, DUI/NIT y tipo
 // de documento) con las HORAS VACIAS. Sirve para que el DUI se digite una sola vez:
@@ -3021,30 +2999,33 @@ function computeModuleStats(groups: PublicDashboardGroup[]) {
 
 async function fetchPublicDashboard(year: number, currentPeriodId: string) {
   // Lecturas opcionales (SEPS/Horas pueden fallar si faltan reglas): no deben romper.
+  // Devuelve quien ENTREGO y quien sigue digitando, con el criterio unico de
+  // @/lib/entregas (el mismo de los recordatorios por correo).
   const safeServiceIds = async (
     coll: string,
-    // Filtro opcional sobre el documento (Horas: solo cuenta si llega al 90%).
-    cuenta?: (data: Record<string, unknown>) => boolean,
-  ): Promise<Set<string>> => {
+    modulo: ModuloEntrega,
+  ): Promise<{ done: Set<string>; digitando: Set<string> }> => {
+    const done = new Set<string>();
+    const digitando = new Set<string>();
     try {
       const snap = await getDocs(
         query(collection(db, coll), where("periodId", "==", currentPeriodId)),
       );
-      const ids = new Set<string>();
       for (const item of snap.docs) {
         const data = item.data() as Record<string, unknown>;
         const sid = data.serviceId;
-        if (typeof sid === "string" && (!cuenta || cuenta(data))) {
-          ids.add(sid);
-        }
+        if (typeof sid !== "string") continue;
+        const estado = estadoModulo(modulo, data);
+        if (estado === "entregado") done.add(sid);
+        else if (estado === "en-digitacion") digitando.add(sid);
       }
-      return ids;
     } catch {
-      return new Set<string>();
+      // Sin reglas para esta coleccion: el modulo queda en cero.
     }
+    return { done, digitando };
   };
 
-  const [calendarOverrides, tabulatorsSnapshot, sepsDone, horasDone] = await Promise.all([
+  const [calendarOverrides, tabulatorsSnapshot, sepsEstado, horasEstado] = await Promise.all([
     fetchCalendarOverridesForYear(year),
     getDocs(
       query(
@@ -3053,9 +3034,11 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
         where("periodId", "<=", `${year}-12`),
       ),
     ),
-    safeServiceIds("sepsTabulators"),
-    safeServiceIds("horasTabulators", (data) => horasAvance(data.employees).completo),
+    safeServiceIds("sepsTabulators", "sesps"),
+    safeServiceIds("horasTabulators", "distribucion"),
   ]);
+  const sepsDone = sepsEstado.done;
+  const horasDone = horasEstado.done;
   const completedByPeriod = new Map<string, Set<string>>();
   const enDigitacion = new Set<string>();
 
@@ -3066,7 +3049,7 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
       values?: Record<string, Record<string, unknown>>;
     };
 
-    if (data.periodId === currentPeriodId && data.serviceId && item.data().estadoEntrega === "borrador") {
+    if (data.periodId === currentPeriodId && data.serviceId && estadoModulo("perc", item.data()) === "en-digitacion") {
       enDigitacion.add(data.serviceId);
     }
     if (
@@ -3112,10 +3095,10 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
         modules.push({ label: "PERC", completed: percDone, enDigitacion: enDigitacion.has(service.id) });
       }
       if (getSepsTemplate(service.id)) {
-        modules.push({ label: "SEPS", completed: sepsDone.has(service.id) });
+        modules.push({ label: "SEPS", completed: sepsDone.has(service.id), enDigitacion: sepsEstado.digitando.has(service.id) });
       }
       if (getHorasTemplate(service.id)) {
-        modules.push({ label: "Horas", completed: horasDone.has(service.id) });
+        modules.push({ label: "Horas", completed: horasDone.has(service.id), enDigitacion: horasEstado.digitando.has(service.id) });
       }
       // "Completo" del servicio: si hace PERC, manda PERC; si no, su modulo de Horas.
       const completed = hasPerc ? percDone : horasDone.has(service.id);
@@ -5665,6 +5648,23 @@ export default function Home() {
   // Antes usaba siempre el mes de captura: al abrir octubre desde el historial en
   // noviembre salian 30 dias en vez de 31.
   const sepsActivePeriod = sepsViewPeriod ?? sepsPeriodId;
+  // Estado de entrega del SEPS mostrado, en vivo (mismo criterio que Monitoreo y
+  // recordatorios): el autoguardado deja "En digitación"; solo "Confirmar
+  // entrega" lo deja "Entregado".
+  const claveEntregaSeps = sepsTemplate ? `${sepsActivePeriod}__${sepsTemplate.serviceId}` : "";
+  const [ultimaEntregaSeps, setUltimaEntregaSeps] = useState({ clave: "", estado: "" });
+  useEffect(() => {
+    if (!user || !claveEntregaSeps || firestoreUnavailable) return;
+    return onSnapshot(doc(db, "sepsTabulators", claveEntregaSeps), { includeMetadataChanges: true }, snap => {
+      const datos = snap.data();
+      const estado = moduloEntregado("sesps", datos)
+        ? snap.metadata.hasPendingWrites ? "Confirmación pendiente de envío" : "Entregado"
+        : estadoModulo("sesps", datos) === "en-digitacion" ? "En digitación" : "Pendiente de entrega";
+      setUltimaEntregaSeps({ clave: claveEntregaSeps, estado });
+    }, () => setUltimaEntregaSeps({ clave: claveEntregaSeps, estado: "Estado sin verificar" }));
+  }, [user, claveEntregaSeps, firestoreUnavailable]);
+  const estadoSeps = ultimaEntregaSeps.clave === claveEntregaSeps ? ultimaEntregaSeps.estado : "";
+  const sepsEntregaConfirmada = estadoSeps === "Entregado";
   const sepsDayColumns = useMemo(
     () => getDayColumns(sepsActivePeriod, sepsDiasManual),
     [sepsActivePeriod, sepsDiasManual],
@@ -7764,7 +7764,8 @@ export default function Home() {
       const desde = periodos[0];
       const hasta = periodos[periodos.length - 1];
 
-      const leer = async (coleccion: string, exigirValores: boolean) => {
+      // modulo null = cualquier documento guardado cuenta (listas del CEC).
+      const leer = async (coleccion: string, modulo: ModuloEntrega | null) => {
         const mapa = new Map<string, Set<string>>();
         try {
           const snap = await getDocs(
@@ -7781,8 +7782,7 @@ export default function Home() {
               values?: Record<string, Record<string, unknown>>;
             };
             if (typeof d.periodId !== "string" || typeof d.serviceId !== "string") return;
-            if (exigirValores && !percEntregado(d)) return;
-            if (coleccion === "horasTabulators" && !horasAvance((d as { employees?: unknown }).employees).completo) return;
+            if (modulo && !moduloEntregado(modulo, d as Record<string, unknown>)) return;
             const actual = mapa.get(d.periodId) ?? new Set<string>();
             actual.add(d.serviceId);
             mapa.set(d.periodId, actual);
@@ -7795,10 +7795,10 @@ export default function Home() {
       };
 
       const [hPerc, hSeps, hHoras, hCec] = await Promise.all([
-        leer("serviceTabulators", true),
-        leer("sepsTabulators", false),
-        leer("horasTabulators", false),
-        leer("cecTabulators", false),
+        leer("serviceTabulators", "perc"),
+        leer("sepsTabulators", "sesps"),
+        leer("horasTabulators", "distribucion"),
+        leer("cecTabulators", null),
       ]);
 
       const vacio = new Set<string>();
@@ -13031,8 +13031,14 @@ export default function Home() {
 
     const queSeGuardo = `El SEPS de ${sepsTemplate.displayName ?? currentService?.name ?? sepsTemplate.serviceId} (${targetPeriodLabel})`;
 
+    if (!auto && !hasAnySepsValue(normalizedValues)) {
+      avisar("Ingrese al menos un dato para confirmar la entrega.");
+      return;
+    }
+
     const refSeps = doc(db, "sepsTabulators", `${targetPeriod}__${sepsTemplate.serviceId}`);
     const datosSeps = {
+      estadoEntrega: auto ? "borrador" : "entregado",
       periodId: targetPeriod,
       periodLabel: targetPeriodLabel,
       module: "sesps",
@@ -13074,7 +13080,7 @@ export default function Home() {
       setMessage(
         estadoEnvio === "pendiente"
           ? avisoSinConexion(queSeGuardo)
-          : `Tabulador SEPS guardado correctamente (${targetPeriodLabel}).`,
+          : `Entrega del SEPS confirmada (${targetPeriodLabel}).`,
       );
     } catch (saveError) {
       if (await handleFirestoreError(saveError)) {
@@ -16856,9 +16862,12 @@ export default function Home() {
                 </button>
               ) : null}
               {indicadorAutoguardado("seps")}
+              {estadoSeps ? <span className="text-xs">{estadoSeps}</span> : null}
               <button
                 type="button"
                 onClick={() => void handleSaveSeps()}
+                title="Confirmar entrega SEPS"
+                aria-label="Confirmar entrega SEPS"
                 disabled={isSavingSeps || sepsEditingBlocked}
                 className={`${BTN_GUARDAR} inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-60`}
               >
@@ -16868,7 +16877,7 @@ export default function Home() {
                 </svg>
                 {isSavingSeps
                   ? "Guardando..."
-                  : `${isSepsHistory ? "Guardar cambios" : "Guardar SEPS"} · ${getShortPeriodLabel(activeSepsPeriod)}`}
+                  : `Confirmar entrega · ${getShortPeriodLabel(activeSepsPeriod)}`}
               </button>
             </div>
           )}
@@ -18206,7 +18215,7 @@ export default function Home() {
 
       if (mod.id === "sesps") {
         if (!sepsTemplate || !capturesModule("sesps")) return "n/a";
-        return hasAnySepsValue(sepsValues) ? "completo" : "incompleto";
+        return sepsEntregaConfirmada ? "completo" : "incompleto";
       }
 
       if (mod.id === "distribucion") {

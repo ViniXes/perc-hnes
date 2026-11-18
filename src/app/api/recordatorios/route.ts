@@ -14,7 +14,7 @@ import {
 } from "@/lib/periodos";
 import { SERVICE_DEFINITIONS } from "@/lib/tabulator-template";
 import { getAreaById, type ModuleId } from "@/lib/modules";
-import { percEntregado } from "@/lib/perc-entrega";
+import { moduloEntregado } from "@/lib/entregas";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -102,11 +102,12 @@ async function entregados(
     .get();
   const ids = new Set<string>();
   snap.forEach((doc) => {
-    const d = doc.data() as { serviceId?: unknown; values?: Record<string, Record<string, unknown>> };
+    const d = doc.data() as Record<string, unknown>;
     if (typeof d.serviceId !== "string") return;
-    // En PERC un documento guardado pero VACIO no cuenta como entregado: es el
-    // mismo criterio del monitoreo, para no dejar sin aviso a quien solo abrió.
-    if (moduleId === "perc" && !percEntregado(d)) return;
+    // Criterio unico de entrega (@/lib/entregas), el mismo del Monitoreo: un
+    // autoguardado o una nomina de Horas por debajo del 90% NO cuenta como
+    // entregado, asi el servicio sigue recibiendo el aviso.
+    if (!moduloEntregado(moduleId, d)) return;
     ids.add(d.serviceId);
   });
   return ids;
