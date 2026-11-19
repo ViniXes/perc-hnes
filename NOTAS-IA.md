@@ -34,6 +34,7 @@ Resumen de cambios recientes (noviembre 2026):
 - **Monitoreo (06/11):** pendientes arriba y completos abajo.
 - **Menú lateral (13/11):** barra de scroll visible y botones de subir/bajar.
 - **Entregas (18/11):** criterio único por módulo (`src/lib/entregas.ts`) en Monitoreo, tendencias y recordatorios; SEPS con Confirmar entrega y estado En digitación.
+- **Asistente virtual eliminado (19/11):** se quitó el robot/chat flotante de la esquina (solo PC). La carga de Excel sigue en cada módulo.
 - **Inicio admin (16/11):** se quitaron los accesos directos (Monitoreo general, Tendencias, Consolidados); ya están en el menú lateral.
 
 ## Pendientes
@@ -53,6 +54,11 @@ Entradas nuevas **arriba**. Formato:
 - Archivos: rutas principales tocadas.
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
+
+### 2026-11-19 — Claude
+- Cambio: se eliminó por completo el asistente virtual (robot flotante "Asistente PULSO", solo escritorio) a pedido del usuario: nadie lo usaba y ocupaba espacio. Era 100 % local: sin API, sin variables de entorno, sin colecciones Firestore ni dependencias npm. No cambia reglas, roles ni permisos.
+- Archivos: borrados `src/lib/assistant-actions.ts` y `src/lib/asistente-faq.ts`; en `src/app/page.tsx` se quitaron imports, estado/funciones del chat, `assistantCtx` y el bloque UI; en `src/app/globals.css` las animaciones `bot-float`, `bot-talk`, `bot-dot`.
+- Notas: las funciones que el asistente llamaba (importadores de Excel SEPS/Horas/Insumos, guardar, navegación, tema, soporte, `hasAnyCapturedValue`) se mantienen porque las usa el resto de la app. Se pierde solo el atajo de arrastrar un Excel al chat. No reintroducir imports de esos archivos.
 
 ### 2026-11-18 — Claude (vista)
 - Cambio: nueva vista aprobada por el usuario (propuesta A–E). Solo apariencia; no cambia lógica, permisos ni plazos.
