@@ -57,7 +57,7 @@ Entradas nuevas **arriba**. Formato:
 ```
 
 ### 2026-11-20 — Claude
-- Cambio: nueva unidad **Consulta Externa** (grupo `consulta-externa`, al mismo nivel que Dirección y las Divisiones) con 4 servicios: Oncología (`ce-oncologia`), Hematología (`ce-hematologia`), Cardiología (`ce-cardiologia`) e Infectología (`ce-infectologia`). Cada uno con PERC, SEPS y Horas, todos en blanco: PERC sin filas, SEPS sin tablas, Horas con columna provisional `ADMINISTRACION` y sin personal. También aparece en el registro, el selector de servicios, Monitoreo por división y POA.
+- Cambio: nueva unidad **Consulta Externa** (grupo `consulta-externa`, al mismo nivel que Dirección y las Divisiones) con 4 servicios: Oncología (`ce-oncologia`), Hematología (`ce-hematologia`), Consulta Externa Cardiología (`ce-cardiologia`, renombrado a pedido del usuario) e Infectología (`ce-infectologia`). Cada uno con PERC, SEPS y Horas, todos en blanco: PERC sin filas, SEPS sin tablas, Horas con columna provisional `ADMINISTRACION` y sin personal. También aparece en el registro, el selector de servicios, Monitoreo por división y POA.
 - Archivos: `src/lib/tabulator-template.ts`, `src/lib/modules.ts`, `src/lib/alcance-servicios.ts`, `src/lib/horas-templates.ts`, `src/lib/seps-templates.ts`, `src/app/page.tsx` (SERVICE_GROUP_LABELS, SIGNUP_DIVISIONS, POA_TITULO_GRUPO).
 - Notas: `ce-cardiologia` es distinto del servicio `cardiologia` (procedimientos ECG/holter, División Médica), que no se tocó. Pendiente del usuario: filas del PERC, tablas del SEPS y centros de costo/personal de Horas de los 4. El Jefe de División Médica NO ve Consulta Externa (es otro grupo).
 

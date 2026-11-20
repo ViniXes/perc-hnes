@@ -447,7 +447,7 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
   // distintos de "cardiologia" (procedimientos, Division Medica).
   { id: "ce-oncologia", name: "Oncología", rows: [] },
   { id: "ce-hematologia", name: "Hematología", rows: [] },
-  { id: "ce-cardiologia", name: "Cardiología", rows: [] },
+  { id: "ce-cardiologia", name: "Consulta Externa Cardiología", rows: [] },
   { id: "ce-infectologia", name: "Infectología", rows: [] },
   {
     // Anestesiologia: por ahora SOLO Distribucion de Horas.
