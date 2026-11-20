@@ -12579,6 +12579,13 @@ export default function Home() {
     const mes = String(LAB_MONTHS.indexOf(labMonth) + 1).padStart(2, "0");
     const periodId = `LAB${labYear}${mes}`;
     const periodoEntrega = `${labYear}-${mes}`;
+    // Mes cerrado = cerrado: fuera de los administradores, solo se guarda el mes
+    // que tiene la captura SEPS abierta (las reglas de Firestore lo exigen igual).
+    if (!isAdmin && !isSepsStaff && (periodoEntrega !== sepsPeriodId || !sepsCaptureOpen)) {
+      setLabError(`${labMonth} ${labYear} está cerrado. Solo se puede guardar ${getPeriodLabel(sepsPeriodId)}${sepsCaptureOpen ? "" : " cuando se abra la captura"}.`);
+      setLabMsg("");
+      return;
+    }
     const nextSaved = { ...labSaved, [key]: prueba };
     setLabSaving(true);
     setLabError("");
@@ -12598,6 +12605,7 @@ export default function Home() {
           userId: user.uid,
           userEmail: user.email || "",
           pruebas: { [key]: prueba },
+          periodoMes: periodoEntrega,
           updatedAt: serverTimestamp(),
         },
         { merge: true },

@@ -56,6 +56,14 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-20 — Claude (mes cerrado = cerrado, por auditoría)
+- Pedido del usuario: lo que quedó cerrado no lo modifica nadie, en todos los servicios. **Los administradores quedan SIN bloqueo** (decisión del usuario); supervisores y servicios sí.
+- Reglas (`firestore.rules`, punto 17): SEPS ya tiene cierre en el servidor (antes no tenía ninguno): documentos `AAAA-MM__servicio` y pruebas `LABAAAAMM__laboratorio-clinico` usan `horasCierre` (5to día hábil, 2:30 p. m.) con la misma reapertura de 24 h (`captureOverrides`, módulo `sesps`). El id del documento debe coincidir con `periodId` + `serviceId`. Las pruebas de Laboratorio guardan `periodoMes` ("AAAA-MM"), que la regla exige. En PERC, Horas y SEPS, un mes anterior al mes pasado sin `captureWindows/{mes}` también queda cerrado (antes quedaba abierto para siempre). GASTOS/DEPRE y demás documentos de `sepsTabulators` siguen igual.
+- App: Laboratorio solo deja guardar pruebas del mes con la captura SEPS abierta (antes se podía elegir cualquier mes).
+- Probado con el emulador de Firestore: 17 casos (mes abierto, cerrado por hora, viejo sin ventana, reapertura, admins, Laboratorio, PERC y Horas).
+- **Las reglas NO se publican solas**: el usuario debe pegarlas en Firebase Console > Firestore > Reglas > Publicar.
+- Archivos: `firestore.rules`, `src/app/page.tsx` (handleSaveLabTest).
+
 ### 2026-11-20 — Claude (publica el ajuste de ChatGPT: confirmar entrega SEPS en Laboratorio)
 - Cambio: ChatGPT lo dejó sin subir en la PC del usuario sobre una copia vieja (5 commits atrás); Claude lo revisó y lo aplicó sobre master. Laboratorio ya puede «Confirmar entrega»: guardar una prueba deja el mes `YYYY-MM__laboratorio-clinico` en `borrador` y confirmar lo marca `entregado` con `laboratorioConDatos: true` (sus datos viven en `LAB{AAAAMM}__laboratorio-clinico`). `sepsEntregado` acepta ese campo. Monitoreo y Tendencias no cuentan como entregado lo que aún no confirmó el servidor (`hasPendingWrites`).
 - Ajuste de Claude: corregir una prueba en un mes ya entregado NO lo devuelve a "En digitación".
