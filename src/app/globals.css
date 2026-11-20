@@ -2173,3 +2173,80 @@ body[data-panel-theme="light"] .panel-shell [class*="bg-[#202c41]"]:not(aside):n
 @media (prefers-reduced-motion: reduce) {
   .pulso-hero .hero-barra > span { transition: none; }
 }
+
+/* =============================================================================
+   PROPUESTA · MODO OSCURO PASTEL (opción B "Azul medianoche", 20/11/2026)
+   Solo en rama de vista previa. Fondo #1A1F2B · texto #E4E4E4 · acento 1 #A8DADC
+   (cian) · acento 2 #FFC1CC (rosa) · botón/CTA #B39CD0 (lavanda).
+   Va al final para ganar por cascada sin tocar las reglas azules de arriba.
+============================================================================= */
+.panel-shell.theme-dark {
+  --bg: #1a1f2b;
+  --surface: #242b3a;
+  --surface-2: #1f2533;
+  --surface-3: #2b3344;
+  --chip: #2f3748;
+  --border: rgba(228, 228, 228, 0.10);
+  --border-strong: rgba(179, 156, 208, 0.45);
+  --text: #e4e4e4;
+  --text-muted: #c3c6cf;
+  --text-faint: #9097a6;
+  --accent: #a8dadc;
+  --accent-btn: #b39cd0;
+  --accent-ink: #1a1f2b;
+  --shadow-card: 0 20px 50px rgba(0, 0, 0, 0.35);
+  /* cian/sky de Tailwind -> escala cian pastel / lavanda */
+  --color-cyan-50: #f0f9f9;
+  --color-cyan-100: #e0f2f3;
+  --color-cyan-200: #c6e7e8;
+  --color-cyan-300: #a8dadc;
+  --color-cyan-400: #8ccbce;
+  --color-cyan-500: #6fb5b8;
+  --color-cyan-600: #5a9a9d;
+  --color-cyan-700: #477c7f;
+  --color-cyan-800: #355e60;
+  --color-cyan-900: #263f41;
+  --color-cyan-950: #1a2a2c;
+  --color-sky-200: #ddd2ec;
+  --color-sky-300: #c9b8e0;
+  --color-sky-400: #b39cd0;
+  --color-sky-500: #9a80bd;
+  --color-sky-600: #8169a5;
+  /* Estados: entregado = cian pastel, pendiente = rosa pastel */
+  --color-emerald-200: #c6e7e8;
+  --color-emerald-300: #a8dadc;
+  --color-emerald-400: #a8dadc;
+  --color-emerald-500: #8ccbce;
+  --color-amber-200: #ffd6dd;
+  --color-amber-300: #ffc1cc;
+  --color-amber-400: #ffc1cc;
+  --color-amber-500: #f4a7b6;
+  background-image:
+    radial-gradient(circle at 12% -2%, rgba(179, 156, 208, 0.10), transparent 42%),
+    radial-gradient(circle at 100% 100%, rgba(168, 218, 220, 0.07), transparent 45%),
+    linear-gradient(160deg, #181c27 0%, #1a1f2b 55%, #1c2230 100%);
+}
+.panel-shell.theme-dark .bg-\[\#202c41\],
+.panel-shell.theme-dark .bg-\[\#0e1626\] {
+  background-image:
+    radial-gradient(circle at calc(100% - 70px) 10px, transparent 0 88px, rgba(228, 228, 228, 0.035) 89px 112px, transparent 113px),
+    radial-gradient(circle at calc(100% - 240px) calc(100% + 60px), rgba(228, 228, 228, 0.025) 0 120px, transparent 121px),
+    linear-gradient(160deg, #262d3d 0%, #222938 100%);
+}
+.panel-shell.theme-dark .pulso-hero {
+  background:
+    radial-gradient(circle at calc(100% - 60px) -40px, transparent 0 140px, rgba(168, 218, 220, 0.07) 141px 180px, transparent 181px),
+    linear-gradient(120deg, #33304c 0%, #262f45 55%, #1f3a45 100%);
+  border-color: rgba(228, 228, 228, 0.08);
+}
+.panel-shell.theme-dark .pulso-hero .hero-tag { color: #a8dadc; }
+.panel-shell.theme-dark .pulso-hero .hero-online { color: #a8dadc; }
+.panel-shell.theme-dark .pulso-sidebar {
+  background-color: #161b26;
+  background-image:
+    radial-gradient(circle at calc(100% - 30px) 40px, transparent 0 70px, rgba(228, 228, 228, 0.035) 71px 92px, transparent 93px),
+    radial-gradient(circle at 0% calc(100% - 40px), rgba(179, 156, 208, 0.05) 0 110px, transparent 111px),
+    linear-gradient(165deg, #171c27 0%, #1a1f2b 100%);
+  border-color: rgba(228, 228, 228, 0.08);
+}
+.panel-shell.theme-dark .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #b39cd0; }
