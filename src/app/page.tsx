@@ -146,7 +146,7 @@ import { permiteReset } from "@/lib/permisos-cuentas";
 import { borrarEdicion, guardarBorrador, pendientesHoras, plantillaLocal, recordarPlantilla, sincronizarHoras } from "@/lib/horas-pendientes";
 import { percEntregado, tieneDatosPerc as hasAnyCapturedValue } from "@/lib/perc-entrega";
 import { moduloEntregado, estadoModulo, horasAvance, HORAS_UMBRAL_COMPLETO, type ModuloEntrega } from "@/lib/entregas";
-import { SERVICE_GROUP_BY_ID, DEPARTMENT_SERVICES, isServiceInChiefScope } from "@/lib/alcance-servicios";
+import { SERVICE_GROUP_BY_ID, DEPARTMENT_SERVICES, isServiceInChiefScope, cuentaEnMonitoreo, etiquetaInicioMonitoreo } from "@/lib/alcance-servicios";
 import { INSUMOS_ALMACEN_TEMPLATE, INSUMOS_CONSOLIDADO_ORDER, type InsumoRow } from "@/lib/insumos-almacen";
 import { GASTOS_EXPENSES, GASTOS_COST_CENTERS, GASTOS_FIXED } from "@/lib/gastos-perc";
 import { DEPRECIACION_ROWS } from "@/lib/depreciacion-perc";
@@ -3091,7 +3091,7 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
       periodId,
       label: PERIOD_FORMATTER.format(monthDate),
       completedServices,
-      totalServices: SERVICE_DEFINITIONS.length,
+      totalServices: SERVICE_DEFINITIONS.filter((s) => cuentaEnMonitoreo(s.id, periodId)).length,
       isCurrentMonth: periodId === currentPeriodId,
       isOpen: blockedDates.length === 0,
     };
@@ -3101,6 +3101,11 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
   const groups: PublicDashboardGroup[] = buildServiceGroups().map((group) => ({
     ...group,
     services: group.services.map((service) => {
+      // Servicio que aun no arranca (p. ej. Consulta Externa antes de 2027): se ve,
+      // pero sin tableros, asi no cuenta en ningun porcentaje.
+      if (!cuentaEnMonitoreo(service.id, currentPeriodId)) {
+        return { ...service, completed: false, modules: [] };
+      }
       const percDone = currentCompletedServices.has(service.id);
       // PERC solo si el servicio tiene el modulo PERC (los "solo Horas" no salen en PERC).
       const hasPerc = getAreaById(service.id)?.modules.includes("perc") ?? false;
@@ -4675,6 +4680,9 @@ export default function Home() {
       buildServiceGroups().map((group) => ({
         ...group,
         services: group.services.map((service) => {
+          if (!cuentaEnMonitoreo(service.id, periodId)) {
+            return { ...service, completed: false, modules: [] };
+          }
           const hasPerc = getAreaById(service.id)?.modules.includes("perc") ?? false;
           const modules: PublicModuleStatus[] = [];
           if (hasPerc) {
@@ -4689,7 +4697,7 @@ export default function Home() {
           return { ...service, completed: false, modules };
         }),
       })),
-    [],
+    [periodId],
   );
   // Tablero general + el overlay de los servicios de datos fijos (Aseo, Vacunacion):
   // su PERC siempre se ve completo, sin depender de que alguien lo guarde.
@@ -4742,9 +4750,12 @@ export default function Home() {
     // pasado, se cuenta con el en vez del estado del mes en curso. Es lo que usa
     // la pantalla de Tendencias para rehacer el monitoreo de cualquier periodo.
     hechos?: Set<string>,
+    // Mes que se cuenta (Tendencias). Excluye servicios que aun no arrancan.
+    periodoStats?: string,
   ) {
     const rawStats = dashboardGroups
       .flatMap((group) => group.services)
+      .filter((service) => !periodoStats || cuentaEnMonitoreo(service.id, periodoStats))
       .filter((service) => service.modules.some((m) => m.label === statsLabel))
       .filter((service) => isServiceInChiefScope(monitorScopeProfile, service.id));
 
@@ -7484,7 +7495,7 @@ export default function Home() {
           etiqueta: "PERC" | "SEPS" | "Horas",
           historial: Map<string, Set<string>>,
         ): TendenciaModulo => {
-          const stat = computeMonitorStats(etiqueta, entregadosDe(etiqueta, historial));
+          const stat = computeMonitorStats(etiqueta, entregadosDe(etiqueta, historial), periodo);
           return {
             done: stat.completos,
             total: stat.total,
@@ -27561,7 +27572,7 @@ export default function Home() {
                             {group.title}
                           </h3>
                           <span className="rounded-full bg-white/5 px-3 py-1 text-[11px] font-semibold text-slate-300">
-                            {groupCompleted}/{group.services.length}
+                            {groupCompleted}/{group.services.filter((service) => service.modules.length > 0).length}
                           </span>
                         </div>
                         <div className="mt-2.5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
@@ -27645,6 +27656,11 @@ export default function Home() {
                                         {mod.label}
                                       </span>
                                     ))}
+                                    {service.modules.length === 0 && etiquetaInicioMonitoreo(service.id, periodId) ? (
+                                      <span className="inline-flex items-center rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+                                        {etiquetaInicioMonitoreo(service.id, periodId)}
+                                      </span>
+                                    ) : null}
                                   </div>
                                 </div>
                               </div>
@@ -30438,7 +30454,7 @@ export default function Home() {
                             {group.title}
                           </h2>
                           <span className="rounded-full bg-white/5 px-3 py-1 text-[11px] font-semibold text-slate-300">
-                            {groupCompleted}/{group.services.length}
+                            {groupCompleted}/{group.services.filter((service) => service.modules.length > 0).length}
                           </span>
                         </div>
 
@@ -30521,6 +30537,11 @@ export default function Home() {
                                         {mod.label}
                                       </span>
                                     ))}
+                                    {service.modules.length === 0 && etiquetaInicioMonitoreo(service.id, periodId) ? (
+                                      <span className="inline-flex items-center rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+                                        {etiquetaInicioMonitoreo(service.id, periodId)}
+                                      </span>
+                                    ) : null}
                                   </div>
                                 </div>
                               </div>

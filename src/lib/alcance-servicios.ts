@@ -104,3 +104,34 @@ export function isServiceInChiefScope(
   if (div) return (SERVICE_GROUP_BY_ID[serviceId] || "apoyo") === div;
   return true;
 }
+
+// --- SERVICIOS QUE AUN NO CUENTAN EN EL AVANCE ---------------------------------
+// Servicio -> primer periodo ("AAAA-MM") que cuenta en Monitoreo, Tendencias,
+// barra de avance y recordatorios. `null` = todavia NO cuenta en ningun mes (se
+// activa a mano cuando el usuario lo indique, poniendo aqui el periodo).
+// Mientras no cuente, el servicio se ve pero sin tableros pendientes, para no
+// impedir que el hospital llegue al 100 %.
+// Consulta Externa: pendiente de activar (usuario, 20/11/2026).
+export const INICIO_MONITOREO: Record<string, string | null> = {
+  "ce-oncologia": null,
+  "ce-hematologia": null,
+  "ce-cardiologia": null,
+  "ce-infectologia": null,
+};
+
+/** ¿El servicio cuenta en el avance de ese periodo? */
+export function cuentaEnMonitoreo(serviceId: string, periodId: string): boolean {
+  if (!(serviceId in INICIO_MONITOREO)) return true;
+  const inicio = INICIO_MONITOREO[serviceId];
+  return !!inicio && periodId >= inicio;
+}
+
+/** Texto corto para la tarjeta cuando el servicio aun no cuenta, o null si ya cuenta. */
+export function etiquetaInicioMonitoreo(serviceId: string, periodId: string): string | null {
+  if (cuentaEnMonitoreo(serviceId, periodId)) return null;
+  const inicio = INICIO_MONITOREO[serviceId];
+  if (!inicio) return "Aún no cuenta";
+  const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  const mes = MESES[Number.parseInt(inicio.slice(5, 7), 10) - 1] ?? inicio.slice(5, 7);
+  return `Inicia ${mes} ${inicio.slice(0, 4)}`;
+}

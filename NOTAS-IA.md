@@ -56,6 +56,11 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-20 — Claude (Consulta Externa fuera del avance)
+- Cambio: a pedido del usuario, los 4 servicios de Consulta Externa se ven en Monitoreo pero NO cuentan en ningún porcentaje (Monitoreo, Avance por módulo, Tendencias, barra de avance del inicio, contador por división) ni reciben recordatorios. En la tarjeta salen sin tableros y con la etiqueta "Aún no cuenta".
+- Cómo: `INICIO_MONITOREO` y `cuentaEnMonitoreo(serviceId, periodId)` en `src/lib/alcance-servicios.ts`. Valor `null` = no cuenta nunca. **Para activarlos, el usuario lo indicará**: poner el primer periodo que cuenta (p. ej. `"2027-01"`). No activarlos por cuenta propia.
+- Archivos: `src/lib/alcance-servicios.ts`, `src/app/page.tsx` (fetchPublicDashboard, fallbackDashboardGroups, computeMonitorStats, tarjetas de Monitoreo), `src/app/api/recordatorios/route.ts`.
+
 ### 2026-11-20 — Claude
 - Cambio: nueva unidad **Consulta Externa** (grupo `consulta-externa`, al mismo nivel que Dirección y las Divisiones) con 4 servicios: Oncología (`ce-oncologia`), Hematología (`ce-hematologia`), Consulta Externa Cardiología (`ce-cardiologia`, renombrado a pedido del usuario) e Infectología (`ce-infectologia`). Cada uno con PERC, SEPS y Horas, todos en blanco: PERC sin filas, SEPS sin tablas, Horas con columna provisional `ADMINISTRACION` y sin personal. También aparece en el registro, el selector de servicios, Monitoreo por división y POA.
 - Archivos: `src/lib/tabulator-template.ts`, `src/lib/modules.ts`, `src/lib/alcance-servicios.ts`, `src/lib/horas-templates.ts`, `src/lib/seps-templates.ts`, `src/app/page.tsx` (SERVICE_GROUP_LABELS, SIGNUP_DIVISIONS, POA_TITULO_GRUPO).

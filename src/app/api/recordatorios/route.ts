@@ -15,6 +15,7 @@ import {
 import { SERVICE_DEFINITIONS } from "@/lib/tabulator-template";
 import { getAreaById, type ModuleId } from "@/lib/modules";
 import { moduloEntregado } from "@/lib/entregas";
+import { cuentaEnMonitoreo } from "@/lib/alcance-servicios";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -226,6 +227,7 @@ async function calcularEnvios(db: FirebaseFirestore.Firestore) {
     for (const servicio of SERVICE_DEFINITIONS) {
       const suyos = getAreaById(servicio.id)?.modules ?? [];
       if (!suyos.includes(moduleId)) continue;
+      if (!cuentaEnMonitoreo(servicio.id, periodo)) continue;
       if (yaEstan.has(servicio.id)) continue;
       const persona = porServicio.get(servicio.id);
       if (!persona) continue;
