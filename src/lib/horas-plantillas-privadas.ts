@@ -2227,6 +2227,31 @@ export const HORAS_TEMPLATES: Record<string, HorasTemplate> = {
       "JUAN JOSE MURCIA LOPEZ",
     ],
   },
+  // Consulta Externa: lista en blanco y columnas provisionales.
+  "ce-oncologia": {
+    serviceId: "ce-oncologia",
+    establishment: "HOSPITAL NACIONAL EL SALVADOR",
+    columns: ["ADMINISTRACION"],
+    seedEmployees: [],
+  },
+  "ce-hematologia": {
+    serviceId: "ce-hematologia",
+    establishment: "HOSPITAL NACIONAL EL SALVADOR",
+    columns: ["ADMINISTRACION"],
+    seedEmployees: [],
+  },
+  "ce-cardiologia": {
+    serviceId: "ce-cardiologia",
+    establishment: "HOSPITAL NACIONAL EL SALVADOR",
+    columns: ["ADMINISTRACION"],
+    seedEmployees: [],
+  },
+  "ce-infectologia": {
+    serviceId: "ce-infectologia",
+    establishment: "HOSPITAL NACIONAL EL SALVADOR",
+    columns: ["ADMINISTRACION"],
+    seedEmployees: [],
+  },
 };
 
 export function getHorasTemplate(serviceId: string | null | undefined): HorasTemplate | null {

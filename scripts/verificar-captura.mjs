@@ -22,6 +22,20 @@ function cargar(nombre) {
 
 const { mezclarHoras, asignarIds, ConflictoHoras } = cargar("horas-mezcla");
 const { percEntregado } = cargar("perc-entrega");
+const { estadoModulo, moduloEntregado } = cargar("entregas");
+
+test("SEPS: el borrador queda pendiente hasta confirmar, también en Laboratorio", () => {
+  const captura = { values: { actividad: { "1": 0 } } };
+  const laboratorio = { serviceId: "laboratorio-clinico", laboratorioConDatos: true };
+  for (const datos of [captura, laboratorio]) {
+    const borrador = { ...datos, estadoEntrega: "borrador" };
+    assert.equal(estadoModulo("sesps", borrador), "en-digitacion");
+    assert.equal(moduloEntregado("sesps", borrador), false);
+    assert.equal(moduloEntregado("sesps", { ...datos, estadoEntrega: "entregado" }), true);
+  }
+  assert.equal(moduloEntregado("sesps", captura), true);
+  assert.equal(moduloEntregado("sesps", { estadoEntrega: "entregado", values: {} }), false);
+});
 const { permiteReset } = cargar("permisos-cuentas");
 const { puedeLeerNomina, puedeConsolidarNomina } = cargar("horas-permisos");
 const calendario = cargar("periodos");

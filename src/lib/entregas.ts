@@ -41,7 +41,8 @@ export function sepsEntregado(doc: Documento) {
   if (!doc) return false;
   const estado = doc.estadoEntrega;
   const values = doc.values as Record<string, Record<string, unknown>> | undefined;
-  return (estado === "entregado" || estado === undefined) && tieneDatosPerc(values);
+  const tienePruebas = doc.serviceId === "laboratorio-clinico" && doc.laboratorioConDatos === true;
+  return (estado === "entregado" || estado === undefined) && (tieneDatosPerc(values) || tienePruebas);
 }
 
 export function moduloEntregado(modulo: ModuloEntrega, doc: Documento): boolean {

@@ -49,6 +49,7 @@ import {
   setDoc,
   Timestamp,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { auth, createSecondaryAuth, firestoreDatabaseId } from "@/lib/firebase";
 import { db, shutdownFirestore } from "@/lib/firestore";
@@ -3030,7 +3031,7 @@ async function fetchPublicDashboard(year: number, currentPeriodId: string) {
         const sid = data.serviceId;
         if (typeof sid !== "string") continue;
         const estado = estadoModulo(modulo, data);
-        if (estado === "entregado") done.add(sid);
+        if (estado === "entregado" && !item.metadata.hasPendingWrites) done.add(sid);
         else if (estado === "en-digitacion") digitando.add(sid);
       }
     } catch {
@@ -7439,7 +7440,7 @@ export default function Home() {
               values?: Record<string, Record<string, unknown>>;
             };
             if (typeof d.periodId !== "string" || typeof d.serviceId !== "string") return;
-            if (modulo && !moduloEntregado(modulo, d as Record<string, unknown>)) return;
+            if (modulo && (item.metadata.hasPendingWrites || !moduloEntregado(modulo, d as Record<string, unknown>))) return;
             const actual = mapa.get(d.periodId) ?? new Set<string>();
             actual.add(d.serviceId);
             mapa.set(d.periodId, actual);
@@ -12575,13 +12576,16 @@ export default function Home() {
       total: resTotal,
       userEmail: user.email || "",
     };
-    const periodId = `LAB${labYear}${String(LAB_MONTHS.indexOf(labMonth) + 1).padStart(2, "0")}`;
+    const mes = String(LAB_MONTHS.indexOf(labMonth) + 1).padStart(2, "0");
+    const periodId = `LAB${labYear}${mes}`;
+    const periodoEntrega = `${labYear}-${mes}`;
     const nextSaved = { ...labSaved, [key]: prueba };
     setLabSaving(true);
     setLabError("");
     setLabMsg("");
     try {
-      await setDoc(
+      const batch = writeBatch(db);
+      batch.set(
         doc(db, "sepsTabulators", `${periodId}__laboratorio-clinico`),
         {
           periodId,
@@ -12593,11 +12597,22 @@ export default function Home() {
           month: labMonth,
           userId: user.uid,
           userEmail: user.email || "",
-          pruebas: nextSaved,
+          pruebas: { [key]: prueba },
           updatedAt: serverTimestamp(),
         },
         { merge: true },
       );
+      // Un mes ya entregado no vuelve a "En digitación" por corregir una prueba:
+      // la corrección queda guardada y la entrega se mantiene.
+      const refMes = doc(db, "sepsTabulators", `${periodoEntrega}__laboratorio-clinico`);
+      const mesActual = await getDoc(refMes).then((s) => s.data()).catch(() => undefined);
+      if (!moduloEntregado("sesps", mesActual)) {
+        batch.set(refMes, {
+          serviceId: "laboratorio-clinico", periodId: periodoEntrega, module: "sesps",
+          userId: user.uid, estadoEntrega: "borrador", updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
+      await batch.commit();
       setLabSaved(nextSaved);
       setLabMsg(`Prueba guardada: ${prueba.testName} (${labMonth} ${labYear}).`);
       setLabTest("");
@@ -12628,7 +12643,7 @@ export default function Home() {
       setMessage(
         fuentesConDatos === 0
           ? `Ninguna de las ${fuentes} unidades tiene SEPS cargado en ${getPeriodLabel(periodo)}: la suma queda en cero. Podés digitarlo a mano.`
-          : `Suma recalculada de ${fuentesConDatos} de ${fuentes} unidades. Revisá y tocá «Guardar» para dejarla fija.`,
+          : `Suma recalculada de ${fuentesConDatos} de ${fuentes} unidades. Revisá y tocá «Confirmar entrega» cuando esté lista.`,
       );
     } catch (recalcError) {
       if (await handleFirestoreError(recalcError)) return;
@@ -12689,7 +12704,12 @@ export default function Home() {
 
     const queSeGuardo = `El SEPS de ${sepsTemplate.displayName ?? currentService?.name ?? sepsTemplate.serviceId} (${targetPeriodLabel})`;
 
-    if (!auto && !hasAnySepsValue(normalizedValues)) {
+    const esLaboratorio = sepsTemplate.serviceId === "laboratorio-clinico";
+    if (!auto && esLaboratorio && labMonth && labPeriodId !== `LAB${targetPeriod.replace("-", "")}`) {
+      avisar(`Seleccione ${targetPeriodLabel} en Laboratorio para confirmar ese período.`);
+      return;
+    }
+    if (!auto && !esLaboratorio && !hasAnySepsValue(normalizedValues)) {
       avisar("Ingrese al menos un dato para confirmar la entrega.");
       return;
     }
@@ -12724,13 +12744,27 @@ export default function Home() {
     setMessage("");
 
     try {
+      let pruebasConDatos = false;
+      if (esLaboratorio) {
+        const fuente = doc(db, "sepsTabulators", `LAB${targetPeriod.replace("-", "")}__laboratorio-clinico`);
+        const pruebas = (await getDoc(fuente)).data()?.pruebas as Record<string, LabSavedPrueba> | undefined;
+        pruebasConDatos = Object.values(pruebas ?? {}).some(p => hasAnySepsValue({ prueba: p.rows }));
+        if (!pruebasConDatos && !hasAnySepsValue(normalizedValues)) {
+          avisar("Guarde al menos una prueba con datos para confirmar la entrega del mes.");
+          return;
+        }
+      }
       const estadoEnvio = await confirmarGuardado(
-        setDoc(refSeps, datosSeps, { merge: true }),
+        setDoc(refSeps, pruebasConDatos ? {
+          periodId: targetPeriod, periodLabel: targetPeriodLabel, module: "sesps",
+          serviceId: sepsTemplate.serviceId, serviceName: datosSeps.serviceName,
+          userId: user.uid, userEmail: datosSeps.userEmail, updatedAt: serverTimestamp(),
+          estadoEntrega: "entregado", laboratorioConDatos: true,
+        } : datosSeps, { merge: true }),
         queSeGuardo,
       );
       marcarGuardadoManual("seps", claveAuto, estadoEnvio);
 
-      setSepsValues(normalizedValues);
       setSepsDataPeriods((prev) => new Set(prev).add(targetPeriod));
       // Refresca el tablero general para que el Monitoreo marque el servicio como
       // completado al instante, sin tener que recargar la pagina.
@@ -12875,7 +12909,7 @@ export default function Home() {
               ? ` ${result.unmatched.length} fila(s) del Excel no se reconocieron y quedaron fuera.`
               : "";
           setMessage(
-            `Excel cargado: ${result.filled} valores en ${wb.SheetNames.length} hoja(s). Revise y presione Guardar.${aviso}`,
+            `Excel cargado: ${result.filled} valores en ${wb.SheetNames.length} hoja(s). Revise antes de confirmar la entrega.${aviso}`,
           );
           setIsImportingSeps(false);
           return;
@@ -12959,7 +12993,7 @@ export default function Home() {
       }
       setSepsValues(next);
       setMessage(
-        `Se importaron ${filledCells} valores desde la hoja "${pick}". Revise los datos y presione Guardar SEPS para confirmar.`,
+        `Se importaron ${filledCells} valores desde la hoja "${pick}". Revise los datos antes de confirmar la entrega.`,
       );
     } catch (err) {
       console.error(err);
@@ -16538,7 +16572,7 @@ export default function Home() {
                 onClick={() => void handleSaveSeps()}
                 title="Confirmar entrega SEPS"
                 aria-label="Confirmar entrega SEPS"
-                disabled={isSavingSeps || sepsEditingBlocked}
+                disabled={isSavingSeps || isLoadingSeps || labSaving || sepsEditingBlocked}
                 className={`${BTN_GUARDAR} inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-xs transition disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">

@@ -56,6 +56,14 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-20 — Claude (publica el ajuste de ChatGPT: confirmar entrega SEPS en Laboratorio)
+- Cambio: ChatGPT lo dejó sin subir en la PC del usuario sobre una copia vieja (5 commits atrás); Claude lo revisó y lo aplicó sobre master. Laboratorio ya puede «Confirmar entrega»: guardar una prueba deja el mes `YYYY-MM__laboratorio-clinico` en `borrador` y confirmar lo marca `entregado` con `laboratorioConDatos: true` (sus datos viven en `LAB{AAAAMM}__laboratorio-clinico`). `sepsEntregado` acepta ese campo. Monitoreo y Tendencias no cuentan como entregado lo que aún no confirmó el servidor (`hasPendingWrites`).
+- Ajuste de Claude: corregir una prueba en un mes ya entregado NO lo devuelve a "En digitación".
+- También: plantillas privadas de Horas para los 4 servicios de Consulta Externa (lista vacía); faltaban y `/api/horas/plantillas` no las encontraba (la prueba del catálogo fallaba).
+- Se descartaron los textos del asistente (ya eliminado en master).
+- Archivos: `src/app/page.tsx`, `src/lib/entregas.ts`, `src/lib/horas-plantillas-privadas.ts`, `scripts/verificar-captura.mjs`.
+- Notas para ChatGPT: la copia local del usuario tiene estos cambios sin commitear y cambios de fin de línea (CRLF) en 9 archivos; descartarlos y hacer `git pull origin master`. No subir `.claude/settings.local.json`.
+
 ### 2026-11-20 — Claude (Consulta Externa fuera del avance)
 - Cambio: a pedido del usuario, los 4 servicios de Consulta Externa se ven en Monitoreo pero NO cuentan en ningún porcentaje (Monitoreo, Avance por módulo, Tendencias, barra de avance del inicio, contador por división) ni reciben recordatorios. En la tarjeta salen sin tableros y con la etiqueta "Aún no cuenta".
 - Cómo: `INICIO_MONITOREO` y `cuentaEnMonitoreo(serviceId, periodId)` en `src/lib/alcance-servicios.ts`. Valor `null` = no cuenta nunca. **Para activarlos, el usuario lo indicará**: poner el primer periodo que cuenta (p. ej. `"2027-01"`). No activarlos por cuenta propia.
