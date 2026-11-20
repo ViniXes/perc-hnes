@@ -46,6 +46,11 @@ export const HORAS_CATALOGO: Record<string, Omit<HorasTemplate, "seedEmployees">
   "udp": {"serviceId":"udp","establishment":"HOSPITAL NACIONAL EL SALVADOR","columns":["DOCENCIA E INVESTIGACION Y CAPACITACION"]},
   "servicio-farmaceutico": {"serviceId":"servicio-farmaceutico","establishment":"HOSPITAL NACIONAL EL SALVADOR","columns":["SERVICIO FARMACEUTICO","SERVICIO DE APOYO A RIISS","ADMINISTRACION"]},
   "banco-de-sangre": {"serviceId":"banco-de-sangre","establishment":"HOSPITAL NACIONAL EL SALVADOR","columns":["BANCO DE SANGRE","SERVICIO DE APOYO A RIISS","ADMINISTRACION"]},
+  // Consulta Externa: columnas provisionales hasta que el usuario defina los centros de costo.
+  "ce-oncologia": {"serviceId":"ce-oncologia","establishment":"HOSPITAL NACIONAL EL SALVADOR","columns":["ADMINISTRACION"]},
+  "ce-hematologia": {"serviceId":"ce-hematologia","establishment":"HOSPITAL NACIONAL EL SALVADOR","columns":["ADMINISTRACION"]},
+  "ce-cardiologia": {"serviceId":"ce-cardiologia","establishment":"HOSPITAL NACIONAL EL SALVADOR","columns":["ADMINISTRACION"]},
+  "ce-infectologia": {"serviceId":"ce-infectologia","establishment":"HOSPITAL NACIONAL EL SALVADOR","columns":["ADMINISTRACION"]},
 };
 
 export function getHorasTemplate(id?: string | null) {

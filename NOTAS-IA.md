@@ -35,6 +35,7 @@ Resumen de cambios recientes (noviembre 2026):
 - **Menú lateral (13/11):** barra de scroll visible y botones de subir/bajar.
 - **Entregas (18/11):** criterio único por módulo (`src/lib/entregas.ts`) en Monitoreo, tendencias y recordatorios; SEPS con Confirmar entrega y estado En digitación.
 - **Asistente virtual eliminado (19/11):** se quitó el robot/chat flotante de la esquina (solo PC). La carga de Excel sigue en cada módulo.
+- **Consulta Externa (20/11):** nueva unidad con Oncología, Hematología, Cardiología e Infectología (PERC, SEPS y Horas en blanco).
 - **Inicio admin (16/11):** se quitaron los accesos directos (Monitoreo general, Tendencias, Consolidados); ya están en el menú lateral.
 
 ## Pendientes
@@ -54,6 +55,11 @@ Entradas nuevas **arriba**. Formato:
 - Archivos: rutas principales tocadas.
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
+
+### 2026-11-20 — Claude
+- Cambio: nueva unidad **Consulta Externa** (grupo `consulta-externa`, al mismo nivel que Dirección y las Divisiones) con 4 servicios: Oncología (`ce-oncologia`), Hematología (`ce-hematologia`), Cardiología (`ce-cardiologia`) e Infectología (`ce-infectologia`). Cada uno con PERC, SEPS y Horas, todos en blanco: PERC sin filas, SEPS sin tablas, Horas con columna provisional `ADMINISTRACION` y sin personal. También aparece en el registro, el selector de servicios, Monitoreo por división y POA.
+- Archivos: `src/lib/tabulator-template.ts`, `src/lib/modules.ts`, `src/lib/alcance-servicios.ts`, `src/lib/horas-templates.ts`, `src/lib/seps-templates.ts`, `src/app/page.tsx` (SERVICE_GROUP_LABELS, SIGNUP_DIVISIONS, POA_TITULO_GRUPO).
+- Notas: `ce-cardiologia` es distinto del servicio `cardiologia` (procedimientos ECG/holter, División Médica), que no se tocó. Pendiente del usuario: filas del PERC, tablas del SEPS y centros de costo/personal de Horas de los 4. El Jefe de División Médica NO ve Consulta Externa (es otro grupo).
 
 ### 2026-11-19 — Claude
 - Cambio: se eliminó por completo el asistente virtual (robot flotante "Asistente PULSO", solo escritorio) a pedido del usuario: nadie lo usaba y ocupaba espacio. Era 100 % local: sin API, sin variables de entorno, sin colecciones Firestore ni dependencias npm. No cambia reglas, roles ni permisos.

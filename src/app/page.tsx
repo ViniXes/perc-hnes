@@ -681,6 +681,7 @@ const SERVICE_GROUP_LABELS: Record<string, string> = {
   medica: "Division Medica",
   enfermeria: "Division de Enfermeria",
   administrativa: "Subdireccion Administrativa",
+  "consulta-externa": "Consulta Externa",
 };
 // Orden y etiquetas del desplegable de REGISTRO (agrupado por division). jefeLabel
 // = opcion de "Jefe de division" (solo las 3 con jefatura). El resto solo servicios.
@@ -690,6 +691,7 @@ const SIGNUP_DIVISIONS: { key: string; label: string; jefeLabel: string | null }
   { key: "enfermeria", label: "Division de Enfermeria", jefeLabel: null },
   { key: "administrativa", label: "Subdireccion Administrativa", jefeLabel: "Subdireccion Administrativa" },
   { key: "direccion", label: "Direccion", jefeLabel: null },
+  { key: "consulta-externa", label: "Consulta Externa", jefeLabel: null },
   // MINSAL: no es una division del hospital, es el nivel ministerial. Se registra
   // por aca porque es la misma puerta de entrada, pero su cuenta solo abre el
   // monitoreo nacional de hospitales.
@@ -8745,6 +8747,7 @@ export default function Home() {
     medica: "División Médica",
     enfermeria: "División de Enfermería",
     administrativa: "Subdirección Administrativa",
+    "consulta-externa": "Consulta Externa",
   };
   /** Grupos para el selector con buscador: primero las Divisiones/Subdirección
    *  (su propio PAO) y luego los servicios de cada una. */

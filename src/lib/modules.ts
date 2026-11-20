@@ -216,6 +216,11 @@ const AREA_OVERRIDES: Record<string, ModuleId[]> = {
   "uci-consolidado": ["sesps"],
   "cardiologia": ["sesps"],
   "nefrologia": ["sesps"],
+  // Consulta Externa: PERC, SEPS y Horas (tabuladores en blanco por ahora).
+  "ce-oncologia": ["perc", "sesps", "distribucion"],
+  "ce-hematologia": ["perc", "sesps", "distribucion"],
+  "ce-cardiologia": ["perc", "sesps", "distribucion"],
+  "ce-infectologia": ["perc", "sesps", "distribucion"],
   // Servicios Varios: por ahora SOLO Distribucion de Horas.
   "servicios-varios": ["distribucion"],
   // Departamento de Tecnologia: por ahora SOLO Distribucion de Horas.

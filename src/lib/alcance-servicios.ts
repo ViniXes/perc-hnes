@@ -57,6 +57,11 @@ export const SERVICE_GROUP_BY_ID: Record<string, string> = {
   nefrologia: "medica",
   anestesiologia: "medica",
   "medicina-critica": "medica",
+  // --- CONSULTA EXTERNA ---
+  "ce-oncologia": "consulta-externa",
+  "ce-hematologia": "consulta-externa",
+  "ce-cardiologia": "consulta-externa",
+  "ce-infectologia": "consulta-externa",
   // --- SUBDIRECCION ADMINISTRATIVA ---
   almacen: "administrativa",
   aseo: "administrativa",

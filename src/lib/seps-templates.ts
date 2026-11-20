@@ -242,6 +242,11 @@ export const SEPS_TEMPLATES: Record<string, SepsTemplate> = {
   "nefrologia": NEFROLOGIA_TEMPLATE,
   // Unidad de Convenios (Direccion): SEPS diario (Bienestar Magisterial).
   "unidad-de-convenios": CONVENIOS_TEMPLATE,
+  // Consulta Externa: SEPS en blanco (sin tablas) hasta tener el formato.
+  "ce-oncologia": { serviceId: "ce-oncologia", establishment: "HOSPITAL NACIONAL EL SALVADOR", tables: [] },
+  "ce-hematologia": { serviceId: "ce-hematologia", establishment: "HOSPITAL NACIONAL EL SALVADOR", tables: [] },
+  "ce-cardiologia": { serviceId: "ce-cardiologia", establishment: "HOSPITAL NACIONAL EL SALVADOR", tables: [] },
+  "ce-infectologia": { serviceId: "ce-infectologia", establishment: "HOSPITAL NACIONAL EL SALVADOR", tables: [] },
   // Hospitalizacion Medicina Interna: SEPS diario.
 };
 

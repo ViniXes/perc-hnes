@@ -442,6 +442,13 @@ export const SERVICE_DEFINITIONS: ServiceDefinition[] = [
     name: "Nefrología",
     rows: [],
   },
+  // --- CONSULTA EXTERNA (unidad nueva, 20/11/2026): PERC, SEPS y Horas.
+  // Tabuladores en blanco por ahora (el usuario enviara las filas). Son servicios
+  // distintos de "cardiologia" (procedimientos, Division Medica).
+  { id: "ce-oncologia", name: "Oncología", rows: [] },
+  { id: "ce-hematologia", name: "Hematología", rows: [] },
+  { id: "ce-cardiologia", name: "Cardiología", rows: [] },
+  { id: "ce-infectologia", name: "Infectología", rows: [] },
   {
     // Anestesiologia: por ahora SOLO Distribucion de Horas.
     id: "anestesiologia",
