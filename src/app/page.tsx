@@ -207,6 +207,14 @@ import { APP_VERSION, AVISO_BLOQUE } from "@/lib/version";
 import { CHANGELOG, CHANGELOG_LATEST, type ChangelogEntry } from "@/lib/changelog";
 import { AVISOS_DIRIGIDOS, type AvisoDirigido } from "@/lib/avisos";
 import { esperarConfirmacion, estaEnLinea } from "@/lib/offline";
+import {
+  AVISO_INACTIVIDAD_MS,
+  INACTIVIDAD_MS,
+  escribirUltimaActividad,
+  guardarPantallaParaVolver,
+  leerUltimaActividad,
+  tomarPantallaParaVolver,
+} from "@/lib/borradores";
 import { SelectorFecha, SelectorMes } from "@/components/selectores-fecha";
 import {
   DEP_ICON_PROPS,
@@ -5769,6 +5777,118 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---- CIERRE POR INACTIVIDAD -----------------------------------------------
+  // Tras 1 h 30 min sin tocar PULSO (pestana abierta en otra cosa, PC sola,
+  // celular bloqueado) la sesion se cierra sola. ANTES de cerrar se guarda todo
+  // lo que estaba en curso (PERC, SEPS, Horas, listas del Comite, POA y control
+  // de documentos) y se recuerda la pantalla para volver ahi al entrar. Memos y
+  // Personal desvinculado guardan su borrador en el equipo (src/lib/borradores.ts).
+  // La ultima actividad vive en localStorage: varias pestanas cuentan juntas y,
+  // si el navegador estuvo cerrado mas de 1 h 30 min, al abrirlo se pide entrar.
+  const ultimaActividadRef = useRef(0);
+  const cerrandoPorInactividadRef = useRef(false);
+  const salidaPorInactividadRef = useRef<(() => Promise<void>) | null>(null);
+  const [avisoInactividad, setAvisoInactividad] = useState<number | null>(null);
+
+  // Las funciones del ultimo render (con los datos al dia).
+  useEffect(() => {
+    salidaPorInactividadRef.current = async () => {
+      const tareas: Promise<unknown>[] = [guardarPendientesYa()];
+      if (poaDirty && poaDoc && canEditPoa) tareas.push(handleSavePoa());
+      if (docsDirty && canEditDocs) tareas.push(handleSaveDocs());
+      await Promise.all(tareas.map((t) => t.catch(() => undefined)));
+    };
+  });
+
+  function seguirEnPulso() {
+    ultimaActividadRef.current = Date.now();
+    escribirUltimaActividad(ultimaActividadRef.current);
+    setAvisoInactividad(null);
+  }
+
+  async function cerrarPorInactividad() {
+    if (cerrandoPorInactividadRef.current) return;
+    cerrandoPorInactividadRef.current = true;
+    setAvisoInactividad(null);
+    const uid = user?.uid;
+    if (uid) guardarPantallaParaVolver(uid, activeSidebarSection);
+    try {
+      // Sin red los guardados quedan en la cache de Firestore; no se espera de mas.
+      await Promise.race([
+        salidaPorInactividadRef.current?.() ?? Promise.resolve(),
+        new Promise((resolver) => window.setTimeout(resolver, 8000)),
+      ]);
+    } catch {
+      // Se cierra igual: lo de los tabuladores ya quedo en el equipo.
+    }
+    await handleSignOut();
+    setMessage(
+      "La sesión se cerró por 1 h 30 min sin actividad. Todo lo que estaba haciendo quedó guardado: al entrar de nuevo vuelve a donde estaba.",
+    );
+  }
+
+  useEffect(() => {
+    if (!user) return;
+    cerrandoPorInactividadRef.current = false;
+    const previa = leerUltimaActividad();
+    // Sesion que el navegador recordo, pero lleva mas de 1 h 30 min sin uso.
+    if (previa > 0 && Date.now() - previa >= INACTIVIDAD_MS) {
+      void cerrarPorInactividad();
+      return;
+    }
+    ultimaActividadRef.current = Date.now();
+    escribirUltimaActividad(ultimaActividadRef.current);
+
+    const alActuar = () => {
+      if (cerrandoPorInactividadRef.current) return;
+      const ahora = Date.now();
+      // Se escribe a lo sumo cada 15 s (mousemove dispara muchisimo).
+      if (ahora - ultimaActividadRef.current < 15000) return;
+      ultimaActividadRef.current = ahora;
+      escribirUltimaActividad(ahora);
+      setAvisoInactividad(null);
+    };
+    const revisar = () => {
+      if (cerrandoPorInactividadRef.current) return;
+      const ultima = Math.max(ultimaActividadRef.current, leerUltimaActividad());
+      ultimaActividadRef.current = ultima;
+      const quieto = Date.now() - ultima;
+      if (quieto >= INACTIVIDAD_MS) {
+        void cerrarPorInactividad();
+      } else if (quieto >= INACTIVIDAD_MS - AVISO_INACTIVIDAD_MS) {
+        setAvisoInactividad(Math.ceil((INACTIVIDAD_MS - quieto) / 1000));
+      } else {
+        setAvisoInactividad(null);
+      }
+    };
+    const alVolver = () => {
+      if (document.visibilityState === "visible") revisar();
+    };
+    const eventos = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart", "scroll"] as const;
+    eventos.forEach((nombre) => window.addEventListener(nombre, alActuar, { passive: true, capture: true }));
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("focus", revisar);
+    const reloj = window.setInterval(revisar, 1000);
+    return () => {
+      eventos.forEach((nombre) => window.removeEventListener(nombre, alActuar, { capture: true }));
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("focus", revisar);
+      window.clearInterval(reloj);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
+
+  // Al entrar despues de un cierre por inactividad: volver a la misma pantalla.
+  const perfilListo = serviceProfile ? user?.uid ?? "" : "";
+  useEffect(() => {
+    if (!perfilListo) return;
+    const seccion = tomarPantallaParaVolver(perfilListo);
+    if (!seccion || seccion === "panel-overview") return;
+    const reloj = window.setTimeout(() => runSidebarItem(seccion), 600);
+    return () => window.clearTimeout(reloj);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perfilListo]);
+
   /** Indicador junto al boton Guardar: Guardado / Guardando / Sin guardar. */
   function indicadorAutoguardado(mod: ModAuto) {
     const info = autoGuardado[mod];
@@ -10394,6 +10514,8 @@ export default function Home() {
 
     try {
       await setPersistence(auth, browserLocalPersistence);
+      // Entrar cuenta como actividad (si no, una sesion vieja se cerraria al instante).
+      escribirUltimaActividad(Date.now());
 
       const loginIdentifier = email.trim();
       if (normalizeKey(loginIdentifier) === normalizeKey(ADMIN_USERNAME)) {
@@ -21071,6 +21193,31 @@ export default function Home() {
                     Está correcto, guardar
                   </button>
                 </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Aviso de cierre por inactividad (2 min antes). */}
+          {avisoInactividad !== null && user ? (
+            <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" role="alertdialog" aria-modal="true" aria-labelledby="aviso-inactividad-titulo">
+              <div className={`modal-pop-in w-full max-w-sm rounded-2xl border p-6 text-center shadow-2xl ${
+                isLightPanelTheme ? "border-slate-200 bg-white text-slate-800" : "border-cyan-400/30 bg-[#0b1628] text-slate-100"
+              }`}>
+                <p id="aviso-inactividad-titulo" className="text-lg font-semibold">¿Sigue ahí?</p>
+                <p className={`mt-2 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                  Por 1 h 30 min sin actividad, la sesión se cerrará en{" "}
+                  <span className="font-semibold tabular-nums">
+                    {Math.floor(avisoInactividad / 60)}:{String(avisoInactividad % 60).padStart(2, "0")}
+                  </span>
+                  . Lo que está haciendo se guardará antes de cerrar.
+                </p>
+                <button
+                  type="button"
+                  onClick={seguirEnPulso}
+                  className="mt-5 w-full rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                >
+                  Seguir en PULSO
+                </button>
               </div>
             </div>
           ) : null}

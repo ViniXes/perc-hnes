@@ -32,6 +32,7 @@ import {
   type MemoPersona,
 } from "@/lib/memo-esdomed";
 import { BTN_GUARDAR } from "@/components/ui-basicos";
+import { borrarBorrador, guardarBorrador, leerBorrador } from "@/lib/borradores";
 
 type MemoGuardado = MemoEsdomed & { id: string; actualizado: string; actualizadoPor: string };
 
@@ -137,6 +138,24 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
 
   const cambiosSinGuardar = memo !== null && JSON.stringify(memo) !== guardadoJson;
 
+  // Borrador en este equipo: si la sesion se cierra (inactividad, luz, cerrar la
+  // pestana) con el memo sin guardar, al volver se recupera tal cual.
+  const claveBorrador = `memo.${area}`;
+  type BorradorMemo = { memo: MemoEsdomed; idOriginal: string | null; guardadoJson: string };
+  useEffect(() => {
+    const b = leerBorrador<BorradorMemo>(usuario, claveBorrador);
+    if (!b?.memo) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMemo(normalizarMemo(b.memo as unknown as Record<string, unknown>));
+    setIdOriginal(b.idOriginal ?? null);
+    setGuardadoJson(b.guardadoJson ?? "");
+    setAviso("Se recuperó el memo que estaba escribiendo y no había guardado. Revíselo y guárdelo.");
+  }, [usuario, claveBorrador]);
+  useEffect(() => {
+    if (memo && cambiosSinGuardar) guardarBorrador(usuario, claveBorrador, { memo, idOriginal, guardadoJson });
+  }, [memo, cambiosSinGuardar, idOriginal, guardadoJson, usuario, claveBorrador]);
+  const olvidarBorrador = () => borrarBorrador(usuario, claveBorrador);
+
   const confirmarDescartar = () =>
     !cambiosSinGuardar || window.confirm("Hay cambios sin guardar en el memo abierto. ¿Descartarlos?");
 
@@ -144,6 +163,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
     if (!confirmarDescartar()) return;
     const year = new Date().getFullYear();
     const nuevo = memoNuevo(area, year, siguienteNumero(year), hoyIso());
+    olvidarBorrador();
     setMemo(nuevo);
     setIdOriginal(null);
     setGuardadoJson("");
@@ -154,6 +174,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
   const abrir = (m: MemoGuardado) => {
     if (!confirmarDescartar()) return;
     const limpio = normalizarMemo(m as unknown as Record<string, unknown>);
+    olvidarBorrador();
     setMemo(limpio);
     setIdOriginal(m.id);
     setGuardadoJson(JSON.stringify(limpio));
@@ -163,6 +184,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
 
   const cerrar = () => {
     if (!confirmarDescartar()) return;
+    olvidarBorrador();
     setMemo(null);
     setIdOriginal(null);
     setGuardadoJson("");
@@ -230,6 +252,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
         await setDoc(ref, { ...datos, createdAt: serverTimestamp(), createdBy: usuario });
         if (idOriginal) await deleteDoc(doc(db, MEMO_COLECCION, idOriginal));
       }
+      olvidarBorrador();
       setIdOriginal(id);
       setGuardadoJson(JSON.stringify(memo));
       setAnio(memo.year);
@@ -252,6 +275,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
     setOcupado("borrar");
     try {
       await deleteDoc(doc(db, MEMO_COLECCION, idOriginal));
+      olvidarBorrador();
       setMemo(null);
       setIdOriginal(null);
       setGuardadoJson("");

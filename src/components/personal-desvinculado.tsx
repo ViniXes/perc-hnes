@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { borrarBorrador, guardarBorrador, leerBorrador } from "@/lib/borradores";
 import { collection, doc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firestore";
 import {
@@ -156,15 +157,29 @@ export function PersonalDesvinculado({ isLight, usuario, nombreUsuario, esEsdome
   const inputExcel = useRef<HTMLInputElement | null>(null);
 
   // Pone en pantalla el borrador del mes elegido (lo guardado o uno vacío).
+  // Lo que esta en pantalla al aplicar lo guardado: si la persona lo cambia y no
+  // guarda, queda un borrador en este equipo (cierre por inactividad, luz, etc.)
+  // que se recupera al volver a este mes.
+  const baseRef = useRef<string | null>(null);
   const aplicarBorrador = useCallback(
-    (r: Reporte | null) => {
+    (r: Reporte | null, pid: string) => {
       setAviso("");
-      setSinMovimientos(r?.sinMovimientos ?? false);
-      setPersonas(r?.personas.length ? r.personas : [nuevaPersona()]);
-      setResponsable(r?.responsable || nombreUsuario);
-      setEditando(r?.estado !== "enviado");
+      const sinMov = r?.sinMovimientos ?? false;
+      const lista = r?.personas.length ? r.personas : [nuevaPersona()];
+      const resp = r?.responsable || nombreUsuario;
+      baseRef.current = JSON.stringify({ sinMovimientos: sinMov, personas: lista, responsable: resp });
+      const local = leerBorrador<{ sinMovimientos: boolean; personas: PersonaDesvinculada[]; responsable: string }>(
+        usuario,
+        `desvinculado.${pid}`,
+      );
+      const recuperar = !!local && Array.isArray(local.personas) && local.personas.length > 0;
+      setSinMovimientos(recuperar ? !!local!.sinMovimientos : sinMov);
+      setPersonas(recuperar ? local!.personas : lista);
+      setResponsable(recuperar ? local!.responsable || resp : resp);
+      setEditando(recuperar || r?.estado !== "enviado");
+      if (recuperar) setAviso("Se recuperó lo que estaba digitando y no había guardado. Revíselo y guárdelo.");
     },
-    [nombreUsuario],
+    [nombreUsuario, usuario],
   );
 
   const cargar = useCallback(async () => {
@@ -177,7 +192,7 @@ export function PersonalDesvinculado({ isLight, usuario, nombreUsuario, esEsdome
         todo[d.id] = leerReporte(d.id, d.data() as Record<string, unknown>);
       });
       setReportes(todo);
-      aplicarBorrador(todo[periodoActual] ?? null);
+      aplicarBorrador(todo[periodoActual] ?? null, periodoActual);
     } catch (e) {
       setError(
         (e as { code?: string })?.code === "permission-denied"
@@ -196,10 +211,17 @@ export function PersonalDesvinculado({ isLight, usuario, nombreUsuario, esEsdome
 
   const reporte = reportes[periodId] ?? null;
 
+  useEffect(() => {
+    if (baseRef.current === null || !puedeEnviar) return;
+    const actual = JSON.stringify({ sinMovimientos, personas, responsable });
+    if (editando && actual !== baseRef.current) guardarBorrador(usuario, `desvinculado.${periodId}`, JSON.parse(actual));
+    else if (actual === baseRef.current) borrarBorrador(usuario, `desvinculado.${periodId}`);
+  }, [sinMovimientos, personas, responsable, editando, periodId, usuario, puedeEnviar]);
+
   const elegirPeriodo = (pid: string) => {
     setPeriodId(pid);
     setError("");
-    aplicarBorrador(reportes[pid] ?? null);
+    aplicarBorrador(reportes[pid] ?? null, pid);
   };
 
   const plazo = useMemo(() => {
@@ -262,6 +284,8 @@ export function PersonalDesvinculado({ isLight, usuario, nombreUsuario, esEsdome
         datos.enviadoPor = usuario;
       }
       await setDoc(doc(db, COLECCION, periodId), datos, { merge: true });
+      baseRef.current = JSON.stringify({ sinMovimientos, personas, responsable });
+      borrarBorrador(usuario, `desvinculado.${periodId}`);
       const ahora = new Date();
       setReportes((prev) => ({
         ...prev,
@@ -624,7 +648,10 @@ export function PersonalDesvinculado({ isLight, usuario, nombreUsuario, esEsdome
             </label>
             <div className="flex flex-wrap gap-2">
               {enviado ? (
-                <button type="button" className={btnSec} disabled={!!ocupado} onClick={() => aplicarBorrador(reporte)}>
+                <button type="button" className={btnSec} disabled={!!ocupado} onClick={() => {
+                  borrarBorrador(usuario, `desvinculado.${periodId}`);
+                  aplicarBorrador(reporte, periodId);
+                }}>
                   Cancelar
                 </button>
               ) : (

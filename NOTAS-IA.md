@@ -56,6 +56,13 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-23 — Claude (cierre de sesión por inactividad)
+- Cambio: a pedido del usuario, la sesión se cierra sola tras **1 h 30 min sin actividad** (mouse, teclado, toque, scroll), aunque la pestaña siga abierta. 2 min antes sale el aviso «¿Sigue ahí?» con cuenta regresiva y botón «Seguir en PULSO». La última actividad vive en localStorage (`pulso.ultimaActividad`): varias pestañas cuentan juntas y, si el navegador estuvo cerrado más de 1 h 30 min, al abrirlo se pide entrar de nuevo.
+- Antes de cerrar se guarda todo: autoguardado de PERC/SEPS/Horas/CEC (`guardarPendientesYa`), POA (`handleSavePoa`) y control de documentos (`handleSaveDocs`) si tenían cambios; tope de 8 s (sin red queda en la caché de Firestore). Se recuerda la pantalla abierta y al volver a entrar se abre ahí (`pulso.volverA`, por uid).
+- Memos y Personal desvinculado guardan borrador local por usuario mientras se escribe (`pulso.borrador.<usuario>.*`) y lo recuperan al volver con un aviso; se borra al guardar, cancelar o cerrar el memo.
+- Archivos: `src/lib/borradores.ts` (nuevo), `src/app/page.tsx` (bloque «CIERRE POR INACTIVIDAD», handleSubmit, aviso modal), `src/components/memos-esdomed.tsx`, `src/components/personal-desvinculado.tsx`.
+- Notas: el tiempo se cambia en `INACTIVIDAD_MS` / `AVISO_INACTIVIDAD_MS` de `src/lib/borradores.ts`.
+
 ### 2026-11-20 — Claude (mes cerrado = cerrado, por auditoría)
 - Pedido del usuario: lo que quedó cerrado no lo modifica nadie, en todos los servicios. **Los administradores quedan SIN bloqueo** (decisión del usuario); supervisores y servicios sí.
 - Reglas (`firestore.rules`, punto 17): SEPS ya tiene cierre en el servidor (antes no tenía ninguno): documentos `AAAA-MM__servicio` y pruebas `LABAAAAMM__laboratorio-clinico` usan `horasCierre` (5to día hábil, 2:30 p. m.) con la misma reapertura de 24 h (`captureOverrides`, módulo `sesps`). El id del documento debe coincidir con `periodId` + `serviceId`. Las pruebas de Laboratorio guardan `periodoMes` ("AAAA-MM"), que la regla exige. En PERC, Horas y SEPS, un mes anterior al mes pasado sin `captureWindows/{mes}` también queda cerrado (antes quedaba abierto para siempre). GASTOS/DEPRE y demás documentos de `sepsTabulators` siguen igual.
