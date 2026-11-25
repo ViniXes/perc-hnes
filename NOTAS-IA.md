@@ -56,6 +56,17 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-25 — Claude (carga en vivo solo de lo reciente: solicitudes, tickets y reaperturas)
+- Cambio: antes se escuchaban EN VIVO las colecciones completas `captureRequests`, `supportTickets` y `captureOverrides`, y crecían cada mes. Ahora:
+  - Solicitudes de habilitación: en vivo `periodId >= (mes en cierre − 2)` más `status == "pending"` de cualquier mes. Los avisos (nueva solicitud / tu solicitud fue resuelta) salen solo de la escucha de lo reciente.
+  - Tickets de soporte: en vivo `createdAt >=` inicio de (mes en cierre − 2) más `status in ["pendiente","en_revision"]`.
+  - Reaperturas/cierres manuales: en vivo `periodId in [...]` con los últimos 3 meses, el mes del PERC/Horas, el de SEPS y el del panel de habilitación (se re-suscribe al cambiar de mes en el panel).
+  - Botón «Ver anteriores» en la bandeja de solicitudes y en la de tickets: trae la colección completa una vez (no se borra nada).
+  - El contador de solicitudes por servicio («llegadas tarde») usa `getCountFromServer` por servicio, para seguir contando toda la historia.
+- Índices: no hacen falta índices compuestos (todas las consultas son de un solo campo); no hay que desplegar nada en Firebase.
+- Archivos: `src/app/page.tsx` (`toRequest`/`toTicket`/`periodoMenos`/`MESES_EN_VIVO` a nivel de módulo; efectos de las 3 escuchas; `verSolicitudesAnteriores`, `verTicketsAnteriores`, `solicitudesPorServicio`).
+- Notas: para cambiar cuántos meses se escuchan, `MESES_EN_VIVO`.
+
 ### 2026-11-25 — Claude (la clave temporal también va por correo con Brevo)
 - Cambio: el reseteo individual, el reseteo masivo y la creación de la cuenta de un servicio ahora envían la clave temporal por correo (Brevo, remitente MAIL_FROM) al correo de contacto del perfil (`contactEmail` o `email`). La ventana «Claves temporales» queda solo de respaldo y dice a quién se envió, o que hay que entregarla a mano si no hay correo o falló.
 - Archivos: `src/lib/correo-clave.ts` (nuevo: correo «Su contraseña fue restablecida»), `src/app/api/admin/reset-password/route.ts` (envía y devuelve `sent/to/reason`; masivo devuelve `enviados` y por cuenta `enviado/correo/motivo`; `maxDuration = 300`), `src/app/page.tsx` (handleAdminSendReset, handleResetAllServices, handleAdminCreateUser usa `notifySignupDecision`).

@@ -41,6 +41,7 @@ import {
   doc,
   getDoc,
   getDocFromServer,
+  getCountFromServer,
   getDocs,
   limit,
   onSnapshot,
@@ -1238,6 +1239,75 @@ type SupportTicket = {
   resolvedByName?: string;
   createdAtMs?: number;
 };
+
+// Documento de Firestore -> solicitud / ticket (lo usan la escucha en vivo y
+// el boton "Ver anteriores").
+const toRequest = (item: {
+  id: string;
+  data: () => Record<string, unknown>;
+}): CaptureRequest => {
+  const data = item.data();
+  return {
+    id: item.id,
+    periodId: String(data.periodId ?? ""),
+    periodLabel: String(data.periodLabel ?? ""),
+    serviceId: String(data.serviceId ?? ""),
+    serviceName: String(data.serviceName ?? ""),
+    moduleId: (data.moduleId as ModuleId) ?? "perc",
+    requestedByName: String(data.requestedByName ?? ""),
+    requestedByUid: String(data.requestedByUid ?? ""),
+    status: (data.status as CaptureRequest["status"]) ?? "pending",
+    note: typeof data.note === "string" ? data.note : undefined,
+    resolvedByName:
+      typeof data.resolvedByName === "string" ? data.resolvedByName : undefined,
+    resolvedByRole:
+      data.resolvedByRole === "admin" ||
+      data.resolvedByRole === "supervisor" ||
+      data.resolvedByRole === "jefe"
+        ? data.resolvedByRole
+        : undefined,
+  };
+};
+
+const toTicket = (item: {
+  id: string;
+  data: () => Record<string, unknown>;
+}): SupportTicket => {
+  const d = item.data();
+  const createdAt = d.createdAt as { toMillis?: () => number } | undefined;
+  return {
+    id: item.id,
+    category: (d.category as SupportTicket["category"]) ?? "error",
+    urgency: (d.urgency as SupportTicket["urgency"]) ?? "media",
+    message: String(d.message ?? ""),
+    reporterName: String(d.reporterName ?? ""),
+    reporterUid: String(d.reporterUid ?? ""),
+    reporterRole: String(d.reporterRole ?? ""),
+    serviceId: String(d.serviceId ?? ""),
+    serviceName: String(d.serviceName ?? ""),
+    screen: String(d.screen ?? ""),
+    appVersion: String(d.appVersion ?? ""),
+    status: (d.status as SupportTicket["status"]) ?? "pendiente",
+    resolvedByName:
+      typeof d.resolvedByName === "string" ? d.resolvedByName : undefined,
+    createdAtMs:
+      typeof createdAt?.toMillis === "function" ? createdAt.toMillis() : undefined,
+  };
+};
+
+// "AAAA-MM" n meses antes.
+function periodoMenos(periodId: string, n: number): string {
+  const [y, m] = periodId.split("-").map((v) => Number.parseInt(v, 10));
+  const total = y * 12 + (m - 1) - n;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+}
+
+// Lo que se escucha EN VIVO de solicitudes, tickets y reaperturas: los ultimos
+// meses (el mes en cierre y los 2 anteriores) mas todo lo PENDIENTE de cualquier
+// mes. Lo mas viejo ya resuelto no se borra: se consulta con "Ver anteriores".
+// Asi la carga no crece cada mes. Las consultas son de un solo campo, no
+// necesitan indices compuestos.
+const MESES_EN_VIVO = 2;
 
 // Solicitud de REGISTRO de un jefe de servicio (creacion de usuario, aprobada por admin).
 type SignupRequest = {
@@ -4121,6 +4191,11 @@ export default function Home() {
   const supportReadyRef = useRef(false);
   // Centro de Soporte: tickets, modal de reporte y bandeja.
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  // "Ver anteriores": en vivo solo se cargan los ultimos meses + lo pendiente.
+  const [historialSolicitudes, setHistorialSolicitudes] = useState<"" | "cargando" | "listo">("");
+  const [historialTickets, setHistorialTickets] = useState<"" | "cargando" | "listo">("");
+  // Total historico de solicitudes por servicio (contador de "llegadas tarde").
+  const [solicitudesPorServicio, setSolicitudesPorServicio] = useState<Record<string, number>>({});
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [supportCategory, setSupportCategory] = useState<SupportTicket["category"]>("error");
   const [supportUrgency, setSupportUrgency] = useState<SupportTicket["urgency"]>("media");
@@ -6514,14 +6589,23 @@ export default function Home() {
   // admin/supervisor abre (o cierra) un tablero, TODOS los clientes conectados
   // -incluido el usuario del servicio- lo ven al instante, sin recargar ni volver
   // a iniciar sesion. Antes solo se leia una vez al cargar, por eso el cambio no
-  // aparecia hasta re-loguear. La coleccion es chica (solo tableros intervenidos).
+  // aparecia hasta re-loguear. Solo se escuchan los meses que la pantalla usa
+  // (los ultimos meses y el que se mira en el panel de habilitacion), no toda la
+  // coleccion: asi no crece la carga cada mes.
+  const periodosOverrides = useMemo(() => {
+    const base = getClosingPeriodId(new Date());
+    const lista = new Set<string>([overridePanelPeriodId, periodId, sepsPeriodId]);
+    for (let i = 0; i <= MESES_EN_VIVO; i += 1) lista.add(periodoMenos(base, i));
+    return [...lista].filter((p) => /^\d{4}-\d{2}$/.test(p)).sort();
+  }, [overridePanelPeriodId, periodId, sepsPeriodId]);
+  const clavePeriodosOverrides = periodosOverrides.join(",");
   useEffect(() => {
-    if (firestoreUnavailable || !user || !firestoreStatusReady) {
+    if (firestoreUnavailable || !user || !firestoreStatusReady || !clavePeriodosOverrides) {
       return;
     }
 
     const unsubscribe = onSnapshot(
-      collection(db, "captureOverrides"),
+      query(collection(db, "captureOverrides"), where("periodId", "in", clavePeriodosOverrides.split(","))),
       (snap) => {
         const next: CaptureOverridesMap = {};
         snap.forEach((item) => {
@@ -6542,7 +6626,7 @@ export default function Home() {
     );
 
     return () => unsubscribe();
-  }, [firestoreUnavailable, user, firestoreStatusReady]);
+  }, [firestoreUnavailable, user, firestoreStatusReady, clavePeriodosOverrides]);
 
   // Carga las solicitudes de habilitacion (bandeja). La coleccion es chica.
   useEffect(() => {
@@ -6554,39 +6638,37 @@ export default function Home() {
     // Cada (re)suscripcion: la primera snapshot es la carga inicial (no avisa).
     requestsReadyRef.current = false;
 
-    const toRequest = (item: {
-      id: string;
-      data: () => Record<string, unknown>;
-    }): CaptureRequest => {
-      const data = item.data();
-      return {
-        id: item.id,
-        periodId: String(data.periodId ?? ""),
-        periodLabel: String(data.periodLabel ?? ""),
-        serviceId: String(data.serviceId ?? ""),
-        serviceName: String(data.serviceName ?? ""),
-        moduleId: (data.moduleId as ModuleId) ?? "perc",
-        requestedByName: String(data.requestedByName ?? ""),
-        requestedByUid: String(data.requestedByUid ?? ""),
-        status: (data.status as CaptureRequest["status"]) ?? "pending",
-        note: typeof data.note === "string" ? data.note : undefined,
-        resolvedByName:
-          typeof data.resolvedByName === "string" ? data.resolvedByName : undefined,
-        resolvedByRole:
-          data.resolvedByRole === "admin" ||
-          data.resolvedByRole === "supervisor" ||
-          data.resolvedByRole === "jefe"
-            ? data.resolvedByRole
-            : undefined,
-      };
-    };
-
-    const unsubscribe = onSnapshot(
-      collection(db, "captureRequests"),
+    const desdeSolicitudes = periodoMenos(getClosingPeriodId(new Date()), MESES_EN_VIVO);
+    const recientes = new Map<string, CaptureRequest>();
+    const pendientes = new Map<string, CaptureRequest>();
+    // Junta lo reciente, lo pendiente y lo que se haya traido con "Ver anteriores".
+    const publicarSolicitudes = () =>
+      setCaptureRequests((prev) => {
+        const m = new Map<string, CaptureRequest>();
+        for (const r of prev) {
+          if (r.periodId < desdeSolicitudes && r.status !== "pending") m.set(r.id, r);
+        }
+        for (const [id, r] of pendientes) m.set(id, r);
+        for (const [id, r] of recientes) m.set(id, r);
+        return [...m.values()];
+      });
+    // Pendientes de CUALQUIER mes (sin avisos: los avisos salen de lo reciente).
+    const unsubscribePendientes = onSnapshot(
+      query(collection(db, "captureRequests"), where("status", "==", "pending")),
       (snap) => {
-        const list: CaptureRequest[] = [];
-        snap.forEach((item) => list.push(toRequest(item)));
-        setCaptureRequests(list);
+        pendientes.clear();
+        snap.forEach((item) => pendientes.set(item.id, toRequest(item)));
+        publicarSolicitudes();
+      },
+      () => {},
+    );
+
+    const unsubscribeRecientes = onSnapshot(
+      query(collection(db, "captureRequests"), where("periodId", ">=", desdeSolicitudes)),
+      (snap) => {
+        recientes.clear();
+        snap.forEach((item) => recientes.set(item.id, toRequest(item)));
+        publicarSolicitudes();
 
         // Avisar SOLO de solicitudes nuevas (despues de la carga inicial).
         if (!requestsReadyRef.current) {
@@ -6667,8 +6749,43 @@ export default function Home() {
       },
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribePendientes();
+      unsubscribeRecientes();
+    };
   }, [user, firestoreUnavailable, firestoreStatusReady]);
+
+  // Contador de solicitudes por servicio (todas las de su historia). Como en vivo
+  // ya no llega toda la coleccion, se pide el conteo al servidor (lee poco).
+  const serviciosConSolicitud = useMemo(
+    () => [...new Set(captureRequests.map((r) => r.serviceId).filter(Boolean))].sort().join(","),
+    [captureRequests],
+  );
+  useEffect(() => {
+    if (firestoreUnavailable || !user || !firestoreStatusReady || !serviciosConSolicitud) return;
+    let cancelado = false;
+    const faltan = serviciosConSolicitud.split(",");
+    void Promise.all(
+      faltan.map(async (serviceId) => {
+        try {
+          const r = await getCountFromServer(
+            query(collection(db, "captureRequests"), where("serviceId", "==", serviceId)),
+          );
+          return [serviceId, r.data().count] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((pares) => {
+      if (cancelado) return;
+      const next: Record<string, number> = {};
+      for (const par of pares) if (par) next[par[0]] = par[1];
+      setSolicitudesPorServicio((prev) => ({ ...prev, ...next }));
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [serviciosConSolicitud, firestoreUnavailable, user, firestoreStatusReady]);
 
   // Centro de Soporte: tickets en tiempo real. Solo supervisores y admin leen la
   // bandeja (los servicios solo crean tickets, no los leen).
@@ -6679,39 +6796,40 @@ export default function Home() {
     }
     supportReadyRef.current = false;
 
-    const toTicket = (item: {
-      id: string;
-      data: () => Record<string, unknown>;
-    }): SupportTicket => {
-      const d = item.data();
-      const createdAt = d.createdAt as { toMillis?: () => number } | undefined;
-      return {
-        id: item.id,
-        category: (d.category as SupportTicket["category"]) ?? "error",
-        urgency: (d.urgency as SupportTicket["urgency"]) ?? "media",
-        message: String(d.message ?? ""),
-        reporterName: String(d.reporterName ?? ""),
-        reporterUid: String(d.reporterUid ?? ""),
-        reporterRole: String(d.reporterRole ?? ""),
-        serviceId: String(d.serviceId ?? ""),
-        serviceName: String(d.serviceName ?? ""),
-        screen: String(d.screen ?? ""),
-        appVersion: String(d.appVersion ?? ""),
-        status: (d.status as SupportTicket["status"]) ?? "pendiente",
-        resolvedByName:
-          typeof d.resolvedByName === "string" ? d.resolvedByName : undefined,
-        createdAtMs:
-          typeof createdAt?.toMillis === "function" ? createdAt.toMillis() : undefined,
-      };
-    };
-
-    const unsubscribe = onSnapshot(
-      collection(db, "supportTickets"),
+    const desdeTickets = (() => {
+      const [y, m] = periodoMenos(getClosingPeriodId(new Date()), MESES_EN_VIVO).split("-").map(Number);
+      return new Date(y, m - 1, 1);
+    })();
+    const desdeTicketsMs = desdeTickets.getTime();
+    const ticketsRecientes = new Map<string, SupportTicket>();
+    const ticketsAbiertos = new Map<string, SupportTicket>();
+    const publicarTickets = () =>
+      setSupportTickets((prev) => {
+        const m = new Map<string, SupportTicket>();
+        for (const t of prev) {
+          if ((t.createdAtMs ?? 0) < desdeTicketsMs && t.status === "resuelto") m.set(t.id, t);
+        }
+        for (const [id, t] of ticketsAbiertos) m.set(id, t);
+        for (const [id, t] of ticketsRecientes) m.set(id, t);
+        return [...m.values()].sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
+      });
+    // Tickets sin resolver de cualquier fecha (sin avisos).
+    const unsubscribeAbiertos = onSnapshot(
+      query(collection(db, "supportTickets"), where("status", "in", ["pendiente", "en_revision"])),
       (snap) => {
-        const list: SupportTicket[] = [];
-        snap.forEach((item) => list.push(toTicket(item)));
-        list.sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
-        setSupportTickets(list);
+        ticketsAbiertos.clear();
+        snap.forEach((item) => ticketsAbiertos.set(item.id, toTicket(item)));
+        publicarTickets();
+      },
+      () => {},
+    );
+
+    const unsubscribeRecientes = onSnapshot(
+      query(collection(db, "supportTickets"), where("createdAt", ">=", Timestamp.fromDate(desdeTickets))),
+      (snap) => {
+        ticketsRecientes.clear();
+        snap.forEach((item) => ticketsRecientes.set(item.id, toTicket(item)));
+        publicarTickets();
 
         if (!supportReadyRef.current) {
           supportReadyRef.current = true;
@@ -6743,7 +6861,10 @@ export default function Home() {
       },
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAbiertos();
+      unsubscribeRecientes();
+    };
   }, [user, firestoreUnavailable, firestoreStatusReady, isAdmin, isSupervisor]);
 
   // Solicitudes de REGISTRO (solo admins las leen, segun reglas de Firestore).
@@ -14327,6 +14448,42 @@ export default function Home() {
       setError(getAuthErrorMessage(bulkError));
     } finally {
       setAdminBusyUserId("");
+    }
+  }
+
+  // Trae TODAS las solicitudes de habilitacion (meses anteriores ya resueltas incluidas).
+  async function verSolicitudesAnteriores() {
+    setHistorialSolicitudes("cargando");
+    try {
+      const snap = await getDocs(collection(db, "captureRequests"));
+      setCaptureRequests((prev) => {
+        const m = new Map<string, CaptureRequest>();
+        snap.forEach((item) => m.set(item.id, toRequest(item)));
+        for (const r of prev) m.set(r.id, r); // lo que llega en vivo manda
+        return [...m.values()];
+      });
+      setHistorialSolicitudes("listo");
+    } catch {
+      setHistorialSolicitudes("");
+      setError("No se pudieron cargar las solicitudes anteriores.");
+    }
+  }
+
+  // Trae TODOS los tickets de soporte (los viejos ya resueltos incluidos).
+  async function verTicketsAnteriores() {
+    setHistorialTickets("cargando");
+    try {
+      const snap = await getDocs(collection(db, "supportTickets"));
+      setSupportTickets((prev) => {
+        const m = new Map<string, SupportTicket>();
+        snap.forEach((item) => m.set(item.id, toTicket(item)));
+        for (const t of prev) m.set(t.id, t);
+        return [...m.values()].sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
+      });
+      setHistorialTickets("listo");
+    } catch {
+      setHistorialTickets("");
+      setError("No se pudieron cargar los tickets anteriores.");
     }
   }
 
@@ -29486,6 +29643,21 @@ export default function Home() {
                   );
                 })() : null}
 
+                <div className="mb-2 flex justify-end">
+                  {historialSolicitudes === "listo" ? (
+                    <span className="text-[11px] text-slate-500">Mostrando también meses anteriores</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void verSolicitudesAnteriores()}
+                      disabled={historialSolicitudes === "cargando"}
+                      title="Por rapidez se muestran los últimos meses y todo lo pendiente"
+                      className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
+                    >
+                      {historialSolicitudes === "cargando" ? "Cargando…" : "Ver anteriores"}
+                    </button>
+                  )}
+                </div>
                 {visibleRequests.length === 0 ? (
                   <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-slate-300">
                     No hay solicitudes por ahora.
@@ -29544,9 +29716,10 @@ export default function Home() {
                           {isOpen ? (
                             <div className="space-y-2 px-2.5 pb-2.5">
                               {group.items.map((req) => {
-                        const lateMarks = captureRequests.filter(
-                          (item) => item.serviceId === req.serviceId,
-                        ).length;
+                        const lateMarks = Math.max(
+                          solicitudesPorServicio[req.serviceId] ?? 0,
+                          captureRequests.filter((item) => item.serviceId === req.serviceId).length,
+                        );
                         // Direccion y Subdireccion Medica tambien aprueban: es su
                         // potestad habilitar un tablero cuando alguien no alcanzo a
                         // capturar en los dias estipulados.
@@ -29819,6 +29992,21 @@ export default function Home() {
                             {pendingSupportCount} pendiente{pendingSupportCount === 1 ? "" : "s"}
                           </span>
                         ) : null}
+                      </div>
+                      <div className="mb-2 flex justify-end">
+                        {historialTickets === "listo" ? (
+                          <span className="text-[11px] text-slate-500">Mostrando también tickets anteriores</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void verTicketsAnteriores()}
+                            disabled={historialTickets === "cargando"}
+                            title="Por rapidez se muestran los últimos meses y todo lo pendiente"
+                            className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
+                          >
+                            {historialTickets === "cargando" ? "Cargando…" : "Ver anteriores"}
+                          </button>
+                        )}
                       </div>
                       {supportTickets.length === 0 ? (
                         <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-8 text-center">
