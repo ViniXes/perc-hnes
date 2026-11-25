@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { gestionaUsuarios, permiteReset } from "@/lib/permisos-cuentas";
+import { generarClaveTemporal } from "@/lib/clave-temporal";
 
 export const runtime = "nodejs";
 
-// Clave a la que se resetea (política del hospital). El usuario la cambia al entrar.
-const RESET_PASSWORD = "123456";
+// Cada reseteo pone una clave temporal ALEATORIA y distinta por cuenta. Solo se
+// devuelve al admin que reseteó (nunca se guarda ni se escribe en logs). El
+// usuario la cambia al entrar (mustChangePassword).
 
 type Body = {
   idToken?: string;
@@ -52,29 +54,38 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  async function resetOne(uid: string): Promise<boolean> {
+  async function resetOne(uid: string): Promise<string | null> {
+    const clave = generarClaveTemporal();
     try {
       await adminDb!
         .collection("serviceUsers")
         .doc(uid)
         .set({ mustChangePassword: true, updatedAt: new Date() }, { merge: true });
-      await adminAuth!.updateUser(uid, { password: RESET_PASSWORD });
+      await adminAuth!.updateUser(uid, { password: clave });
       await adminAuth!.revokeRefreshTokens(uid);
-      return true;
+      return clave;
     } catch {
-      return false;
+      return null;
     }
   }
 
   // 2a) Reset masivo: todas las cuentas de servicio ya creadas.
   if (body.scope === "all-services") {
     const snap = await adminDb.collection("serviceUsers").where("role", "==", "service").get();
-    let done = 0;
+    const cuentas: { usuario: string; nombre: string; clave: string }[] = [];
     for (const d of snap.docs) {
       const destino = await adminAuth.getUser(d.id).catch(() => null);
-      if (permiteReset(caller, d.data(), destino?.email) && await resetOne(d.id)) done += 1;
+      if (!permiteReset(caller, d.data(), destino?.email)) continue;
+      const clave = await resetOne(d.id);
+      if (!clave) continue;
+      const perfil = d.data();
+      const correo = (destino?.email || "").toLowerCase();
+      const usuario = String(perfil.username || (correo.endsWith("@perc-hnes.app") ? correo.split("@")[0] : correo));
+      const nombre = String(perfil.serviceName || perfil.name || "");
+      cuentas.push({ usuario, nombre, clave });
     }
-    return NextResponse.json({ ok: true, count: done, total: snap.size, password: RESET_PASSWORD });
+    cuentas.sort((a, b) => a.usuario.localeCompare(b.usuario));
+    return NextResponse.json({ ok: true, count: cuentas.length, total: snap.size, cuentas });
   }
 
   // 2b) Reset individual.
@@ -87,8 +98,8 @@ export async function POST(req: NextRequest) {
   if (!permiteReset(caller, target.data(), cuenta?.email)) {
     return NextResponse.json({ ok: false, error: "Esta cuenta no admite un reinicio ordinario." }, { status: 403 });
   }
-  const ok = await resetOne(targetUid);
-  return ok
-    ? NextResponse.json({ ok: true, password: RESET_PASSWORD })
+  const clave = await resetOne(targetUid);
+  return clave
+    ? NextResponse.json({ ok: true, password: clave })
     : NextResponse.json({ ok: false, error: "No se pudo resetear ese usuario." }, { status: 500 });
 }

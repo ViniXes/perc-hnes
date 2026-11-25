@@ -335,7 +335,7 @@ export async function POST(req: NextRequest) {
       : buildApprovedEmail(
           name,
           (body.username || "").trim(),
-          (body.password || "123456").trim(),
+          (body.password || "").trim(),
           (body.roleLabel || "").trim(),
         );
 

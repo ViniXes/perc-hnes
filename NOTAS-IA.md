@@ -56,6 +56,13 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-25 — Claude (clave temporal aleatoria, ya no 123456)
+- Cambio: a pedido del usuario, la clave temporal ya no es fija. Cada cuenta nueva (servicio, jefes, división, departamento, MINSAL, comité, dirección), cada reseteo (individual y masivo) y cada recuperación de acceso recibe una clave **aleatoria y distinta de 12 caracteres** (mayúsculas, minúsculas y números, sin 0/O/o ni 1/l/I), generada con `crypto.getRandomValues`. Se sigue obligando a cambiarla al entrar (`mustChangePassword`).
+- La clave no se guarda en Firestore ni se escribe en logs: el servidor la devuelve solo al admin que hizo la acción, que la ve en una ventana nueva «Claves temporales» (Copiar; en el reseteo masivo, «Descargar lista» en CSV). En recuperación de acceso, si el correo salió por Brevo, el admin no la ve; si no salió, aparece la ventana para entregarla a mano. Las aprobaciones de registro la envían por correo y además la muestran.
+- Al crear su contraseña personal, se rechaza 123456 y la misma clave con la que entró.
+- Archivos: `src/lib/clave-temporal.ts` (nuevo), `src/app/api/admin/reset-password/route.ts` (masivo devuelve `cuentas: [{usuario, nombre, clave}]` en vez de `password`), `src/app/api/admin/recover-access/route.ts`, `src/app/api/admin/send-account-email/route.ts`, `src/app/page.tsx` (`mostrarClaves`, modal «Claves temporales recién generadas», textos sin 123456), `.env.example` (se quitó `NEXT_PUBLIC_DEFAULT_TEMP_PASSWORD`, ya no se usa).
+- Notas: no volver a poner una clave fija en el código: el repo es público. Usar `generarClaveTemporal()`.
+
 ### 2026-11-23 — Claude (cierre de sesión por inactividad)
 - Cambio: a pedido del usuario, la sesión se cierra sola tras **1 h 30 min sin actividad** (mouse, teclado, toque, scroll), aunque la pestaña siga abierta. 2 min antes sale el aviso «¿Sigue ahí?» con cuenta regresiva y botón «Seguir en PULSO». La última actividad vive en localStorage (`pulso.ultimaActividad`): varias pestañas cuentan juntas y, si el navegador estuvo cerrado más de 1 h 30 min, al abrirlo se pide entrar de nuevo.
 - Antes de cerrar se guarda todo: autoguardado de PERC/SEPS/Horas/CEC (`guardarPendientesYa`), POA (`handleSavePoa`) y control de documentos (`handleSaveDocs`) si tenían cambios; tope de 8 s (sin red queda en la caché de Firestore). Se recuerda la pantalla abierta y al volver a entrar se abre ahí (`pulso.volverA`, por uid).

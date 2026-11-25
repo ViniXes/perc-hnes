@@ -1,5 +1,6 @@
 "use client";
 
+import { generarClaveTemporal } from "@/lib/clave-temporal";
 import { PoaUnidadPicker, type PoaUnidadGrupo } from "@/components/poa-unidad-picker";
 import { MemosEsdomed } from "@/components/memos-esdomed";
 import { DocumentosPlanificacion } from "@/components/documentos-planificacion";
@@ -432,7 +433,10 @@ type PublicDashboardGroup = {
 // defecto para que el login funcione aunque no esten configuradas en Vercel.
 // SEGURIDAD: al ser app cliente quedan en el bundle; la proteccion real es ROTAR
 // las claves (sobreescribiendolas con las env en Vercel) y poner el repo PRIVADO.
-const DEFAULT_TEMP_PASSWORD = process.env.NEXT_PUBLIC_DEFAULT_TEMP_PASSWORD || "123456";
+// Clave temporal: ya no es fija. Cada cuenta nueva y cada reseteo recibe una
+// aleatoria distinta (src/lib/clave-temporal.ts). Esta solo se sigue rechazando
+// como contraseña personal porque fue la temporal de antes.
+const CLAVE_TEMPORAL_ANTIGUA = "123456";
 const ADMIN_USERNAME = process.env.NEXT_PUBLIC_ADMIN_USERNAME || "Hcardoza";
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "hcardoza.admin@perc-hnes.app";
 // Administradores de ESDOMED: los UNICOS admins que entran a Recursos Humanos >
@@ -3298,10 +3302,11 @@ async function createServiceUserAccount(
   // el admin queda como correo de CONTACTO. Asi el login por usuario funciona sin
   // leer Firestore antes de autenticar.
   const loginEmail = getServiceLoginEmail(service.id);
+  const claveTemporal = generarClaveTemporal();
   const credential = await createUserWithEmailAndPassword(
     creationAuth,
     loginEmail,
-    DEFAULT_TEMP_PASSWORD,
+    claveTemporal,
   );
 
   await updateProfile(credential.user, {
@@ -3350,11 +3355,12 @@ async function createServiceUserAccount(
     credential,
     displayName,
     serviceUsername,
+    password: claveTemporal,
   };
 }
 
-// Contrasena generica para las cuentas de jefes creadas por aprobacion.
-const CHIEF_TEMP_PASSWORD = "123456";
+// Las cuentas creadas por aprobacion reciben una clave temporal aleatoria
+// (generarClaveTemporal), distinta para cada una.
 // Cargo "DIMES" del Comite de Expediente Clinico (no es una de las 13 listas).
 const CEC_CARGO_DIMES = "dimes";
 
@@ -3376,7 +3382,7 @@ function buildChiefUsername(firstName: string, lastName: string) {
 }
 
 // Crea una cuenta de JEFE de servicio (aprobada por admin): usuario por nombre,
-// contrasena 123456, perfil de servicio. NO crea serviceAssignment (es un usuario
+// clave temporal aleatoria, perfil de servicio. NO crea serviceAssignment (es un usuario
 // adicional del servicio, no la cuenta unica del servicio).
 function isReservedUsername(username: string) {
   const key = normalizeKey(username);
@@ -3409,6 +3415,7 @@ async function createChiefUserAccount(
 
   let username = base;
   let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  const claveTemporal = generarClaveTemporal();
   for (let attempt = 0; attempt < 30; attempt += 1) {
     username = attempt === 0 ? base : `${base}${attempt + 1}`;
     if (isReservedUsername(username)) {
@@ -3419,7 +3426,7 @@ async function createChiefUserAccount(
       credential = await createUserWithEmailAndPassword(
         creationAuth,
         loginEmail,
-        CHIEF_TEMP_PASSWORD,
+        claveTemporal,
       );
       break;
     } catch (err) {
@@ -3458,7 +3465,7 @@ async function createChiefUserAccount(
     updatedAt: serverTimestamp(),
   });
 
-  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+  return { credential, username, displayName, password: claveTemporal };
 }
 
 // Crea la cuenta de un JEFE DE DIVISION (supervisor con alcance a UNA division).
@@ -3483,6 +3490,7 @@ async function createDivisionChiefAccount(
   const displayName = buildFullName(firstName.trim(), lastName.trim(), divisionLabel);
   let username = base;
   let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  const claveTemporal = generarClaveTemporal();
   for (let attempt = 0; attempt < 30; attempt += 1) {
     username = attempt === 0 ? base : `${base}${attempt + 1}`;
     if (isReservedUsername(username)) {
@@ -3490,7 +3498,7 @@ async function createDivisionChiefAccount(
     }
     const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
     try {
-      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, CHIEF_TEMP_PASSWORD);
+      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, claveTemporal);
       break;
     } catch (err) {
       if ((err as { code?: string })?.code === "auth/email-already-in-use") {
@@ -3525,7 +3533,7 @@ async function createDivisionChiefAccount(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+  return { credential, username, displayName, password: claveTemporal };
 }
 
 // Crea la cuenta de una JEFA DE DEPARTAMENTO (supervisor con alcance a un set fijo
@@ -3552,6 +3560,7 @@ async function createDepartmentChiefAccount(
   const displayName = buildFullName(firstName.trim(), lastName.trim(), departmentLabel);
   let username = base;
   let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  const claveTemporal = generarClaveTemporal();
   for (let attempt = 0; attempt < 30; attempt += 1) {
     username = attempt === 0 ? base : `${base}${attempt + 1}`;
     if (isReservedUsername(username)) {
@@ -3559,7 +3568,7 @@ async function createDepartmentChiefAccount(
     }
     const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
     try {
-      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, CHIEF_TEMP_PASSWORD);
+      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, claveTemporal);
       break;
     } catch (err) {
       if ((err as { code?: string })?.code === "auth/email-already-in-use") {
@@ -3598,7 +3607,7 @@ async function createDepartmentChiefAccount(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+  return { credential, username, displayName, password: claveTemporal };
 }
 
 /**
@@ -3619,12 +3628,13 @@ async function createMinsalAccount(
   const displayName = buildFullName(firstName.trim(), lastName.trim(), etiqueta);
   let username = base;
   let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  const claveTemporal = generarClaveTemporal();
   for (let attempt = 0; attempt < 30; attempt += 1) {
     username = attempt === 0 ? base : `${base}${attempt + 1}`;
     if (isReservedUsername(username)) continue;
     const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
     try {
-      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, CHIEF_TEMP_PASSWORD);
+      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, claveTemporal);
       break;
     } catch (err) {
       if ((err as { code?: string })?.code === "auth/email-already-in-use") continue;
@@ -3663,7 +3673,7 @@ async function createMinsalAccount(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+  return { credential, username, displayName, password: claveTemporal };
 }
 
 // Crea la cuenta de un miembro del COMITE DE EXPEDIENTE CLINICO que no tenia
@@ -3690,12 +3700,13 @@ async function createComiteAccount(
   const displayName = buildFullName(firstName.trim(), lastName.trim(), etiqueta);
   let username = base;
   let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  const claveTemporal = generarClaveTemporal();
   for (let attempt = 0; attempt < 30; attempt += 1) {
     username = attempt === 0 ? base : `${base}${attempt + 1}`;
     if (isReservedUsername(username)) continue;
     const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
     try {
-      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, CHIEF_TEMP_PASSWORD);
+      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, claveTemporal);
       break;
     } catch (err) {
       if ((err as { code?: string })?.code === "auth/email-already-in-use") continue;
@@ -3736,7 +3747,7 @@ async function createComiteAccount(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+  return { credential, username, displayName, password: claveTemporal };
 }
 
 // Crea la cuenta de la DIRECTORA: ve TODO el hospital (todos los servicios y modulos,
@@ -3763,6 +3774,7 @@ async function createDirectorAccount(
   const displayName = buildFullName(firstName.trim(), lastName.trim(), directorLabel);
   let username = base;
   let credential: Awaited<ReturnType<typeof createUserWithEmailAndPassword>> | null = null;
+  const claveTemporal = generarClaveTemporal();
   for (let attempt = 0; attempt < 30; attempt += 1) {
     username = attempt === 0 ? base : `${base}${attempt + 1}`;
     if (isReservedUsername(username)) {
@@ -3770,7 +3782,7 @@ async function createDirectorAccount(
     }
     const loginEmail = `${username}@${SERVICE_LOGIN_DOMAIN}`;
     try {
-      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, CHIEF_TEMP_PASSWORD);
+      credential = await createUserWithEmailAndPassword(creationAuth, loginEmail, claveTemporal);
       break;
     } catch (err) {
       if ((err as { code?: string })?.code === "auth/email-already-in-use") {
@@ -3810,7 +3822,7 @@ async function createDirectorAccount(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-  return { credential, username, displayName, password: CHIEF_TEMP_PASSWORD };
+  return { credential, username, displayName, password: claveTemporal };
 }
 
 // Resuelve el correo de ACCESO desde lo que el usuario escribe (usuario o correo).
@@ -5789,6 +5801,39 @@ export default function Home() {
   const cerrandoPorInactividadRef = useRef(false);
   const salidaPorInactividadRef = useRef<(() => Promise<void>) | null>(null);
   const [avisoInactividad, setAvisoInactividad] = useState<number | null>(null);
+  // Claves temporales recién generadas: se muestran UNA vez al admin (no quedan
+  // guardadas en ningún lado). El aviso común se borra a los 4 s, por eso va aparte.
+  const [clavesEntregadas, setClavesEntregadas] = useState<{
+    titulo: string;
+    nota?: string;
+    filas: { usuario: string; nombre?: string; clave: string }[];
+  } | null>(null);
+  const [claveCopiada, setClaveCopiada] = useState("");
+  function mostrarClaves(
+    titulo: string,
+    filas: { usuario: string; nombre?: string; clave: string }[],
+    nota?: string,
+  ) {
+    setClaveCopiada("");
+    setClavesEntregadas({ titulo, filas, nota });
+  }
+  function copiarClave(texto: string, id: string) {
+    void navigator.clipboard?.writeText(texto).then(() => setClaveCopiada(id)).catch(() => {});
+  }
+  function descargarClaves() {
+    if (!clavesEntregadas) return;
+    const campo = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const csv = [
+      "Usuario,Nombre,Clave temporal",
+      ...clavesEntregadas.filas.map((f) => [f.usuario, f.nombre || "", f.clave].map(campo).join(",")),
+    ].join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `claves-temporales-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   // Las funciones del ultimo render (con los datos al dia).
   useEffect(() => {
@@ -10576,7 +10621,7 @@ export default function Home() {
     const secondarySession = createSecondaryAuth();
 
     try {
-      const { serviceUsername } = await createServiceUserAccount(secondarySession.auth, {
+      const { serviceUsername, password: claveTemporal } = await createServiceUserAccount(secondarySession.auth, {
         service,
         email: adminCreateForm.email,
         firstName: adminCreateForm.firstName,
@@ -10595,9 +10640,8 @@ export default function Home() {
         phone: "",
         serviceId: "",
       });
-      setMessage(
-        `Cuenta creada para ${service.name}. Inicia sesion con el usuario "${serviceUsername}" y la contrasena temporal "${DEFAULT_TEMP_PASSWORD}".`,
-      );
+      setMessage(`Cuenta creada para ${service.name}. Usuario "${serviceUsername}".`);
+      mostrarClaves("Cuenta creada", [{ usuario: serviceUsername, nombre: service.name, clave: claveTemporal }]);
     } catch (createError) {
       if (await handleFirestoreError(createError)) {
         return;
@@ -10796,7 +10840,7 @@ export default function Home() {
     }
   }
 
-  // Admin aprueba un registro: crea la cuenta del jefe (usuario por nombre, pass 123456).
+  // Admin aprueba un registro: crea la cuenta del jefe (usuario por nombre, clave temporal aleatoria).
   // Ultimo motivo por el que no salio un correo (para mostrarlo en el panel).
   const lastMailReasonRef = useRef("");
 
@@ -10959,8 +11003,16 @@ export default function Home() {
       void registrarBitacora("Acceso recuperado", `${req.fullName} (${data.username || ""})`);
       lastMailReasonRef.current = data.reason || "";
       setMessage(
-        `Acceso de ${req.fullName} restablecido. Usuario "${data.username}", contraseña temporal "${data.password}". ${mailSuffix(data.sent === true, req.email)}`,
+        `Acceso de ${req.fullName} restablecido. Usuario "${data.username}". ${mailSuffix(data.sent === true, req.email)}`,
       );
+      // Si el correo salió, la clave solo la ve la persona. Si no, el admin la entrega.
+      if (data.sent !== true && data.password) {
+        mostrarClaves(
+          "Acceso restablecido",
+          [{ usuario: data.username || "", nombre: req.fullName, clave: data.password }],
+          "El correo no se pudo enviar: entregue usted la clave temporal.",
+        );
+      }
     } catch (recoverError) {
       setError(getAuthErrorMessage(recoverError));
     } finally {
@@ -11011,7 +11063,7 @@ export default function Home() {
       }
       const secondaryDiv = createSecondaryAuth();
       try {
-        const { username, credential } = await createDivisionChiefAccount(secondaryDiv.auth, {
+        const { username, credential, password: claveTemporal } = await createDivisionChiefAccount(secondaryDiv.auth, {
           division: divKey,
           divisionLabel: DIVLBL[divKey],
           contactEmail: req.email,
@@ -11035,12 +11087,13 @@ export default function Home() {
           name: `${req.firstName} ${req.lastName}`.trim(),
           status: "approved",
           username,
-          password: CHIEF_TEMP_PASSWORD,
+          password: claveTemporal,
           roleLabel: DIVLBL[divKey],
         });
         setMessage(
-          `Cuenta de ${DIVLBL[divKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
+          `Cuenta de ${DIVLBL[divKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11063,7 +11116,7 @@ export default function Home() {
     if (req.requestType === "minsal") {
       const secondaryMin = createSecondaryAuth();
       try {
-        const { username, credential } = await createMinsalAccount(secondaryMin.auth, {
+        const { username, credential, password: claveTemporal } = await createMinsalAccount(secondaryMin.auth, {
           contactEmail: req.email,
           firstName: req.firstName,
           lastName: req.lastName,
@@ -11085,12 +11138,13 @@ export default function Home() {
           name: `${req.firstName} ${req.lastName}`.trim(),
           status: "approved",
           username,
-          password: CHIEF_TEMP_PASSWORD,
+          password: claveTemporal,
           roleLabel: "MINSAL",
         });
         setMessage(
-          `Cuenta MINSAL creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
+          `Cuenta MINSAL creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11114,7 +11168,7 @@ export default function Home() {
       const secondaryCec = createSecondaryAuth();
       try {
         const listas = (req.cecServicios ?? []).filter((id) => !!CEC_BY_SERVICE[id]);
-        const { username, credential } = await createComiteAccount(secondaryCec.auth, {
+        const { username, credential, password: claveTemporal } = await createComiteAccount(secondaryCec.auth, {
           contactEmail: req.email,
           firstName: req.firstName,
           lastName: req.lastName,
@@ -11138,7 +11192,7 @@ export default function Home() {
           name: `${req.firstName} ${req.lastName}`.trim(),
           status: "approved",
           username,
-          password: CHIEF_TEMP_PASSWORD,
+          password: claveTemporal,
           roleLabel: (req.serviceName ?? "").endsWith("— DIMES")
             ? "Comité de Expediente Clínico — DIMES"
             : "Comité de Expediente Clínico",
@@ -11147,8 +11201,9 @@ export default function Home() {
         setMessage(
           `Cuenta del Comité creada para ${req.firstName} ${req.lastName}${
             nombres ? ` (llena: ${nombres})` : " (solo lectura: sin lista asignada)"
-          }. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
+          }. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11173,7 +11228,7 @@ export default function Home() {
         req.requestType === "subdirector" ? "Subdirección Médica" : "Directora";
       const secondaryDir = createSecondaryAuth();
       try {
-        const { username, credential } = await createDirectorAccount(secondaryDir.auth, {
+        const { username, credential, password: claveTemporal } = await createDirectorAccount(secondaryDir.auth, {
           contactEmail: req.email,
           firstName: req.firstName,
           lastName: req.lastName,
@@ -11196,12 +11251,13 @@ export default function Home() {
           name: `${req.firstName} ${req.lastName}`.trim(),
           status: "approved",
           username,
-          password: CHIEF_TEMP_PASSWORD,
+          password: claveTemporal,
           roleLabel: cargoLabel,
         });
         setMessage(
-          `Cuenta de ${cargoLabel} creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
+          `Cuenta de ${cargoLabel} creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11230,7 +11286,7 @@ export default function Home() {
       }
       const secondaryDe = createSecondaryAuth();
       try {
-        const { username, credential } = await createDepartmentChiefAccount(secondaryDe.auth, {
+        const { username, credential, password: claveTemporal } = await createDepartmentChiefAccount(secondaryDe.auth, {
           department: depKey,
           departmentLabel: departmentEditorLabel(depKey),
           contactEmail: req.email,
@@ -11255,12 +11311,13 @@ export default function Home() {
           name: `${req.firstName} ${req.lastName}`.trim(),
           status: "approved",
           username,
-          password: CHIEF_TEMP_PASSWORD,
+          password: claveTemporal,
           roleLabel: departmentEditorLabel(depKey),
         });
         setMessage(
-          `Cuenta de Asistencia UCI/UCIN creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
+          `Cuenta de Asistencia UCI/UCIN creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11289,7 +11346,7 @@ export default function Home() {
       }
       const secondaryDep = createSecondaryAuth();
       try {
-        const { username, credential } = await createDepartmentChiefAccount(secondaryDep.auth, {
+        const { username, credential, password: claveTemporal } = await createDepartmentChiefAccount(secondaryDep.auth, {
           department: depKey,
           departmentLabel: DEPARTMENT_LABELS[depKey],
           contactEmail: req.email,
@@ -11313,12 +11370,13 @@ export default function Home() {
           name: `${req.firstName} ${req.lastName}`.trim(),
           status: "approved",
           username,
-          password: CHIEF_TEMP_PASSWORD,
+          password: claveTemporal,
           roleLabel: DEPARTMENT_LABELS[depKey],
         });
         setMessage(
-          `Cuenta de ${DEPARTMENT_LABELS[depKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
+          `Cuenta de ${DEPARTMENT_LABELS[depKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11359,7 +11417,7 @@ export default function Home() {
     }
     const secondary = createSecondaryAuth();
     try {
-      const { username, credential } = await createChiefUserAccount(secondary.auth, {
+      const { username, credential, password: claveTemporal } = await createChiefUserAccount(secondary.auth, {
         service,
         contactEmail: req.email,
         firstName: req.firstName,
@@ -11384,12 +11442,13 @@ export default function Home() {
         name: `${req.firstName} ${req.lastName}`.trim(),
         status: "approved",
         username,
-        password: CHIEF_TEMP_PASSWORD,
+        password: claveTemporal,
         roleLabel: service.name,
       });
       setMessage(
-        `Cuenta creada para ${req.firstName} ${req.lastName}. Usuario "${username}", contraseña "${CHIEF_TEMP_PASSWORD}". ${mailSuffix(mailed, req.email)}`,
+        `Cuenta creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
       );
+      mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
     } catch (approveError) {
       setError(getAuthErrorMessage(approveError));
     } finally {
@@ -13495,9 +13554,9 @@ export default function Home() {
     setIsChangingPassword(true);
 
     try {
-      if (newPassword === DEFAULT_TEMP_PASSWORD) {
-        setForcedPwdError("La nueva contraseña no puede ser la temporal 123456.");
-        setError("La nueva contraseña no puede ser la temporal 123456.");
+      if (newPassword === CLAVE_TEMPORAL_ANTIGUA || newPassword === password) {
+        setForcedPwdError("La nueva contraseña debe ser distinta de la temporal.");
+        setError("La nueva contraseña debe ser distinta de la temporal.");
         return;
       }
       const eraObligatorio = serviceProfile.mustChangePassword;
@@ -14129,7 +14188,7 @@ export default function Home() {
     setMessage("");
 
     try {
-      // Reset por SERVIDOR (Admin SDK): pone la clave del usuario en 123456 y
+      // Reset por SERVIDOR (Admin SDK): pone una clave temporal aleatoria y
       // marca mustChangePassword. La SDK de cliente no puede cambiar la clave de
       // OTRO usuario, por eso va contra /api/admin/reset-password.
       const idToken = await auth.currentUser?.getIdToken();
@@ -14153,9 +14212,12 @@ export default function Home() {
         "Clave reseteada",
         managedUser.name || managedUser.username || uid,
       );
-      setMessage(
-        `Clave de ${managedUser.name || managedUser.username || "usuario"} reseteada a ${data.password || "123456"}. La cambiará al iniciar sesión.`,
-      );
+      setMessage(`Clave de ${managedUser.name || managedUser.username || "usuario"} reseteada.`);
+      if (data.password) {
+        mostrarClaves("Clave reseteada", [
+          { usuario: managedUser.username || "", nombre: managedUser.name || "", clave: data.password },
+        ]);
+      }
     } catch (resetError) {
       setError(getAuthErrorMessage(resetError));
     } finally {
@@ -14201,7 +14263,7 @@ export default function Home() {
     }
   }
 
-  // Reset masivo: TODAS las cuentas de servicio ya creadas -> 123456 (para entregar).
+  // Reset masivo: TODAS las cuentas de servicio ya creadas -> una clave aleatoria para cada una.
   async function handleResetAllServices() {
     if (!isAdmin) return;
     setError("");
@@ -14218,14 +14280,24 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken, scope: "all-services" }),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string; count?: number; total?: number; password?: string };
+      const data = (await res.json()) as {
+        ok?: boolean; error?: string; count?: number; total?: number;
+        cuentas?: { usuario: string; nombre?: string; clave: string }[];
+      };
       if (!res.ok || !data.ok) {
         setError(data.error || "No se pudo hacer el reset masivo.");
         return;
       }
       const users = await fetchManagedUsers();
       applyAdminUsers(users);
-      setMessage(`Se resetearon ${data.count ?? 0} de ${data.total ?? 0} cuentas de servicio a ${data.password || "123456"}.`);
+      setMessage(`Se resetearon ${data.count ?? 0} de ${data.total ?? 0} cuentas de servicio.`);
+      if (data.cuentas?.length) {
+        mostrarClaves(
+          `Claves reseteadas (${data.cuentas.length} cuentas)`,
+          data.cuentas,
+          "Cada cuenta tiene una clave distinta. Descargue la lista antes de cerrar: no se vuelve a mostrar.",
+        );
+      }
     } catch (bulkError) {
       setError(getAuthErrorMessage(bulkError));
     } finally {
@@ -21197,6 +21269,66 @@ export default function Home() {
             </div>
           ) : null}
 
+          {/* Claves temporales recién generadas (se muestran una sola vez). */}
+          {clavesEntregadas ? (
+            <div className="fixed inset-0 z-[290] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="claves-entregadas-titulo">
+              <div className={`modal-pop-in flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border p-6 shadow-2xl ${
+                isLightPanelTheme ? "border-slate-200 bg-white text-slate-800" : "border-amber-400/30 bg-[#0b1628] text-slate-100"
+              }`}>
+                <p id="claves-entregadas-titulo" className="text-lg font-semibold">{clavesEntregadas.titulo}</p>
+                <p className={`mt-1.5 text-sm ${isLightPanelTheme ? "text-slate-600" : "text-slate-300"}`}>
+                  Entregue la clave temporal a la persona. Al entrar, PULSO le pedirá cambiarla.
+                  Esta ventana es la única vez que se muestra.
+                </p>
+                {clavesEntregadas.nota ? (
+                  <p className={`mt-2 text-sm ${isLightPanelTheme ? "text-amber-700" : "text-amber-300"}`}>{clavesEntregadas.nota}</p>
+                ) : null}
+                <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                  {clavesEntregadas.filas.map((f, i) => (
+                    <div key={`${f.usuario}-${i}`} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
+                      isLightPanelTheme ? "border-slate-200 bg-slate-50" : "border-white/10 bg-white/[0.04]"
+                    }`}>
+                      <div className="min-w-0 flex-1">
+                        {f.nombre ? <p className={`truncate text-xs ${isLightPanelTheme ? "text-slate-500" : "text-slate-400"}`}>{f.nombre}</p> : null}
+                        <p className="text-sm">Usuario: <strong className="font-mono">{f.usuario}</strong></p>
+                        <p className="text-sm">Clave: <strong className="select-all font-mono text-base tracking-wide">{f.clave}</strong></p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copiarClave(`Usuario: ${f.usuario}\nClave temporal: ${f.clave}`, `${i}`)}
+                        className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+                          isLightPanelTheme ? "border-slate-300 hover:bg-slate-100" : "border-white/15 hover:bg-white/10"
+                        }`}
+                      >
+                        {claveCopiada === `${i}` ? "Copiado" : "Copiar"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-5 flex flex-wrap justify-end gap-2">
+                  {clavesEntregadas.filas.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={descargarClaves}
+                      className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                        isLightPanelTheme ? "border-slate-300 hover:bg-slate-100" : "border-white/15 hover:bg-white/10"
+                      }`}
+                    >
+                      Descargar lista (Excel/CSV)
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setClavesEntregadas(null)}
+                    className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                  >
+                    Ya la entregué, cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {/* Aviso de cierre por inactividad (2 min antes). */}
           {avisoInactividad !== null && user ? (
             <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" role="alertdialog" aria-modal="true" aria-labelledby="aviso-inactividad-titulo">
@@ -25017,7 +25149,7 @@ export default function Home() {
                       </p>
                       <h3 className="mt-1 text-xl font-bold text-white">Nuevos jefes de servicio</h3>
                       <p className="mt-1 text-xs text-slate-400">
-                        Aprobá para crear la cuenta (usuario por nombre, contraseña {CHIEF_TEMP_PASSWORD}).
+                        Aprobá para crear la cuenta (usuario por nombre y clave temporal aleatoria).
                       </p>
                     </div>
                     <button
@@ -25364,7 +25496,7 @@ export default function Home() {
                     </h3>
                     <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
                       Ingresó con una contraseña temporal. Para continuar en PULSO debe cambiarla por una
-                      que solo usted conozca (mínimo 6 caracteres, distinta de 123456).
+                      que solo usted conozca (mínimo 6 caracteres, distinta de la temporal).
                     </p>
                   </div>
                   <label className="block">
@@ -25645,7 +25777,7 @@ export default function Home() {
                   </p>
                   <span className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-slate-400">
                     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-amber-300/80"><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /></svg>
-                    Clave temporal inicial: <span className="font-semibold text-slate-200">{DEFAULT_TEMP_PASSWORD}</span>
+                    Clave temporal: <span className="font-semibold text-slate-200">aleatoria, se muestra al crear o resetear</span>
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -25673,7 +25805,7 @@ export default function Home() {
                       type="button"
                       onClick={() => void handleResetAllServices()}
                       disabled={adminBusyUserId === "__all__"}
-                      title="Resetear la clave de TODOS los servicios a la temporal (123456)"
+                      title="Resetear la clave de TODOS los servicios (una clave temporal aleatoria para cada uno)"
                       className="inline-flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
@@ -25828,7 +25960,7 @@ export default function Home() {
                       Usuario asignado: <strong>{selectedAdminCreateService ? getServiceUsername(selectedAdminCreateService.id) : "Selecciona un servicio"}</strong>
                     </p>
                     <p className="mt-1">
-                      Contrasena temporal: <strong>{DEFAULT_TEMP_PASSWORD}</strong>
+                      Contraseña temporal: <strong>se genera al crear la cuenta (12 caracteres)</strong>
                     </p>
                   </div>
 
@@ -31085,7 +31217,7 @@ export default function Home() {
                     <p className="font-semibold">Solicitud enviada.</p>
                     <p className="mt-1 text-emerald-200/90">
                       Un administrador restablecerá su acceso en horario hábil. Después podrá ingresar
-                      con su usuario y la contraseña temporal <strong>123456</strong>; al entrar, PULSO le
+                      con su usuario y la contraseña temporal que le llegará por correo; al entrar, PULSO le
                       pedirá cambiarla por una personal. Si no puede ingresar, contacte al administrador.
                     </p>
                   </div>

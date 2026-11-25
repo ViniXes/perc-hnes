@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 import { gestionaUsuarios, permiteReset } from "@/lib/permisos-cuentas";
+import { generarClaveTemporal } from "@/lib/clave-temporal";
 import { APP_URL, enviarCorreo, envolverHtml, esCorreo, escaparHtml } from "@/lib/correo";
 
 export const runtime = "nodejs";
@@ -12,7 +13,7 @@ export const runtime = "nodejs";
 // accessRecoveryRequests. Un administrador, desde el menu Solicitudes, elige la
 // cuenta que corresponde y llama a esta ruta, que:
 //   1) verifica que quien llama sea administrador,
-//   2) pone la CLAVE TEMPORAL 123456 en esa cuenta (Admin SDK) y marca
+//   2) pone una CLAVE TEMPORAL aleatoria en esa cuenta (Admin SDK) y marca
 //      mustChangePassword para que la cambie al entrar,
 //   3) envia por correo el USUARIO y la clave temporal al correo de la solicitud,
 //   4) marca la solicitud como resuelta.
@@ -26,9 +27,8 @@ type Body = {
   targetUid?: string;
 };
 
-// Clave temporal fija (politica del hospital, igual que el reset de Usuarios).
-// La persona la cambia obligatoriamente al entrar (mustChangePassword).
-const CLAVE_TEMPORAL = "123456";
+// La clave temporal es aleatoria y distinta en cada recuperacion
+// (generarClaveTemporal). La persona la cambia al entrar (mustChangePassword).
 
 function correoRecuperacion(nombre: string, usuario: string, clave: string) {
   const asunto = "PULSO · Recuperación de acceso";
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
   if (!permiteReset(caller, destino.data(), correoAcceso)) {
     return NextResponse.json({ ok: false, error: "Esta cuenta no admite un reinicio ordinario." }, { status: 403 });
   }
-  const clave = CLAVE_TEMPORAL;
+  const clave = generarClaveTemporal();
   try {
     await adminDb
       .collection("serviceUsers")
