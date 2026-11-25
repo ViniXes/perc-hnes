@@ -56,6 +56,11 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-25 — Claude (la clave temporal también va por correo con Brevo)
+- Cambio: el reseteo individual, el reseteo masivo y la creación de la cuenta de un servicio ahora envían la clave temporal por correo (Brevo, remitente MAIL_FROM) al correo de contacto del perfil (`contactEmail` o `email`). La ventana «Claves temporales» queda solo de respaldo y dice a quién se envió, o que hay que entregarla a mano si no hay correo o falló.
+- Archivos: `src/lib/correo-clave.ts` (nuevo: correo «Su contraseña fue restablecida»), `src/app/api/admin/reset-password/route.ts` (envía y devuelve `sent/to/reason`; masivo devuelve `enviados` y por cuenta `enviado/correo/motivo`; `maxDuration = 300`), `src/app/page.tsx` (handleAdminSendReset, handleResetAllServices, handleAdminCreateUser usa `notifySignupDecision`).
+- Notas: Brevo Free permite 300 correos al día; un reseteo masivo de todos los servicios consume uno por cuenta.
+
 ### 2026-11-25 — Claude (clave temporal aleatoria, ya no 123456)
 - Cambio: a pedido del usuario, la clave temporal ya no es fija. Cada cuenta nueva (servicio, jefes, división, departamento, MINSAL, comité, dirección), cada reseteo (individual y masivo) y cada recuperación de acceso recibe una clave **aleatoria y distinta de 12 caracteres** (mayúsculas, minúsculas y números, sin 0/O/o ni 1/l/I), generada con `crypto.getRandomValues`. Se sigue obligando a cambiarla al entrar (`mustChangePassword`).
 - La clave no se guarda en Firestore ni se escribe en logs: el servidor la devuelve solo al admin que hizo la acción, que la ve en una ventana nueva «Claves temporales» (Copiar; en el reseteo masivo, «Descargar lista» en CSV). En recuperación de acceso, si el correo salió por Brevo, el admin no la ve; si no salió, aparece la ventana para entregarla a mano. Las aprobaciones de registro la envían por correo y además la muestran.

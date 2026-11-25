@@ -10621,6 +10621,8 @@ export default function Home() {
     const secondarySession = createSecondaryAuth();
 
     try {
+      const correoContacto = adminCreateForm.email.trim();
+      const nombreContacto = `${adminCreateForm.firstName} ${adminCreateForm.lastName}`.trim();
       const { serviceUsername, password: claveTemporal } = await createServiceUserAccount(secondarySession.auth, {
         service,
         email: adminCreateForm.email,
@@ -10640,8 +10642,20 @@ export default function Home() {
         phone: "",
         serviceId: "",
       });
-      setMessage(`Cuenta creada para ${service.name}. Usuario "${serviceUsername}".`);
-      mostrarClaves("Cuenta creada", [{ usuario: serviceUsername, nombre: service.name, clave: claveTemporal }]);
+      const mailed = await notifySignupDecision({
+        to: correoContacto,
+        name: nombreContacto || service.name,
+        status: "approved",
+        username: serviceUsername,
+        password: claveTemporal,
+        roleLabel: service.name,
+      });
+      setMessage(`Cuenta creada para ${service.name}. Usuario "${serviceUsername}". ${mailSuffix(mailed, correoContacto)}`);
+      mostrarClaves(
+        "Cuenta creada",
+        [{ usuario: serviceUsername, nombre: service.name, clave: claveTemporal }],
+        mailed ? `Se envió por correo a ${correoContacto}. La ve aquí solo como respaldo.` : "No se pudo enviar por correo: entréguela usted.",
+      );
     } catch (createError) {
       if (await handleFirestoreError(createError)) {
         return;
@@ -11093,7 +11107,7 @@ export default function Home() {
         setMessage(
           `Cuenta de ${DIVLBL[divKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
-        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `Se envió por correo a ${req.email}. La ve aquí solo como respaldo.` : "No se pudo enviar por correo: entréguela usted.");
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11144,7 +11158,7 @@ export default function Home() {
         setMessage(
           `Cuenta MINSAL creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
-        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `Se envió por correo a ${req.email}. La ve aquí solo como respaldo.` : "No se pudo enviar por correo: entréguela usted.");
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11203,7 +11217,7 @@ export default function Home() {
             nombres ? ` (llena: ${nombres})` : " (solo lectura: sin lista asignada)"
           }. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
-        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `Se envió por correo a ${req.email}. La ve aquí solo como respaldo.` : "No se pudo enviar por correo: entréguela usted.");
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11257,7 +11271,7 @@ export default function Home() {
         setMessage(
           `Cuenta de ${cargoLabel} creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
-        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `Se envió por correo a ${req.email}. La ve aquí solo como respaldo.` : "No se pudo enviar por correo: entréguela usted.");
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11317,7 +11331,7 @@ export default function Home() {
         setMessage(
           `Cuenta de Asistencia UCI/UCIN creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
-        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `Se envió por correo a ${req.email}. La ve aquí solo como respaldo.` : "No se pudo enviar por correo: entréguela usted.");
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11376,7 +11390,7 @@ export default function Home() {
         setMessage(
           `Cuenta de ${DEPARTMENT_LABELS[depKey]} creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
         );
-        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
+        mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `Se envió por correo a ${req.email}. La ve aquí solo como respaldo.` : "No se pudo enviar por correo: entréguela usted.");
       } catch (approveError) {
         setError(getAuthErrorMessage(approveError));
       } finally {
@@ -11448,7 +11462,7 @@ export default function Home() {
       setMessage(
         `Cuenta creada para ${req.firstName} ${req.lastName}. Usuario "${username}". ${mailSuffix(mailed, req.email)}`,
       );
-      mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `También se envió por correo a ${req.email}.` : undefined);
+      mostrarClaves("Cuenta creada", [{ usuario: username, nombre: `${req.firstName} ${req.lastName}`.trim(), clave: claveTemporal }], mailed ? `Se envió por correo a ${req.email}. La ve aquí solo como respaldo.` : "No se pudo enviar por correo: entréguela usted.");
     } catch (approveError) {
       setError(getAuthErrorMessage(approveError));
     } finally {
@@ -14201,7 +14215,9 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken, targetUid: uid }),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string; password?: string };
+      const data = (await res.json()) as {
+        ok?: boolean; error?: string; password?: string; sent?: boolean; to?: string; reason?: string;
+      };
       if (!res.ok || !data.ok) {
         setError(data.error || "No se pudo resetear la clave.");
         return;
@@ -14214,9 +14230,13 @@ export default function Home() {
       );
       setMessage(`Clave de ${managedUser.name || managedUser.username || "usuario"} reseteada.`);
       if (data.password) {
-        mostrarClaves("Clave reseteada", [
-          { usuario: managedUser.username || "", nombre: managedUser.name || "", clave: data.password },
-        ]);
+        mostrarClaves(
+          "Clave reseteada",
+          [{ usuario: managedUser.username || "", nombre: managedUser.name || "", clave: data.password }],
+          data.sent
+            ? `Se envió por correo a ${data.to}. La ve aquí solo como respaldo.`
+            : `No se pudo enviar por correo (${data.reason || "error desconocido"}): entréguela usted.`,
+        );
       }
     } catch (resetError) {
       setError(getAuthErrorMessage(resetError));
@@ -14282,7 +14302,8 @@ export default function Home() {
       });
       const data = (await res.json()) as {
         ok?: boolean; error?: string; count?: number; total?: number;
-        cuentas?: { usuario: string; nombre?: string; clave: string }[];
+        enviados?: number;
+        cuentas?: { usuario: string; nombre?: string; clave: string; enviado?: boolean; correo?: string }[];
       };
       if (!res.ok || !data.ok) {
         setError(data.error || "No se pudo hacer el reset masivo.");
@@ -14294,8 +14315,12 @@ export default function Home() {
       if (data.cuentas?.length) {
         mostrarClaves(
           `Claves reseteadas (${data.cuentas.length} cuentas)`,
-          data.cuentas,
-          "Cada cuenta tiene una clave distinta. Descargue la lista antes de cerrar: no se vuelve a mostrar.",
+          data.cuentas.map((c) => ({
+            usuario: c.usuario,
+            nombre: `${c.nombre || ""}${c.enviado ? ` · enviada a ${c.correo}` : " · SIN correo: entregar a mano"}`,
+            clave: c.clave,
+          })),
+          `Cada cuenta tiene una clave distinta. Se enviaron por correo ${data.enviados ?? 0} de ${data.cuentas.length}. Descargue la lista como respaldo antes de cerrar: no se vuelve a mostrar.`,
         );
       }
     } catch (bulkError) {
