@@ -5127,16 +5127,19 @@ export default function Home() {
   // si un admin le otorga el acceso. Las reglas de Firestore piden lo mismo.
   // El acceso otorgado vale para cualquier cuenta (p. ej. un servicio que ademas
   // apoya a Consulta Externa): solo un admin lo da.
-  const esJefaturaCE =
-    !ghostUid &&
-    ((serviceProfile?.division === "consulta-externa" &&
+  // esJefaturaCEPerfil: el perfil tiene los memos de C.E. (tambien en modo
+  // verificacion, para que el admin VEA el menu, en solo lectura). esJefaturaCE:
+  // ademas puede firmar y enviar (nunca en modo verificacion).
+  const esJefaturaCEPerfil =
+    (serviceProfile?.division === "consulta-externa" &&
       (serviceProfile?.serviceName === JEFATURA_CE_NOMBRE ||
         serviceProfile?.serviceName === ASISTENTE_CE_NOMBRE)) ||
-      hasGrant(GRANT_MEMOS_CE));
+    hasGrant(GRANT_MEMOS_CE);
+  const esJefaturaCE = !ghostUid && esJefaturaCEPerfil;
   // Bandeja de memos de esta cuenta: ESDOMED (sus admins) o Consulta Externa.
   // La Dra. Katherinne Gil (SIS) solo recibe: su cuenta lleva el acceso "panel-memos-sis".
-  const bandejaMemos: "esdomed" | "consulta-externa" | "sis" | null = esJefaturaCE
-    ? "consulta-externa"
+  const bandejaMemos: "esdomed" | "consulta-externa" | "sis" | null = esJefaturaCEPerfil
+    ? "consulta-externa" // en modo verificacion, solo lectura
     : esAdminEsdomed && !ghostUid
       ? "esdomed"
       : hasGrant(GRANT_MEMOS_SIS)
@@ -20038,7 +20041,7 @@ export default function Home() {
         : []),
       // MEMORANDUMS de la Jefatura de Consulta Externa: sus memos (firmados y
       // sellados) y la bandeja de lo que se intercambia con ESDOMED.
-      ...(esJefaturaCE && !isAdmin
+      ...(esJefaturaCEPerfil && !isAdmin
         ? [
             {
               id: "panel-memos",
@@ -25461,7 +25464,7 @@ export default function Home() {
                 ) : null,
               )
             : null}
-          {(esJefaturaCE || isAdmin) &&
+          {(esJefaturaCEPerfil || isAdmin) &&
           (activeSidebarSection === "panel-memos-consulta-externa" || mobileView === "panel-memos-consulta-externa") ? (
             <div data-view="panel-memos-consulta-externa">
               <MemosEsdomed

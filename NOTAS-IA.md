@@ -56,6 +56,9 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (memos de C.E. visibles en modo verificación)
+- page.tsx: `esJefaturaCEPerfil` (sin ghostUid) decide el menú Memorándums y la bandeja; `esJefaturaCE` (= perfil y no ghost) sigue decidiendo firmar/enviar. En modo verificación el admin ve el menú de la cuenta (p. ej. Dr. Cartagena) y la bandeja en solo lectura.
+
 ### 2026-11-26 — Claude (eliminar memos desde la bandeja)
 - Botón «Eliminar» en la Bandeja de memos (solo admins de ESDOMED, no en modo verificación): borra todas las copias del memo en memosInternos (mismo codigo y mismo remitente) y el memo guardado del área que lo envió. Reglas: memosInternos `allow delete: if adminEsdomed();` (antes false). El usuario debe publicarlas. Emulador 63/63.
 
