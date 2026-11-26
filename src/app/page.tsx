@@ -25453,6 +25453,7 @@ export default function Home() {
                       nombreUsuario={serviceProfile?.name || ""}
                       uid={user?.uid || ""}
                       puedeEnviar={area === "esdomed" && bandejaMemos === "esdomed"}
+                      esAdmin={isAdmin && !ghostUid}
                     />
                   </div>
                 ) : null,
@@ -25470,6 +25471,7 @@ export default function Home() {
                 uid={user?.uid || ""}
                 puedeEnviar={esJefaturaCE}
                 puedeSellar={esJefaturaCE || esAdminEsdomed}
+                esAdmin={isAdmin && !ghostUid}
               />
             </div>
           ) : null}

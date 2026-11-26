@@ -37,6 +37,14 @@ import { BTN_GUARDAR } from "@/components/ui-basicos";
 import { AjusteSello } from "@/components/ajuste-sello";
 import { VistaSello } from "@/components/vista-sello";
 import { useConfirmar } from "@/components/dialogo-confirmar";
+import { PersonaAutocompletar } from "@/components/persona-autocompletar";
+import {
+  leerDirectorio,
+  personasDeMemos,
+  personasFijas,
+  publicarDirectorio,
+  unirPersonas,
+} from "@/lib/directorio-memos";
 import { borrarBorrador, guardarBorrador, leerBorrador } from "@/lib/borradores";
 import {
   DESTINO_MEMO,
@@ -70,6 +78,8 @@ type Props = {
   puedeEnviar?: boolean;
   /** Puede cargar y usar la firma y sello del área (por defecto, quien envía). */
   puedeSellar?: boolean;
+  /** Administrador: arma y publica el directorio de nombres para las sugerencias. */
+  esAdmin?: boolean;
 };
 
 function hoyIso(): string {
@@ -97,6 +107,7 @@ export function MemosEsdomed({
   uid = "",
   puedeEnviar = false,
   puedeSellar,
+  esAdmin = false,
 }: Props) {
   const config = MEMO_AREAS[area];
   const coleccion = config.coleccion;
@@ -122,6 +133,8 @@ export function MemosEsdomed({
   const [selloCargado, setSelloCargado] = useState(false);
   const selloInputRef = useRef<HTMLInputElement | null>(null);
   const [vistaUrl, setVistaUrl] = useState<string | null>(null);
+  // Nombres y cargos que se sugieren al escribir en el encabezado.
+  const [directorio, setDirectorio] = useState<MemoPersona[]>([]);
   // Vista previa donde se coloca el sello con el mouse sobre el memo completo.
   const [colocando, setColocando] = useState(false);
   const cuerpoRef = useRef<HTMLTextAreaElement | null>(null);
@@ -309,6 +322,32 @@ export function MemosEsdomed({
 
   const editarBloque = (b: number, cambios: Partial<MemoBloque>) =>
     editarBloques((lista) => lista.map((x, j) => (j === b ? { ...x, ...cambios } : x)));
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const lista = esAdmin
+        ? ((await publicarDirectorio(db, [MEMO_AREAS.esdomed.coleccion, MEMO_AREAS["consulta-externa"].coleccion])) ??
+          (await leerDirectorio(db)))
+        : await leerDirectorio(db);
+      if (vivo) setDirectorio(lista);
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [esAdmin]);
+  const sugerencias = useMemo(
+    // Primero los remitentes y destinatarios de esta área (con el cargo que usa
+    // esta área, p. ej. "Jefe de ESDOMED" en los memos de C.E.).
+    () =>
+      unirPersonas(
+        [config.de, ...(config.para ? [config.para] : [])],
+        personasDeMemos(memos),
+        personasFijas(),
+        directorio,
+      ),
+    [config, memos, directorio],
+  );
 
   const editarPersona = (b: number, i: number, cambios: Partial<MemoPersona>) =>
     editarBloques((lista) =>
@@ -592,11 +631,14 @@ export function MemosEsdomed({
       <div className="mt-2 space-y-2">
         {bloque.personas.map((p, i) => (
           <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
-            <input
+            <PersonaAutocompletar
               className={input}
-              value={p.nombre}
-              placeholder="Nombre (p. ej. Dra. …)"
-              onChange={(e) => editarPersona(b, i, { nombre: e.target.value })}
+              valor={p.nombre}
+              lista={sugerencias}
+              isLight={isLight}
+              placeholder="Nombre (escriba y elija de la lista)"
+              onNombre={(nombre) => editarPersona(b, i, { nombre })}
+              onElegir={(elegida) => editarPersona(b, i, { nombre: elegida.nombre, cargo: elegida.cargo })}
             />
             <input
               className={input}

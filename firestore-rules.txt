@@ -81,6 +81,9 @@ rules_version = '2';
 //     recibe copia (para 'sis') de los memos que la nombran.
 //     Cada destinatario confirma "Recibido" una vez; queda la fecha y hora del
 //     servidor (recibidoAt) y quien envio la ve.
+// 19) DIRECTORIO DE MEMOS (memoDirectorio): lista de nombres y cargos para
+//     sugerir en PARA/DE/CC de los memos. La leen los administradores y la
+//     Jefatura de Consulta Externa; la escribe solo un administrador.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -417,6 +420,13 @@ service cloud.firestore {
     match /memoSellos/{area} {
       allow read, write: if (area == 'esdomed' && adminEsdomed())
         || (area == 'consulta-externa' && (esJefaturaCE() || adminEsdomed()));
+    }
+    // Directorio para sugerir nombres en los memos (memoDirectorio/personas):
+    // SOLO nombre y cargo. Lo publica un administrador desde Memorandums y lo
+    // leen quienes redactan memos (administradores y Jefatura de C.E.).
+    match /memoDirectorio/{id} {
+      allow read: if adminPoa() || esJefaturaCE();
+      allow write: if adminPoa();
     }
     // Memos enviados entre ESDOMED y Consulta Externa. Cada lado ve lo que envio y
     // lo que recibio; quien recibe solo puede marcarlo leido. Nadie los borra.
