@@ -35,6 +35,7 @@ import {
 } from "@/lib/memo-esdomed";
 import { BTN_GUARDAR } from "@/components/ui-basicos";
 import { AjusteSello } from "@/components/ajuste-sello";
+import { VistaSello } from "@/components/vista-sello";
 import { borrarBorrador, guardarBorrador, leerBorrador } from "@/lib/borradores";
 import {
   DESTINO_MEMO,
@@ -66,6 +67,8 @@ type Props = {
   uid?: string;
   /** Puede enviar memos de esta área por PULSO y cargar su firma y sello. */
   puedeEnviar?: boolean;
+  /** Puede cargar y usar la firma y sello del área (por defecto, quien envía). */
+  puedeSellar?: boolean;
 };
 
 function hoyIso(): string {
@@ -85,11 +88,19 @@ function fechaDe(valor: unknown): string {
   return "";
 }
 
-export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid = "", puedeEnviar = false }: Props) {
+export function MemosEsdomed({
+  area,
+  isLight,
+  usuario,
+  nombreUsuario = "",
+  uid = "",
+  puedeEnviar = false,
+  puedeSellar,
+}: Props) {
   const config = MEMO_AREAS[area];
   const coleccion = config.coleccion;
   const destino = (puedeEnviar ? DESTINO_MEMO[area] : undefined) as BandejaId | undefined;
-  const usaSello = !!config.conSello && puedeEnviar;
+  const usaSello = !!config.conSello && (puedeSellar ?? puedeEnviar);
   // A quién se envía: la otra área (marcada de entrada) y, si el memo la nombra,
   // la Dra. Katherinne Gil (SIS).
   const [enviarOtraArea, setEnviarOtraArea] = useState(true);
@@ -110,6 +121,8 @@ export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid =
   const [selloCargado, setSelloCargado] = useState(false);
   const selloInputRef = useRef<HTMLInputElement | null>(null);
   const [vistaUrl, setVistaUrl] = useState<string | null>(null);
+  // Vista previa donde se coloca el sello con el mouse sobre el memo completo.
+  const [colocando, setColocando] = useState(false);
   const cuerpoRef = useRef<HTMLTextAreaElement | null>(null);
 
   const cargar = useCallback(async () => {
@@ -385,7 +398,10 @@ export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid =
     try {
       if (tipo === "pdf") await downloadMemoPdf(memo, selloDe(memo));
       else if (tipo === "word") await downloadMemoDocx(memo, selloDe(memo));
-      else {
+      else if (selloDe(memo)) {
+        // Con firma y sello: la vista previa deja moverlo y girarlo encima del memo.
+        setColocando(true);
+      } else {
         const blob = await buildMemoPdfConMembrete(memo, selloDe(memo));
         setVistaUrl(URL.createObjectURL(blob));
       }
@@ -921,6 +937,7 @@ export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid =
                 despedida={memo.despedida}
                 firmante={memo.firma ? memoFirmante(memo) : null}
                 isLight={isLight}
+                onColocar={() => setColocando(true)}
               />
             ) : null}
 
@@ -953,6 +970,20 @@ export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid =
           </div>
         )}
       </div>
+
+      {colocando && memo && sello ? (
+        <VistaSello
+          memo={memo}
+          sello={sello}
+          isLight={isLight}
+          onCerrar={() => setColocando(false)}
+          onListo={(a) => {
+            editar({ selloAjuste: a });
+            setColocando(false);
+            setAviso("Posición del sello lista. Guarde el memo para que quede así.");
+          }}
+        />
+      ) : null}
 
       {vistaUrl ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-3" onClick={() => setVistaUrl(null)}>

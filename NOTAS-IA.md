@@ -56,6 +56,11 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (sello en la vista previa y sello de C.E. para ESDOMED)
+- Cambio: «Vista previa» abre el memo completo (hojas renderizadas con pdfjs-dist) y la firma y sello se arrastra/gira/redimensiona encima, en cualquier hoja (p. ej. a la par del nombre en DE:). Modo libre en `selloAjuste` (`pagina>=1`, `x/y` = centro en mm); `pagina 0` = lugar de siempre. PDF dibuja el sello al final en su hoja; Word lo ancla a la página. Además, los admins de ESDOMED pueden cargar/usar la firma y sello de Consulta Externa (enviar como C.E. sigue siendo solo de la jefatura).
+- Archivos: `src/components/vista-sello.tsx` (nuevo), `src/lib/memo-esdomed.ts`, `src/components/memos-esdomed.tsx`, `src/components/ajuste-sello.tsx`, `src/app/page.tsx`, `firestore.rules` (memoSellos), `public/pdfjs/pdf.worker.min.mjs`.
+- Notas: el usuario debe publicar el bloque memoSellos de las reglas.
+
 ### 2026-11-26 — Claude (acuse de recibido de memos)
 - Cambio: en la Bandeja de memos, quien recibe (ESDOMED, Consulta Externa o la Dra. Gil) abre el memo y toca «Confirmar recibido»; queda `recibido`, `recibidoAt` (hora del servidor), `recibidoPor/recibidoPorNombre`. Quien envió lo ve en Enviados («✓ Recibido 26/11/2026, 3:05 p. m.», hora de El Salvador) y le sale un aviso. Reglas: solo el destinatario, una vez, con `recibidoAt == request.time`.
 - Archivos: `src/components/bandeja-memos.tsx`, `src/lib/memos-internos.ts`, `src/app/page.tsx` (escucha de acuses), `firestore.rules`.

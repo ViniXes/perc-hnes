@@ -410,10 +410,12 @@ service cloud.firestore {
     match /consultaExternaMemos/{docId} {
       allow read, write: if esJefaturaCE() || adminPoa();
     }
-    // Imagen de firma y sello de cada area: solo la lee y la cambia esa area.
+    // Imagen de firma y sello de cada area: la lee y la cambia esa area. La de
+    // Consulta Externa tambien la puede cargar y usar ESDOMED (administra PULSO).
+    // ENVIAR como Consulta Externa sigue siendo solo de la jefatura.
     match /memoSellos/{area} {
       allow read, write: if (area == 'esdomed' && adminEsdomed())
-        || (area == 'consulta-externa' && esJefaturaCE());
+        || (area == 'consulta-externa' && (esJefaturaCE() || adminEsdomed()));
     }
     // Memos enviados entre ESDOMED y Consulta Externa. Cada lado ve lo que envio y
     // lo que recibio; quien recibe solo puede marcarlo leido. Nadie los borra.

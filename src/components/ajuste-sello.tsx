@@ -24,15 +24,31 @@ type Props = {
   despedida: string;
   firmante: MemoPersona | null;
   isLight: boolean;
+  /** Abre la vista previa del memo completo para poner el sello donde se quiera. */
+  onColocar?: () => void;
 };
 
 // Mismas medidas que el PDF (mm).
 const ANCHO = 215.9 - 30 - 23.4;
 const L = 4.87; // renglón Times 12
 
-export function AjusteSello({ sello, ajuste, onChange, despedida, firmante, isLight }: Props) {
+export function AjusteSello({
+  sello,
+  ajuste,
+  onChange,
+  despedida,
+  firmante,
+  isLight,
+  onColocar,
+}: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const arrastre = useRef<{ modo: "mover" | "girar"; x: number; y: number; dx: number; dy: number } | null>(null);
+  const arrastre = useRef<{
+    modo: "mover" | "girar";
+    x: number;
+    y: number;
+    dx: number;
+    dy: number;
+  } | null>(null);
   const aj = normalizarAjuste(ajuste);
   const base = medidaSello(sello);
   const w = base.w * aj.escala;
@@ -67,7 +83,13 @@ export function AjusteSello({ sello, ajuste, onChange, despedida, firmante, isLi
     if (!a) return;
     const p = punto(e);
     if (a.modo === "mover") {
-      onChange(normalizarAjuste({ ...aj, dx: a.dx + (p.x - a.x), dy: a.dy + (p.y - a.y) }));
+      onChange(
+        normalizarAjuste({
+          ...aj,
+          dx: a.dx + (p.x - a.x),
+          dy: a.dy + (p.y - a.y),
+        }),
+      );
     } else {
       // La manija va arriba del sello: el ángulo se mide desde "las 12".
       let grados = (Math.atan2(p.y - cy, p.x - cx) * 180) / Math.PI + 90;
@@ -87,77 +109,130 @@ export function AjusteSello({ sello, ajuste, onChange, despedida, firmante, isLi
 
   const sub = isLight ? "text-slate-500" : "text-slate-400";
   const btn = `rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
-    isLight ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" : "border border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
+    isLight
+      ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+      : "border border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
   }`;
 
   return (
-    <div className={`rounded-2xl border p-3 ${isLight ? "border-slate-200 bg-slate-50/60" : "border-white/[0.07] bg-white/[0.02]"}`}>
-      <p className="text-sm font-semibold">Acomodar firma y sello</p>
-      <p className={`text-[12px] ${sub}`}>
-        Arrastre el sello con el mouse para moverlo. Para girarlo, arrastre el círculo de arriba o use la barra.
-      </p>
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${ANCHO} ${alto}`}
-        className="mt-2 w-full touch-none select-none rounded-lg bg-white shadow-inner"
-        onPointerMove={mover}
-        onPointerUp={soltar}
-        onPointerCancel={soltar}
-      >
-        <text x={0} y={yDespedida} fontFamily="Times New Roman, serif" fontSize={4.2} fill="#111">
-          {despedida.trim() || "Atentamente."}
-        </text>
-        {firmante ? (
-          <g fontFamily="Times New Roman, serif" fontSize={4.2} fill="#111" textAnchor="middle">
-            <line x1={ANCHO / 2 - 35} x2={ANCHO / 2 + 35} y1={yLinea} y2={yLinea} stroke="#111" strokeWidth={0.25} />
-            <text x={ANCHO / 2} y={yLinea + L} fontWeight="bold">
-              {firmante.nombre}
-            </text>
-            <text x={ANCHO / 2} y={yLinea + L * 2}>
-              {firmante.cargo.split("\n")[0]}
-            </text>
-          </g>
+    <div
+      className={`rounded-2xl border p-3 ${isLight ? "border-slate-200 bg-slate-50/60" : "border-white/[0.07] bg-white/[0.02]"}`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Acomodar firma y sello</p>
+          <p className={`text-[12px] ${sub}`}>
+            {aj.pagina > 0
+              ? `Está colocado a mano en la hoja ${aj.pagina}. Para moverlo, abra la vista previa.`
+              : "Arrastre el sello con el mouse para moverlo. Para girarlo, arrastre el círculo de arriba o use la barra."}
+          </p>
+        </div>
+        {onColocar ? (
+          <button
+            type="button"
+            onClick={onColocar}
+            className="rounded-xl bg-teal-600 px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-teal-500"
+          >
+            Colocar en la vista previa
+          </button>
         ) : null}
-        <g transform={`rotate(${aj.rot} ${cx} ${cy})`}>
-          <image
-            href={sello.data}
-            x={cx - w / 2}
-            y={cy - h / 2}
-            width={w}
-            height={h}
-            style={{ cursor: "move" }}
-            onPointerDown={(e) => empezar("mover", e)}
-          />
-          <rect
-            x={cx - w / 2}
-            y={cy - h / 2}
-            width={w}
-            height={h}
-            fill="none"
-            stroke="#14b8a6"
-            strokeWidth={0.3}
-            strokeDasharray="1.5 1"
-            pointerEvents="none"
-          />
-          <line x1={cx} x2={cx} y1={cy - h / 2} y2={cy - radioManija} stroke="#14b8a6" strokeWidth={0.3} pointerEvents="none" />
-        </g>
-        <circle
-          cx={hx}
-          cy={hy}
-          r={2.4}
-          fill="#14b8a6"
-          stroke="#fff"
-          strokeWidth={0.5}
-          style={{ cursor: "grab" }}
-          onPointerDown={(e) => empezar("girar", e)}
+      </div>
+      {aj.pagina > 0 ? null : (
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${ANCHO} ${alto}`}
+          className="mt-2 w-full touch-none select-none rounded-lg bg-white shadow-inner"
+          onPointerMove={mover}
+          onPointerUp={soltar}
+          onPointerCancel={soltar}
         >
-          <title>Arrastre para girar</title>
-        </circle>
-      </svg>
+          <text
+            x={0}
+            y={yDespedida}
+            fontFamily="Times New Roman, serif"
+            fontSize={4.2}
+            fill="#111"
+          >
+            {despedida.trim() || "Atentamente."}
+          </text>
+          {firmante ? (
+            <g
+              fontFamily="Times New Roman, serif"
+              fontSize={4.2}
+              fill="#111"
+              textAnchor="middle"
+            >
+              <line
+                x1={ANCHO / 2 - 35}
+                x2={ANCHO / 2 + 35}
+                y1={yLinea}
+                y2={yLinea}
+                stroke="#111"
+                strokeWidth={0.25}
+              />
+              <text x={ANCHO / 2} y={yLinea + L} fontWeight="bold">
+                {firmante.nombre}
+              </text>
+              <text x={ANCHO / 2} y={yLinea + L * 2}>
+                {firmante.cargo.split("\n")[0]}
+              </text>
+            </g>
+          ) : null}
+          <g transform={`rotate(${aj.rot} ${cx} ${cy})`}>
+            <image
+              href={sello.data}
+              x={cx - w / 2}
+              y={cy - h / 2}
+              width={w}
+              height={h}
+              style={{ cursor: "move" }}
+              onPointerDown={(e) => empezar("mover", e)}
+            />
+            <rect
+              x={cx - w / 2}
+              y={cy - h / 2}
+              width={w}
+              height={h}
+              fill="none"
+              stroke="#14b8a6"
+              strokeWidth={0.3}
+              strokeDasharray="1.5 1"
+              pointerEvents="none"
+            />
+            <line
+              x1={cx}
+              x2={cx}
+              y1={cy - h / 2}
+              y2={cy - radioManija}
+              stroke="#14b8a6"
+              strokeWidth={0.3}
+              pointerEvents="none"
+            />
+          </g>
+          <circle
+            cx={hx}
+            cy={hy}
+            r={2.4}
+            fill="#14b8a6"
+            stroke="#fff"
+            strokeWidth={0.5}
+            style={{ cursor: "grab" }}
+            onPointerDown={(e) => empezar("girar", e)}
+          >
+            <title>Arrastre para girar</title>
+          </circle>
+        </svg>
+      )}
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         <label className="flex items-center gap-2 text-xs">
           <span className="w-12 shrink-0 font-semibold">Giro</span>
-          <button type="button" className={btn} onClick={() => onChange(normalizarAjuste({ ...aj, rot: aj.rot - 5 }))}>
+          <button
+            type="button"
+            className={btn}
+            onClick={() =>
+              onChange(normalizarAjuste({ ...aj, rot: aj.rot - 5 }))
+            }
+          >
             ⟲
           </button>
           <input
@@ -169,7 +244,13 @@ export function AjusteSello({ sello, ajuste, onChange, despedida, firmante, isLi
             onChange={(e) => onChange({ ...aj, rot: Number(e.target.value) })}
             className="w-full accent-teal-500"
           />
-          <button type="button" className={btn} onClick={() => onChange(normalizarAjuste({ ...aj, rot: aj.rot + 5 }))}>
+          <button
+            type="button"
+            className={btn}
+            onClick={() =>
+              onChange(normalizarAjuste({ ...aj, rot: aj.rot + 5 }))
+            }
+          >
             ⟳
           </button>
           <span className="w-10 text-right tabular-nums">{aj.rot}°</span>
@@ -182,14 +263,22 @@ export function AjusteSello({ sello, ajuste, onChange, despedida, firmante, isLi
             max={160}
             step={5}
             value={Math.round(aj.escala * 100)}
-            onChange={(e) => onChange({ ...aj, escala: Number(e.target.value) / 100 })}
+            onChange={(e) =>
+              onChange({ ...aj, escala: Number(e.target.value) / 100 })
+            }
             className="w-full accent-teal-500"
           />
-          <span className="w-10 text-right tabular-nums">{Math.round(aj.escala * 100)}%</span>
+          <span className="w-10 text-right tabular-nums">
+            {Math.round(aj.escala * 100)}%
+          </span>
         </label>
       </div>
       <div className="mt-2 flex justify-end">
-        <button type="button" className={btn} onClick={() => onChange({ ...SELLO_AJUSTE_INICIAL })}>
+        <button
+          type="button"
+          className={btn}
+          onClick={() => onChange({ ...SELLO_AJUSTE_INICIAL })}
+        >
           Volver al lugar de siempre
         </button>
       </div>

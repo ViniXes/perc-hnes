@@ -25464,6 +25464,7 @@ export default function Home() {
                 nombreUsuario={serviceProfile?.name || ""}
                 uid={user?.uid || ""}
                 puedeEnviar={esJefaturaCE}
+                puedeSellar={esJefaturaCE || esAdminEsdomed}
               />
             </div>
           ) : null}

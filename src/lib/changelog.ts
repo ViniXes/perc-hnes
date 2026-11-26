@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.531",
+    para: ["admin", "div:consulta-externa"],
+    texto:
+      "Memorándums: en «Vista previa» puede arrastrar y girar la firma y sello sobre el memo completo, por ejemplo a la par de su nombre. Se respeta en el PDF, el Word y lo que se envía.",
+  },
+  {
     version: "1986.527",
     para: ["admin"],
     texto:

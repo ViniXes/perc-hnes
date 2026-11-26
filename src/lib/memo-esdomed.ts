@@ -54,10 +54,25 @@ export type MemoEsdomed = {
   selloAjuste: MemoSelloAjuste;
 };
 
-/** dx/dy en mm desde el lugar de siempre (centrado bajo la despedida); rot en grados (horario); escala 1 = 100 %. */
-export type MemoSelloAjuste = { dx: number; dy: number; rot: number; escala: number };
+/**
+ * Dos modos:
+ *  - "de siempre" (pagina = 0): centrado bajo la despedida, corrido dx/dy (mm).
+ *  - "libre" (pagina >= 1): puesto con el mouse sobre la vista previa; x/y son
+ *    el centro del sello en mm desde la esquina de esa hoja (p. ej. a la par
+ *    del nombre de quien firma, en el bloque DE:).
+ * rot en grados (sentido horario); escala 1 = 100 %.
+ */
+export type MemoSelloAjuste = {
+  dx: number;
+  dy: number;
+  rot: number;
+  escala: number;
+  pagina: number;
+  x: number;
+  y: number;
+};
 
-export const SELLO_AJUSTE_INICIAL: MemoSelloAjuste = { dx: 0, dy: 0, rot: 0, escala: 1 };
+export const SELLO_AJUSTE_INICIAL: MemoSelloAjuste = { dx: 0, dy: 0, rot: 0, escala: 1, pagina: 0, x: 0, y: 0 };
 
 function numeroEn(v: unknown, min: number, max: number, def: number): number {
   const n = Number(v);
@@ -71,6 +86,9 @@ export function normalizarAjuste(raw: unknown): MemoSelloAjuste {
     dy: numeroEn(o.dy, -70, 70, 0),
     rot: numeroEn(o.rot, -180, 180, 0),
     escala: numeroEn(o.escala, 0.5, 1.6, 1),
+    pagina: Math.round(numeroEn(o.pagina, 0, 50, 0)),
+    x: numeroEn(o.x, 0, 215.9, 0),
+    y: numeroEn(o.y, 0, 279.4, 0),
   };
 }
 
@@ -184,7 +202,19 @@ export function medidaSello(s: Pick<MemoSello, "w" | "h">): { w: number; h: numb
  * sale igual en PDF y Word), su caja girada (w, h en mm), el tamaño sin girar
  * (w0, h0: el espacio que ocupa en la hoja) y el corrimiento (dx, dy en mm).
  */
-export type SelloListo = { data: string; w: number; h: number; w0: number; h0: number; dx: number; dy: number };
+export type SelloListo = {
+  data: string;
+  w: number;
+  h: number;
+  w0: number;
+  h0: number;
+  dx: number;
+  dy: number;
+  /** 0 = lugar de siempre; >= 1 = hoja donde se puso a mano (x, y = centro en mm). */
+  pagina: number;
+  x: number;
+  y: number;
+};
 
 export async function prepararSelloListo(
   sello: MemoSello | null | undefined,
@@ -195,7 +225,18 @@ export async function prepararSelloListo(
   const base = medidaSello(sello);
   const w0 = base.w * aj.escala;
   const h0 = base.h * aj.escala;
-  const listo: SelloListo = { data: sello.data, w: w0, h: h0, w0, h0, dx: aj.dx, dy: aj.dy };
+  const listo: SelloListo = {
+    data: sello.data,
+    w: w0,
+    h: h0,
+    w0,
+    h0,
+    dx: aj.dx,
+    dy: aj.dy,
+    pagina: aj.pagina,
+    x: aj.x,
+    y: aj.y,
+  };
   if (!aj.rot || typeof document === "undefined") return listo;
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -406,29 +447,41 @@ const ANCHO_TEXTO_MM = 215.9 - 30 - 23.4;
  * sobre él, corrida y girada como se acomodó en PULSO.
  */
 function wSello(s: SelloListo): string {
+  const alto = Math.max(240, Math.round(s.h0 * 56.7));
+  return `<w:p><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="0" w:after="0" w:line="${alto}" w:lineRule="exact"/></w:pPr>${wSelloRun(s)}</w:p>`;
+}
+
+/**
+ * La imagen flotante del sello (un <w:r>). En el modo de siempre se ubica
+ * respecto del párrafo que la lleva; puesta a mano, respecto de la hoja.
+ */
+function wSelloRun(s: SelloListo): string {
   const emu = (mm: number) => Math.round(mm * 36000);
   const cx = emu(s.w);
   const cy = emu(s.h);
-  const x = emu(ANCHO_TEXTO_MM / 2 + s.dx - s.w / 2);
-  const y = emu(s.h0 / 2 + s.dy - s.h / 2);
-  const alto = Math.max(240, Math.round(s.h0 * 56.7));
+  const libre = s.pagina > 0;
+  const x = libre ? emu(s.x - s.w / 2) : emu(ANCHO_TEXTO_MM / 2 + s.dx - s.w / 2);
+  const y = libre ? emu(s.y - s.h / 2) : emu(s.h0 / 2 + s.dy - s.h / 2);
   return (
-    `<w:p><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="0" w:after="0" w:line="${alto}" w:lineRule="exact"/></w:pPr><w:r><w:drawing>` +
+    `<w:r><w:drawing>` +
     `<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251659264" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">` +
-    `<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>${x}</wp:posOffset></wp:positionH>` +
-    `<wp:positionV relativeFrom="paragraph"><wp:posOffset>${y}</wp:posOffset></wp:positionV>` +
+    `<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="${libre ? "page" : "column"}"><wp:posOffset>${x}</wp:posOffset></wp:positionH>` +
+    `<wp:positionV relativeFrom="${libre ? "page" : "paragraph"}"><wp:posOffset>${y}</wp:posOffset></wp:positionV>` +
     `<wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="9101" name="Firma y sello"/><wp:cNvGraphicFramePr/>` +
     `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
     `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="9101" name="sello-memo.png"/><pic:cNvPicPr/></pic:nvPicPr>` +
     `<pic:blipFill><a:blip r:embed="rIdSelloMemo"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
     `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>` +
-    `</a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>`
+    `</a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`
   );
 }
 
 export function memoDocxCuerpoXml(memo: MemoEsdomed, sello?: SelloListo | null): string {
   const p: string[] = [];
-  p.push(wVacio());
+  // Sello puesto a mano en la hoja 1 (p. ej. junto al nombre en DE:): va
+  // anclado al primer párrafo, que siempre cae en la hoja 1.
+  const libre = !!sello && sello.pagina > 0;
+  p.push(libre && sello && sello.pagina === 1 ? `<w:p>${wSelloRun(sello)}</w:p>` : wVacio());
   p.push(
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr>${wRun(rArial(true, 20), memoNumeroTexto(memo))}</w:p>`,
   );
@@ -473,7 +526,7 @@ export function memoDocxCuerpoXml(memo: MemoEsdomed, sello?: SelloListo | null):
   }
 
   const firmante = memoFirmante(memo);
-  const conSello = memo.sellado && !!sello;
+  const conSello = memo.sellado && !!sello && !libre;
   if (conSello && sello) {
     p.push(wVacio());
     p.push(wSello(sello));
@@ -498,6 +551,8 @@ export function memoDocxCuerpoXml(memo: MemoEsdomed, sello?: SelloListo | null):
       p.push(`<w:p>${wRun(rArial(false, 16), `${i === 0 ? "C.c. " : "        "}${c}`)}</w:p>`);
     });
   }
+  // Puesto a mano en otra hoja: se ancla al final (cae en la última hoja).
+  if (libre && sello && sello.pagina > 1) p.push(`<w:p>${wSelloRun(sello)}</w:p>`);
   return p.join("");
 }
 
@@ -617,6 +672,14 @@ type Pdf = {
   splitTextToSize: (s: string, w: number) => string[];
   addImage: (d: string, f: string, x: number, y: number, w: number, h: number) => unknown;
   output: (tipo: "blob") => Blob;
+  setPage: (n: number) => unknown;
+  getNumberOfPages: () => number;
+};
+
+/** Para la vista previa: dibujar o no el sello, y dónde quedaría (centro, mm). */
+export type OpcionesPdfSello = {
+  dibujarSello?: boolean;
+  posicion?: { pagina: number; x: number; y: number };
 };
 
 function dibujarMembrete(pdf: Pdf, img: MemoImagenes) {
@@ -644,15 +707,28 @@ function dibujarMembrete(pdf: Pdf, img: MemoImagenes) {
   });
 }
 
-export async function buildMemoPdf(memo: MemoEsdomed, img: MemoImagenes, sello?: MemoSello | null): Promise<Blob> {
+export async function buildMemoPdf(
+  memo: MemoEsdomed,
+  img: MemoImagenes,
+  sello?: MemoSello | null,
+  opciones?: OpcionesPdfSello,
+): Promise<Blob> {
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait", compress: true }) as unknown as Pdf;
   const listo = memo.sellado ? await prepararSelloListo(sello, memo.selloAjuste) : null;
-  return construirMemoPdf(pdf, memo, img, listo);
+  return construirMemoPdf(pdf, memo, img, listo, opciones);
 }
 
 /** Separado de buildMemoPdf para poder armarlo con cualquier instancia de jsPDF. */
-export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes, sello?: SelloListo | null): Blob {
+export function construirMemoPdf(
+  pdf: Pdf,
+  memo: MemoEsdomed,
+  img: MemoImagenes,
+  sello?: SelloListo | null,
+  opciones: OpcionesPdfSello = {},
+): Blob {
+  const dibujar = opciones.dibujarSello !== false;
+  const selloLibre = !!sello && sello.pagina > 0;
   const ancho = PW - ML - MR;
   let y = Y_INICIO;
   let inicioHoja = Y_INICIO;
@@ -800,21 +876,22 @@ export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes,
   const firma = memoFirmante(memo);
   const cargosFirma = firma ? firma.cargo.split("\n").map((x) => x.trim()).filter(Boolean) : [];
   // Firma y sello: centrados al final, encima de la línea de firma (si la lleva).
-  if (memo.sellado && sello) {
+  if (memo.sellado && sello && !selloLibre) {
     const altoFirma = memo.firma && firma ? L_TIMES * (2 + cargosFirma.length) : 0;
     espacio(L_TIMES + sello.h0 + altoFirma);
     y += L_TIMES * 0.6;
     // Centro del sello: su lugar de siempre (centrado) más lo que se corrió.
     const cxS = ML + ancho / 2 + sello.dx;
     const cyS = y + sello.h0 / 2 + sello.dy;
-    pdf.addImage(sello.data, "PNG", cxS - sello.w / 2, cyS - sello.h / 2, sello.w, sello.h);
+    if (dibujar) pdf.addImage(sello.data, "PNG", cxS - sello.w / 2, cyS - sello.h / 2, sello.w, sello.h);
+    opciones.posicion = { pagina: pdf.getNumberOfPages(), x: cxS, y: cyS };
     // La línea de firma queda sobre la parte de abajo del sello, como firmado a mano.
     y += sello.h0 - (memo.firma && firma ? L_TIMES * 0.5 : 0);
   }
   if (memo.firma && firma) {
     const cargos = cargosFirma;
     const alto = L_TIMES * (4 + 2 + cargos.length);
-    const yaSellado = memo.sellado && !!sello;
+    const yaSellado = memo.sellado && !!sello && !selloLibre;
     if (!yaSellado) {
       espacio(alto);
       y += L_TIMES * 4;
@@ -854,6 +931,18 @@ export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes,
     });
   }
 
+  // Sello puesto a mano: en su hoja, encima de todo.
+  if (memo.sellado && sello && selloLibre) {
+    const total = pdf.getNumberOfPages();
+    const hoja = Math.min(sello.pagina, total);
+    opciones.posicion = { pagina: hoja, x: sello.x, y: sello.y };
+    if (dibujar) {
+      pdf.setPage(hoja);
+      pdf.addImage(sello.data, "PNG", sello.x - sello.w / 2, sello.y - sello.h / 2, sello.w, sello.h);
+      pdf.setPage(total);
+    }
+  }
+
   return pdf.output("blob");
 }
 
@@ -890,8 +979,12 @@ function imagenesMembrete(): Promise<MemoImagenes> {
   return imagenesCache;
 }
 
-export async function buildMemoPdfConMembrete(memo: MemoEsdomed, sello?: MemoSello | null): Promise<Blob> {
-  return buildMemoPdf(memo, await imagenesMembrete(), sello);
+export async function buildMemoPdfConMembrete(
+  memo: MemoEsdomed,
+  sello?: MemoSello | null,
+  opciones?: OpcionesPdfSello,
+): Promise<Blob> {
+  return buildMemoPdf(memo, await imagenesMembrete(), sello, opciones);
 }
 
 export async function downloadMemoPdf(memo: MemoEsdomed, sello?: MemoSello | null): Promise<void> {
