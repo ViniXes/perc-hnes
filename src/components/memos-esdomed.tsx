@@ -24,6 +24,7 @@ import {
   memoDocId,
   memoFechaTexto,
   memoNuevo,
+  memoFirmante,
   memoNumeroTexto,
   normalizarMemo,
   type MemoEsdomed,
@@ -33,6 +34,7 @@ import {
   type MemoPersona,
 } from "@/lib/memo-esdomed";
 import { BTN_GUARDAR } from "@/components/ui-basicos";
+import { AjusteSello } from "@/components/ajuste-sello";
 import { borrarBorrador, guardarBorrador, leerBorrador } from "@/lib/borradores";
 import {
   DESTINO_MEMO,
@@ -910,6 +912,16 @@ export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid =
                   {ocupado === "sello" ? "Guardando…" : sello ? "Cambiar firma y sello" : "Cargar firma y sello"}
                 </button>
               </div>
+            ) : null}
+            {usaSello && sello && memo.sellado ? (
+              <AjusteSello
+                sello={sello}
+                ajuste={memo.selloAjuste}
+                onChange={(a) => editar({ selloAjuste: a })}
+                despedida={memo.despedida}
+                firmante={memo.firma ? memoFirmante(memo) : null}
+                isLight={isLight}
+              />
             ) : null}
 
             <div className="flex flex-wrap justify-between gap-2 border-t pt-4 border-slate-500/20">

@@ -5,11 +5,11 @@
  * la escribe scripts/marcar-version.mjs a partir del historial del repositorio.
  * No editar a mano — correr "npm run marcar-version" antes de hacer el commit.
  */
-export const APP_VERSION = "1986.528";
+export const APP_VERSION = "1986.529";
 
 /**
  * Publicaciones contadas por marcar-version. El aviso de version nueva y las
  * novedades solo salen cuando cambia AVISO_BLOQUE (cada 6 publicaciones).
  */
-export const PUBLICACION = 28;
+export const PUBLICACION = 29;
 export const AVISO_BLOQUE = 4;

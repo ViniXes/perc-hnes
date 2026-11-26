@@ -50,7 +50,29 @@ export type MemoEsdomed = {
   cc: string;
   /** Lleva la imagen de firma y sello del área al final (antes de la firma). */
   sellado: boolean;
+  /** Dónde y cómo va el sello: corrimiento (mm) desde su lugar, giro (°) y tamaño. */
+  selloAjuste: MemoSelloAjuste;
 };
+
+/** dx/dy en mm desde el lugar de siempre (centrado bajo la despedida); rot en grados (horario); escala 1 = 100 %. */
+export type MemoSelloAjuste = { dx: number; dy: number; rot: number; escala: number };
+
+export const SELLO_AJUSTE_INICIAL: MemoSelloAjuste = { dx: 0, dy: 0, rot: 0, escala: 1 };
+
+function numeroEn(v: unknown, min: number, max: number, def: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
+}
+
+export function normalizarAjuste(raw: unknown): MemoSelloAjuste {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    dx: numeroEn(o.dx, -90, 90, 0),
+    dy: numeroEn(o.dy, -70, 70, 0),
+    rot: numeroEn(o.rot, -180, 180, 0),
+    escala: numeroEn(o.escala, 0.5, 1.6, 1),
+  };
+}
 
 export const MEMO_COLECCION = "esdomedMemos";
 
@@ -151,10 +173,55 @@ export function memoNumeroTexto(memo: Pick<MemoEsdomed, "year" | "numero" | "cod
  */
 export type MemoSello = { data: string; w: number; h: number };
 
-/** Tamaño impreso del sello (mm): hasta 58 de ancho y 46 de alto. */
-function medidaSello(s: MemoSello): { w: number; h: number } {
+/** Tamaño impreso del sello (mm) a 100 %: hasta 58 de ancho y 46 de alto. */
+export function medidaSello(s: Pick<MemoSello, "w" | "h">): { w: number; h: number } {
   const escala = Math.min(58 / Math.max(1, s.w), 46 / Math.max(1, s.h));
   return { w: s.w * escala, h: s.h * escala };
+}
+
+/**
+ * Sello listo para imprimir: ya girado (imagen nueva con el giro aplicado, así
+ * sale igual en PDF y Word), su caja girada (w, h en mm), el tamaño sin girar
+ * (w0, h0: el espacio que ocupa en la hoja) y el corrimiento (dx, dy en mm).
+ */
+export type SelloListo = { data: string; w: number; h: number; w0: number; h0: number; dx: number; dy: number };
+
+export async function prepararSelloListo(
+  sello: MemoSello | null | undefined,
+  ajusteRaw: MemoSelloAjuste | undefined,
+): Promise<SelloListo | null> {
+  if (!sello) return null;
+  const aj = normalizarAjuste(ajusteRaw);
+  const base = medidaSello(sello);
+  const w0 = base.w * aj.escala;
+  const h0 = base.h * aj.escala;
+  const listo: SelloListo = { data: sello.data, w: w0, h: h0, w0, h0, dx: aj.dx, dy: aj.dy };
+  if (!aj.rot || typeof document === "undefined") return listo;
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("sello"));
+      i.src = sello.data;
+    });
+    const rad = (aj.rot * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(rad));
+    const sin = Math.abs(Math.sin(rad));
+    const W = Math.ceil(sello.w * cos + sello.h * sin);
+    const H = Math.ceil(sello.w * sin + sello.h * cos);
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return listo;
+    ctx.translate(W / 2, H / 2);
+    ctx.rotate(rad);
+    ctx.drawImage(img, -sello.w / 2, -sello.h / 2, sello.w, sello.h);
+    const mmPorPx = w0 / sello.w;
+    return { ...listo, data: canvas.toDataURL("image/png"), w: W * mmPorPx, h: H * mmPorPx };
+  } catch {
+    return listo;
+  }
 }
 
 /** "2026-10-23" -> "23/10/2026" */
@@ -195,6 +262,7 @@ export function memoNuevo(area: MemoArea, year: number, numero: number, hoy: str
     firma: false,
     cc: "",
     sellado: !!MEMO_AREAS[area].conSello,
+    selloAjuste: { ...SELLO_AJUSTE_INICIAL },
   };
 }
 
@@ -237,6 +305,7 @@ export function normalizarMemo(raw: Record<string, unknown>): MemoEsdomed {
     firma: raw.firma === true,
     cc: String(raw.cc ?? ""),
     sellado: raw.sellado === true,
+    selloAjuste: normalizarAjuste(raw.selloAjuste),
   };
 }
 
@@ -328,23 +397,36 @@ function wPersonas(etiqueta: string, lista: MemoPersona[], tab: number): string[
 }
 
 /** XML del cuerpo del documento (lo que va entre <w:body> y <w:sectPr>). */
-/** Párrafo centrado con la imagen del sello (relación `rIdSelloMemo`). */
-function wSello(s: MemoSello): string {
-  const { w, h } = medidaSello(s);
-  const cx = Math.round(w * 36000);
-  const cy = Math.round(h * 36000);
+/** Ancho del texto del memo (mm): carta menos márgenes 3 cm y 2.34 cm. */
+const ANCHO_TEXTO_MM = 215.9 - 30 - 23.4;
+
+/**
+ * Párrafo con la imagen del sello (relación `rIdSelloMemo`). El párrafo guarda
+ * el alto del sello sin girar (el espacio en la hoja) y la imagen va "flotando"
+ * sobre él, corrida y girada como se acomodó en PULSO.
+ */
+function wSello(s: SelloListo): string {
+  const emu = (mm: number) => Math.round(mm * 36000);
+  const cx = emu(s.w);
+  const cy = emu(s.h);
+  const x = emu(ANCHO_TEXTO_MM / 2 + s.dx - s.w / 2);
+  const y = emu(s.h0 / 2 + s.dy - s.h / 2);
+  const alto = Math.max(240, Math.round(s.h0 * 56.7));
   return (
-    `<w:p><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing>` +
-    `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="9101" name="Firma y sello"/>` +
+    `<w:p><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="0" w:after="0" w:line="${alto}" w:lineRule="exact"/></w:pPr><w:r><w:drawing>` +
+    `<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251659264" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">` +
+    `<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>${x}</wp:posOffset></wp:positionH>` +
+    `<wp:positionV relativeFrom="paragraph"><wp:posOffset>${y}</wp:posOffset></wp:positionV>` +
+    `<wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="9101" name="Firma y sello"/><wp:cNvGraphicFramePr/>` +
     `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
     `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="9101" name="sello-memo.png"/><pic:cNvPicPr/></pic:nvPicPr>` +
     `<pic:blipFill><a:blip r:embed="rIdSelloMemo"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
     `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>` +
-    `</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+    `</a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>`
   );
 }
 
-export function memoDocxCuerpoXml(memo: MemoEsdomed, sello?: MemoSello | null): string {
+export function memoDocxCuerpoXml(memo: MemoEsdomed, sello?: SelloListo | null): string {
   const p: string[] = [];
   p.push(wVacio());
   p.push(
@@ -460,9 +542,9 @@ export async function buildMemoDocx(memo: MemoEsdomed, sello?: MemoSello | null)
       ),
     );
   }
-  const conSello = memo.sellado && !!sello;
-  if (conSello && sello) {
-    const b64 = sello.data.replace(/^data:image\/[a-z+]+;base64,/i, "");
+  const listo = memo.sellado ? await prepararSelloListo(sello, memo.selloAjuste) : null;
+  if (listo) {
+    const b64 = listo.data.replace(/^data:image\/[a-z+]+;base64,/i, "");
     zip.file("word/media/sello-memo.png", b64, { base64: true });
     const rels = zip.file("word/_rels/document.xml.rels");
     if (rels) {
@@ -476,7 +558,7 @@ export async function buildMemoDocx(memo: MemoEsdomed, sello?: MemoSello | null)
       );
     }
   }
-  let doc = xml.replace("<!--CUERPO-->", memoDocxCuerpoXml(memo, conSello ? sello : null));
+  let doc = xml.replace("<!--CUERPO-->", memoDocxCuerpoXml(memo, listo));
   if (hdr && !doc.includes("<w:titlePg")) doc = doc.replace(/(<w:cols[^>]*\/>)(?![\s\S]*<w:cols)/, "$1<w:titlePg/>");
   zip.file("word/document.xml", doc);
   return zip.generateAsync({
@@ -565,11 +647,12 @@ function dibujarMembrete(pdf: Pdf, img: MemoImagenes) {
 export async function buildMemoPdf(memo: MemoEsdomed, img: MemoImagenes, sello?: MemoSello | null): Promise<Blob> {
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait", compress: true }) as unknown as Pdf;
-  return construirMemoPdf(pdf, memo, img, sello);
+  const listo = memo.sellado ? await prepararSelloListo(sello, memo.selloAjuste) : null;
+  return construirMemoPdf(pdf, memo, img, listo);
 }
 
 /** Separado de buildMemoPdf para poder armarlo con cualquier instancia de jsPDF. */
-export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes, sello?: MemoSello | null): Blob {
+export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes, sello?: SelloListo | null): Blob {
   const ancho = PW - ML - MR;
   let y = Y_INICIO;
   let inicioHoja = Y_INICIO;
@@ -718,13 +801,15 @@ export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes,
   const cargosFirma = firma ? firma.cargo.split("\n").map((x) => x.trim()).filter(Boolean) : [];
   // Firma y sello: centrados al final, encima de la línea de firma (si la lleva).
   if (memo.sellado && sello) {
-    const m = medidaSello(sello);
     const altoFirma = memo.firma && firma ? L_TIMES * (2 + cargosFirma.length) : 0;
-    espacio(L_TIMES + m.h + altoFirma);
+    espacio(L_TIMES + sello.h0 + altoFirma);
     y += L_TIMES * 0.6;
-    pdf.addImage(sello.data, "PNG", ML + ancho / 2 - m.w / 2, y, m.w, m.h);
+    // Centro del sello: su lugar de siempre (centrado) más lo que se corrió.
+    const cxS = ML + ancho / 2 + sello.dx;
+    const cyS = y + sello.h0 / 2 + sello.dy;
+    pdf.addImage(sello.data, "PNG", cxS - sello.w / 2, cyS - sello.h / 2, sello.w, sello.h);
     // La línea de firma queda sobre la parte de abajo del sello, como firmado a mano.
-    y += m.h - (memo.firma && firma ? L_TIMES * 0.5 : 0);
+    y += sello.h0 - (memo.firma && firma ? L_TIMES * 0.5 : 0);
   }
   if (memo.firma && firma) {
     const cargos = cargosFirma;

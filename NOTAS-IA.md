@@ -56,6 +56,10 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (mover, girar y agrandar la firma y sello)
+- Cambio: con «Firmar y sellar» marcado, el editor muestra «Acomodar firma y sello»: un dibujo a escala (mm) del final del memo donde el sello se arrastra con el mouse, se gira con la manija o la barra y se cambia de tamaño. Se guarda en el memo (`selloAjuste: {dx, dy, rot, escala}`) y se respeta en PDF, Word y en lo enviado. El giro se aplica dibujando la imagen girada en un canvas (`prepararSelloListo`); en Word el sello va flotante (`wp:anchor`) sobre un párrafo del alto del sello.
+- Archivos: `src/components/ajuste-sello.tsx` (nuevo), `src/components/memos-esdomed.tsx`, `src/lib/memo-esdomed.ts`.
+
 ### 2026-11-26 — Claude (botón de firma y sello junto a «Firmar y sellar»)
 - Cambio: el botón «Cargar/Cambiar firma y sello» y la miniatura también aparecen debajo de la casilla «Firmar y sellar» en el editor del memo (el usuario no veía el de arriba).
 - Archivos: `src/components/memos-esdomed.tsx`.
