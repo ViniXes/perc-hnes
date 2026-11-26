@@ -265,7 +265,7 @@ function grupoMenuLateral(id: string): string {
   if (["panel-monitor-general", "panel-tendencias", "panel-monitor-horas", "panel-hospitales"].includes(id)) {
     return "Monitoreo";
   }
-  if (["panel-docs", "panel-poa", "panel-memos"].includes(id)) return "Documentos";
+  if (["panel-docs", "panel-poa", "panel-memos", "panel-memos-bandeja"].includes(id)) return "Documentos";
   if (
     [
       "panel-config",
