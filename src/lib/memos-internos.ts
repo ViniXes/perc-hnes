@@ -124,3 +124,30 @@ export function leerSello(raw: Record<string, unknown> | undefined | null): Memo
   if (!/^data:image\//.test(data) || !w || !h) return null;
   return { data, w, h };
 }
+
+/**
+ * Mes del envío en hora de El Salvador ("AAAA-MM"). Va en cada memo enviado para
+ * que la bandeja cargue solo los meses recientes, sin índices compuestos.
+ */
+export function mesMemo(instante = new Date()): string {
+  const p = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/El_Salvador",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(instante);
+  const y = p.find((x) => x.type === "year")?.value ?? "";
+  const m = p.find((x) => x.type === "month")?.value ?? "";
+  return `${y}-${m}`;
+}
+
+/** Meses que la bandeja carga en vivo: el actual y los anteriores (n en total). */
+export const MESES_BANDEJA = 3;
+export function mesesRecientes(n = MESES_BANDEJA, hoy = mesMemo()): string[] {
+  const [y, m] = hoy.split("-").map(Number);
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const d = new Date(y, m - 1 - i, 1);
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}

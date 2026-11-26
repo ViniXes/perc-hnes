@@ -25481,6 +25481,7 @@ export default function Home() {
           (activeSidebarSection === "panel-memos-bandeja" || mobileView === "panel-memos-bandeja") ? (
             <div data-view="panel-memos-bandeja">
               <BandejaMemos
+                key={bandejaMemos}
                 area={bandejaMemos}
                 isLight={isLightPanelTheme}
                 usuario={serviceProfile?.email || ""}

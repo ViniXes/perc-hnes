@@ -56,6 +56,9 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (bandeja de memos por partes)
+- Bandeja de memos (bandeja-memos.tsx): en vivo solo carga los últimos 3 meses (campo nuevo `mes` "AAAA-MM", hora El Salvador, que se pone al enviar) y lo pendiente (`leido == false` / `recibido == false`; ahora se crea con `recibido: false`). «Ver anteriores» trae todo con getDocs. Solo igualdades: no pide índices compuestos ni cambia reglas. Emulador 58/58.
+
 ### 2026-11-26 — Claude (acceso de memos C.E. para cualquier cuenta)
 - v1986.539. El acceso «Memorándums de Consulta Externa» (menuGrants 'panel-memos-consulta-externa') ya no exige division 'consulta-externa': sirve para una cuenta de servicio (p. ej. el Dr. Cartagena, de asesores-de-medicamentos, que además conserva Horas). Cambió esJefaturaCE en page.tsx y en firestore.rules (el usuario debe publicar las reglas).
 - Emulador: 53/53 OK (cuenta de servicio con el acceso escribe y envía; sin el acceso, no).

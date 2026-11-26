@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { collection, doc, getDocs, onSnapshot, query, serverTimestamp, updateDoc, where, type Query } from "firebase/firestore";
 import { db } from "@/lib/firestore";
 import {
   MEMO_AREAS,
@@ -23,7 +23,9 @@ import {
 import {
   MENSAJES_COLECCION,
   NOMBRE_BANDEJA,
+  MESES_BANDEJA,
   leerSello,
+  mesesRecientes,
   type BandejaId,
   type MemoInterno,
 } from "@/lib/memos-internos";
@@ -67,6 +69,14 @@ function aMensaje(id: string, d: Record<string, unknown>): MemoInterno {
   };
 }
 
+/** Junta lo traído del historial con lo que llega en vivo (este manda). */
+function unir(vivos: MemoInterno[], viejos: MemoInterno[]): MemoInterno[] {
+  const m = new Map<string, MemoInterno>();
+  for (const x of viejos) m.set(x.id, x);
+  for (const x of vivos) m.set(x.id, x);
+  return [...m.values()].sort((a, b) => b.enviadoMs - a.enviadoMs);
+}
+
 /** Fecha y hora en hora de El Salvador, p. ej. "26/11/2026, 3:05 p. m.". */
 function cuando(ms: number): string {
   if (!ms) return "";
@@ -81,14 +91,20 @@ function cuando(ms: number): string {
 }
 
 export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "", soloLectura = false }: Props) {
-  const [recibidos, setRecibidos] = useState<MemoInterno[]>([]);
-  const [enviados, setEnviados] = useState<MemoInterno[]>([]);
   const [pestana, setPestana] = useState<"recibidos" | "enviados">("recibidos");
   const [error, setError] = useState("");
   const [abierto, setAbierto] = useState<MemoInterno | null>(null);
   const [vistaUrl, setVistaUrl] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<"" | "vista" | "pdf" | "word">("");
 
+  // Para no cargar todo el historial (cada memo trae su PDF y su sello), en vivo
+  // solo llegan los últimos meses y lo pendiente (sin leer o sin acuse). El resto
+  // se trae con «Ver anteriores». Solo consultas por igualdad: no piden índices.
+  const [historial, setHistorial] = useState<"" | "cargando" | "listo">("");
+  const [vivosR, setVivosR] = useState<MemoInterno[]>([]);
+  const [vivosE, setVivosE] = useState<MemoInterno[]>([]);
+  const [anterioresR, setAnterioresR] = useState<MemoInterno[]>([]);
+  const [anterioresE, setAnterioresE] = useState<MemoInterno[]>([]);
   useEffect(() => {
     const avisar = (e: unknown) =>
       setError(
@@ -96,26 +112,60 @@ export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "", soloL
           ? "Firestore no permite leer la bandeja. Falta publicar las reglas de «memosInternos»."
           : "No se pudo cargar la bandeja. Revise la conexión.",
       );
-    const ordenar = (l: MemoInterno[]) => l.sort((a, b) => b.enviadoMs - a.enviadoMs);
-    const offR = onSnapshot(
-      query(collection(db, MENSAJES_COLECCION), where("para", "==", area)),
-      (snap) => setRecibidos(ordenar(snap.docs.map((x) => aMensaje(x.id, x.data() as Record<string, unknown>)))),
-      avisar,
-    );
+    const col = collection(db, MENSAJES_COLECCION);
+    const meses = mesesRecientes();
+    const escuchar = (campo: "para" | "de", setLista: (l: MemoInterno[]) => void) => {
+      const consultas: Query[] = [
+        ...meses.map((mes) => query(col, where(campo, "==", area), where("mes", "==", mes))),
+        query(col, where(campo, "==", area), where("recibido", "==", false)),
+        ...(campo === "para" ? [query(col, where(campo, "==", area), where("leido", "==", false))] : []),
+      ];
+      const partes = consultas.map(() => new Map<string, MemoInterno>());
+      const juntar = () => {
+        const todo = new Map<string, MemoInterno>();
+        for (const p of partes) for (const [id, m] of p) todo.set(id, m);
+        setLista([...todo.values()]);
+      };
+      const offs = consultas.map((q, i) =>
+        onSnapshot(
+          q,
+          (snap) => {
+            partes[i] = new Map(snap.docs.map((x) => [x.id, aMensaje(x.id, x.data() as Record<string, unknown>)]));
+            juntar();
+          },
+          avisar,
+        ),
+      );
+      return () => offs.forEach((off) => off());
+    };
+    const offR = escuchar("para", (l) => setVivosR(l));
     // La bandeja de la Dra. Gil solo recibe: no tiene enviados.
-    const offE =
-      area === "sis"
-        ? () => {}
-        : onSnapshot(
-            query(collection(db, MENSAJES_COLECCION), where("de", "==", area)),
-            (snap) => setEnviados(ordenar(snap.docs.map((x) => aMensaje(x.id, x.data() as Record<string, unknown>)))),
-            avisar,
-          );
+    const offE = area === "sis" ? () => {} : escuchar("de", (l) => setVivosE(l));
     return () => {
       offR();
       offE();
     };
   }, [area]);
+
+  const recibidos = useMemo(() => unir(vivosR, anterioresR), [vivosR, anterioresR]);
+  const enviados = useMemo(() => unir(vivosE, anterioresE), [vivosE, anterioresE]);
+
+  const verAnteriores = async () => {
+    setHistorial("cargando");
+    try {
+      const col = collection(db, MENSAJES_COLECCION);
+      const leer = async (campo: "para" | "de") =>
+        (await getDocs(query(col, where(campo, "==", area)))).docs.map((x) =>
+          aMensaje(x.id, x.data() as Record<string, unknown>),
+        );
+      setAnterioresR(await leer("para"));
+      if (area !== "sis") setAnterioresE(await leer("de"));
+      setHistorial("listo");
+    } catch {
+      setHistorial("");
+      setError("No se pudieron cargar los memos anteriores.");
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -243,10 +293,32 @@ export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "", soloL
         ) : null}
       </div>
 
-      <div className="mt-3 space-y-1.5">
+      <div className="mt-2 flex justify-end">
+        {historial === "listo" ? (
+          <span className={`text-[11px] ${sub}`}>Mostrando también los meses anteriores</span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void verAnteriores()}
+            disabled={historial === "cargando"}
+            title={`Por rapidez se muestran los últimos ${MESES_BANDEJA} meses y todo lo pendiente`}
+            className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition disabled:opacity-50 ${
+              isLight ? "border-slate-300 text-slate-600 hover:bg-slate-100" : "border-white/10 text-slate-300 hover:bg-white/10"
+            }`}
+          >
+            {historial === "cargando" ? "Cargando…" : "Ver anteriores"}
+          </button>
+        )}
+      </div>
+
+      <div className="mt-2 space-y-1.5">
         {lista.length === 0 ? (
           <p className={`rounded-2xl border border-dashed px-3 py-8 text-center text-sm ${sub} ${isLight ? "border-slate-300" : "border-white/15"}`}>
-            {pestana === "recibidos" ? "No ha recibido memos todavía." : "No ha enviado memos por PULSO todavía."}
+            {historial === "listo"
+              ? pestana === "recibidos"
+                ? "No ha recibido memos todavía."
+                : "No ha enviado memos por PULSO todavía."
+              : `Nada en los últimos ${MESES_BANDEJA} meses. Use «Ver anteriores» para buscar más atrás.`}
           </p>
         ) : null}
         {lista.map((m) => {

@@ -53,6 +53,7 @@ import {
   SELLOS_COLECCION,
   leerSello,
   memoNombraGil,
+  mesMemo,
   prepararSello,
   type BandejaId,
 } from "@/lib/memos-internos";
@@ -523,7 +524,9 @@ export function MemosEsdomed({
           enviadoPorNombre: nombreUsuario || usuario,
           enviadoUid: uid,
           createdAt: serverTimestamp(),
+          mes: mesMemo(),
           leido: false,
+          recibido: false,
         });
       }
       await setDoc(
