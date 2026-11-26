@@ -3,6 +3,14 @@
 import { generarClaveTemporal } from "@/lib/clave-temporal";
 import { PoaUnidadPicker, type PoaUnidadGrupo } from "@/components/poa-unidad-picker";
 import { MemosEsdomed } from "@/components/memos-esdomed";
+import { BandejaMemos } from "@/components/bandeja-memos";
+import {
+  GRANT_MEMOS_CE,
+  JEFATURA_CE_NOMBRE,
+  MENSAJES_COLECCION,
+  NOMBRE_BANDEJA,
+  SUBJEFATURA_CE_NOMBRE,
+} from "@/lib/memos-internos";
 import { DocumentosPlanificacion } from "@/components/documentos-planificacion";
 import { PersonalDesvinculado } from "@/components/personal-desvinculado";
 import { poaDatosBloque, poaDatosGrafico, poaGraficoPastel3D } from "@/lib/poa-chart";
@@ -705,7 +713,7 @@ const SIGNUP_DIVISIONS: { key: string; label: string; jefeLabel: string | null }
   { key: "enfermeria", label: "Division de Enfermeria", jefeLabel: null },
   { key: "administrativa", label: "Subdireccion Administrativa", jefeLabel: "Subdireccion Administrativa" },
   { key: "direccion", label: "Direccion", jefeLabel: null },
-  { key: "consulta-externa", label: "Consulta Externa", jefeLabel: null },
+  { key: "consulta-externa", label: "Consulta Externa", jefeLabel: "Jefatura de Consulta Externa" },
   // MINSAL: no es una division del hospital, es el nivel ministerial. Se registra
   // por aca porque es la misma puerta de entrada, pero su cuenta solo abre el
   // monitoreo nacional de hospitales.
@@ -4184,8 +4192,11 @@ export default function Home() {
   const [captureRequests, setCaptureRequests] = useState<CaptureRequest[]>([]);
   // Avisos tipo "WhatsApp" (banner) cuando llega una solicitud nueva (admin/supervisor).
   const [toastNotifs, setToastNotifs] = useState<
-    { id: string; title: string; body: string }[]
+    { id: string; title: string; body: string; destino?: string }[]
   >([]);
+  // Memos recibidos por PULSO sin leer (bandeja de ESDOMED o de Consulta Externa).
+  const [memosSinLeer, setMemosSinLeer] = useState(0);
+  const memosReadyRef = useRef(false);
   const requestsReadyRef = useRef(false);
   const signupReadyRef = useRef(false);
   const supportReadyRef = useRef(false);
@@ -5068,6 +5079,7 @@ export default function Home() {
     const dep = serviceProfile?.department || "";
     if (dep && DEPARTMENT_LABELS[dep]) return DEPARTMENT_LABELS[dep];
     const div = serviceProfile?.division || "";
+    if (div === "consulta-externa") return serviceProfile?.serviceName || JEFATURA_CE_NOMBRE;
     const nombre = div ? CEC_DIVISION_LABEL[div] : "";
     return nombre ? `Jefatura de la ${nombre}` : "";
   })();
@@ -5103,6 +5115,19 @@ export default function Home() {
   // (marcan los accesos del SIS) y la cuenta de RRHH con el acceso otorgado. Ningun
   // otro administrador, supervisor ni servicio lo ve.
   const esAdminEsdomed = isAdmin && ESDOMED_ADMIN_EMAILS.includes((user?.email || "").toLowerCase());
+  // Jefatura de Consulta Externa: escribe los memos de C.E. (firmados y sellados) y
+  // los intercambia con ESDOMED. Otra cuenta de C.E. (p. ej. la subjefatura) solo
+  // si un admin le otorga el acceso. Las reglas de Firestore piden lo mismo.
+  const esJefaturaCE =
+    !ghostUid &&
+    serviceProfile?.division === "consulta-externa" &&
+    (serviceProfile?.serviceName === JEFATURA_CE_NOMBRE || hasGrant(GRANT_MEMOS_CE));
+  // Bandeja de memos de esta cuenta: ESDOMED (sus admins) o Consulta Externa.
+  const bandejaMemos: "esdomed" | "consulta-externa" | null = esJefaturaCE
+    ? "consulta-externa"
+    : esAdminEsdomed && !ghostUid
+      ? "esdomed"
+      : null;
   const esRrhhDesvinculados = hasGrant("panel-desvinculados");
   const puedeVerDesvinculados = !isMinsal && (esAdminEsdomed || esRrhhDesvinculados);
   // Cuenta "solo accesos otorgados" cuyo UNICO acceso es este reporte (la cuenta de
@@ -7008,6 +7033,46 @@ export default function Home() {
     );
     return () => unsubscribe();
   }, [user, isAdmin, firestoreUnavailable, firestoreStatusReady]);
+
+  // MEMOS POR PULSO: cuenta los recibidos sin leer y avisa (banner) cuando llega
+  // uno nuevo a la bandeja de ESDOMED o de la Jefatura de Consulta Externa.
+  useEffect(() => {
+    memosReadyRef.current = false;
+    if (!user || !bandejaMemos || firestoreUnavailable || !firestoreStatusReady) {
+      setMemosSinLeer(0);
+      return;
+    }
+    const de = bandejaMemos === "esdomed" ? "consulta-externa" : "esdomed";
+    const unsubscribe = onSnapshot(
+      query(collection(db, MENSAJES_COLECCION), where("para", "==", bandejaMemos), where("leido", "==", false)),
+      (snap) => {
+        setMemosSinLeer(snap.size);
+        if (!memosReadyRef.current) {
+          memosReadyRef.current = true;
+          return;
+        }
+        for (const change of snap.docChanges()) {
+          if (change.type !== "added") continue;
+          const d = change.doc.data() as Record<string, unknown>;
+          const notif = {
+            id: `memo-${change.doc.id}-${Date.now()}`,
+            title: `Nuevo memo de ${NOMBRE_BANDEJA[de] || de}`,
+            body: String(d.asunto ?? "") || String(d.codigo ?? ""),
+            destino: "panel-memos-bandeja",
+          };
+          setToastNotifs((prev) => [notif, ...prev].slice(0, 3));
+          setCasitaAlert(true);
+          window.setTimeout(() => {
+            setToastNotifs((prev) => prev.filter((n) => n.id !== notif.id));
+          }, 9000);
+        }
+      },
+      () => {
+        // Sin reglas publicadas todavia: no romper la app.
+      },
+    );
+    return () => unsubscribe();
+  }, [user, bandejaMemos, firestoreUnavailable, firestoreStatusReady]);
 
   // En pantallas chicas el menu arranca cerrado (cajon); en PC, abierto.
   useEffect(() => {
@@ -10824,6 +10889,8 @@ export default function Home() {
       medica: "Jefe de División Médica",
       apoyo: "Jefe de División de Apoyo",
       administrativa: "Subdirección Administrativa",
+      "consulta-externa": JEFATURA_CE_NOMBRE,
+      "consulta-externa-sub": SUBJEFATURA_CE_NOMBRE,
     };
     if (!signupForm.firstName.trim() || !signupForm.lastName.trim() || !signupForm.email.trim()) {
       setError("Completá nombres, apellidos y correo.");
@@ -11186,6 +11253,10 @@ export default function Home() {
       medica: "Jefe de División Médica",
       apoyo: "Jefe de División de Apoyo",
       administrativa: "Subdirección Administrativa",
+      // Consulta Externa: jefatura y subjefatura ven el monitoreo (PERC, SEPS y
+      // Horas) de sus 4 consultas. Las dos quedan con division "consulta-externa".
+      "consulta-externa": JEFATURA_CE_NOMBRE,
+      "consulta-externa-sub": SUBJEFATURA_CE_NOMBRE,
     };
 
     // --- Solicitud de JEFE DE DIVISION ---
@@ -11199,7 +11270,7 @@ export default function Home() {
       const secondaryDiv = createSecondaryAuth();
       try {
         const { username, credential, password: claveTemporal } = await createDivisionChiefAccount(secondaryDiv.auth, {
-          division: divKey,
+          division: divKey === "consulta-externa-sub" ? "consulta-externa" : divKey,
           divisionLabel: DIVLBL[divKey],
           contactEmail: req.email,
           firstName: req.firstName,
@@ -19907,6 +19978,34 @@ export default function Home() {
             },
           ]
         : []),
+      // MEMORANDUMS de la Jefatura de Consulta Externa: sus memos (firmados y
+      // sellados) y la bandeja de lo que se intercambia con ESDOMED.
+      ...(esJefaturaCE && !isAdmin
+        ? [
+            {
+              id: "panel-memos",
+              label: "Memorándums",
+              detail: "Memos firmados y sellados",
+              badge: "ME",
+              children: [
+                {
+                  id: "panel-memos-consulta-externa",
+                  label: "Consulta Externa",
+                  detail: "Memorándums de la Jefatura de Consulta Externa",
+                  badge: "CX",
+                  icon: "memo",
+                },
+                {
+                  id: "panel-memos-bandeja",
+                  label: memosSinLeer > 0 ? `Bandeja de memos (${memosSinLeer})` : "Bandeja de memos",
+                  detail: "Recibidos y enviados con ESDOMED",
+                  badge: "BM",
+                  icon: "memo",
+                },
+              ],
+            },
+          ]
+        : []),
       // MEMORANDUMS: memos con membrete oficial (PDF y Word), uno por area en el
       // submenu. Solo administradores.
       ...(isAdmin
@@ -19939,6 +20038,18 @@ export default function Home() {
                   badge: "MD",
                   icon: "consolidado",
                 },
+                // Memos firmados que llegan de (y se envian a) Consulta Externa.
+                ...(bandejaMemos === "esdomed"
+                  ? [
+                      {
+                        id: "panel-memos-bandeja",
+                        label: memosSinLeer > 0 ? `Bandeja de memos (${memosSinLeer})` : "Bandeja de memos",
+                        detail: "Recibidos y enviados con Consulta Externa",
+                        badge: "BM",
+                        icon: "memo",
+                      },
+                    ]
+                  : []),
               ],
             },
           ]
@@ -20689,7 +20800,12 @@ export default function Home() {
                   key={n.id}
                   type="button"
                   onClick={() => {
-                    setShowRequestsModal(true);
+                    if (n.destino) {
+                      handleSidebarNavigation(n.destino);
+                      setMobileView(n.destino as typeof mobileView);
+                    } else {
+                      setShowRequestsModal(true);
+                    }
                     setToastNotifs((prev) => prev.filter((x) => x.id !== n.id));
                   }}
                   className="notif-slide-in pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-2xl border border-white/10 bg-[#1b2537]/95 px-3.5 py-3 text-left shadow-2xl shadow-black/50 backdrop-blur-md"
@@ -21043,6 +21159,10 @@ export default function Home() {
                                     ? "Memorándums · Planificación"
                                     : mobileView === "panel-memos-planificacion-docs"
                                       ? "Planificación · Mis documentos"
+                                      : mobileView === "panel-memos-consulta-externa"
+                                      ? "Memorándums · Consulta Externa"
+                                      : mobileView === "panel-memos-bandeja"
+                                      ? "Bandeja de memos"
                                       : mobileView === "panel-desvinculados"
                                         ? "Personal desvinculado"
                                         : ""}
@@ -25265,11 +25385,34 @@ export default function Home() {
                       area={area}
                       isLight={isLightPanelTheme}
                       usuario={serviceProfile?.email || ""}
+                      nombreUsuario={serviceProfile?.name || ""}
+                      uid={user?.uid || ""}
+                      puedeEnviar={area === "esdomed" && bandejaMemos === "esdomed"}
                     />
                   </div>
                 ) : null,
               )
             : null}
+          {esJefaturaCE &&
+          (activeSidebarSection === "panel-memos-consulta-externa" || mobileView === "panel-memos-consulta-externa") ? (
+            <div data-view="panel-memos-consulta-externa">
+              <MemosEsdomed
+                key="consulta-externa"
+                area="consulta-externa"
+                isLight={isLightPanelTheme}
+                usuario={serviceProfile?.email || ""}
+                nombreUsuario={serviceProfile?.name || ""}
+                uid={user?.uid || ""}
+                puedeEnviar
+              />
+            </div>
+          ) : null}
+          {bandejaMemos &&
+          (activeSidebarSection === "panel-memos-bandeja" || mobileView === "panel-memos-bandeja") ? (
+            <div data-view="panel-memos-bandeja">
+              <BandejaMemos area={bandejaMemos} isLight={isLightPanelTheme} usuario={serviceProfile?.email || ""} />
+            </div>
+          ) : null}
           {puedeVerDesvinculados &&
           (activeSidebarSection === "panel-desvinculados" || mobileView === "panel-desvinculados") ? (
             <div data-view={soloDesvinculados ? "panel-desvinculados home" : "panel-desvinculados"}>
@@ -31817,6 +31960,11 @@ export default function Home() {
                                 {d.jefeLabel}
                               </option>
                             ) : null}
+                            {signupDivView === "consulta-externa" ? (
+                              <option value="div:consulta-externa-sub" className="bg-[#1b2537] text-cyan-200">
+                                {SUBJEFATURA_CE_NOMBRE}
+                              </option>
+                            ) : null}
                             {signupDivView === "medica" ? (
                               <>
                                 <option value="dept:uci-ucin#1" className="bg-[#1b2537] text-emerald-200">
@@ -31877,12 +32025,16 @@ export default function Home() {
                               ))}
                             {svcs.map((s) => (
                               <option key={`chief:${s.id}`} value={`chief:${s.id}`} className="bg-[#1b2537] text-white">
-                                Jefe — {s.name}
+                                {signupDivView === "consulta-externa"
+                                  ? `Jefe de ${s.name.replace(/^Consulta Externa\s+/i, "")}`
+                                  : `Jefe — ${s.name}`}
                               </option>
                             ))}
                             {svcs.map((s) => (
                               <option key={`svc:${s.id}`} value={`svc:${s.id}`} className="bg-[#1b2537] text-white">
-                                {s.name}
+                                {signupDivView === "consulta-externa"
+                                  ? `Encargado de área — ${s.name.replace(/^Consulta Externa\s+/i, "")}`
+                                  : s.name}
                               </option>
                             ))}
                           </>

@@ -29,7 +29,7 @@ export type MemoPersona = { nombre: string; cargo: string };
 export type MemoBloque = { etiqueta: string; personas: MemoPersona[] };
 
 /** Área dueña del memo (cada una con su numeración y su remitente). */
-export type MemoArea = "esdomed" | "planificacion";
+export type MemoArea = "esdomed" | "planificacion" | "consulta-externa";
 
 export type MemoEsdomed = {
   area: MemoArea;
@@ -48,6 +48,8 @@ export type MemoEsdomed = {
   firma: boolean;
   /** Copias ("C.c."), una por renglón. */
   cc: string;
+  /** Lleva la imagen de firma y sello del área al final (antes de la firma). */
+  sellado: boolean;
 };
 
 export const MEMO_COLECCION = "esdomedMemos";
@@ -80,30 +82,79 @@ export function memoFirmante(memo: Pick<MemoEsdomed, "bloques">): MemoPersona | 
   return de ? (personasValidas(de.personas)[0] ?? null) : null;
 }
 
-export type MemoAreaConfig = { nombre: string; codigo: string; de: MemoPersona };
+export type MemoAreaConfig = {
+  nombre: string;
+  codigo: string;
+  de: MemoPersona;
+  /** Destinatario por defecto (PARA:). */
+  para?: MemoPersona;
+  /** Colección de Firestore donde se guardan sus memos. */
+  coleccion: string;
+  /** Número con el año adelante, como lo usa Consulta Externa: "2026-HNES-CEX-06". */
+  anioPrimero?: boolean;
+  /** Tiene firma y sello digital (se carga una vez en el menú). */
+  conSello?: boolean;
+};
 
 export const MEMO_AREAS: Record<MemoArea, MemoAreaConfig> = {
-  esdomed: { nombre: "ESDOMED", codigo: "ESDOMED", de: MEMO_DE_DEFAULT },
+  esdomed: { nombre: "ESDOMED", codigo: "ESDOMED", de: MEMO_DE_DEFAULT, coleccion: MEMO_COLECCION, conSello: true },
   planificacion: {
     nombre: "Planificación",
     codigo: "PLANIFICACION",
     de: { nombre: "Dr. Roberto Centeno Zambrano", cargo: "Jefe de Unidad de Planificación" },
+    coleccion: MEMO_COLECCION,
+  },
+  // Jefatura de Consulta Externa: sus memos van a otra colección (los ve también
+  // la jefatura, no solo los administradores) y salen firmados y sellados.
+  "consulta-externa": {
+    nombre: "Consulta Externa",
+    codigo: "CEX",
+    de: { nombre: "Dra. Brenda Abigail Benítez Benítez", cargo: "Jefa de Consulta Externa en Funciones" },
+    para: { nombre: "Ing. Heber Benjamín Cardoza Guevara", cargo: "Jefe de ESDOMED" },
+    coleccion: "consultaExternaMemos",
+    anioPrimero: true,
+    conSello: true,
   },
 };
 
+export function esMemoArea(v: unknown): v is MemoArea {
+  return v === "esdomed" || v === "planificacion" || v === "consulta-externa";
+}
+
 /**
- * ESDOMED conserva los ids de siempre ("2026__0021"); las demás áreas llevan su
- * nombre adelante ("planificacion__2026__0001"). Todo en la misma colección.
+ * ESDOMED conserva los ids de siempre ("2026__0021"); Planificación lleva su
+ * nombre adelante ("planificacion__2026__0001") porque comparte la colección.
+ * Consulta Externa tiene colección propia: "2026__0006".
  */
 export function memoDocId(area: MemoArea, year: number, numero: number): string {
   const base = `${year}__${String(numero).padStart(4, "0")}`;
-  return area === "esdomed" ? base : `${area}__${base}`;
+  return area === "planificacion" ? `${area}__${base}` : base;
 }
 
-/** "No. HNES-2026-ESDOMED-20" */
-export function memoCodigo(memo: Pick<MemoEsdomed, "year" | "numero" | "codigoArea">): string {
-  const codigo = (memo.codigoArea || "").trim().toUpperCase() || "ESDOMED";
+/** "HNES-2026-ESDOMED-20" o, en Consulta Externa, "2026-HNES-CEX-06". */
+export function memoCodigo(memo: Pick<MemoEsdomed, "year" | "numero" | "codigoArea"> & { area?: MemoArea }): string {
+  const area = memo.area && MEMO_AREAS[memo.area] ? memo.area : "esdomed";
+  const codigo = (memo.codigoArea || "").trim().toUpperCase() || MEMO_AREAS[area].codigo;
+  if (MEMO_AREAS[area].anioPrimero) return `${memo.year}-HNES-${codigo}-${String(memo.numero).padStart(2, "0")}`;
   return `HNES-${memo.year}-${codigo}-${memo.numero}`;
+}
+
+/** Como sale impreso arriba a la derecha: "No. HNES-2026-ESDOMED-20" o "N.º 2026-HNES-CEX-06". */
+export function memoNumeroTexto(memo: Pick<MemoEsdomed, "year" | "numero" | "codigoArea"> & { area?: MemoArea }): string {
+  const anioPrimero = !!(memo.area && MEMO_AREAS[memo.area]?.anioPrimero);
+  return `${anioPrimero ? "N.º" : "No."} ${memoCodigo(memo)}`;
+}
+
+/**
+ * Imagen de firma y sello (PNG con fondo transparente, como data URL) y su
+ * tamaño en píxeles para conservar la proporción.
+ */
+export type MemoSello = { data: string; w: number; h: number };
+
+/** Tamaño impreso del sello (mm): hasta 58 de ancho y 46 de alto. */
+function medidaSello(s: MemoSello): { w: number; h: number } {
+  const escala = Math.min(58 / Math.max(1, s.w), 46 / Math.max(1, s.h));
+  return { w: s.w * escala, h: s.h * escala };
 }
 
 /** "2026-10-23" -> "23/10/2026" */
@@ -112,7 +163,9 @@ export function memoFechaTexto(fecha: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : fecha || "";
 }
 
-export function memoNombreArchivo(memo: Pick<MemoEsdomed, "year" | "numero" | "codigoArea" | "asunto">): string {
+export function memoNombreArchivo(
+  memo: Pick<MemoEsdomed, "year" | "numero" | "codigoArea" | "asunto"> & { area?: MemoArea },
+): string {
   const asunto = (memo.asunto || "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -131,7 +184,7 @@ export function memoNuevo(area: MemoArea, year: number, numero: number, hoy: str
     year,
     numero,
     bloques: [
-      { etiqueta: "PARA:", personas: [{ ...MEMO_PARA_DEFAULT }] },
+      { etiqueta: "PARA:", personas: [{ ...(MEMO_AREAS[area].para ?? MEMO_PARA_DEFAULT) }] },
       { etiqueta: "DE:", personas: [{ ...MEMO_AREAS[area].de }] },
     ],
     asunto: "",
@@ -141,6 +194,7 @@ export function memoNuevo(area: MemoArea, year: number, numero: number, hoy: str
     despedida: "Atentamente.",
     firma: false,
     cc: "",
+    sellado: !!MEMO_AREAS[area].conSello,
   };
 }
 
@@ -167,7 +221,7 @@ export function normalizarMemo(raw: Record<string, unknown>): MemoEsdomed {
     bloques.push({ etiqueta: "DE:", personas: [persona(raw.de)] });
   }
   // Los memos de antes de que hubiera áreas son todos de ESDOMED.
-  const area: MemoArea = raw.area === "planificacion" ? "planificacion" : "esdomed";
+  const area: MemoArea = esMemoArea(raw.area) ? raw.area : "esdomed";
   return {
     area,
     codigoArea:
@@ -182,6 +236,7 @@ export function normalizarMemo(raw: Record<string, unknown>): MemoEsdomed {
     despedida: String(raw.despedida ?? ""),
     firma: raw.firma === true,
     cc: String(raw.cc ?? ""),
+    sellado: raw.sellado === true,
   };
 }
 
@@ -273,11 +328,27 @@ function wPersonas(etiqueta: string, lista: MemoPersona[], tab: number): string[
 }
 
 /** XML del cuerpo del documento (lo que va entre <w:body> y <w:sectPr>). */
-export function memoDocxCuerpoXml(memo: MemoEsdomed): string {
+/** Párrafo centrado con la imagen del sello (relación `rIdSelloMemo`). */
+function wSello(s: MemoSello): string {
+  const { w, h } = medidaSello(s);
+  const cx = Math.round(w * 36000);
+  const cy = Math.round(h * 36000);
+  return (
+    `<w:p><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing>` +
+    `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="9101" name="Firma y sello"/>` +
+    `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="9101" name="sello-memo.png"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:blipFill><a:blip r:embed="rIdSelloMemo"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>` +
+    `</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+  );
+}
+
+export function memoDocxCuerpoXml(memo: MemoEsdomed, sello?: MemoSello | null): string {
   const p: string[] = [];
   p.push(wVacio());
   p.push(
-    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr>${wRun(rArial(true, 20), `No. ${memoCodigo(memo)}`)}</w:p>`,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr>${wRun(rArial(true, 20), memoNumeroTexto(memo))}</w:p>`,
   );
   p.push(wVacio());
 
@@ -320,8 +391,13 @@ export function memoDocxCuerpoXml(memo: MemoEsdomed): string {
   }
 
   const firmante = memoFirmante(memo);
+  const conSello = memo.sellado && !!sello;
+  if (conSello && sello) {
+    p.push(wVacio());
+    p.push(wSello(sello));
+  }
   if (memo.firma && firmante) {
-    p.push(wVacio(), wVacio(), wVacio(), wVacio());
+    if (!conSello) p.push(wVacio(), wVacio(), wVacio(), wVacio());
     // Que la firma no quede sola arriba de una hoja nueva.
     const keep = `<w:keepNext/><w:keepLines/>`;
     p.push(`<w:p><w:pPr>${keep}<w:jc w:val="center"/></w:pPr>${wRun("", "_".repeat(34))}</w:p>`);
@@ -354,7 +430,7 @@ function descargarBlob(blob: Blob, nombre: string) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-export async function buildMemoDocx(memo: MemoEsdomed): Promise<Blob> {
+export async function buildMemoDocx(memo: MemoEsdomed, sello?: MemoSello | null): Promise<Blob> {
   const { default: JSZip } = await import("jszip");
   const res = await fetch("/memo/plantilla-memo.docx", { cache: "force-cache" });
   if (!res.ok) throw new Error("No se pudo leer la plantilla del memo.");
@@ -384,7 +460,23 @@ export async function buildMemoDocx(memo: MemoEsdomed): Promise<Blob> {
       ),
     );
   }
-  let doc = xml.replace("<!--CUERPO-->", memoDocxCuerpoXml(memo));
+  const conSello = memo.sellado && !!sello;
+  if (conSello && sello) {
+    const b64 = sello.data.replace(/^data:image\/[a-z+]+;base64,/i, "");
+    zip.file("word/media/sello-memo.png", b64, { base64: true });
+    const rels = zip.file("word/_rels/document.xml.rels");
+    if (rels) {
+      const relsXml = await rels.async("string");
+      zip.file(
+        "word/_rels/document.xml.rels",
+        relsXml.replace(
+          "</Relationships>",
+          '<Relationship Id="rIdSelloMemo" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/sello-memo.png"/></Relationships>',
+        ),
+      );
+    }
+  }
+  let doc = xml.replace("<!--CUERPO-->", memoDocxCuerpoXml(memo, conSello ? sello : null));
   if (hdr && !doc.includes("<w:titlePg")) doc = doc.replace(/(<w:cols[^>]*\/>)(?![\s\S]*<w:cols)/, "$1<w:titlePg/>");
   zip.file("word/document.xml", doc);
   return zip.generateAsync({
@@ -394,8 +486,8 @@ export async function buildMemoDocx(memo: MemoEsdomed): Promise<Blob> {
   });
 }
 
-export async function downloadMemoDocx(memo: MemoEsdomed): Promise<void> {
-  descargarBlob(await buildMemoDocx(memo), `${memoNombreArchivo(memo)}.docx`);
+export async function downloadMemoDocx(memo: MemoEsdomed, sello?: MemoSello | null): Promise<void> {
+  descargarBlob(await buildMemoDocx(memo, sello), `${memoNombreArchivo(memo)}.docx`);
 }
 
 // =============================================================================
@@ -470,14 +562,14 @@ function dibujarMembrete(pdf: Pdf, img: MemoImagenes) {
   });
 }
 
-export async function buildMemoPdf(memo: MemoEsdomed, img: MemoImagenes): Promise<Blob> {
+export async function buildMemoPdf(memo: MemoEsdomed, img: MemoImagenes, sello?: MemoSello | null): Promise<Blob> {
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait", compress: true }) as unknown as Pdf;
-  return construirMemoPdf(pdf, memo, img);
+  return construirMemoPdf(pdf, memo, img, sello);
 }
 
 /** Separado de buildMemoPdf para poder armarlo con cualquier instancia de jsPDF. */
-export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes): Blob {
+export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes, sello?: MemoSello | null): Blob {
   const ancho = PW - ML - MR;
   let y = Y_INICIO;
   let inicioHoja = Y_INICIO;
@@ -501,7 +593,7 @@ export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes)
   pdf.setTextColor(0);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(10);
-  pdf.text(t(`No. ${memoCodigo(memo)}`), PW - MR, y, { align: "right" });
+  pdf.text(t(memoNumeroTexto(memo)), PW - MR, y, { align: "right" });
   y += L_ARIAL * 2.4;
 
   // Columna de los nombres, la misma para todo el encabezado: si un título es
@@ -623,11 +715,25 @@ export function construirMemoPdf(pdf: Pdf, memo: MemoEsdomed, img: MemoImagenes)
   }
 
   const firma = memoFirmante(memo);
+  const cargosFirma = firma ? firma.cargo.split("\n").map((x) => x.trim()).filter(Boolean) : [];
+  // Firma y sello: centrados al final, encima de la línea de firma (si la lleva).
+  if (memo.sellado && sello) {
+    const m = medidaSello(sello);
+    const altoFirma = memo.firma && firma ? L_TIMES * (2 + cargosFirma.length) : 0;
+    espacio(L_TIMES + m.h + altoFirma);
+    y += L_TIMES * 0.6;
+    pdf.addImage(sello.data, "PNG", ML + ancho / 2 - m.w / 2, y, m.w, m.h);
+    // La línea de firma queda sobre la parte de abajo del sello, como firmado a mano.
+    y += m.h - (memo.firma && firma ? L_TIMES * 0.5 : 0);
+  }
   if (memo.firma && firma) {
-    const cargos = firma.cargo.split("\n").map((x) => x.trim()).filter(Boolean);
+    const cargos = cargosFirma;
     const alto = L_TIMES * (4 + 2 + cargos.length);
-    espacio(alto);
-    y += L_TIMES * 4;
+    const yaSellado = memo.sellado && !!sello;
+    if (!yaSellado) {
+      espacio(alto);
+      y += L_TIMES * 4;
+    }
     const cx = ML + ancho / 2;
     pdf.setDrawColor(0);
     pdf.setLineWidth(0.25);
@@ -699,10 +805,10 @@ function imagenesMembrete(): Promise<MemoImagenes> {
   return imagenesCache;
 }
 
-export async function buildMemoPdfConMembrete(memo: MemoEsdomed): Promise<Blob> {
-  return buildMemoPdf(memo, await imagenesMembrete());
+export async function buildMemoPdfConMembrete(memo: MemoEsdomed, sello?: MemoSello | null): Promise<Blob> {
+  return buildMemoPdf(memo, await imagenesMembrete(), sello);
 }
 
-export async function downloadMemoPdf(memo: MemoEsdomed): Promise<void> {
-  descargarBlob(await buildMemoPdfConMembrete(memo), `${memoNombreArchivo(memo)}.pdf`);
+export async function downloadMemoPdf(memo: MemoEsdomed, sello?: MemoSello | null): Promise<void> {
+  descargarBlob(await buildMemoPdfConMembrete(memo, sello), `${memoNombreArchivo(memo)}.pdf`);
 }

@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.526",
+    para: ["admin", "div:consulta-externa"],
+    texto:
+      "Memorándums firmados y sellados: la Jefatura de Consulta Externa y ESDOMED se envían memos dentro de PULSO, con bandeja de recibidos y enviados y aviso cuando llega uno nuevo. Cada área carga una vez su imagen de firma y sello y marca «Firmar y sellar» en el memo.",
+  },
+  {
     version: "1986.510",
     para: ["admin"],
     texto:

@@ -11,11 +11,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firestore";
 import {
   MEMO_AREAS,
-  MEMO_COLECCION,
   MEMO_ETIQUETA_OPCIONES,
   memoEtiqueta,
   buildMemoPdfConMembrete,
@@ -25,16 +24,31 @@ import {
   memoDocId,
   memoFechaTexto,
   memoNuevo,
+  memoNumeroTexto,
   normalizarMemo,
   type MemoEsdomed,
+  type MemoSello,
   type MemoArea,
   type MemoBloque,
   type MemoPersona,
 } from "@/lib/memo-esdomed";
 import { BTN_GUARDAR } from "@/components/ui-basicos";
 import { borrarBorrador, guardarBorrador, leerBorrador } from "@/lib/borradores";
+import {
+  DESTINO_MEMO,
+  MENSAJES_COLECCION,
+  NOMBRE_BANDEJA,
+  SELLOS_COLECCION,
+  leerSello,
+  prepararSello,
+} from "@/lib/memos-internos";
 
-type MemoGuardado = MemoEsdomed & { id: string; actualizado: string; actualizadoPor: string };
+type MemoGuardado = MemoEsdomed & {
+  id: string;
+  actualizado: string;
+  actualizadoPor: string;
+  enviado: string;
+};
 
 type Props = {
   /** Área cuyos memos se muestran (submenú de MEMORÁNDUMS). */
@@ -42,6 +56,12 @@ type Props = {
   isLight: boolean;
   /** Correo o usuario de quien guarda (queda en el memo). */
   usuario: string;
+  /** Nombre de quien envía (sale en la bandeja del que recibe). */
+  nombreUsuario?: string;
+  /** uid de la sesión (queda en el envío; las reglas lo exigen). */
+  uid?: string;
+  /** Puede enviar memos de esta área por PULSO y cargar su firma y sello. */
+  puedeEnviar?: boolean;
 };
 
 function hoyIso(): string {
@@ -61,7 +81,11 @@ function fechaDe(valor: unknown): string {
   return "";
 }
 
-export function MemosEsdomed({ area, isLight, usuario }: Props) {
+export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid = "", puedeEnviar = false }: Props) {
+  const config = MEMO_AREAS[area];
+  const coleccion = config.coleccion;
+  const destino = puedeEnviar ? DESTINO_MEMO[area] : undefined;
+  const usaSello = !!config.conSello && puedeEnviar;
   const [memos, setMemos] = useState<MemoGuardado[]>([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -72,7 +96,11 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
   const [memo, setMemo] = useState<MemoEsdomed | null>(null);
   const [idOriginal, setIdOriginal] = useState<string | null>(null);
   const [guardadoJson, setGuardadoJson] = useState("");
-  const [ocupado, setOcupado] = useState<"" | "guardar" | "pdf" | "word" | "vista" | "borrar">("");
+  const [ocupado, setOcupado] = useState<"" | "guardar" | "pdf" | "word" | "vista" | "borrar" | "enviar" | "sello">("");
+  // Firma y sello del área (memoSellos/<area>), solo para quien firma.
+  const [sello, setSello] = useState<MemoSello | null>(null);
+  const [selloCargado, setSelloCargado] = useState(false);
+  const selloInputRef = useRef<HTMLInputElement | null>(null);
   const [vistaUrl, setVistaUrl] = useState<string | null>(null);
   const cuerpoRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -80,7 +108,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
     setCargando(true);
     setError("");
     try {
-      const snap = await getDocs(collection(db, MEMO_COLECCION));
+      const snap = await getDocs(collection(db, coleccion));
       const lista = snap.docs.map((d) => {
         const data = d.data() as Record<string, unknown>;
         return {
@@ -88,6 +116,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
           id: d.id,
           actualizado: fechaDe(data.updatedAt) || fechaDe(data.createdAt),
           actualizadoPor: String(data.updatedBy ?? data.createdBy ?? ""),
+          enviado: fechaDe(data.enviadoAt),
         };
       });
       lista.sort((a, b) => b.year - a.year || b.numero - a.numero);
@@ -96,13 +125,66 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
     } catch (e) {
       setError(
         (e as { code?: string })?.code === "permission-denied"
-          ? "Firestore no permite leer los memos. Falta publicar las reglas de «esdomedMemos»."
+          ? `Firestore no permite leer los memos. Falta publicar las reglas de «${coleccion}».`
           : "No se pudieron cargar los memos. Revisá la conexión e intentá de nuevo.",
       );
     } finally {
       setCargando(false);
     }
-  }, [area]);
+  }, [area, coleccion]);
+
+  // Firma y sello guardados del área.
+  useEffect(() => {
+    if (!usaSello) return;
+    let vivo = true;
+    getDoc(doc(db, SELLOS_COLECCION, area))
+      .then((snap) => {
+        if (!vivo) return;
+        setSello(snap.exists() ? leerSello(snap.data() as Record<string, unknown>) : null);
+      })
+      .catch(() => {
+        if (vivo) setSello(null);
+      })
+      .finally(() => {
+        if (vivo) setSelloCargado(true);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [area, usaSello]);
+
+  const subirSello = async (archivo: File | undefined) => {
+    if (!archivo) return;
+    if (!/^image\/(png|jpe?g)$/i.test(archivo.type)) {
+      setError("La firma y sello debe ser una imagen PNG o JPG.");
+      return;
+    }
+    setOcupado("sello");
+    setError("");
+    try {
+      const nuevo = await prepararSello(archivo);
+      await setDoc(doc(db, SELLOS_COLECCION, area), {
+        ...nuevo,
+        area,
+        updatedAt: serverTimestamp(),
+        updatedBy: usuario,
+      });
+      setSello(nuevo);
+      setAviso("Firma y sello guardados. Desde ahora los memos marcados «Firmar y sellar» salen con esta imagen.");
+    } catch (e) {
+      setError(
+        (e as { code?: string })?.code === "permission-denied"
+          ? "Firestore no permitió guardar la firma. Falta publicar las reglas de «memoSellos»."
+          : "No se pudo leer o guardar la imagen. Intente con otra (PNG con fondo transparente es lo ideal).",
+      );
+    } finally {
+      setOcupado("");
+      if (selloInputRef.current) selloInputRef.current.value = "";
+    }
+  };
+
+  /** El sello solo se usa si el memo está marcado para firmar y sellar. */
+  const selloDe = (m: MemoEsdomed) => (usaSello && m.sellado ? sello : null);
 
   // Carga inicial de la lista al entrar al menú.
   useEffect(() => {
@@ -238,7 +320,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
     setAviso("");
     try {
       const id = memoDocId(memo.area, memo.year, memo.numero);
-      const ref = doc(db, MEMO_COLECCION, id);
+      const ref = doc(db, coleccion, id);
       const datos = { ...memo, updatedAt: serverTimestamp(), updatedBy: usuario };
       if (id === idOriginal) {
         await setDoc(ref, datos, { merge: true });
@@ -250,7 +332,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
           return;
         }
         await setDoc(ref, { ...datos, createdAt: serverTimestamp(), createdBy: usuario });
-        if (idOriginal) await deleteDoc(doc(db, MEMO_COLECCION, idOriginal));
+        if (idOriginal) await deleteDoc(doc(db, coleccion, idOriginal));
       }
       olvidarBorrador();
       setIdOriginal(id);
@@ -261,7 +343,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
     } catch (e) {
       setError(
         (e as { code?: string })?.code === "permission-denied"
-          ? "Firestore no permitió guardar. Falta publicar las reglas de «esdomedMemos»."
+          ? `Firestore no permitió guardar. Falta publicar las reglas de «${coleccion}».`
           : "No se pudo guardar el memo. Revisá la conexión e intentá de nuevo.",
       );
     } finally {
@@ -274,7 +356,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
     if (!window.confirm(`¿Eliminar el memo No. ${memoCodigo(memo)}? No se puede deshacer.`)) return;
     setOcupado("borrar");
     try {
-      await deleteDoc(doc(db, MEMO_COLECCION, idOriginal));
+      await deleteDoc(doc(db, coleccion, idOriginal));
       olvidarBorrador();
       setMemo(null);
       setIdOriginal(null);
@@ -293,14 +375,66 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
     setOcupado(tipo);
     setError("");
     try {
-      if (tipo === "pdf") await downloadMemoPdf(memo);
-      else if (tipo === "word") await downloadMemoDocx(memo);
+      if (tipo === "pdf") await downloadMemoPdf(memo, selloDe(memo));
+      else if (tipo === "word") await downloadMemoDocx(memo, selloDe(memo));
       else {
-        const blob = await buildMemoPdfConMembrete(memo);
+        const blob = await buildMemoPdfConMembrete(memo, selloDe(memo));
         setVistaUrl(URL.createObjectURL(blob));
       }
     } catch {
       setError("No se pudo generar el documento. Intentá de nuevo.");
+    } finally {
+      setOcupado("");
+    }
+  };
+
+  /** Envía el memo guardado, firmado y sellado, a la bandeja del otro lado. */
+  const enviar = async () => {
+    if (!memo || !destino) return;
+    if (!idOriginal || cambiosSinGuardar) {
+      setError("Primero guarde el memo; se envía tal como quedó guardado.");
+      return;
+    }
+    if (!memo.sellado || !sello) {
+      setError(
+        sello
+          ? "Marque «Firmar y sellar» para enviarlo: por PULSO solo se envían memos firmados y sellados."
+          : "Cargue primero la firma y sello del área (botón «Cargar firma y sello»).",
+      );
+      return;
+    }
+    const nombreDestino = NOMBRE_BANDEJA[destino] || MEMO_AREAS[destino].nombre;
+    if (!window.confirm(`¿Enviar el memo ${memoNumeroTexto(memo)} firmado y sellado a ${nombreDestino}?`)) return;
+    setOcupado("enviar");
+    setError("");
+    setAviso("");
+    try {
+      await addDoc(collection(db, MENSAJES_COLECCION), {
+        de: area,
+        para: destino,
+        memo,
+        sello,
+        codigo: memoCodigo(memo),
+        asunto: memo.asunto,
+        enviadoPor: usuario,
+        enviadoPorNombre: nombreUsuario || usuario,
+        enviadoUid: uid,
+        createdAt: serverTimestamp(),
+        leido: false,
+      });
+      await setDoc(
+        doc(db, coleccion, idOriginal),
+        { enviadoAt: serverTimestamp(), enviadoA: destino },
+        { merge: true },
+      ).catch(() => {});
+      setAviso(`Memo ${memoNumeroTexto(memo)} enviado a ${nombreDestino}. Le llega en su bandeja de PULSO.`);
+      void cargar();
+    } catch (e) {
+      setError(
+        (e as { code?: string })?.code === "permission-denied"
+          ? "Firestore no permitió enviar. Falta publicar las reglas de «memosInternos»."
+          : "No se pudo enviar el memo. Revise la conexión e intente de nuevo.",
+      );
     } finally {
       setOcupado("");
     }
@@ -440,11 +574,13 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
         <div>
           <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${sub}`}>Memorándums</p>
           <h2 className={`mt-1 text-xl font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>
-            {MEMO_AREAS[area].nombre}
+            {config.nombre}
           </h2>
           <p className={`mt-1 max-w-2xl text-sm ${isLight ? "text-slate-600" : "text-slate-400"}`}>
             Memos con el membrete oficial, guardados por número correlativo. Se descargan en PDF o en Word
-            (para firmar o seguir editando). Solo los administradores ven este menú.
+            {destino
+              ? ` y se envían firmados y sellados a ${NOMBRE_BANDEJA[destino] || MEMO_AREAS[destino].nombre} por PULSO.`
+              : " (para firmar o seguir editando). Solo los administradores ven este menú."}
           </p>
         </div>
         <button
@@ -461,6 +597,44 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
       ) : null}
       {aviso ? (
         <p className="mt-4 rounded-xl border border-teal-400/40 bg-teal-500/10 px-3 py-2 text-sm text-teal-600">{aviso}</p>
+      ) : null}
+
+      {usaSello ? (
+        <div
+          className={`mt-4 flex flex-wrap items-center gap-3 rounded-2xl border px-3 py-2.5 ${
+            isLight ? "border-slate-200 bg-slate-50/60" : "border-white/[0.07] bg-white/[0.02]"
+          }`}
+        >
+          {sello ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={sello.data} alt="Firma y sello" className="h-14 w-auto rounded-lg bg-white p-1" />
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Firma y sello digital</p>
+            <p className={`text-[12px] ${sub}`}>
+              {!selloCargado
+                ? "Cargando…"
+                : sello
+                  ? "Va al final del memo, sobre la línea de firma, en el PDF, el Word y lo que se envía."
+                  : "Todavía no está cargada. Suba la imagen de su firma y sello (PNG con fondo transparente es lo ideal)."}
+            </p>
+          </div>
+          <input
+            ref={selloInputRef}
+            type="file"
+            accept="image/png,image/jpeg"
+            className="hidden"
+            onChange={(e) => void subirSello(e.target.files?.[0])}
+          />
+          <button
+            type="button"
+            className={btnSec}
+            disabled={!!ocupado}
+            onClick={() => selloInputRef.current?.click()}
+          >
+            {ocupado === "sello" ? "Guardando…" : sello ? "Cambiar firma y sello" : "Cargar firma y sello"}
+          </button>
+        </div>
       ) : null}
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -519,6 +693,9 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
                     {m.asunto || "(sin asunto)"}
                   </span>
                   <span className={`block truncate text-[11px] ${sub}`}>Para: {m.bloques[0]?.personas[0]?.nombre || "—"}</span>
+                  {m.enviado ? (
+                    <span className="mt-0.5 block text-[10.5px] font-semibold text-emerald-500">Enviado por PULSO · {m.enviado}</span>
+                  ) : null}
                 </button>
               );
             })}
@@ -530,7 +707,7 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
           <div className="min-w-0 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-semibold">
-                {idOriginal ? "Editando" : "Nuevo"} · No. {memoCodigo(memo)}
+                {idOriginal ? "Editando" : "Nuevo"} · {memoNumeroTexto(memo)}
                 {cambiosSinGuardar ? <span className="ml-2 text-xs font-normal text-amber-500">sin guardar</span> : null}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -551,6 +728,17 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
                 >
                   {ocupado === "guardar" ? "Guardando…" : "Guardar"}
                 </button>
+                {destino ? (
+                  <button
+                    type="button"
+                    onClick={() => void enviar()}
+                    disabled={!!ocupado}
+                    title={cambiosSinGuardar || !idOriginal ? "Primero guarde el memo" : undefined}
+                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+                  >
+                    {ocupado === "enviar" ? "Enviando…" : `Enviar a ${NOMBRE_BANDEJA[destino] || MEMO_AREAS[destino].nombre}`}
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -658,6 +846,13 @@ export function MemosEsdomed({ area, isLight, usuario }: Props) {
               <input type="checkbox" checked={memo.firma} onChange={(e) => editar({ firma: e.target.checked })} />
               Agregar línea de firma con el nombre y cargo del bloque «DE:»
             </label>
+            {usaSello ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={memo.sellado} onChange={(e) => editar({ sellado: e.target.checked })} />
+                Firmar y sellar (agrega la imagen de firma y sello al final, antes de guardar y enviar)
+                {!sello && selloCargado ? <span className="text-xs text-amber-500">· falta cargar la imagen</span> : null}
+              </label>
+            ) : null}
 
             <div className="flex flex-wrap justify-between gap-2 border-t pt-4 border-slate-500/20">
               <button type="button" onClick={cerrar} className={btnSec}>

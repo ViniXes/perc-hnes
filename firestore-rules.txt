@@ -68,6 +68,16 @@ rules_version = '2';
 //     escriben SOLO los administradores de ESDOMED (lista fija de correos) y la
 //     cuenta con el acceso 'panel-desvinculados'. Ningun otro admin, supervisor
 //     ni servicio. Borrar: solo los administradores de ESDOMED.
+// 17) MES CERRADO = CERRADO (20/11/2026, por auditoria). SEPS (incluidas las
+//     pruebas de Laboratorio) ya tiene cierre en el servidor como PERC y Horas:
+//     despues de las 2:30 p. m. del 5to dia habil solo el administrador guarda,
+//     salvo reapertura vigente (24 h). Y en PERC, Horas y SEPS, un mes anterior al
+//     mes pasado que no tenga hora de cierre publicada tambien queda cerrado.
+// 18) MEMOS FIRMADOS POR PULSO (26/11/2026): consultaExternaMemos (memos de la
+//     Jefatura de Consulta Externa), memoSellos (imagen de firma y sello de
+//     ESDOMED y de Consulta Externa, solo la lee su dueño) y memosInternos (los
+//     memos que se envian ESDOMED <-> Consulta Externa; quien recibe solo marca
+//     leido, nadie borra).
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -162,9 +172,8 @@ service cloud.firestore {
     }
     // --- Cierre de captura en el servidor --------------------------------------
     // captureWindows/{mes} guarda la hora de cierre de cada modulo: percCierre
-    // (3er dia habil) y horasCierre (5to, tambien la usa el Comite). SEPS queda
-    // sin cierre en el servidor: en esa coleccion tambien viven Gastos,
-    // Depreciacion, Laboratorio y comentarios, con otros plazos. Si el mes
+    // (3er dia habil) y horasCierre (5to, tambien la usa el Comite). SEPS usa
+    // horasCierre solo en sus documentos del mes (ver sepsDocAbierto). Si el mes
     // todavia no tiene la hora publicada, no se bloquea nada (la publican el
     // administrador al entrar y el recordatorio diario del servidor).
     function enPlazo(periodId, campo) {
@@ -188,9 +197,41 @@ service cloud.firestore {
       let ref = overrideRef(periodId, serviceId, moduleId);
       return exists(ref) && get(ref).data.state == 'closed';
     }
+    // Mes anterior al de hoy ("AAAA-MM"). Un mes MAS VIEJO que ese sin hora de
+    // cierre publicada ya cerro hace rato: queda cerrado igual (antes, si faltaba
+    // captureWindows/{mes}, el servidor lo dejaba abierto para siempre).
+    function mesAnterior() {
+      let y = request.time.year();
+      let m = request.time.month();
+      let py = m == 1 ? y - 1 : y;
+      let pm = m == 1 ? 12 : m - 1;
+      return string(py) + '-' + (pm < 10 ? '0' : '') + string(pm);
+    }
+    function noEsMesViejo(periodId) {
+      let ref = /databases/$(database)/documents/captureWindows/$(periodId);
+      return exists(ref) || periodId >= mesAnterior();
+    }
     function capturaAbierta(periodId, serviceId, moduleId, campo) {
       return reabierto(periodId, serviceId, moduleId)
-        || (enPlazo(periodId, campo) && !cerradoAMano(periodId, serviceId, moduleId));
+        || (enPlazo(periodId, campo) && noEsMesViejo(periodId)
+            && !cerradoAMano(periodId, serviceId, moduleId));
+    }
+    // SEPS: cierra el 5to dia habil a las 2:30 p. m., igual que Horas
+    // (horasCierre). Solo se controlan los documentos del mes de cada servicio
+    // ("AAAA-MM__servicio") y las pruebas de Laboratorio ("LABAAAAMM__laboratorio-clinico",
+    // que traen periodoMes). Gastos, Depreciacion y demas siguen como antes.
+    function sepsDocAbierto(docId) {
+      let d = request.resource.data;
+      let mensual = docId.matches('^[0-9]{4}-[0-9]{2}__.+$');
+      let lab = docId.matches('^LAB[0-9]{6}__laboratorio-clinico$');
+      return (!mensual && !lab)
+        || (mensual && d.get('periodId', '') is string && d.get('serviceId', '') is string
+            && docId == d.get('periodId', '') + '__' + d.get('serviceId', '')
+            && capturaAbierta(d.periodId, d.serviceId, 'sesps', 'horasCierre'))
+        || (lab && d.get('periodoMes', '') is string
+            && d.get('periodoMes', '').matches('^[0-9]{4}-[0-9]{2}$')
+            && docId == 'LAB' + d.periodoMes.replace('-', '') + '__laboratorio-clinico'
+            && capturaAbierta(d.periodoMes, 'laboratorio-clinico', 'sesps', 'horasCierre'));
     }
     function percAbierto(periodId, serviceId) {
       return capturaAbierta(periodId, serviceId, 'perc', 'percCierre');
@@ -223,8 +264,10 @@ service cloud.firestore {
     match /sepsTabulators/{docId} {
       allow read: if isSignedIn() && noEsMinsal();
       allow create, update: if isAdmin()
+        || (tienePerfil() && userProfile().role == 'admin')
         || (isSignedIn() && noEsMinsal()
-            && request.resource.data.userId == request.auth.uid)
+            && request.resource.data.userId == request.auth.uid
+            && sepsDocAbierto(docId))
         || request.auth.token.email == 'jcmiranda@perc-hnes.app';
       allow delete: if isAdmin();
     }
@@ -348,6 +391,44 @@ service cloud.firestore {
       allow create, update: if adminEsdomed()
         || (rrhhDesvinculados() && request.resource.data.periodId == periodId);
       allow delete: if adminEsdomed();
+    }
+    // --- MEMOS FIRMADOS Y SELLADOS POR PULSO (26/11/2026) --------------------
+    // Jefatura de Consulta Externa: cuenta de division "consulta-externa" creada
+    // como "Jefatura de Consulta Externa", o la que un admin habilite con el
+    // acceso 'panel-memos-consulta-externa' (p. ej. la subjefatura).
+    function esJefaturaCE() {
+      return tienePerfil()
+        && userProfile().get('division', '') == 'consulta-externa'
+        && (userProfile().get('serviceName', '') == 'Jefatura de Consulta Externa'
+            || userProfile().get('menuGrants', []).hasAny(['panel-memos-consulta-externa']));
+    }
+    // Memos de la Jefatura de Consulta Externa ("<año>__<numero>"). Solo ella.
+    match /consultaExternaMemos/{docId} {
+      allow read, write: if esJefaturaCE();
+    }
+    // Imagen de firma y sello de cada area: solo la lee y la cambia esa area.
+    match /memoSellos/{area} {
+      allow read, write: if (area == 'esdomed' && adminEsdomed())
+        || (area == 'consulta-externa' && esJefaturaCE());
+    }
+    // Memos enviados entre ESDOMED y Consulta Externa. Cada lado ve lo que envio y
+    // lo que recibio; quien recibe solo puede marcarlo leido. Nadie los borra.
+    match /memosInternos/{id} {
+      allow read: if adminEsdomed()
+        || (esJefaturaCE()
+            && (resource.data.para == 'consulta-externa' || resource.data.de == 'consulta-externa'));
+      allow create: if request.resource.data.leido == false
+        && request.resource.data.enviadoUid == request.auth.uid
+        && ((request.resource.data.de == 'esdomed'
+              && request.resource.data.para == 'consulta-externa' && adminEsdomed())
+            || (request.resource.data.de == 'consulta-externa'
+              && request.resource.data.para == 'esdomed' && esJefaturaCE()));
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['leido', 'leidoAt', 'leidoPor'])
+        && request.resource.data.leido == true
+        && ((resource.data.para == 'esdomed' && adminEsdomed())
+            || (resource.data.para == 'consulta-externa' && esJefaturaCE()));
+      allow delete: if false;
     }
     // Planificacion > Mis documentos: PDF por categoria. "<id>" es la ficha
     // (tipo "meta") y "<id>__<n>" cada trozo del PDF. Solo administradores.

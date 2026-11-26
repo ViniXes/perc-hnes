@@ -56,6 +56,12 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (Consulta Externa: perfiles y memos firmados por PULSO)
+- Cambio: registro con «Jefatura de Consulta Externa» y «Subjefatura de Consulta Externa» (cuentas de división `consulta-externa`, ven Monitoreo general con PERC/SEPS/Horas de sus 4 consultas); en esa división las opciones de servicio se leen «Jefe de Oncología…» y «Encargado de área — Oncología…». Memorándums > Consulta Externa (solo la jefatura) con número «N.º 2026-HNES-CEX-06». Firma y sello digital por área (ESDOMED y C.E.) que se agrega al final del PDF/Word con «Firmar y sellar». Botón «Enviar a …» y Memorándums > Bandeja de memos (recibidos/enviados, leído), con aviso tipo WhatsApp al llegar uno.
+- Firestore: `consultaExternaMemos` (solo jefatura C.E.), `memoSellos/{esdomed|consulta-externa}` (solo su dueño), `memosInternos` (cada lado lee lo suyo; quien recibe solo marca leído; nadie borra). La jefatura se reconoce por `division == consulta-externa` y `serviceName == "Jefatura de Consulta Externa"` o el acceso `panel-memos-consulta-externa`. ESDOMED = `adminEsdomed()`.
+- Archivos: `src/lib/memo-esdomed.ts` (área consulta-externa, `sellado`, sello en PDF/Word, `memoNumeroTexto`), `src/lib/memos-internos.ts` (nuevo), `src/components/bandeja-memos.tsx` (nuevo), `src/components/memos-esdomed.tsx` (colección por área, cargar sello, enviar), `src/app/page.tsx` (registro, menú, escucha de no leídos), `firestore.rules`/`firestore-rules.txt` (regla 18, probadas con el emulador).
+- Notas: las imágenes de firma NO están en el repo (es público); cada área las sube desde la app. Hay que publicar las reglas a mano.
+
 ### 2026-11-25 — Claude (carga en vivo solo de lo reciente: solicitudes, tickets y reaperturas)
 - Cambio: antes se escuchaban EN VIVO las colecciones completas `captureRequests`, `supportTickets` y `captureOverrides`, y crecían cada mes. Ahora:
   - Solicitudes de habilitación: en vivo `periodId >= (mes en cierre − 2)` más `status == "pending"` de cualquier mes. Los avisos (nueva solicitud / tu solicitud fue resuelta) salen solo de la escucha de lo reciente.
