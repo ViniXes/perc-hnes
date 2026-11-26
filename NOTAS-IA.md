@@ -56,6 +56,9 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (directorio sin nombres de memos de ESDOMED)
+- El directorio de sugerencias (memoDirectorio) ya no toma nombres de los memos de ESDOMED/Planificación (esdomedMemos), solo de cuentas de PULSO, personas fijas y memos de C.E. Requisito del usuario: C.E. (jefatura, asistente, Dr. Cartagena) no ve nada de los memos de ESDOMED ni de Planificación.
+
 ### 2026-11-26 — Claude (memos de C.E. visibles en modo verificación)
 - page.tsx: `esJefaturaCEPerfil` (sin ghostUid) decide el menú Memorándums y la bandeja; `esJefaturaCE` (= perfil y no ghost) sigue decidiendo firmar/enviar. En modo verificación el admin ve el menú de la cuenta (p. ej. Dr. Cartagena) y la bandeja en solo lectura.
 

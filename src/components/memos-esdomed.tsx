@@ -328,7 +328,7 @@ export function MemosEsdomed({
     let vivo = true;
     (async () => {
       const lista = esAdmin
-        ? ((await publicarDirectorio(db, [MEMO_AREAS.esdomed.coleccion, MEMO_AREAS["consulta-externa"].coleccion])) ??
+        ? ((await publicarDirectorio(db, [MEMO_AREAS["consulta-externa"].coleccion])) ??
           (await leerDirectorio(db)))
         : await leerDirectorio(db);
       if (vivo) setDirectorio(lista);
