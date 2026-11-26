@@ -8,13 +8,15 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, doc, getDocs, onSnapshot, query, serverTimestamp, updateDoc, where, type Query } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs, onSnapshot, query, serverTimestamp, updateDoc, where, type Query } from "firebase/firestore";
 import { db } from "@/lib/firestore";
+import { useConfirmar } from "@/components/dialogo-confirmar";
 import {
   MEMO_AREAS,
   buildMemoPdfConMembrete,
   downloadMemoDocx,
   downloadMemoPdf,
+  memoDocId,
   memoFechaTexto,
   memoNumeroTexto,
   normalizarMemo,
@@ -39,6 +41,8 @@ type Props = {
   nombreUsuario?: string;
   /** Modo verificación del admin: solo mirar (no marca leído ni confirma). */
   soloLectura?: boolean;
+  /** Administradores de ESDOMED: pueden borrar un memo (p. ej. uno de prueba). */
+  puedeEliminar?: boolean;
 };
 
 function msDe(valor: unknown): number {
@@ -90,7 +94,8 @@ function cuando(ms: number): string {
   });
 }
 
-export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "", soloLectura = false }: Props) {
+export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "", soloLectura = false, puedeEliminar = false }: Props) {
+  const [preguntar, dialogoConfirmar] = useConfirmar(isLight);
   const [pestana, setPestana] = useState<"recibidos" | "enviados">("recibidos");
   const [error, setError] = useState("");
   const [abierto, setAbierto] = useState<MemoInterno | null>(null);
@@ -194,6 +199,52 @@ export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "", soloL
         leidoAt: serverTimestamp(),
         leidoPor: usuario,
       }).catch(() => {});
+    }
+  };
+
+  /**
+   * Borra el memo de TODAS las bandejas (una copia por destinatario) y, si existe,
+   * el memo guardado del área que lo envió. Solo admins de ESDOMED.
+   */
+  const [eliminando, setEliminando] = useState(false);
+  const eliminar = async (m: MemoInterno) => {
+    if (!puedeEliminar || soloLectura) return;
+    const ok = await preguntar({
+      titulo: "¿Eliminar este memo?",
+      texto: `Se borrará ${memoNumeroTexto(m.memo)} «${m.asunto || "sin asunto"}» de todas las bandejas, y también el memo guardado de ${nombreArea(m.de)}. No se puede deshacer.`,
+      boton: "Sí, eliminar",
+      tono: "peligro",
+    });
+    if (!ok) return;
+    setEliminando(true);
+    setError("");
+    try {
+      const col = collection(db, MENSAJES_COLECCION);
+      const ids = new Set<string>([m.id]);
+      if (m.codigo) {
+        const snap = await getDocs(query(col, where("codigo", "==", m.codigo)));
+        snap.docs.forEach((x) => {
+          if ((x.data() as { de?: string }).de === m.de) ids.add(x.id);
+        });
+      }
+      for (const id of ids) await deleteDoc(doc(db, MENSAJES_COLECCION, id));
+      const areaMemo = m.memo.area;
+      if (areaMemo && areaMemo === m.de && MEMO_AREAS[areaMemo as MemoArea]) {
+        await deleteDoc(
+          doc(db, MEMO_AREAS[areaMemo as MemoArea].coleccion, memoDocId(areaMemo as MemoArea, m.memo.year, m.memo.numero)),
+        ).catch(() => {});
+      }
+      setAnterioresR((l) => l.filter((x) => !ids.has(x.id)));
+      setAnterioresE((l) => l.filter((x) => !ids.has(x.id)));
+      cerrar();
+    } catch (e) {
+      setError(
+        (e as { code?: string })?.code === "permission-denied"
+          ? "Firestore no permitió eliminar. Falta publicar las reglas nuevas de «memosInternos»."
+          : "No se pudo eliminar el memo. Revise la conexión e intente de nuevo.",
+      );
+    } finally {
+      setEliminando(false);
     }
   };
 
@@ -419,6 +470,16 @@ export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "", soloL
                 <button type="button" className={btnSec} disabled={!!ocupado} onClick={() => void descargar("word")}>
                   {ocupado === "word" ? "Generando…" : "Descargar Word"}
                 </button>
+                {puedeEliminar && !soloLectura ? (
+                  <button
+                    type="button"
+                    disabled={eliminando || !!ocupado}
+                    onClick={() => void eliminar(abierto)}
+                    className="rounded-xl bg-rose-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-50"
+                  >
+                    {eliminando ? "Eliminando…" : "Eliminar"}
+                  </button>
+                ) : null}
                 <button type="button" className={btnSec} onClick={cerrar}>
                   Cerrar
                 </button>
@@ -434,6 +495,7 @@ export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "", soloL
           </div>
         </div>
       ) : null}
+      {dialogoConfirmar}
     </section>
   );
 }

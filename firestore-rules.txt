@@ -80,7 +80,8 @@ rules_version = '2';
 //     leido, nadie borra). La Dra. Katherinne Gil (acceso 'panel-memos-sis')
 //     recibe copia (para 'sis') de los memos que la nombran.
 //     Cada destinatario confirma "Recibido" una vez; queda la fecha y hora del
-//     servidor (recibidoAt) y quien envio la ve.
+//     servidor (recibidoAt) y quien envio la ve. Borrar un memo enviado: solo
+//     los administradores de ESDOMED.
 // 19) DIRECTORIO DE MEMOS (memoDirectorio): lista de nombres y cargos para
 //     sugerir en PARA/DE/CC de los memos. La leen los administradores y la
 //     Jefatura de Consulta Externa; la escribe solo un administrador.
@@ -429,7 +430,7 @@ service cloud.firestore {
       allow write: if adminPoa();
     }
     // Memos enviados entre ESDOMED y Consulta Externa. Cada lado ve lo que envio y
-    // lo que recibio; quien recibe solo puede marcarlo leido. Nadie los borra.
+    // lo que recibio; quien recibe solo puede marcarlo leido. Solo ESDOMED borra.
     // Dra. Katherinne Gil (SIS): solo recibe (para == 'sis') los memos que la
     // nombran; su cuenta lleva el acceso 'panel-memos-sis'.
     function bandejaSis() {
@@ -461,7 +462,8 @@ service cloud.firestore {
         && ((resource.data.para == 'esdomed' && adminEsdomed())
             || (resource.data.para == 'consulta-externa' && esJefaturaCE())
             || (resource.data.para == 'sis' && bandejaSis()));
-      allow delete: if false;
+      // Borrar: solo los administradores de ESDOMED (p. ej. memos de prueba).
+      allow delete: if adminEsdomed();
     }
     // Planificacion > Mis documentos: PDF por categoria. "<id>" es la ficha
     // (tipo "meta") y "<id>__<n>" cada trozo del PDF. Solo administradores.

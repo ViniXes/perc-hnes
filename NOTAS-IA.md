@@ -56,6 +56,9 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (eliminar memos desde la bandeja)
+- Botón «Eliminar» en la Bandeja de memos (solo admins de ESDOMED, no en modo verificación): borra todas las copias del memo en memosInternos (mismo codigo y mismo remitente) y el memo guardado del área que lo envió. Reglas: memosInternos `allow delete: if adminEsdomed();` (antes false). El usuario debe publicarlas. Emulador 63/63.
+
 ### 2026-11-26 — Claude (bandeja de memos por partes)
 - Bandeja de memos (bandeja-memos.tsx): en vivo solo carga los últimos 3 meses (campo nuevo `mes` "AAAA-MM", hora El Salvador, que se pone al enviar) y lo pendiente (`leido == false` / `recibido == false`; ahora se crea con `recibido: false`). «Ver anteriores» trae todo con getDocs. Solo igualdades: no pide índices compuestos ni cambia reglas. Emulador 58/58.
 

@@ -25487,6 +25487,7 @@ export default function Home() {
                 usuario={serviceProfile?.email || ""}
                 nombreUsuario={serviceProfile?.name || ""}
                 soloLectura={!!ghostUid}
+                puedeEliminar={esAdminEsdomed && !ghostUid}
               />
             </div>
           ) : null}
