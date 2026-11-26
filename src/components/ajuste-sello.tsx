@@ -7,7 +7,7 @@
  * acomoda aquí es lo que sale en el PDF, el Word y lo que recibe el otro lado.
  */
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   SELLO_AJUSTE_INICIAL,
   medidaSello,
@@ -42,6 +42,8 @@ export function AjusteSello({
   onColocar,
 }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  // Recuadro y manija solo mientras el sello está tocado.
+  const [activo, setActivo] = useState(false);
   const arrastre = useRef<{
     modo: "mover" | "girar";
     x: number;
@@ -73,6 +75,8 @@ export function AjusteSello({
 
   const empezar = (modo: "mover" | "girar", e: React.PointerEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    setActivo(true);
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     const p = punto(e);
     arrastre.current = { modo, x: p.x, y: p.y, dx: aj.dx, dy: aj.dy };
@@ -145,6 +149,7 @@ export function AjusteSello({
           onPointerMove={mover}
           onPointerUp={soltar}
           onPointerCancel={soltar}
+          onPointerDown={() => setActivo(false)}
         >
           <text
             x={0}
@@ -188,39 +193,45 @@ export function AjusteSello({
               style={{ cursor: "move" }}
               onPointerDown={(e) => empezar("mover", e)}
             />
-            <rect
-              x={cx - w / 2}
-              y={cy - h / 2}
-              width={w}
-              height={h}
-              fill="none"
-              stroke="#14b8a6"
-              strokeWidth={0.3}
-              strokeDasharray="1.5 1"
-              pointerEvents="none"
-            />
-            <line
-              x1={cx}
-              x2={cx}
-              y1={cy - h / 2}
-              y2={cy - radioManija}
-              stroke="#14b8a6"
-              strokeWidth={0.3}
-              pointerEvents="none"
-            />
+            {activo ? (
+              <>
+                <rect
+                  x={cx - w / 2}
+                  y={cy - h / 2}
+                  width={w}
+                  height={h}
+                  fill="none"
+                  stroke="#14b8a6"
+                  strokeWidth={0.3}
+                  strokeDasharray="1.5 1"
+                  pointerEvents="none"
+                />
+                <line
+                  x1={cx}
+                  x2={cx}
+                  y1={cy - h / 2}
+                  y2={cy - radioManija}
+                  stroke="#14b8a6"
+                  strokeWidth={0.3}
+                  pointerEvents="none"
+                />
+              </>
+            ) : null}
           </g>
-          <circle
-            cx={hx}
-            cy={hy}
-            r={2.4}
-            fill="#14b8a6"
-            stroke="#fff"
-            strokeWidth={0.5}
-            style={{ cursor: "grab" }}
-            onPointerDown={(e) => empezar("girar", e)}
-          >
-            <title>Arrastre para girar</title>
-          </circle>
+          {activo ? (
+            <circle
+              cx={hx}
+              cy={hy}
+              r={2.4}
+              fill="#14b8a6"
+              stroke="#fff"
+              strokeWidth={0.5}
+              style={{ cursor: "grab" }}
+              onPointerDown={(e) => empezar("girar", e)}
+            >
+              <title>Arrastre para girar</title>
+            </circle>
+          ) : null}
         </svg>
       )}
       <div className="mt-2 grid gap-2 sm:grid-cols-2">

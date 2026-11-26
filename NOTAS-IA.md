@@ -56,6 +56,10 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (recuadro del sello solo al tocarlo)
+- Cambio: en la vista previa y en «Acomodar firma y sello», el recuadro punteado y el círculo de giro solo se ven al tocar el sello; al tocar fuera desaparecen (nunca salen en PDF/Word).
+- Archivos: `src/components/vista-sello.tsx`, `src/components/ajuste-sello.tsx`.
+
 ### 2026-11-26 — Claude (bandeja SIS en modo verificación)
 - Cambio: la «Bandeja de memos» de la cuenta SIS también aparece cuando el admin la ve en modo verificación, en solo lectura (no marca leído ni confirma recibido).
 - Archivos: `src/app/page.tsx`, `src/components/bandeja-memos.tsx`.

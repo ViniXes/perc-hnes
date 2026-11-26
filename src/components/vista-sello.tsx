@@ -56,6 +56,8 @@ export function VistaSello({ memo, sello, isLight, onListo, onCerrar }: Props) {
   const [hojas, setHojas] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [aj, setAj] = useState<MemoSelloAjuste | null>(null);
+  // El recuadro punteado y la manija solo se ven mientras el sello está tocado.
+  const [activo, setActivo] = useState(false);
   const hojaRefs = useRef<(HTMLDivElement | null)[]>([]);
   const arrastre = useRef<{ modo: "mover" | "girar"; ox: number; oy: number } | null>(null);
 
@@ -115,6 +117,7 @@ export function VistaSello({ memo, sello, isLight, onListo, onCerrar }: Props) {
     if (!aj) return;
     e.preventDefault();
     e.stopPropagation();
+    setActivo(true);
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     const p = ubicar(e.clientX, e.clientY);
     arrastre.current = { modo, ox: p ? p.x - aj.x : 0, oy: p ? p.y - aj.y : 0 };
@@ -162,7 +165,7 @@ export function VistaSello({ memo, sello, isLight, onListo, onCerrar }: Props) {
           <div className="min-w-0">
             <p className="text-sm font-semibold">Vista previa · colocar firma y sello</p>
             <p className="text-[12px] opacity-70">
-              Arrastre el sello a donde lo quiera (p. ej. a la par de su nombre). El círculo verde lo gira.
+              Toque el sello y arrástrelo a donde lo quiera (p. ej. a la par de su nombre). El círculo verde lo gira; toque fuera para quitar el recuadro.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -223,6 +226,7 @@ export function VistaSello({ memo, sello, isLight, onListo, onCerrar }: Props) {
           onPointerMove={mover}
           onPointerUp={soltar}
           onPointerCancel={soltar}
+          onPointerDown={() => setActivo(false)}
         >
           {error ? <p className="p-6 text-center text-sm text-rose-500">{error}</p> : null}
           {!error && hojas.length === 0 ? (
@@ -257,14 +261,18 @@ export function VistaSello({ memo, sello, isLight, onListo, onCerrar }: Props) {
                       alt="Firma y sello"
                       draggable={false}
                       onPointerDown={(e) => empezar("mover", e)}
-                      className="h-full w-full cursor-move outline-dashed outline-1 outline-teal-500"
+                      className={`h-full w-full cursor-move ${activo ? "outline-dashed outline-1 outline-teal-500" : ""}`}
                     />
-                    <span className="pointer-events-none absolute left-1/2 top-[-18px] h-[18px] w-px -translate-x-1/2 bg-teal-500" />
-                    <span
-                      title="Arrastre para girar"
-                      onPointerDown={(e) => empezar("girar", e)}
-                      className="absolute left-1/2 top-[-30px] h-4 w-4 -translate-x-1/2 cursor-grab rounded-full border-2 border-white bg-teal-500 shadow"
-                    />
+                    {activo ? (
+                      <>
+                        <span className="pointer-events-none absolute left-1/2 top-[-18px] h-[18px] w-px -translate-x-1/2 bg-teal-500" />
+                        <span
+                          title="Arrastre para girar"
+                          onPointerDown={(e) => empezar("girar", e)}
+                          className="absolute left-1/2 top-[-30px] h-4 w-4 -translate-x-1/2 cursor-grab rounded-full border-2 border-white bg-teal-500 shadow"
+                        />
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
