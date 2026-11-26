@@ -56,6 +56,11 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (Asistente administrativo de Consulta Externa)
+- Cambio: en el registro, bajo «Jefatura de Consulta Externa», nueva opción «Asistente administrativo de Consulta Externa» (division de solicitud `consulta-externa-asist`; al aprobar queda division `consulta-externa`, serviceName = ese nombre). Mismos permisos que la jefatura: monitoreo y redactar, sellar y enviar memos de C.E. (`esJefaturaCE` en cliente y reglas acepta ese serviceName).
+- Archivos: `src/app/page.tsx`, `src/lib/memos-internos.ts`, `firestore.rules`.
+- Notas: el usuario debe publicar la función `esJefaturaCE()` de las reglas.
+
 ### 2026-11-26 — Claude (diálogo propio para eliminar/enviar memos)
 - Cambio: en Memorándums (ESDOMED, Planificación, Consulta Externa) los `window.confirm` (eliminar, enviar, descartar cambios) se reemplazaron por un diálogo con el diseño de PULSO. Nuevo hook reutilizable `useConfirmar(isLight)`.
 - Archivos: `src/components/dialogo-confirmar.tsx` (nuevo), `src/components/memos-esdomed.tsx`.

@@ -398,11 +398,12 @@ service cloud.firestore {
     // --- MEMOS FIRMADOS Y SELLADOS POR PULSO (26/11/2026) --------------------
     // Jefatura de Consulta Externa: cuenta de division "consulta-externa" creada
     // como "Jefatura de Consulta Externa", o la que un admin habilite con el
-    // acceso 'panel-memos-consulta-externa' (p. ej. la subjefatura).
+    // acceso 'panel-memos-consulta-externa' (p. ej. la subjefatura). El Asistente
+    // administrativo de Consulta Externa (secretaria) tiene los mismos permisos.
     function esJefaturaCE() {
       return tienePerfil()
         && userProfile().get('division', '') == 'consulta-externa'
-        && (userProfile().get('serviceName', '') == 'Jefatura de Consulta Externa'
+        && (userProfile().get('serviceName', '') in ['Jefatura de Consulta Externa', 'Asistente administrativo de Consulta Externa']
             || userProfile().get('menuGrants', []).hasAny(['panel-memos-consulta-externa']));
     }
     // Memos de la Unidad de Consulta Externa ("<año>__<numero>"): la jefatura y,

@@ -53,6 +53,8 @@ export function memoNombraGil(memo: Pick<MemoEsdomed, "bloques">): boolean {
 /** Nombre del servicio (serviceName) de la cuenta de la Jefatura de Consulta Externa. */
 export const JEFATURA_CE_NOMBRE = "Jefatura de Consulta Externa";
 export const SUBJEFATURA_CE_NOMBRE = "Subjefatura de Consulta Externa";
+/** Asistente administrativo (secretaría) de C.E.: mismos permisos que la jefatura, incluidos los memos. */
+export const ASISTENTE_CE_NOMBRE = "Asistente administrativo de Consulta Externa";
 /** Acceso que un admin puede otorgar (Usuarios) para que otra cuenta de C.E. use los memos. */
 export const GRANT_MEMOS_CE = "panel-memos-consulta-externa";
 

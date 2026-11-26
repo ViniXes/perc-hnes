@@ -11,6 +11,7 @@ import {
   MENSAJES_COLECCION,
   NOMBRE_BANDEJA,
   SUBJEFATURA_CE_NOMBRE,
+  ASISTENTE_CE_NOMBRE,
 } from "@/lib/memos-internos";
 import { DocumentosPlanificacion } from "@/components/documentos-planificacion";
 import { PersonalDesvinculado } from "@/components/personal-desvinculado";
@@ -5127,7 +5128,9 @@ export default function Home() {
   const esJefaturaCE =
     !ghostUid &&
     serviceProfile?.division === "consulta-externa" &&
-    (serviceProfile?.serviceName === JEFATURA_CE_NOMBRE || hasGrant(GRANT_MEMOS_CE));
+    (serviceProfile?.serviceName === JEFATURA_CE_NOMBRE ||
+      serviceProfile?.serviceName === ASISTENTE_CE_NOMBRE ||
+      hasGrant(GRANT_MEMOS_CE));
   // Bandeja de memos de esta cuenta: ESDOMED (sus admins) o Consulta Externa.
   // La Dra. Katherinne Gil (SIS) solo recibe: su cuenta lleva el acceso "panel-memos-sis".
   const bandejaMemos: "esdomed" | "consulta-externa" | "sis" | null = esJefaturaCE
@@ -10931,6 +10934,7 @@ export default function Home() {
       administrativa: "Subdirección Administrativa",
       "consulta-externa": JEFATURA_CE_NOMBRE,
       "consulta-externa-sub": SUBJEFATURA_CE_NOMBRE,
+      "consulta-externa-asist": ASISTENTE_CE_NOMBRE,
     };
     if (!signupForm.firstName.trim() || !signupForm.lastName.trim() || !signupForm.email.trim()) {
       setError("Completá nombres, apellidos y correo.");
@@ -11297,6 +11301,7 @@ export default function Home() {
       // Horas) de sus 4 consultas. Las dos quedan con division "consulta-externa".
       "consulta-externa": JEFATURA_CE_NOMBRE,
       "consulta-externa-sub": SUBJEFATURA_CE_NOMBRE,
+      "consulta-externa-asist": ASISTENTE_CE_NOMBRE,
     };
 
     // --- Solicitud de JEFE DE DIVISION ---
@@ -11310,7 +11315,7 @@ export default function Home() {
       const secondaryDiv = createSecondaryAuth();
       try {
         const { username, credential, password: claveTemporal } = await createDivisionChiefAccount(secondaryDiv.auth, {
-          division: divKey === "consulta-externa-sub" ? "consulta-externa" : divKey,
+          division: divKey.startsWith("consulta-externa-") ? "consulta-externa" : divKey,
           divisionLabel: DIVLBL[divKey],
           contactEmail: req.email,
           firstName: req.firstName,
@@ -32059,9 +32064,14 @@ export default function Home() {
                               </option>
                             ) : null}
                             {signupDivView === "consulta-externa" ? (
-                              <option value="div:consulta-externa-sub" className="bg-[#1b2537] text-cyan-200">
-                                {SUBJEFATURA_CE_NOMBRE}
-                              </option>
+                              <>
+                                <option value="div:consulta-externa-asist" className="bg-[#1b2537] text-cyan-200">
+                                  {ASISTENTE_CE_NOMBRE}
+                                </option>
+                                <option value="div:consulta-externa-sub" className="bg-[#1b2537] text-cyan-200">
+                                  {SUBJEFATURA_CE_NOMBRE}
+                                </option>
+                              </>
                             ) : null}
                             {signupDivView === "medica" ? (
                               <>
