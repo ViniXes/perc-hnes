@@ -56,6 +56,10 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (bandeja SIS en modo verificación)
+- Cambio: la «Bandeja de memos» de la cuenta SIS también aparece cuando el admin la ve en modo verificación, en solo lectura (no marca leído ni confirma recibido).
+- Archivos: `src/app/page.tsx`, `src/components/bandeja-memos.tsx`.
+
 ### 2026-11-26 — Claude (permisos de memos en la ventana Permisos)
 - Cambio: en Usuarios > Permisos, el ítem «Memorándums» ya no es solo admin: trae interruptores para `panel-memos-sis` (bandeja Dra. Gil) y `panel-memos-consulta-externa`.
 - Archivos: `src/app/page.tsx`.

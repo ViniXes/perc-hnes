@@ -35,6 +35,8 @@ type Props = {
   usuario: string;
   /** Nombre de quien confirma el recibido (lo ve quien envió). */
   nombreUsuario?: string;
+  /** Modo verificación del admin: solo mirar (no marca leído ni confirma). */
+  soloLectura?: boolean;
 };
 
 function msDe(valor: unknown): number {
@@ -78,7 +80,7 @@ function cuando(ms: number): string {
   });
 }
 
-export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "" }: Props) {
+export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "", soloLectura = false }: Props) {
   const [recibidos, setRecibidos] = useState<MemoInterno[]>([]);
   const [enviados, setEnviados] = useState<MemoInterno[]>([]);
   const [pestana, setPestana] = useState<"recibidos" | "enviados">("recibidos");
@@ -136,7 +138,7 @@ export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "" }: Pro
     } finally {
       setOcupado("");
     }
-    if (m.para === area && !m.leido) {
+    if (!soloLectura && m.para === area && !m.leido) {
       await updateDoc(doc(db, MENSAJES_COLECCION, m.id), {
         leido: true,
         leidoAt: serverTimestamp(),
@@ -153,7 +155,7 @@ export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "" }: Pro
   /** Acuse de recibido: queda con la fecha y hora del servidor y no se puede deshacer. */
   const [confirmando, setConfirmando] = useState(false);
   const confirmarRecibido = async (m: MemoInterno) => {
-    if (m.para !== area || m.recibido) return;
+    if (soloLectura || m.para !== area || m.recibido) return;
     setConfirmando(true);
     setError("");
     try {
@@ -313,6 +315,10 @@ export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "" }: Pro
                   abiertoVivo.recibido ? (
                     <span className="rounded-xl bg-emerald-500/15 px-3 py-2 text-sm font-semibold text-emerald-600">
                       ✓ Recibido {cuando(abiertoVivo.recibidoMs)}
+                    </span>
+                  ) : soloLectura ? (
+                    <span className="rounded-xl bg-amber-500/15 px-3 py-2 text-sm font-semibold text-amber-600">
+                      Sin confirmar (solo lectura)
                     </span>
                   ) : (
                     <button

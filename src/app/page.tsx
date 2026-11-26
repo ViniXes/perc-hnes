@@ -5134,8 +5134,8 @@ export default function Home() {
     ? "consulta-externa"
     : esAdminEsdomed && !ghostUid
       ? "esdomed"
-      : !ghostUid && hasGrant(GRANT_MEMOS_SIS)
-        ? "sis"
+      : hasGrant(GRANT_MEMOS_SIS)
+        ? "sis" // también en modo verificación (solo lectura)
         : null;
   const esRrhhDesvinculados = hasGrant("panel-desvinculados");
   const puedeVerDesvinculados = !isMinsal && (esAdminEsdomed || esRrhhDesvinculados);
@@ -25476,6 +25476,7 @@ export default function Home() {
                 isLight={isLightPanelTheme}
                 usuario={serviceProfile?.email || ""}
                 nombreUsuario={serviceProfile?.name || ""}
+                soloLectura={!!ghostUid}
               />
             </div>
           ) : null}
