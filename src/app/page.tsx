@@ -27220,7 +27220,38 @@ export default function Home() {
                                             </>,
                                           )}
 
-                                          {item("memos", "ME", "Memorándums", 0, null, soloAdmin)}
+                                          {item(
+                                            "memos",
+                                            "ME",
+                                            "Memorándums",
+                                            (tieneGrant("panel-memos-sis") ? 1 : 0) + (tieneGrant("panel-memos-consulta-externa") ? 1 : 0),
+                                            <>
+                                              {opcion(
+                                                "memos-sis",
+                                                "Bandeja de memos: Dra. Katherinne Gil (SIS)",
+                                                "Recibe los memos de ESDOMED y Consulta Externa que la nombran.",
+                                                interruptor(
+                                                  tieneGrant("panel-memos-sis"),
+                                                  () => ponerGrant("panel-memos-sis", !tieneGrant("panel-memos-sis")),
+                                                  "Bandeja de memos SIS",
+                                                ),
+                                              )}
+                                              {opcion(
+                                                "memos-ce",
+                                                "Memorándums de Consulta Externa",
+                                                "Firma y envía memos como Consulta Externa (solo cuentas de C.E.).",
+                                                interruptor(
+                                                  tieneGrant("panel-memos-consulta-externa"),
+                                                  () =>
+                                                    ponerGrant(
+                                                      "panel-memos-consulta-externa",
+                                                      !tieneGrant("panel-memos-consulta-externa"),
+                                                    ),
+                                                  "Memorándums de Consulta Externa",
+                                                ),
+                                              )}
+                                            </>,
+                                          )}
                                           {item("config", "CF", "Configuración", 0, null, candado("Todos", true))}
                                           {item("calendar", "CM", "Días hábiles", 0, null, soloAdmin)}
                                           {item("users", "US", "Usuarios", 0, null, soloAdmin)}

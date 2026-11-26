@@ -56,6 +56,10 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (permisos de memos en la ventana Permisos)
+- Cambio: en Usuarios > Permisos, el ítem «Memorándums» ya no es solo admin: trae interruptores para `panel-memos-sis` (bandeja Dra. Gil) y `panel-memos-consulta-externa`.
+- Archivos: `src/app/page.tsx`.
+
 ### 2026-11-26 — Claude (bandeja de la Dra. Gil bajo Documentos)
 - Cambio: «Bandeja de memos» de la cuenta SIS (acceso `panel-memos-sis`) sale en el grupo Documentos del menú.
 - Archivos: `src/app/page.tsx` (grupoMenuLateral).
