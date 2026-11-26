@@ -891,8 +891,25 @@ export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid =
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={memo.sellado} onChange={(e) => editar({ sellado: e.target.checked })} />
                 Firmar y sellar (agrega la imagen de firma y sello al final, antes de guardar y enviar)
-                {!sello && selloCargado ? <span className="text-xs text-amber-500">· falta cargar la imagen</span> : null}
               </label>
+            ) : null}
+            {usaSello ? (
+              <div className="flex flex-wrap items-center gap-3 pl-6">
+                {sello ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={sello.data} alt="Firma y sello" className="h-12 w-auto rounded-lg bg-white p-1" />
+                ) : selloCargado ? (
+                  <span className="text-xs text-amber-500">Falta cargar la imagen de su firma y sello.</span>
+                ) : null}
+                <button
+                  type="button"
+                  className={`${BTN_GUARDAR} rounded-xl px-3.5 py-1.5 text-sm transition disabled:opacity-50`}
+                  disabled={!!ocupado}
+                  onClick={() => selloInputRef.current?.click()}
+                >
+                  {ocupado === "sello" ? "Guardando…" : sello ? "Cambiar firma y sello" : "Cargar firma y sello"}
+                </button>
+              </div>
             ) : null}
 
             <div className="flex flex-wrap justify-between gap-2 border-t pt-4 border-slate-500/20">

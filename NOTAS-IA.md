@@ -56,6 +56,10 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (botón de firma y sello junto a «Firmar y sellar»)
+- Cambio: el botón «Cargar/Cambiar firma y sello» y la miniatura también aparecen debajo de la casilla «Firmar y sellar» en el editor del memo (el usuario no veía el de arriba).
+- Archivos: `src/components/memos-esdomed.tsx`.
+
 ### 2026-11-26 — Claude (Consulta Externa visible para admins y copia a la Dra. Gil)
 - Cambio: Memorándums > Consulta Externa ahora también aparece para los administradores, junto a ESDOMED y Planificación (ven y editan; firmar/enviar con el sello de C.E. solo la jefatura). La Dra. Katherinne Gil (Médico Implementador del SIS) recibe copia en su propia bandeja de los memos de ESDOMED o C.E. que la nombran en el encabezado (`memoNombraGil`); al enviar se eligen los destinatarios. Su cuenta necesita el acceso «Bandeja de memos: Dra. Katherinne Gil (SIS)» (`panel-memos-sis`) en Usuarios.
 - Firestore: `consultaExternaMemos` también para `adminPoa()`; `memosInternos` admite `para == 'sis'` (`bandejaSis()`). Probadas con el emulador.
