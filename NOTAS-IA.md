@@ -56,6 +56,10 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (diálogo propio para eliminar/enviar memos)
+- Cambio: en Memorándums (ESDOMED, Planificación, Consulta Externa) los `window.confirm` (eliminar, enviar, descartar cambios) se reemplazaron por un diálogo con el diseño de PULSO. Nuevo hook reutilizable `useConfirmar(isLight)`.
+- Archivos: `src/components/dialogo-confirmar.tsx` (nuevo), `src/components/memos-esdomed.tsx`.
+
 ### 2026-11-26 — Claude (recuadro del sello solo al tocarlo)
 - Cambio: en la vista previa y en «Acomodar firma y sello», el recuadro punteado y el círculo de giro solo se ven al tocar el sello; al tocar fuera desaparecen (nunca salen en PDF/Word).
 - Archivos: `src/components/vista-sello.tsx`, `src/components/ajuste-sello.tsx`.

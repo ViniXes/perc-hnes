@@ -36,6 +36,7 @@ import {
 import { BTN_GUARDAR } from "@/components/ui-basicos";
 import { AjusteSello } from "@/components/ajuste-sello";
 import { VistaSello } from "@/components/vista-sello";
+import { useConfirmar } from "@/components/dialogo-confirmar";
 import { borrarBorrador, guardarBorrador, leerBorrador } from "@/lib/borradores";
 import {
   DESTINO_MEMO,
@@ -259,11 +260,19 @@ export function MemosEsdomed({
   }, [memo, cambiosSinGuardar, idOriginal, guardadoJson, usuario, claveBorrador]);
   const olvidarBorrador = () => borrarBorrador(usuario, claveBorrador);
 
-  const confirmarDescartar = () =>
-    !cambiosSinGuardar || window.confirm("Hay cambios sin guardar en el memo abierto. ¿Descartarlos?");
+  const [preguntar, dialogoConfirmar] = useConfirmar(isLight);
+  const confirmarDescartar = async () =>
+    !cambiosSinGuardar ||
+    (await preguntar({
+      titulo: "¿Descartar los cambios?",
+      texto: "El memo abierto tiene cambios sin guardar. Si continúa, se pierden.",
+      boton: "Descartar cambios",
+      cancelar: "Seguir editando",
+      tono: "aviso",
+    }));
 
-  const abrirNuevo = () => {
-    if (!confirmarDescartar()) return;
+  const abrirNuevo = async () => {
+    if (!(await confirmarDescartar())) return;
     const year = new Date().getFullYear();
     const nuevo = memoNuevo(area, year, siguienteNumero(year), hoyIso());
     olvidarBorrador();
@@ -274,8 +283,8 @@ export function MemosEsdomed({
     setError("");
   };
 
-  const abrir = (m: MemoGuardado) => {
-    if (!confirmarDescartar()) return;
+  const abrir = async (m: MemoGuardado) => {
+    if (!(await confirmarDescartar())) return;
     const limpio = normalizarMemo(m as unknown as Record<string, unknown>);
     olvidarBorrador();
     setMemo(limpio);
@@ -285,8 +294,8 @@ export function MemosEsdomed({
     setError("");
   };
 
-  const cerrar = () => {
-    if (!confirmarDescartar()) return;
+  const cerrar = async () => {
+    if (!(await confirmarDescartar())) return;
     olvidarBorrador();
     setMemo(null);
     setIdOriginal(null);
@@ -374,7 +383,18 @@ export function MemosEsdomed({
 
   const borrar = async () => {
     if (!memo || !idOriginal) return;
-    if (!window.confirm(`¿Eliminar el memo No. ${memoCodigo(memo)}? No se puede deshacer.`)) return;
+    const ok = await preguntar({
+      titulo: "¿Eliminar este memo?",
+      texto: (
+        <>
+          Se eliminará el memo <strong className="whitespace-nowrap">{memoNumeroTexto(memo)}</strong>
+          {memo.asunto.trim() ? <> · {memo.asunto.trim()}</> : null}. Esta acción no se puede deshacer.
+        </>
+      ),
+      boton: "Sí, eliminar",
+      tono: "peligro",
+    });
+    if (!ok) return;
     setOcupado("borrar");
     try {
       await deleteDoc(doc(db, coleccion, idOriginal));
@@ -436,7 +456,17 @@ export function MemosEsdomed({
       return;
     }
     const nombreDestino = destinos.map((d) => NOMBRE_BANDEJA[d]).join(" y ");
-    if (!window.confirm(`¿Enviar el memo ${memoNumeroTexto(memo)} firmado y sellado a ${nombreDestino}?`)) return;
+    const ok = await preguntar({
+      titulo: "¿Enviar el memo?",
+      texto: (
+        <>
+          El memo <strong className="whitespace-nowrap">{memoNumeroTexto(memo)}</strong> se enviará firmado y sellado a{" "}
+          <strong>{nombreDestino}</strong> por PULSO.
+        </>
+      ),
+      boton: "Enviar",
+    });
+    if (!ok) return;
     setOcupado("enviar");
     setError("");
     setAviso("");
@@ -605,6 +635,7 @@ export function MemosEsdomed({
 
   return (
     <section id={`panel-memos-${area}`} className={`rounded-[24px] p-5 ${tarjeta}`}>
+      {dialogoConfirmar}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className={`text-[11px] font-semibold uppercase tracking-[0.22em] ${sub}`}>Memorándums</p>
