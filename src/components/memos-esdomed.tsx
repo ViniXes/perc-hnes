@@ -40,7 +40,9 @@ import {
   NOMBRE_BANDEJA,
   SELLOS_COLECCION,
   leerSello,
+  memoNombraGil,
   prepararSello,
+  type BandejaId,
 } from "@/lib/memos-internos";
 
 type MemoGuardado = MemoEsdomed & {
@@ -84,8 +86,12 @@ function fechaDe(valor: unknown): string {
 export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid = "", puedeEnviar = false }: Props) {
   const config = MEMO_AREAS[area];
   const coleccion = config.coleccion;
-  const destino = puedeEnviar ? DESTINO_MEMO[area] : undefined;
+  const destino = (puedeEnviar ? DESTINO_MEMO[area] : undefined) as BandejaId | undefined;
   const usaSello = !!config.conSello && puedeEnviar;
+  // A quién se envía: la otra área (marcada de entrada) y, si el memo la nombra,
+  // la Dra. Katherinne Gil (SIS).
+  const [enviarOtraArea, setEnviarOtraArea] = useState(true);
+  const [enviarGil, setEnviarGil] = useState(true);
   const [memos, setMemos] = useState<MemoGuardado[]>([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -403,28 +409,39 @@ export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid =
       );
       return;
     }
-    const nombreDestino = NOMBRE_BANDEJA[destino] || MEMO_AREAS[destino].nombre;
+    const destinos: BandejaId[] = [
+      ...(enviarOtraArea ? [destino] : []),
+      ...(enviarGil && memoNombraGil(memo) ? (["sis"] as const) : []),
+    ];
+    if (destinos.length === 0) {
+      setError("Marque al menos a quién enviarlo.");
+      return;
+    }
+    const nombreDestino = destinos.map((d) => NOMBRE_BANDEJA[d]).join(" y ");
     if (!window.confirm(`¿Enviar el memo ${memoNumeroTexto(memo)} firmado y sellado a ${nombreDestino}?`)) return;
     setOcupado("enviar");
     setError("");
     setAviso("");
     try {
-      await addDoc(collection(db, MENSAJES_COLECCION), {
-        de: area,
-        para: destino,
-        memo,
-        sello,
-        codigo: memoCodigo(memo),
-        asunto: memo.asunto,
-        enviadoPor: usuario,
-        enviadoPorNombre: nombreUsuario || usuario,
-        enviadoUid: uid,
-        createdAt: serverTimestamp(),
-        leido: false,
-      });
+      // Un envío por destinatario: cada bandeja marca su propio "leído".
+      for (const para of destinos) {
+        await addDoc(collection(db, MENSAJES_COLECCION), {
+          de: area,
+          para,
+          memo,
+          sello,
+          codigo: memoCodigo(memo),
+          asunto: memo.asunto,
+          enviadoPor: usuario,
+          enviadoPorNombre: nombreUsuario || usuario,
+          enviadoUid: uid,
+          createdAt: serverTimestamp(),
+          leido: false,
+        });
+      }
       await setDoc(
         doc(db, coleccion, idOriginal),
-        { enviadoAt: serverTimestamp(), enviadoA: destino },
+        { enviadoAt: serverTimestamp(), enviadoA: destinos.join(",") },
         { merge: true },
       ).catch(() => {});
       setAviso(`Memo ${memoNumeroTexto(memo)} enviado a ${nombreDestino}. Le llega en su bandeja de PULSO.`);
@@ -579,8 +596,10 @@ export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid =
           <p className={`mt-1 max-w-2xl text-sm ${isLight ? "text-slate-600" : "text-slate-400"}`}>
             Memos con el membrete oficial, guardados por número correlativo. Se descargan en PDF o en Word
             {destino
-              ? ` y se envían firmados y sellados a ${NOMBRE_BANDEJA[destino] || MEMO_AREAS[destino].nombre} por PULSO.`
-              : " (para firmar o seguir editando). Solo los administradores ven este menú."}
+              ? ` y se envían firmados y sellados por PULSO a ${NOMBRE_BANDEJA[destino]} (y a la Dra. Katherinne Gil cuando el memo la nombra).`
+              : area === "consulta-externa"
+                ? ". Los firma, sella y envía la Jefatura de Consulta Externa (Dra. Benítez) desde su cuenta."
+                : " (para firmar o seguir editando). Solo los administradores ven este menú."}
           </p>
         </div>
         <button
@@ -736,10 +755,32 @@ export function MemosEsdomed({ area, isLight, usuario, nombreUsuario = "", uid =
                     title={cambiosSinGuardar || !idOriginal ? "Primero guarde el memo" : undefined}
                     className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
                   >
-                    {ocupado === "enviar" ? "Enviando…" : `Enviar a ${NOMBRE_BANDEJA[destino] || MEMO_AREAS[destino].nombre}`}
+                    {ocupado === "enviar" ? "Enviando…" : "Enviar por PULSO"}
                   </button>
                 ) : null}
               </div>
+              {destino ? (
+                <div className={`flex w-full flex-wrap items-center justify-end gap-x-4 gap-y-1 text-[12px] ${sub}`}>
+                  <span>Enviar a:</span>
+                  <label className="flex items-center gap-1.5">
+                    <input type="checkbox" checked={enviarOtraArea} onChange={(e) => setEnviarOtraArea(e.target.checked)} />
+                    {NOMBRE_BANDEJA[destino as BandejaId]}
+                  </label>
+                  <label
+                    className={`flex items-center gap-1.5 ${memoNombraGil(memo) ? "" : "opacity-50"}`}
+                    title="Solo si el memo la nombra en el encabezado (PARA, CC., VÍA…)"
+                  >
+                    <input
+                      type="checkbox"
+                      disabled={!memoNombraGil(memo)}
+                      checked={enviarGil && memoNombraGil(memo)}
+                      onChange={(e) => setEnviarGil(e.target.checked)}
+                    />
+                    {NOMBRE_BANDEJA.sis}
+                    {memoNombraGil(memo) ? "" : " (no va en el memo)"}
+                  </label>
+                </div>
+              ) : null}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-[150px_100px_100px_1fr_170px]">

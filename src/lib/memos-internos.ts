@@ -20,10 +20,35 @@ export const DESTINO_MEMO: Partial<Record<MemoArea, MemoArea>> = {
   "consulta-externa": "esdomed",
 };
 
-export const NOMBRE_BANDEJA: Partial<Record<MemoArea, string>> = {
+/**
+ * Bandejas: las dos áreas que escriben memos y la Dra. Katherinne Gil (Médico
+ * Implementador del SIS), que solo RECIBE: le llega copia de los memos de
+ * ESDOMED o de Consulta Externa que la nombran en el encabezado.
+ */
+export type BandejaId = "esdomed" | "consulta-externa" | "sis";
+
+export const NOMBRE_BANDEJA: Record<BandejaId, string> = {
   esdomed: "ESDOMED",
   "consulta-externa": "Jefatura de Consulta Externa",
+  sis: "Dra. Katherinne Gil (SIS)",
 };
+
+/** Acceso (Usuarios) que convierte una cuenta en la bandeja de la Dra. Gil. */
+export const GRANT_MEMOS_SIS = "panel-memos-sis";
+
+function sinTildes(t: string) {
+  return t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+/** ¿El memo nombra a la Dra. Katherinne Gil en el encabezado (PARA, CC., VÍA…)? */
+export function memoNombraGil(memo: Pick<MemoEsdomed, "bloques">): boolean {
+  return memo.bloques.some((b) =>
+    b.personas.some((p) => {
+      const n = sinTildes(p.nombre);
+      return /\bgil\b/.test(n) && /\bk[a-z]*t[a-z]*rin/.test(n);
+    }),
+  );
+}
 
 /** Nombre del servicio (serviceName) de la cuenta de la Jefatura de Consulta Externa. */
 export const JEFATURA_CE_NOMBRE = "Jefatura de Consulta Externa";
@@ -33,8 +58,8 @@ export const GRANT_MEMOS_CE = "panel-memos-consulta-externa";
 
 export type MemoInterno = {
   id: string;
-  de: MemoArea;
-  para: MemoArea;
+  de: BandejaId;
+  para: BandejaId;
   memo: MemoEsdomed;
   sello: MemoSello | null;
   codigo: string;

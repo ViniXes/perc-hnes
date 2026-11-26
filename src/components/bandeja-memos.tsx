@@ -20,11 +20,17 @@ import {
   normalizarMemo,
   type MemoArea,
 } from "@/lib/memo-esdomed";
-import { MENSAJES_COLECCION, NOMBRE_BANDEJA, leerSello, type MemoInterno } from "@/lib/memos-internos";
+import {
+  MENSAJES_COLECCION,
+  NOMBRE_BANDEJA,
+  leerSello,
+  type BandejaId,
+  type MemoInterno,
+} from "@/lib/memos-internos";
 
 type Props = {
-  /** Bandeja de qué área (lo que le llega y lo que envió). */
-  area: MemoArea;
+  /** Bandeja de qué área (lo que le llega y lo que envió). "sis" solo recibe. */
+  area: BandejaId;
   isLight: boolean;
   usuario: string;
 };
@@ -38,8 +44,8 @@ function aMensaje(id: string, d: Record<string, unknown>): MemoInterno {
   const memo = normalizarMemo((d.memo ?? {}) as Record<string, unknown>);
   return {
     id,
-    de: (d.de as MemoArea) || "esdomed",
-    para: (d.para as MemoArea) || "esdomed",
+    de: (d.de as BandejaId) || "esdomed",
+    para: (d.para as BandejaId) || "esdomed",
     memo,
     sello: leerSello(d.sello as Record<string, unknown> | null),
     codigo: String(d.codigo ?? ""),
@@ -81,11 +87,15 @@ export function BandejaMemos({ area, isLight, usuario }: Props) {
       (snap) => setRecibidos(ordenar(snap.docs.map((x) => aMensaje(x.id, x.data() as Record<string, unknown>)))),
       avisar,
     );
-    const offE = onSnapshot(
-      query(collection(db, MENSAJES_COLECCION), where("de", "==", area)),
-      (snap) => setEnviados(ordenar(snap.docs.map((x) => aMensaje(x.id, x.data() as Record<string, unknown>)))),
-      avisar,
-    );
+    // La bandeja de la Dra. Gil solo recibe: no tiene enviados.
+    const offE =
+      area === "sis"
+        ? () => {}
+        : onSnapshot(
+            query(collection(db, MENSAJES_COLECCION), where("de", "==", area)),
+            (snap) => setEnviados(ordenar(snap.docs.map((x) => aMensaje(x.id, x.data() as Record<string, unknown>)))),
+            avisar,
+          );
     return () => {
       offR();
       offE();
@@ -159,7 +169,7 @@ export function BandejaMemos({ area, isLight, usuario }: Props) {
           ? "text-slate-600 hover:bg-slate-100"
           : "text-slate-300 hover:bg-white/[0.06]"
     }`;
-  const nombreArea = (a: MemoArea) => NOMBRE_BANDEJA[a] || MEMO_AREAS[a]?.nombre || a;
+  const nombreArea = (a: BandejaId) => NOMBRE_BANDEJA[a] || MEMO_AREAS[a as MemoArea]?.nombre || a;
 
   return (
     <section id="panel-memos-bandeja" className={`rounded-[24px] p-5 ${tarjeta}`}>
@@ -183,9 +193,11 @@ export function BandejaMemos({ area, isLight, usuario }: Props) {
             <span className="ml-2 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{sinLeer}</span>
           ) : null}
         </button>
-        <button type="button" className={tab(pestana === "enviados")} onClick={() => setPestana("enviados")}>
-          Enviados
-        </button>
+        {area !== "sis" ? (
+          <button type="button" className={tab(pestana === "enviados")} onClick={() => setPestana("enviados")}>
+            Enviados
+          </button>
+        ) : null}
       </div>
 
       <div className="mt-3 space-y-1.5">

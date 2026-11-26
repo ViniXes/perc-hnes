@@ -6,6 +6,7 @@ import { MemosEsdomed } from "@/components/memos-esdomed";
 import { BandejaMemos } from "@/components/bandeja-memos";
 import {
   GRANT_MEMOS_CE,
+  GRANT_MEMOS_SIS,
   JEFATURA_CE_NOMBRE,
   MENSAJES_COLECCION,
   NOMBRE_BANDEJA,
@@ -535,6 +536,11 @@ const GRANTABLE_MENUS: { id: string; label: string; group: "PERC" | "SEPS" | "Ho
   // Recursos Humanos reporta cada mes el personal desvinculado para que ESDOMED
   // deshabilite sus accesos al SIS (memo del 04/11/2026). Los admins ya lo ven.
   { id: "panel-desvinculados", label: "Personal desvinculado (reporte de RRHH)", group: "General" },
+  // Memos por PULSO: la cuenta de la Dra. Katherinne Gil (SIS) recibe los memos de
+  // ESDOMED / Consulta Externa que la nombran; y una cuenta de C.E. distinta de la
+  // jefatura (p. ej. la subjefatura) puede usar los memos de Consulta Externa.
+  { id: "panel-memos-sis", label: "Bandeja de memos: Dra. Katherinne Gil (SIS)", group: "General" },
+  { id: "panel-memos-consulta-externa", label: "Memorándums de Consulta Externa (firmar y enviar)", group: "General" },
 ];
 type CensoRow = { key: string; label: string };
 const CENSO_BASE_ROWS: CensoRow[] = [
@@ -5123,11 +5129,14 @@ export default function Home() {
     serviceProfile?.division === "consulta-externa" &&
     (serviceProfile?.serviceName === JEFATURA_CE_NOMBRE || hasGrant(GRANT_MEMOS_CE));
   // Bandeja de memos de esta cuenta: ESDOMED (sus admins) o Consulta Externa.
-  const bandejaMemos: "esdomed" | "consulta-externa" | null = esJefaturaCE
+  // La Dra. Katherinne Gil (SIS) solo recibe: su cuenta lleva el acceso "panel-memos-sis".
+  const bandejaMemos: "esdomed" | "consulta-externa" | "sis" | null = esJefaturaCE
     ? "consulta-externa"
     : esAdminEsdomed && !ghostUid
       ? "esdomed"
-      : null;
+      : !ghostUid && hasGrant(GRANT_MEMOS_SIS)
+        ? "sis"
+        : null;
   const esRrhhDesvinculados = hasGrant("panel-desvinculados");
   const puedeVerDesvinculados = !isMinsal && (esAdminEsdomed || esRrhhDesvinculados);
   // Cuenta "solo accesos otorgados" cuyo UNICO acceso es este reporte (la cuenta de
@@ -7042,7 +7051,6 @@ export default function Home() {
       setMemosSinLeer(0);
       return;
     }
-    const de = bandejaMemos === "esdomed" ? "consulta-externa" : "esdomed";
     const unsubscribe = onSnapshot(
       query(collection(db, MENSAJES_COLECCION), where("para", "==", bandejaMemos), where("leido", "==", false)),
       (snap) => {
@@ -7056,7 +7064,7 @@ export default function Home() {
           const d = change.doc.data() as Record<string, unknown>;
           const notif = {
             id: `memo-${change.doc.id}-${Date.now()}`,
-            title: `Nuevo memo de ${NOMBRE_BANDEJA[de] || de}`,
+            title: `Nuevo memo de ${NOMBRE_BANDEJA[d.de as keyof typeof NOMBRE_BANDEJA] || "PULSO"}`,
             body: String(d.asunto ?? "") || String(d.codigo ?? ""),
             destino: "panel-memos-bandeja",
           };
@@ -19978,6 +19986,17 @@ export default function Home() {
             },
           ]
         : []),
+      // Bandeja de la Dra. Katherinne Gil (SIS): solo los memos que la nombran.
+      ...(bandejaMemos === "sis" && !isAdmin
+        ? [
+            {
+              id: "panel-memos-bandeja",
+              label: memosSinLeer > 0 ? `Bandeja de memos (${memosSinLeer})` : "Bandeja de memos",
+              detail: "Memos de ESDOMED y Consulta Externa dirigidos a usted",
+              badge: "BM",
+            },
+          ]
+        : []),
       // MEMORANDUMS de la Jefatura de Consulta Externa: sus memos (firmados y
       // sellados) y la bandeja de lo que se intercambia con ESDOMED.
       ...(esJefaturaCE && !isAdmin
@@ -20028,6 +20047,15 @@ export default function Home() {
                   label: "Planificación",
                   detail: "Memorándums de la Unidad de Planificación",
                   badge: "PL",
+                  icon: "memo",
+                },
+                // Unidad de Consulta Externa (Dra. Benitez): sus memos firmados y
+                // sellados. El admin los ve; los firma y envia la jefatura.
+                {
+                  id: "panel-memos-consulta-externa",
+                  label: "Consulta Externa",
+                  detail: "Memorándums de la Unidad de Consulta Externa",
+                  badge: "CX",
                   icon: "memo",
                 },
                 // Archivo de PDF de Planificacion separado por categoria.
@@ -25393,7 +25421,7 @@ export default function Home() {
                 ) : null,
               )
             : null}
-          {esJefaturaCE &&
+          {(esJefaturaCE || isAdmin) &&
           (activeSidebarSection === "panel-memos-consulta-externa" || mobileView === "panel-memos-consulta-externa") ? (
             <div data-view="panel-memos-consulta-externa">
               <MemosEsdomed
@@ -25403,7 +25431,7 @@ export default function Home() {
                 usuario={serviceProfile?.email || ""}
                 nombreUsuario={serviceProfile?.name || ""}
                 uid={user?.uid || ""}
-                puedeEnviar
+                puedeEnviar={esJefaturaCE}
               />
             </div>
           ) : null}

@@ -77,7 +77,8 @@ rules_version = '2';
 //     Jefatura de Consulta Externa), memoSellos (imagen de firma y sello de
 //     ESDOMED y de Consulta Externa, solo la lee su dueño) y memosInternos (los
 //     memos que se envian ESDOMED <-> Consulta Externa; quien recibe solo marca
-//     leido, nadie borra).
+//     leido, nadie borra). La Dra. Katherinne Gil (acceso 'panel-memos-sis')
+//     recibe copia (para 'sis') de los memos que la nombran.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -402,9 +403,10 @@ service cloud.firestore {
         && (userProfile().get('serviceName', '') == 'Jefatura de Consulta Externa'
             || userProfile().get('menuGrants', []).hasAny(['panel-memos-consulta-externa']));
     }
-    // Memos de la Jefatura de Consulta Externa ("<año>__<numero>"). Solo ella.
+    // Memos de la Unidad de Consulta Externa ("<año>__<numero>"): la jefatura y,
+    // como en ESDOMED y Planificacion, los administradores.
     match /consultaExternaMemos/{docId} {
-      allow read, write: if esJefaturaCE();
+      allow read, write: if esJefaturaCE() || adminPoa();
     }
     // Imagen de firma y sello de cada area: solo la lee y la cambia esa area.
     match /memoSellos/{area} {
@@ -413,21 +415,29 @@ service cloud.firestore {
     }
     // Memos enviados entre ESDOMED y Consulta Externa. Cada lado ve lo que envio y
     // lo que recibio; quien recibe solo puede marcarlo leido. Nadie los borra.
+    // Dra. Katherinne Gil (SIS): solo recibe (para == 'sis') los memos que la
+    // nombran; su cuenta lleva el acceso 'panel-memos-sis'.
+    function bandejaSis() {
+      return tienePerfil()
+        && userProfile().get('menuGrants', []).hasAny(['panel-memos-sis']);
+    }
     match /memosInternos/{id} {
       allow read: if adminEsdomed()
         || (esJefaturaCE()
-            && (resource.data.para == 'consulta-externa' || resource.data.de == 'consulta-externa'));
+            && (resource.data.para == 'consulta-externa' || resource.data.de == 'consulta-externa'))
+        || (bandejaSis() && resource.data.para == 'sis');
       allow create: if request.resource.data.leido == false
         && request.resource.data.enviadoUid == request.auth.uid
         && ((request.resource.data.de == 'esdomed'
-              && request.resource.data.para == 'consulta-externa' && adminEsdomed())
+              && request.resource.data.para in ['consulta-externa', 'sis'] && adminEsdomed())
             || (request.resource.data.de == 'consulta-externa'
-              && request.resource.data.para == 'esdomed' && esJefaturaCE()));
+              && request.resource.data.para in ['esdomed', 'sis'] && esJefaturaCE()));
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['leido', 'leidoAt', 'leidoPor'])
         && request.resource.data.leido == true
         && ((resource.data.para == 'esdomed' && adminEsdomed())
-            || (resource.data.para == 'consulta-externa' && esJefaturaCE()));
+            || (resource.data.para == 'consulta-externa' && esJefaturaCE())
+            || (resource.data.para == 'sis' && bandejaSis()));
       allow delete: if false;
     }
     // Planificacion > Mis documentos: PDF por categoria. "<id>" es la ficha

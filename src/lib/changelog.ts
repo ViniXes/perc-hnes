@@ -27,6 +27,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1986.527",
+    para: ["admin"],
+    texto:
+      "Memorándums: la unidad Consulta Externa aparece junto a ESDOMED y Planificación. Al enviar un memo por PULSO, si nombra a la Dra. Katherinne Gil, también le llega a ella.",
+  },
+  {
     version: "1986.526",
     para: ["admin", "div:consulta-externa"],
     texto:

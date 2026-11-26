@@ -56,6 +56,11 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (Consulta Externa visible para admins y copia a la Dra. Gil)
+- Cambio: Memorándums > Consulta Externa ahora también aparece para los administradores, junto a ESDOMED y Planificación (ven y editan; firmar/enviar con el sello de C.E. solo la jefatura). La Dra. Katherinne Gil (Médico Implementador del SIS) recibe copia en su propia bandeja de los memos de ESDOMED o C.E. que la nombran en el encabezado (`memoNombraGil`); al enviar se eligen los destinatarios. Su cuenta necesita el acceso «Bandeja de memos: Dra. Katherinne Gil (SIS)» (`panel-memos-sis`) en Usuarios.
+- Firestore: `consultaExternaMemos` también para `adminPoa()`; `memosInternos` admite `para == 'sis'` (`bandejaSis()`). Probadas con el emulador.
+- Archivos: `src/lib/memos-internos.ts`, `src/components/memos-esdomed.tsx`, `src/components/bandeja-memos.tsx`, `src/app/page.tsx` (GRANTABLE_MENUS, menú, bandeja sis), `firestore.rules`.
+
 ### 2026-11-26 — Claude (Consulta Externa: perfiles y memos firmados por PULSO)
 - Cambio: registro con «Jefatura de Consulta Externa» y «Subjefatura de Consulta Externa» (cuentas de división `consulta-externa`, ven Monitoreo general con PERC/SEPS/Horas de sus 4 consultas); en esa división las opciones de servicio se leen «Jefe de Oncología…» y «Encargado de área — Oncología…». Memorándums > Consulta Externa (solo la jefatura) con número «N.º 2026-HNES-CEX-06». Firma y sello digital por área (ESDOMED y C.E.) que se agrega al final del PDF/Word con «Firmar y sellar». Botón «Enviar a …» y Memorándums > Bandeja de memos (recibidos/enviados, leído), con aviso tipo WhatsApp al llegar uno.
 - Firestore: `consultaExternaMemos` (solo jefatura C.E.), `memoSellos/{esdomed|consulta-externa}` (solo su dueño), `memosInternos` (cada lado lee lo suyo; quien recibe solo marca leído; nadie borra). La jefatura se reconoce por `division == consulta-externa` y `serviceName == "Jefatura de Consulta Externa"` o el acceso `panel-memos-consulta-externa`. ESDOMED = `adminEsdomed()`.
