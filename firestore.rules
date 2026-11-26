@@ -79,6 +79,8 @@ rules_version = '2';
 //     memos que se envian ESDOMED <-> Consulta Externa; quien recibe solo marca
 //     leido, nadie borra). La Dra. Katherinne Gil (acceso 'panel-memos-sis')
 //     recibe copia (para 'sis') de los memos que la nombran.
+//     Cada destinatario confirma "Recibido" una vez; queda la fecha y hora del
+//     servidor (recibidoAt) y quien envio la ve.
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -432,9 +434,17 @@ service cloud.firestore {
               && request.resource.data.para in ['consulta-externa', 'sis'] && adminEsdomed())
             || (request.resource.data.de == 'consulta-externa'
               && request.resource.data.para in ['esdomed', 'sis'] && esJefaturaCE()));
+      // Quien recibe: marca leido y confirma el RECIBIDO una sola vez, con la hora
+      // del servidor (no se puede deshacer ni cambiar la fecha).
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['leido', 'leidoAt', 'leidoPor'])
+            .hasOnly(['leido', 'leidoAt', 'leidoPor',
+                      'recibido', 'recibidoAt', 'recibidoPor', 'recibidoPorNombre'])
         && request.resource.data.leido == true
+        && (!request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['recibido', 'recibidoAt', 'recibidoPor', 'recibidoPorNombre'])
+            || (resource.data.get('recibido', false) == false
+                && request.resource.data.recibido == true
+                && request.resource.data.recibidoAt == request.time))
         && ((resource.data.para == 'esdomed' && adminEsdomed())
             || (resource.data.para == 'consulta-externa' && esJefaturaCE())
             || (resource.data.para == 'sis' && bandejaSis()));

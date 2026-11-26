@@ -33,6 +33,8 @@ type Props = {
   area: BandejaId;
   isLight: boolean;
   usuario: string;
+  /** Nombre de quien confirma el recibido (lo ve quien envió). */
+  nombreUsuario?: string;
 };
 
 function msDe(valor: unknown): number {
@@ -57,15 +59,26 @@ function aMensaje(id: string, d: Record<string, unknown>): MemoInterno {
     leido: d.leido === true,
     leidoMs: msDe(d.leidoAt),
     leidoPor: String(d.leidoPor ?? ""),
+    recibido: d.recibido === true,
+    recibidoMs: msDe(d.recibidoAt),
+    recibidoPorNombre: String(d.recibidoPorNombre ?? d.recibidoPor ?? ""),
   };
 }
 
+/** Fecha y hora en hora de El Salvador, p. ej. "26/11/2026, 3:05 p. m.". */
 function cuando(ms: number): string {
   if (!ms) return "";
-  return new Date(ms).toLocaleString("es-SV", { dateStyle: "short", timeStyle: "short" });
+  return new Date(ms).toLocaleString("es-SV", {
+    timeZone: "America/El_Salvador",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-export function BandejaMemos({ area, isLight, usuario }: Props) {
+export function BandejaMemos({ area, isLight, usuario, nombreUsuario = "" }: Props) {
   const [recibidos, setRecibidos] = useState<MemoInterno[]>([]);
   const [enviados, setEnviados] = useState<MemoInterno[]>([]);
   const [pestana, setPestana] = useState<"recibidos" | "enviados">("recibidos");
@@ -136,6 +149,34 @@ export function BandejaMemos({ area, isLight, usuario }: Props) {
     setAbierto(null);
     setVistaUrl(null);
   };
+
+  /** Acuse de recibido: queda con la fecha y hora del servidor y no se puede deshacer. */
+  const [confirmando, setConfirmando] = useState(false);
+  const confirmarRecibido = async (m: MemoInterno) => {
+    if (m.para !== area || m.recibido) return;
+    setConfirmando(true);
+    setError("");
+    try {
+      await updateDoc(doc(db, MENSAJES_COLECCION, m.id), {
+        leido: true,
+        recibido: true,
+        recibidoAt: serverTimestamp(),
+        recibidoPor: usuario,
+        recibidoPorNombre: nombreUsuario || usuario,
+      });
+      setAbierto((a) => (a && a.id === m.id ? { ...a, recibido: true, recibidoMs: Date.now(), recibidoPorNombre: nombreUsuario || usuario } : a));
+    } catch (e) {
+      setError(
+        (e as { code?: string })?.code === "permission-denied"
+          ? "Firestore no permitió confirmar. Falta publicar las reglas nuevas de «memosInternos»."
+          : "No se pudo confirmar el recibido. Revise la conexión e intente de nuevo.",
+      );
+    } finally {
+      setConfirmando(false);
+    }
+  };
+  // El memo abierto se mantiene al día con lo que llega de Firestore.
+  const abiertoVivo = abierto ? [...recibidos, ...enviados].find((x) => x.id === abierto.id) ?? abierto : null;
 
   const descargar = async (tipo: "pdf" | "word") => {
     if (!abierto) return;
@@ -236,8 +277,21 @@ export function BandejaMemos({ area, isLight, usuario }: Props) {
               <span className={`block truncate text-[11px] ${sub}`}>
                 {pestana === "recibidos"
                   ? `De: ${nombreArea(m.de)}${m.enviadoPorNombre ? ` · ${m.enviadoPorNombre}` : ""}`
-                  : `Para: ${nombreArea(m.para)} · ${m.leido ? `Leído ${cuando(m.leidoMs)}` : "Sin leer"}`}
+                  : `Para: ${nombreArea(m.para)}${m.recibido ? "" : ` · ${m.leido ? `Leído ${cuando(m.leidoMs)}` : "Sin leer"}`}`}
                 {m.memo.fecha ? ` · Fecha del memo ${memoFechaTexto(m.memo.fecha)}` : ""}
+              </span>
+              <span
+                className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                  m.recibido
+                    ? "bg-emerald-500/15 text-emerald-600"
+                    : "bg-amber-500/15 text-amber-600"
+                }`}
+              >
+                {m.recibido
+                  ? `✓ Recibido ${cuando(m.recibidoMs)}${m.recibidoPorNombre ? ` · ${m.recibidoPorNombre}` : ""}`
+                  : pestana === "recibidos"
+                    ? "Falta confirmar el recibido"
+                    : "Sin acuse de recibido"}
               </span>
             </button>
           );
@@ -254,7 +308,33 @@ export function BandejaMemos({ area, isLight, usuario }: Props) {
               <p className="min-w-0 truncate text-sm font-semibold">
                 {memoNumeroTexto(abierto.memo)} · {abierto.asunto}
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {abiertoVivo && abiertoVivo.para === area ? (
+                  abiertoVivo.recibido ? (
+                    <span className="rounded-xl bg-emerald-500/15 px-3 py-2 text-sm font-semibold text-emerald-600">
+                      ✓ Recibido {cuando(abiertoVivo.recibidoMs)}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={confirmando}
+                      onClick={() => void confirmarRecibido(abiertoVivo)}
+                      className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                    >
+                      {confirmando ? "Confirmando…" : "Confirmar recibido"}
+                    </button>
+                  )
+                ) : abiertoVivo ? (
+                  <span
+                    className={`rounded-xl px-3 py-2 text-sm font-semibold ${
+                      abiertoVivo.recibido ? "bg-emerald-500/15 text-emerald-600" : "bg-amber-500/15 text-amber-600"
+                    }`}
+                  >
+                    {abiertoVivo.recibido
+                      ? `✓ Recibido ${cuando(abiertoVivo.recibidoMs)}${abiertoVivo.recibidoPorNombre ? ` · ${abiertoVivo.recibidoPorNombre}` : ""}`
+                      : "Sin acuse de recibido"}
+                  </span>
+                ) : null}
                 <button type="button" className={btnSec} disabled={!!ocupado} onClick={() => void descargar("pdf")}>
                   {ocupado === "pdf" ? "Generando…" : "Descargar PDF"}
                 </button>

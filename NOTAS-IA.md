@@ -56,6 +56,10 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (acuse de recibido de memos)
+- Cambio: en la Bandeja de memos, quien recibe (ESDOMED, Consulta Externa o la Dra. Gil) abre el memo y toca «Confirmar recibido»; queda `recibido`, `recibidoAt` (hora del servidor), `recibidoPor/recibidoPorNombre`. Quien envió lo ve en Enviados («✓ Recibido 26/11/2026, 3:05 p. m.», hora de El Salvador) y le sale un aviso. Reglas: solo el destinatario, una vez, con `recibidoAt == request.time`.
+- Archivos: `src/components/bandeja-memos.tsx`, `src/lib/memos-internos.ts`, `src/app/page.tsx` (escucha de acuses), `firestore.rules`.
+
 ### 2026-11-26 — Claude (mover, girar y agrandar la firma y sello)
 - Cambio: con «Firmar y sellar» marcado, el editor muestra «Acomodar firma y sello»: un dibujo a escala (mm) del final del memo donde el sello se arrastra con el mouse, se gira con la manija o la barra y se cambia de tamaño. Se guarda en el memo (`selloAjuste: {dx, dy, rot, escala}`) y se respeta en PDF, Word y en lo enviado. El giro se aplica dibujando la imagen girada en un canvas (`prepararSelloListo`); en Word el sello va flotante (`wp:anchor`) sobre un párrafo del alto del sello.
 - Archivos: `src/components/ajuste-sello.tsx` (nuevo), `src/components/memos-esdomed.tsx`, `src/lib/memo-esdomed.ts`.

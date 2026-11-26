@@ -7043,6 +7043,38 @@ export default function Home() {
     return () => unsubscribe();
   }, [user, isAdmin, firestoreUnavailable, firestoreStatusReady]);
 
+  // ACUSE DE RECIBIDO: quien envio un memo recibe un aviso cuando el destinatario
+  // confirma "Recibido" (la fecha y hora quedan en la bandeja, en Enviados).
+  useEffect(() => {
+    if (!user || !bandejaMemos || bandejaMemos === "sis" || firestoreUnavailable || !firestoreStatusReady) return;
+    const yaRecibidos = new Set<string>();
+    let listo = false;
+    const unsubscribe = onSnapshot(
+      query(collection(db, MENSAJES_COLECCION), where("de", "==", bandejaMemos), where("recibido", "==", true)),
+      (snap) => {
+        for (const item of snap.docs) {
+          if (yaRecibidos.has(item.id)) continue;
+          yaRecibidos.add(item.id);
+          if (!listo) continue;
+          const d = item.data() as Record<string, unknown>;
+          const notif = {
+            id: `acuse-${item.id}-${Date.now()}`,
+            title: `${NOMBRE_BANDEJA[d.para as keyof typeof NOMBRE_BANDEJA] || "El destinatario"} confirmó el recibido`,
+            body: String(d.asunto ?? "") || String(d.codigo ?? ""),
+            destino: "panel-memos-bandeja",
+          };
+          setToastNotifs((prev) => [notif, ...prev].slice(0, 3));
+          window.setTimeout(() => {
+            setToastNotifs((prev) => prev.filter((n) => n.id !== notif.id));
+          }, 9000);
+        }
+        listo = true;
+      },
+      () => {},
+    );
+    return () => unsubscribe();
+  }, [user, bandejaMemos, firestoreUnavailable, firestoreStatusReady]);
+
   // MEMOS POR PULSO: cuenta los recibidos sin leer y avisa (banner) cuando llega
   // uno nuevo a la bandeja de ESDOMED o de la Jefatura de Consulta Externa.
   useEffect(() => {
@@ -25438,7 +25470,12 @@ export default function Home() {
           {bandejaMemos &&
           (activeSidebarSection === "panel-memos-bandeja" || mobileView === "panel-memos-bandeja") ? (
             <div data-view="panel-memos-bandeja">
-              <BandejaMemos area={bandejaMemos} isLight={isLightPanelTheme} usuario={serviceProfile?.email || ""} />
+              <BandejaMemos
+                area={bandejaMemos}
+                isLight={isLightPanelTheme}
+                usuario={serviceProfile?.email || ""}
+                nombreUsuario={serviceProfile?.name || ""}
+              />
             </div>
           ) : null}
           {puedeVerDesvinculados &&

@@ -70,6 +70,10 @@ export type MemoInterno = {
   leido: boolean;
   leidoMs: number;
   leidoPor: string;
+  /** Acuse de recibido que confirma el destinatario (fecha y hora del servidor). */
+  recibido: boolean;
+  recibidoMs: number;
+  recibidoPorNombre: string;
 };
 
 /**
