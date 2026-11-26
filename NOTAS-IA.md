@@ -56,6 +56,10 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-26 — Claude (acceso de memos C.E. para cualquier cuenta)
+- v1986.539. El acceso «Memorándums de Consulta Externa» (menuGrants 'panel-memos-consulta-externa') ya no exige division 'consulta-externa': sirve para una cuenta de servicio (p. ej. el Dr. Cartagena, de asesores-de-medicamentos, que además conserva Horas). Cambió esJefaturaCE en page.tsx y en firestore.rules (el usuario debe publicar las reglas).
+- Emulador: 53/53 OK (cuenta de servicio con el acceso escribe y envía; sin el acceso, no).
+
 ### 2026-11-26 — Claude (sugerencias de nombres en el encabezado de los memos)
 - Cambio: en PARA/DE/CC/VÍA de los memos (ESDOMED, Planificación, C.E.), al escribir salen sugerencias con nombre y cargo; al elegir se llenan los dos. Fuentes: remitentes fijos, personas de memos guardados y cuentas de PULSO. Un admin, al abrir Memorándums, publica `memoDirectorio/personas` (solo nombre y cargo) para que la Jefatura de C.E. tenga la lista sin leer serviceUsers.
 - Archivos: `src/lib/directorio-memos.ts`, `src/components/persona-autocompletar.tsx` (nuevos), `src/components/memos-esdomed.tsx`, `src/app/page.tsx` (prop esAdmin), `firestore.rules` (memoDirectorio).

@@ -5125,11 +5125,13 @@ export default function Home() {
   // Jefatura de Consulta Externa: escribe los memos de C.E. (firmados y sellados) y
   // los intercambia con ESDOMED. Otra cuenta de C.E. (p. ej. la subjefatura) solo
   // si un admin le otorga el acceso. Las reglas de Firestore piden lo mismo.
+  // El acceso otorgado vale para cualquier cuenta (p. ej. un servicio que ademas
+  // apoya a Consulta Externa): solo un admin lo da.
   const esJefaturaCE =
     !ghostUid &&
-    serviceProfile?.division === "consulta-externa" &&
-    (serviceProfile?.serviceName === JEFATURA_CE_NOMBRE ||
-      serviceProfile?.serviceName === ASISTENTE_CE_NOMBRE ||
+    ((serviceProfile?.division === "consulta-externa" &&
+      (serviceProfile?.serviceName === JEFATURA_CE_NOMBRE ||
+        serviceProfile?.serviceName === ASISTENTE_CE_NOMBRE)) ||
       hasGrant(GRANT_MEMOS_CE));
   // Bandeja de memos de esta cuenta: ESDOMED (sus admins) o Consulta Externa.
   // La Dra. Katherinne Gil (SIS) solo recibe: su cuenta lleva el acceso "panel-memos-sis".
