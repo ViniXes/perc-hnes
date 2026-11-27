@@ -56,6 +56,9 @@ Entradas nuevas **arriba**. Formato:
 - Notas: (opcional) avisos para la otra IA, pendientes que deja, riesgos.
 ```
 
+### 2026-11-27 — Claude (encabezado del memo más claro)
+- memos-esdomed.tsx: el editor del encabezado ya no usa chips de tipo en cada bloque. Cada sección muestra su título en color (PARA, DE, CC., A TRAVÉS DE, VÍA) con una línea de ayuda, columnas «Nombre / Cargo», un select «Es …» para cambiar el tipo, «↑ Subir / ↓ Bajar / Quitar», botones «Agregar sección» (A TRAVÉS DE/VÍA se insertan antes de DE) y la vista previa en vivo «Así se verá el encabezado». El modelo de datos (bloques) no cambió.
+
 ### 2026-11-26 — Claude (directorio sin nombres de memos de ESDOMED)
 - El directorio de sugerencias (memoDirectorio) ya no toma nombres de los memos de ESDOMED/Planificación (esdomedMemos), solo de cuentas de PULSO, personas fijas y memos de C.E. Requisito del usuario: C.E. (jefatura, asistente, Dr. Cartagena) no ve nada de los memos de ESDOMED ni de Planificación.
 

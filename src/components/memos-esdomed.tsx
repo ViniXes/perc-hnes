@@ -572,103 +572,181 @@ export function MemosEsdomed({
     isLight ? "text-slate-500 hover:bg-slate-100 hover:text-rose-600" : "text-slate-400 hover:bg-white/[0.06] hover:text-rose-300"
   }`;
 
-  const chip = (activo: boolean) =>
-    `rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
-      activo
-        ? isLight
-          ? "bg-teal-600 text-white"
-          : "bg-teal-400/20 text-teal-100 ring-1 ring-inset ring-teal-300/40"
-        : isLight
-          ? "border border-slate-200 text-slate-600 hover:bg-slate-100"
-          : "border border-white/10 text-slate-300 hover:bg-white/[0.06]"
-    }`;
   const btnLink = `text-[11px] font-semibold hover:underline ${isLight ? "text-teal-700" : "text-teal-300"}`;
 
-  /** Un bloque del encabezado: título (rápido o libre) y sus personas. */
-  const editorBloque = (bloque: MemoBloque, b: number, total: number) => (
-    <div
-      key={b}
-      className={`rounded-2xl border p-3 ${isLight ? "border-slate-200 bg-slate-50/60" : "border-white/[0.07] bg-white/[0.02]"}`}
-    >
-      <div className="flex flex-wrap items-center gap-1.5">
-        <input
-          className={`${input} w-40 font-bold uppercase`}
-          value={bloque.etiqueta}
-          placeholder="Título"
-          aria-label="Título del bloque"
-          onChange={(e) => editarBloque(b, { etiqueta: e.target.value })}
-        />
-        {MEMO_ETIQUETA_OPCIONES.map((op) => (
-          <button
-            key={op}
-            type="button"
-            onClick={() => editarBloque(b, { etiqueta: op })}
-            className={chip(memoEtiqueta(bloque.etiqueta) === op)}
-          >
-            {op}
-          </button>
-        ))}
-        <span className="ml-auto flex items-center gap-1">
-          <button type="button" className={btnMini} title="Subir" disabled={b === 0} onClick={() => moverBloque(b, -1)}>
-            ↑
-          </button>
-          <button
-            type="button"
-            className={btnMini}
-            title="Bajar"
-            disabled={b === total - 1}
-            onClick={() => moverBloque(b, 1)}
-          >
-            ↓
-          </button>
-          <button
-            type="button"
-            className={btnMini}
-            title="Quitar este bloque"
-            onClick={() => editarBloques((lista) => lista.filter((_, j) => j !== b))}
-          >
-            Quitar bloque
-          </button>
-        </span>
-      </div>
-      <div className="mt-2 space-y-2">
-        {bloque.personas.map((p, i) => (
-          <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
-            <PersonaAutocompletar
-              className={input}
-              valor={p.nombre}
-              lista={sugerencias}
-              isLight={isLight}
-              placeholder="Nombre (escriba y elija de la lista)"
-              onNombre={(nombre) => editarPersona(b, i, { nombre })}
-              onElegir={(elegida) => editarPersona(b, i, { nombre: elegida.nombre, cargo: elegida.cargo })}
-            />
-            <input
-              className={input}
-              value={p.cargo}
-              placeholder="Cargo (sale en negrita)"
-              onChange={(e) => editarPersona(b, i, { cargo: e.target.value })}
-            />
+  /** Para qué sirve cada sección del encabezado (se muestra debajo del título). */
+  const AYUDA_SECCION: Record<string, string> = {
+    "PARA:": "A quién va dirigido el memo",
+    "DE:": "Quién lo firma y lo envía",
+    "A TRAVÉS DE:": "Por medio de quién se envía (p. ej. el jefe inmediato)",
+    "VÍA:": "Por conducto de quién pasa",
+    "CC.:": "A quién se le manda copia",
+  };
+  const COLOR_SECCION: Record<string, string> = {
+    "PARA:": isLight ? "bg-sky-600 text-white" : "bg-sky-400/20 text-sky-100 ring-1 ring-inset ring-sky-300/40",
+    "DE:": isLight ? "bg-teal-600 text-white" : "bg-teal-400/20 text-teal-100 ring-1 ring-inset ring-teal-300/40",
+    "CC.:": isLight ? "bg-amber-500 text-white" : "bg-amber-400/20 text-amber-100 ring-1 ring-inset ring-amber-300/40",
+  };
+  const colorSeccion = (t: string) =>
+    COLOR_SECCION[t] ??
+    (isLight ? "bg-indigo-600 text-white" : "bg-indigo-400/20 text-indigo-100 ring-1 ring-inset ring-indigo-300/40");
+
+  /** Una sección del encabezado (PARA, DE, CC.…) con sus personas. */
+  const editorBloque = (bloque: MemoBloque, b: number, total: number) => {
+    const titulo = memoEtiqueta(bloque.etiqueta);
+    const esConocido = MEMO_ETIQUETA_OPCIONES.includes(titulo);
+    return (
+      <div
+        key={b}
+        className={`rounded-2xl border p-3 ${isLight ? "border-slate-200 bg-white" : "border-white/[0.08] bg-white/[0.02]"}`}
+      >
+        <div className="flex flex-wrap items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-lg px-3 py-1 text-sm font-bold tracking-wide ${colorSeccion(titulo)}`}>
+                {(titulo || "SIN TÍTULO").replace(/:$/, "")}
+              </span>
+              {!esConocido ? (
+                <input
+                  className={`${input} w-44 font-bold uppercase`}
+                  value={bloque.etiqueta}
+                  placeholder="Escriba el título"
+                  aria-label="Título de la sección"
+                  onChange={(e) => editarBloque(b, { etiqueta: e.target.value })}
+                />
+              ) : null}
+            </div>
+            <p className={`mt-1 text-[11.5px] ${sub}`}>{AYUDA_SECCION[titulo] ?? "Sección con título propio"}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <select
+              className={`${btnMini} cursor-pointer border ${isLight ? "border-slate-200 bg-white" : "border-white/10 bg-[#1b2638]"}`}
+              value={esConocido ? titulo : "otro"}
+              aria-label="Cambiar el tipo de sección"
+              title="Cambiar el tipo de sección"
+              onChange={(e) => editarBloque(b, { etiqueta: e.target.value === "otro" ? "" : e.target.value })}
+            >
+              {MEMO_ETIQUETA_OPCIONES.map((op) => (
+                <option key={op} value={op}>
+                  Es {op.replace(/:$/, "")}
+                </option>
+              ))}
+              <option value="otro">Otro título…</option>
+            </select>
+            <button type="button" className={btnMini} title="Subir esta sección" disabled={b === 0} onClick={() => moverBloque(b, -1)}>
+              ↑ Subir
+            </button>
             <button
               type="button"
               className={btnMini}
-              title="Quitar persona"
-              onClick={() => editarBloque(b, { personas: bloque.personas.filter((_, k) => k !== i) })}
+              title="Bajar esta sección"
+              disabled={b === total - 1}
+              onClick={() => moverBloque(b, 1)}
+            >
+              ↓ Bajar
+            </button>
+            <button
+              type="button"
+              className={`${btnMini} ${isLight ? "text-rose-600" : "text-rose-300"}`}
+              title="Quitar esta sección"
+              onClick={() => editarBloques((lista) => lista.filter((_, j) => j !== b))}
             >
               Quitar
             </button>
           </div>
-        ))}
-        <button
-          type="button"
-          className={btnLink}
-          onClick={() => editarBloque(b, { personas: [...bloque.personas, { nombre: "", cargo: "" }] })}
-        >
-          + Agregar persona a {memoEtiqueta(bloque.etiqueta) || "este bloque"}
-        </button>
+        </div>
+        <div className="mt-3 space-y-2">
+          {bloque.personas.length > 0 ? (
+            <div className={`hidden gap-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] sm:grid sm:grid-cols-[1fr_1.4fr_auto] ${sub}`}>
+              <span>Nombre</span>
+              <span>Cargo</span>
+              <span className="w-12" />
+            </div>
+          ) : null}
+          {bloque.personas.map((p, i) => (
+            <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
+              <PersonaAutocompletar
+                className={input}
+                valor={p.nombre}
+                lista={sugerencias}
+                isLight={isLight}
+                placeholder="Escriba el nombre y elija de la lista"
+                onNombre={(nombre) => editarPersona(b, i, { nombre })}
+                onElegir={(elegida) => editarPersona(b, i, { nombre: elegida.nombre, cargo: elegida.cargo })}
+              />
+              <input
+                className={input}
+                value={p.cargo}
+                placeholder="Cargo"
+                aria-label="Cargo"
+                onChange={(e) => editarPersona(b, i, { cargo: e.target.value })}
+              />
+              <button
+                type="button"
+                className={btnMini}
+                title="Quitar a esta persona"
+                onClick={() => editarBloque(b, { personas: bloque.personas.filter((_, k) => k !== i) })}
+              >
+                Quitar
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className={btnLink}
+            onClick={() => editarBloque(b, { personas: [...bloque.personas, { nombre: "", cargo: "" }] })}
+          >
+            + Otra persona en {(titulo || "esta sección").replace(/:$/, "")}
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
+
+  /** Así sale el encabezado impreso: título a la izquierda, nombre y cargo (en negrita). */
+  const vistaEncabezado = (m: MemoEsdomed) => {
+    const filas = m.bloques
+      .map((bl) => ({ t: memoEtiqueta(bl.etiqueta), ps: bl.personas.filter((p) => p.nombre.trim() || p.cargo.trim()) }))
+      .filter((f) => f.ps.length > 0);
+    return (
+      <div className={`rounded-xl bg-white p-4 font-serif text-[13px] leading-snug text-slate-900 ${isLight ? "border border-slate-300" : ""}`}>
+        {filas.length === 0 ? <p className="text-slate-400">Agregue al menos la sección PARA.</p> : null}
+        {filas.map((f, k) => (
+          <div key={k} className="grid grid-cols-[7.5rem_1fr] gap-2 py-1.5">
+            <span className="font-bold">{f.t}</span>
+            <span>
+              {f.ps.map((p, i) => (
+                <span key={i} className={`block ${i > 0 ? "mt-1.5" : ""}`}>
+                  {p.nombre}
+                  {p.cargo ? <b className="block">{p.cargo}</b> : null}
+                </span>
+              ))}
+            </span>
+          </div>
+        ))}
+        <div className="grid grid-cols-[7.5rem_1fr] gap-2 py-1.5">
+          <span className="font-bold">ASUNTO:</span>
+          <b>{m.asunto || <span className="font-normal text-slate-400">(falta el asunto)</span>}</b>
+        </div>
+        <div className="grid grid-cols-[7.5rem_1fr] gap-2 py-1.5">
+          <span className="font-bold">FECHA:</span>
+          <span>{m.fecha ? memoFechaTexto(m.fecha) : ""}</span>
+        </div>
+      </div>
+    );
+  };
+
+  /** Botones para agregar una sección; las que ya están (salvo CC.) no se repiten. */
+  const agregarSeccion = (op: string) =>
+    editarBloques((lista) => {
+      const nueva = { etiqueta: op, personas: [{ nombre: "", cargo: "" }] };
+      // DE va al final (antes que CC.); lo demás, antes de DE.
+      const iDe = lista.findIndex((x) => memoEtiqueta(x.etiqueta) === "DE:");
+      if (op === "DE:" || op === "CC.:" || op === "" || iDe < 0) return [...lista, nueva];
+      const copia = [...lista];
+      copia.splice(iDe, 0, nueva);
+      return copia;
+    });
 
   // Alto del cuerpo según el texto, para escribir memos largos con comodidad.
   useEffect(() => {
@@ -921,18 +999,40 @@ export function MemosEsdomed({
             </div>
 
             <div className="space-y-2">
-              <span className={etiqueta}>Encabezado (PARA, CC.:, DE, A TRAVÉS DE…)</span>
-              {memo.bloques.map((bloque, b) => editorBloque(bloque, b, memo.bloques.length))}
-              <button
-                type="button"
-                className={btnLink}
-                onClick={() => editarBloques((lista) => [...lista, { etiqueta: "", personas: [{ nombre: "", cargo: "" }] }])}
-              >
-                + Agregar bloque
-              </button>
-              <p className={`text-[11px] ${sub}`}>
-                Salen en este orden. Con ↑ ↓ se acomodan; un bloque sin personas no se imprime.
+              <span className={etiqueta}>Encabezado del memo</span>
+              <p className={`-mt-0.5 text-[12px] ${sub}`}>
+                Cada sección sale impresa en este mismo orden. Escriba el nombre y elija a la persona de la lista: el cargo se llena solo.
               </p>
+              {memo.bloques.map((bloque, b) => editorBloque(bloque, b, memo.bloques.length))}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className={`text-[11px] font-semibold ${sub}`}>Agregar sección:</span>
+                {MEMO_ETIQUETA_OPCIONES.filter(
+                  (op) => op === "CC.:" || !memo.bloques.some((x) => memoEtiqueta(x.etiqueta) === op),
+                ).map((op) => (
+                  <button
+                    key={op}
+                    type="button"
+                    className={`${btnMini} border ${isLight ? "border-slate-200" : "border-white/10"}`}
+                    title={AYUDA_SECCION[op]}
+                    onClick={() => agregarSeccion(op)}
+                  >
+                    + {op.replace(/:$/, "")}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`${btnMini} border ${isLight ? "border-slate-200" : "border-white/10"}`}
+                  onClick={() => agregarSeccion("")}
+                >
+                  + Otro título
+                </button>
+              </div>
+              <details open className="pt-1">
+                <summary className={`cursor-pointer text-[11px] font-semibold uppercase tracking-[0.14em] ${sub}`}>
+                  Así se verá el encabezado
+                </summary>
+                <div className="mt-2">{vistaEncabezado(memo)}</div>
+              </details>
             </div>
 
             <label className="block">
